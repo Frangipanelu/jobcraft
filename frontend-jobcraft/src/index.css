@@ -1,0 +1,333 @@
+@import url("https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400..700&display=swap");
+
+/* ================= 极简编辑设计系统 =================
+ * Hallmark · genre: editorial-modern (internal tool) · theme: 极简编辑
+ * 设计文档: docs/UI_DESIGN.md
+ */
+:root {
+  --jc-bg: #faf9f6;
+  --jc-bg-2: #f1efe9;
+  --jc-bg-3: #f6f7f7;
+  --jc-panel: #fefefc;
+  --jc-panel-2: #f6f4ef;
+  --jc-line: #e9e6de;
+  --jc-ink: #1c1b18;
+  --jc-muted: #6f6c63;
+  --jc-soft: #4a4842;
+  --jc-accent: #0f6b52;
+  --jc-accent-deep: #0a5440;
+  --jc-accent-soft: #e7efe8;
+  --jc-danger: #a34436;
+  --jc-danger-soft: #f5e7e2;
+  --jc-success: #3d8f5c;
+  --jc-success-bg: #eef6ef;
+  --jc-warn: #c07a2b;
+  --jc-warn-bg: #faf3e7;
+  --jc-warn-text: #b4552c;
+  --jc-info: #2f6f9e;
+  --jc-info-bg: #eef6fb;
+  --jc-danger-bg: #fdf0ee;
+  --jc-serif: "Fraunces", "Songti SC", "STSong", Georgia, serif;
+  --jc-sans: "PingFang SC", "Microsoft YaHei", "Segoe UI", system-ui, sans-serif;
+  --jc-radius: 12px;
+  --jc-radius-sm: 8px;
+  --jc-radius-xs: 4px;
+  --jc-space-1: 4px;
+  --jc-space-2: 8px;
+  --jc-space-3: 12px;
+  --jc-space-4: 16px;
+  --jc-space-5: 22px;
+  --jc-space-6: 40px;
+  --jc-shadow: 0 1px 2px rgba(30, 30, 25, 0.04), 0 10px 30px -24px rgba(30, 30, 25, 0.28);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+html,
+body {
+  overflow-x: clip;
+}
+
+body {
+  font-family: var(--jc-sans);
+  background: var(--jc-bg);
+  color: var(--jc-ink);
+  line-height: 1.6;
+}
+
+/* 衬线标题 */
+h1.ant-typography,
+h2.ant-typography,
+h3.ant-typography,
+h4.ant-typography,
+h5.ant-typography {
+  font-family: var(--jc-serif);
+  letter-spacing: -0.01em;
+}
+
+/* ===== 布局 ===== */
+.jc-layout {
+  min-height: 100%;
+  background: var(--jc-bg);
+}
+
+/* 浅色侧栏 + hairline 边框 */
+.jc-sider {
+  background: var(--jc-bg);
+  border-right: 1px solid var(--jc-line);
+  box-shadow: none;
+}
+
+.jc-sider .ant-layout-sider-children {
+  display: flex;
+  flex-direction: column;
+}
+
+.jc-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 28px 22px 22px;
+  color: var(--jc-ink);
+  border-bottom: 1px solid var(--jc-line);
+}
+
+.jc-brand-logo {
+  width: 36px;
+  height: 36px;
+  border-radius: 9px;
+  background: var(--jc-accent);
+  color: #fff;
+  font-family: var(--jc-serif);
+  font-size: 19px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.jc-brand-title {
+  font-family: var(--jc-serif);
+  font-size: 21px;
+  font-weight: 600;
+  line-height: 1.1;
+  letter-spacing: 0.02em;
+}
+
+.jc-brand-sub {
+  font-size: 11px;
+  color: var(--jc-muted);
+  letter-spacing: 0.28em;
+  margin-top: 3px;
+}
+
+.jc-menu {
+  background: transparent;
+  border-right: none;
+  flex: 1;
+  padding: 14px 12px;
+}
+
+.jc-menu .ant-menu-item {
+  margin: 2px 0;
+  height: 42px;
+  line-height: 42px;
+  font-size: 14px;
+}
+
+/* 顶栏：半透明白 + hairline */
+.jc-header {
+  background: rgba(250, 249, 246, 0.85);
+  backdrop-filter: blur(10px);
+  padding: 0 32px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--jc-line);
+  box-shadow: none;
+  z-index: 10;
+}
+
+.jc-page-title {
+  font-family: var(--jc-serif);
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--jc-ink);
+}
+
+.jc-back-link {
+  cursor: pointer;
+  margin-right: 16px;
+  color: var(--jc-accent);
+  font-weight: 500;
+}
+
+/* ===== 页面 ===== */
+.jc-page {
+  padding: 40px 40px 60px;
+  min-height: 280px;
+  overflow: auto;
+}
+
+.jc-page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 28px;
+}
+
+/* ===== 卡片网格 ===== */
+.jc-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 1fr));
+  gap: 18px;
+}
+
+.jc-card {
+  background: var(--jc-panel);
+  border: 1px solid var(--jc-line);
+  border-radius: var(--jc-radius);
+  padding: 22px;
+  box-shadow: var(--jc-shadow);
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.jc-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 14px 34px -22px rgba(30, 30, 25, 0.3);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .jc-card {
+    transition: none;
+  }
+
+  .jc-card:hover {
+    transform: none;
+  }
+}
+
+.jc-card-title {
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: var(--jc-ink);
+  font-size: 15px;
+}
+
+.jc-card-meta {
+  font-size: 12px;
+  color: var(--jc-muted);
+  margin-bottom: 8px;
+}
+
+.jc-tag {
+  margin-bottom: 4px;
+}
+
+/* ===== 区块面板 ===== */
+.jc-section {
+  background: var(--jc-panel);
+  border: 1px solid var(--jc-line);
+  border-radius: var(--jc-radius);
+  padding: 22px;
+  margin-bottom: 20px;
+  box-shadow: var(--jc-shadow);
+}
+
+.jc-metric-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+/* ===== 简历预览 ===== */
+.jc-resume-preview {
+  background: var(--jc-panel-2);
+  border: 1px solid var(--jc-line);
+  border-radius: 8px;
+  padding: 16px;
+  max-height: 600px;
+  overflow: auto;
+  white-space: pre-wrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.jc-iframe {
+  width: 100%;
+  min-height: 560px;
+  border: 1px solid var(--jc-line);
+  border-radius: 8px;
+  background: var(--jc-panel);
+}
+
+/* ===== 复盘双栏（窄屏折叠） ===== */
+.jc-review-cols {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 260px;
+  gap: 24px;
+  align-items: start;
+}
+
+@media (max-width: 768px) {
+  .jc-review-cols {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* ===== 经历卡 ===== */
+.jc-card-header {
+  display: flex;
+  gap: 8px;
+  font-size: 12px;
+  margin-bottom: 6px;
+  flex-wrap: wrap;
+}
+
+.jc-card-company {
+  font-weight: 600;
+  color: var(--jc-accent);
+}
+
+.jc-card-role {
+  color: var(--jc-muted);
+}
+
+.jc-card-role::before {
+  content: "· ";
+}
+
+.jc-card-period {
+  color: var(--jc-muted);
+}
+
+.jc-card-period::before {
+  content: "· ";
+}
+
+.jc-achievements {
+  margin-top: 8px;
+}
+
+.jc-summary {
+  font-size: 13px;
+  color: var(--jc-ink);
+  margin-bottom: 6px;
+  line-height: 1.5;
+}
+
+.jc-bullet {
+  font-size: 13px;
+  color: var(--jc-soft);
+  line-height: 1.6;
+  padding: 2px 0;
+  padding-left: 4px;
+}

@@ -1,0 +1,60 @@
+import textwrap
+
+import requests
+
+raw_text = textwrap.dedent("""
+面试官 09:00 请你先做一个自我介绍。
+候选人：我叫李明，毕业于某某大学计算机专业，之前在一家电商公司做了3年后端开发，主要负责订单系统和支付链路。
+面试官 09:02 你们订单系统每天的量级大概是多少？遇到过什么性能问题？
+候选人：日均几百万单吧。性能问题主要是大促时数据库压力大，我们做了缓存和分库分表。
+面试官 09:05 能具体说说分库分表的策略吗？
+候选人：就是按用户ID取模，分成64个库，每个库16张表。
+面试官 09:08 为什么要按用户ID取模，而不是按订单ID？有什么优缺点？
+候选人：这个……当时 leader 定的，我没太深入想。
+面试官 09:10 你对我们这个岗位最感兴趣的地方是什么？
+候选人：我觉得贵公司业务发展很快，技术挑战也比较大，想过来学习成长。
+面试官 09:12 说说你最有成就感的一个项目。
+候选人：是之前做的订单系统重构，我们把单体架构拆成了微服务，提升了系统的可扩展性。
+面试官 09:15 微服务拆分后，服务间调用怎么保证一致性？
+候选人：我们主要用消息队列，异步保证最终一致性。
+面试官 09:18 有没有遇到过消息丢失或者重复消费的情况？
+候选人：有，重复消费我们通过幂等设计处理，消息丢失的话……一般很少发生。
+面试官 09:21 如果让你设计一个高并发的秒杀系统，你会怎么设计？
+候选人：我会用缓存抗流量，然后异步下单，库存用 Redis 扣减。
+面试官 09:24 Redis 扣减库存如果失败怎么办？
+候选人：可以回滚，或者重试。
+面试官 09:27 你了解过分布式事务吗？比如 TCC、Saga。
+候选人：听说过，但没实际用过。
+面试官 09:30 你平时怎么学习新技术？
+候选人：看博客、GitHub，还有参加技术分享。
+面试官 09:33 你有什么问题要问我吗？
+候选人：我想了解一下团队的技术栈和日常工作内容。
+""").strip()
+
+payload = {
+    "user_id": 1,
+    "company": "测试公司",
+    "position": "高级后端工程师",
+    "round_type": "技术面",
+    "job_analysis_id": None,
+    "raw_text": raw_text,
+}
+
+if __name__ == "__main__":
+    print("1. 创建面试复盘（长文本）...")
+    resp = requests.post(
+        "http://127.0.0.1:8000/api/jobcraft/interview-review", json=payload, timeout=300
+    )
+    print(f"status: {resp.status_code}")
+    if resp.status_code != 200:
+        print(resp.text)
+        exit(1)
+
+    result = resp.json()
+    record_id = result.get("record_id")
+    print(f"record_id: {record_id}, overall_score: {result.get('overall_score')}")
+    print(f"questions count: {len(result.get('questions', []))}")
+    for q in result.get("questions", []):
+        print(
+            f"  - [{q.get('dimension')}] {q.get('question_text')[:40]}... | score={q.get('score')}, level={q.get('level')}"
+        )
