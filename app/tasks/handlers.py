@@ -5,9 +5,9 @@ JobCraft 任务处理器
 """
 
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
-from .worker import TaskManager, TaskStatus, get_task_manager
+from .worker import TaskStatus, get_task_manager
 
 logger = logging.getLogger(__name__)
 

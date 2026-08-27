@@ -7,6 +7,7 @@ JobCraft 求职助手 — FastAPI 接口层
 import logging
 import os
 import shutil
+import time
 import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -37,7 +38,6 @@ from app.schemas.jobcraft import (
 )
 from app.tools.upload_file_read_tool import read_file_content
 from app.auth.router import router as auth_router
-from app.auth.dependencies import get_current_user, get_optional_user
 from app.monitoring import setup_monitoring
 
 
