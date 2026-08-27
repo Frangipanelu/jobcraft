@@ -203,7 +203,7 @@ def generate_resume_html(
     entries_html = []
     for card in cards:
         header = escape(_card_header(card))
-        bullets = _split_bullets(_get_card_text(card, card_versions))
+        bullets = _split_bullets(_get_card_text(card, card_versions))[:4]
         bullet_html = ""
         if bullets:
             bullet_html = (

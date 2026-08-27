@@ -196,6 +196,29 @@
 - [x] **m3/m5 细节**：`.jc-card` 动效加 `prefers-reduced-motion` 降级；补圆角/间距 token（`--jc-radius-sm/xs`、`--jc-space-*`）
 - [x] 验证：`npm run build` 通过（tsc 严格）；`uv run ruff check .` 通过；`uv run pytest tests/ -q` 51 passed、6 skipped
 
+### v0.11 UI 迭代（本轮）
+
+- [x] **重复标题修复**：`App.tsx` 主页面（dashboard/experience/jd-analysis）不再渲染全局 Header，仅子页面渲染含返回按钮的 Header；三个主页面内部统一用 `.jc-page-header` 标题，6 条路由均无重复标题（Playwright 实测）
+- [x] **经历卡分类分组**：后端 `experience_card` 新增 `card_type`（work/intern/project），Schema/DAO/SQL/前端类型/表单全链路打通；列表按「工作经历（含实习）」与「项目经历」分组展示
+- [x] **列表收敛**：经历卡列表只显示 `renderSummary` 摘要，STAR 要点收进详情弹窗
+- [x] **删除后停留**：Collapse 分组用稳定 key + `defaultActiveKey`，删除卡片后分组保持展开、停留卡片页
+- [x] **编辑/详情合一**：经历卡卡片操作按钮去掉独立「编辑」，只留「详情」；详情弹窗基础字段（类型/标题/描述/标签）+ S/A/R 结构化字段全部可编辑，一次 PATCH 保存（`updateCard` 已支持）
+- [x] **求职路线视觉化**：`CareerRoutePage` 重写为路线流卡片——每条投递一张 `.jc-route-card`，5 步流程（简历→JD 分析→润色→面试准备→复盘）以圆形状态节点 + 连接线呈现（done/todo/ready/locked 四种状态配色），小屏自动折叠为纵向；按钮去掉内联 style 改用 `.jc-route-*` token 类
+- [x] 验证：`npm run build` 通过（tsc 严格）；`uv run ruff check .` 通过；`uv run pytest tests/ -q` 65 passed、11 skipped
+
+### v0.12 求职路线 + 经历卡 + JD 库体验优化（本轮）
+
+- [x] **需求1 - 求职路线空态 UI + 简历可查看**：`CareerRoutePage` 空态不再用 `Empty`，改为固定 5 步流程面板（简历→JD分析→润色→面试准备→复盘，`.jc-route-*` 圆形节点+连接线），顶部提供「上传已投简历」入口（原有上传逻辑不变，新记录自动添加）；已投简历的投递记录上点击「简历」按钮可查看简历原文弹窗（`getSubmission` → `resume_markdown`，复用 `.jc-resume-preview` 样式）
+- [x] **需求2 - 经历卡上传拆分 + 公司聚合**：
+  - 后端 `upload` 与 `submission/manual` 路由：逐段解析简历 → 每段重建原文（`_rebuild_entry_text`，不再整份简历存 raw_text）、识别 `card_type`（work/intern/project）、保留 parse 出的 `ai_structured{summary,achievements}` 缓存、同公司+同岗位去重（`find_card_by_company_role` + 内存 seen 集合）
+  - `ParseResumeEntriesAgent` prompt 增加 card_type 判定规则；`ResumeExperience` schema 加 `card_type` 字段；`split_resume_card_by_entries` 回填同步加 card_type + 去重
+  - 前端 `ExperiencePage` 改为**按公司分组**（同公司一个折叠组、组内不同岗位并列），组内同公司+同岗位兼容去重（老数据），标题旁展示「项目/实习」类型 Tag；卡片保留「详情/AI 分析/标签/删除」
+- [x] **需求3 - JD 列表去掉多余「查看」按钮**：`JDAnalysisPage` 岗位名称可点击查看详情，删除操作列的「查看」按钮（保留删除）
+- [x] **需求4 - 缺口分析与简历拼接用 STAR + 一页纸原则**：
+  - 缺口分析匹配源 `_card_text_blob` 已优先 `ai_structured.achievements`（S/A/R 拼接），无 STAR 才回退原文——需求本体已满足
+  - 简历拼接 `generate_resume_html` 每张经历卡 bullet 截断为最多 4 条，控制 A4 一页篇幅
+- [x] 验证：`npm run build` 通过；`uv run ruff check .` 通过；`uv run pytest tests/ -q` 70 passed、6 skipped；上传接口实测 3 段简历拆 3 卡（不同公司/岗位）、raw_text 逐段、去重生效
+
 ## 待办事项（v0.6 之后）
 
 - [ ] 面试复盘长文本稳定性优化（Groq TPM 限制下的平衡）— Multi-Agent 重构后单 Agent prompt 降至 1500~2000 tokens，显著缓解

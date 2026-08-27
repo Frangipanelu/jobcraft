@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS experience_card (
     industry VARCHAR(100),
     role_type VARCHAR(100),
     source VARCHAR(50) DEFAULT 'manual',
+    card_type VARCHAR(32) DEFAULT 'work',
     version INT DEFAULT 1,
     is_active TINYINT(1) DEFAULT 1,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

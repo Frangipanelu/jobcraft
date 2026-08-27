@@ -86,7 +86,9 @@ class ParseResumeEntriesAgent(BaseAgent):
             "4. 如果某段经历包含多条 bullet 项，每个 bullet 拆成一个 achievement\n"
             "5. summary 写一句总概括，格式：'参与/负责了xx项目/xx流程，实现/达成xx目标，带来xx%提升'\n"
             "6. company/role/period 从原文提取，原文没有则填空字符串\n"
-            "7. 每条 achievement 的 title 写 bullet 的核心动作，situation/action/result 尽量提取量化结果\n\n"
+            "7. 每条 achievement 的 title 写 bullet 的核心动作，situation/action/result 尽量提取量化结果\n"
+            "8. card_type 判断该段经历的类型：正式全职工作写 'work'，实习写 'intern'，"
+            "学校里/业余的独立项目或竞赛项目写 'project'（工作期间做的小项目仍算 work）\n\n"
             "输出 JSON: {\n"
             '  "entries": [\n'
             "    {\n"
@@ -95,6 +97,7 @@ class ParseResumeEntriesAgent(BaseAgent):
             '      "period": "2020.03 - 2022.06",\n'
             '      "title": "经历标题",\n'
             '      "summary": "一句话总概括",\n'
+            '      "card_type": "work | intern | project",\n'
             '      "achievements": [\n'
             '        { "title": "...", "situation": "...", "action": {"main": "...", "difficulty": "", "resolution": ""}, "result": "..." },\n'
             "      ]\n"
