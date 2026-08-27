@@ -2,6 +2,55 @@
 
 > 本文件定义所有 AI Agent（编码、架构、测试、Review）在本项目中的角色、行为准则、绝对红线与自动化验证要求。任何 AI 会话开始前必须先读取本文件。
 
+## 0. AI 工作流（必读）
+
+### 0.1 启动流程
+
+当opencode开始新会话时，必须按以下步骤执行：
+
+```
+1. 读取上下文
+   ├── AGENTS.md        → 了解行为规范
+   ├── PRODUCT.md       → 了解产品定义
+   ├── ARCHITECTURE.md  → 了解技术架构
+   └── PROGRESS.md      → 了解当前进度
+
+2. 检查任务
+   └── TODO.md          → 查看未完成任务
+
+3. 建立任务（如有新需求）
+   └── 更新 TODO.md     → 创建任务清单
+
+4. 执行任务
+   ├── 完成一个任务 → 更新 TODO.md
+   ├── 提交代码 → 记录 commit_id
+   └── 更新 PROGRESS.md
+
+5. 完成后
+   ├── 确保所有任务完成
+   ├── 更新 PROGRESS.md
+   └── git push origin main
+```
+
+### 0.2 文档更新规则
+
+| 时机 | 更新文件 | 内容 |
+|------|----------|------|
+| 开始任务 | TODO.md | 创建任务清单 |
+| 完成任务 | TODO.md | 标记为完成 |
+| 提交代码 | PROGRESS.md | 记录 commit_id |
+| 发布版本 | PROGRESS.md | 更新版本号 |
+
+### 0.3 Commit Message 规范
+
+```
+feat: 新功能
+fix: 修复bug
+refactor: 重构
+docs: 文档更新
+chore: 杂项
+```
+
 ## 1. 角色与行为准则
 
 ### 1.1 角色定义
