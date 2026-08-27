@@ -24,7 +24,7 @@ import {
   Tag,
   Typography,
 } from 'antd'
-const { Text } = Typography
+const { Text, Title } = Typography
 const { TextArea } = Input
 
 export default function JDAnalysisPage() {
@@ -145,6 +145,9 @@ export default function JDAnalysisPage() {
 
   return (
     <div>
+      <div className="jc-page-header">
+        <Title level={4} style={{ margin: 0 }}>JD 分析库</Title>
+      </div>
       <Card title="新建 JD 分析" style={{ marginBottom: 24 }}>
         <Space direction="vertical" style={{ width: '100%' }}>
           <Space>
@@ -287,12 +290,9 @@ export default function JDAnalysisPage() {
               {
                 title: '操作',
                 render: (_: any, record: any) => (
-                  <Space>
-                    <Button size="small" onClick={() => handleViewAnalysis(record.id)}>查看</Button>
-                    <Popconfirm title="确定删除？" onConfirm={() => handleDelete(record.id)}>
-                      <Button size="small" danger icon={<DeleteOutlined />} />
-                    </Popconfirm>
-                  </Space>
+                  <Popconfirm title="确定删除？" onConfirm={() => handleDelete(record.id)}>
+                    <Button size="small" danger icon={<DeleteOutlined />} />
+                  </Popconfirm>
                 ),
               },
             ]}

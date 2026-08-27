@@ -331,3 +331,130 @@ h5.ant-typography {
   padding: 2px 0;
   padding-left: 4px;
 }
+
+/* ===== 求职路线 ===== */
+.jc-route-card {
+  background: var(--jc-panel);
+  border: 1px solid var(--jc-line);
+  border-radius: var(--jc-radius);
+  padding: 22px;
+  margin-bottom: 18px;
+  box-shadow: var(--jc-shadow);
+}
+
+.jc-route-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.jc-route-title {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.jc-route-meta {
+  font-size: 12px;
+  color: var(--jc-muted);
+  margin-top: 8px;
+  margin-bottom: 20px;
+}
+
+.jc-route-flow {
+  display: flex;
+  align-items: flex-start;
+}
+
+.jc-route-step-wrap {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+}
+
+.jc-route-link {
+  flex: 1;
+  height: 2px;
+  background: var(--jc-line);
+  margin-top: 21px;
+  min-width: 8px;
+}
+
+.jc-route-link.is-done {
+  background: var(--jc-accent);
+}
+
+.jc-route-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  min-width: 76px;
+}
+
+.jc-route-node {
+  width: 44px !important;
+  height: 44px !important;
+  border-radius: 50% !important;
+  border: 1px solid var(--jc-line) !important;
+  background: var(--jc-panel) !important;
+  color: var(--jc-muted) !important;
+  font-size: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.jc-route-step.done .jc-route-node {
+  border-color: var(--jc-accent) !important;
+  background: var(--jc-accent-soft) !important;
+  color: var(--jc-accent) !important;
+}
+
+.jc-route-step.todo .jc-route-node {
+  border-color: var(--jc-accent) !important;
+  background: var(--jc-accent) !important;
+  color: #fff !important;
+}
+
+.jc-route-step.ready .jc-route-node {
+  border-color: var(--jc-accent) !important;
+  color: var(--jc-accent) !important;
+}
+
+.jc-route-step.locked .jc-route-node {
+  border-style: dashed;
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.jc-route-label {
+  font-size: 13px;
+  color: var(--jc-ink);
+  white-space: nowrap;
+}
+
+.jc-route-sub {
+  font-size: 11px;
+  color: var(--jc-muted);
+  white-space: nowrap;
+}
+
+@media (max-width: 768px) {
+  .jc-route-flow {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .jc-route-step-wrap {
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .jc-route-link {
+    display: none;
+  }
+}

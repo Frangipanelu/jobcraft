@@ -105,8 +105,8 @@ export default function App() {
         />
       </Sider>
       <Layout>
-        <Header className="jc-header">
-          {isSubPage && (
+        {isSubPage && (
+          <Header className="jc-header">
             <Button
               className="jc-back-link"
               type="link"
@@ -115,9 +115,9 @@ export default function App() {
             >
               返回
             </Button>
-          )}
-          <span className="jc-page-title">{pageTitle}</span>
-        </Header>
+            <span className="jc-page-title">{pageTitle}</span>
+          </Header>
+        )}
         <Content className="jc-page">{pageNode}</Content>
       </Layout>
     </Layout>

@@ -13,10 +13,11 @@ import {
   Space,
   Divider,
   Tooltip,
+  Typography,
+  Select,
 } from 'antd'
 import {
   PlusOutlined,
-  EditOutlined,
   DeleteOutlined,
   UploadOutlined,
   ThunderboltOutlined,
@@ -34,10 +35,13 @@ import {
   type ExperienceCard,
 } from '../api.ts'
 
+const { Title } = Typography
+
 interface CardFormState {
   title: string
   raw_text: string
   tags: string
+  card_type: string
 }
 
 function makeFormState(card?: Partial<ExperienceCard>): CardFormState {
@@ -45,6 +49,7 @@ function makeFormState(card?: Partial<ExperienceCard>): CardFormState {
     title: card?.title ?? '',
     raw_text: card?.raw_text ?? '',
     tags: (card?.tags ?? []).join(', '),
+    card_type: card?.card_type ?? 'work',
   }
 }
 
@@ -57,13 +62,13 @@ function parseFormState(values: CardFormState): Partial<ExperienceCard> {
     title: values.title,
     raw_text: values.raw_text,
     tags,
+    card_type: values.card_type,
   }
 }
 
 export default function ExperiencePage() {
   const [cards, setCards] = useState<ExperienceCard[]>([])
   const [modalOpen, setModalOpen] = useState(false)
-  const [editingId, setEditingId] = useState<number | null>(null)
   const [uploading, setUploading] = useState(false)
   const [backfilling, setBackfilling] = useState(false)
   const [structuring, setStructuring] = useState<Set<number>>(new Set())
@@ -94,27 +99,30 @@ export default function ExperiencePage() {
   }, [structuring.size])
 
   const groups = useMemo(() => {
-    const map = new Map<string, ExperienceCard[]>()
+    // 按公司分组：同一公司只展示一组，组内多个岗位（角色）并列；
+    // 组内同公司+同岗位去重（兼容去重逻辑上线前导入的旧数据）
+    const byCompany = new Map<string, ExperienceCard[]>()
     for (const card of cards) {
-      const key = `全部经历（${cards.length} 张）`
-      const list = map.get(key) || []
-      list.push(card)
-      map.set(key, list)
+      const key = (card.company || '').trim() || '(未标注公司)'
+      const list = byCompany.get(key) || []
+      const dup = list.some(
+        (x) =>
+          (x.role || '').trim() === (card.role || '').trim() &&
+          (card.role || '').trim() !== '',
+      )
+      if (dup) continue
+      byCompany.set(key, [...list, card])
     }
-    return Array.from(map.entries())
+    const entries: [string, string, ExperienceCard[]][] = []
+    for (const [company, list] of byCompany) {
+      const label = company === '(未标注公司)' ? '未标注公司' : company
+      entries.push([company, `${label} · ${list.length} 个岗位`, list])
+    }
+    return entries
   }, [cards])
 
   const openCreate = () => {
     const init = makeFormState()
-    setEditingId(null)
-    setInitialValues(init)
-    form.setFieldsValue(init)
-    setModalOpen(true)
-  }
-
-  const openEdit = (card: ExperienceCard) => {
-    const init = makeFormState(card)
-    setEditingId(card.id)
     setInitialValues(init)
     form.setFieldsValue(init)
     setModalOpen(true)
@@ -128,13 +136,8 @@ export default function ExperiencePage() {
     }
     const payload = parseFormState(values)
     try {
-      if (editingId) {
-        await updateCard(editingId, payload)
-        message.success('经历卡已更新')
-      } else {
-        await createCard(payload)
-        message.success('经历卡已创建')
-      }
+      await createCard(payload)
+      message.success('经历卡已创建')
       setModalOpen(false)
       await load()
     } catch (err) {
@@ -198,11 +201,11 @@ export default function ExperiencePage() {
     setDetailOpen(true)
   }
 
-  const handleSaveStructured = async (updated: Record<string, any>) => {
+  const handleSaveDetail = async (payload: Partial<ExperienceCard>) => {
     if (!detailCard) return
     try {
-      await updateCard(detailCard.id, { ai_structured: updated })
-      message.success('结构化内容已更新')
+      await updateCard(detailCard.id, payload)
+      message.success('经历卡已更新')
       setDetailOpen(false)
       await load()
     } catch (err) {
@@ -255,36 +258,21 @@ export default function ExperiencePage() {
     }
   }
 
-  const renderAchievements = (card: ExperienceCard) => {
-    const cache = card.ai_structured as { summary?: string; achievements?: Array<Record<string, any>> } | null
-    if (!cache) return null
-    const achievements = cache.achievements || []
-    const starOneLiner = (ach: Record<string, any>) => {
-      const parts: string[] = []
-      if (ach.title) parts.push(ach.title)
-      if (ach.situation) parts.push(ach.situation)
-      if (ach.action?.main) parts.push(ach.action.main)
-      if (ach.action?.difficulty) parts.push(`困难：${ach.action.difficulty}`)
-      if (ach.action?.resolution) parts.push(`解决：${ach.action.resolution}`)
-      if (ach.result) parts.push(ach.result)
-      return parts.join('，')
-    }
+  const renderSummary = (card: ExperienceCard) => {
+    const cache = card.ai_structured as { summary?: string } | null
+    const summary = cache?.summary || card.summary || ''
+    if (!summary) return null
     return (
-      <div className="jc-achievements">
-        {cache.summary && <div className="jc-summary">{cache.summary}</div>}
-        {achievements.map((ach: Record<string, any>, i: number) => (
-          <div key={i} className="jc-bullet">• {starOneLiner(ach)}</div>
-        ))}
+      <div className="jc-summary" style={{ marginTop: 8 }}>
+        {summary}
       </div>
     )
   }
 
   return (
     <div>
-      <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
-        <div style={{ fontSize: 16, fontWeight: 600 }}>
-          经历卡片 · {cards.length}
-        </div>
+      <div className="jc-page-header">
+        <Title level={4} style={{ margin: 0 }}>经历卡片</Title>
         <Space wrap>
           <Button icon={<PartitionOutlined />} loading={backfilling} onClick={handleBackfill}>
             {backfilling ? '拆分中...' : '拆分历史整卡'}
@@ -307,9 +295,9 @@ export default function ExperiencePage() {
         </Space>
       </div>
 
-      {groups.map(([key, list]) => (
-        <Collapse key={key} className="jc-section" ghost>
-          <Collapse.Panel header={<b>{key}</b>} key={key}>
+      {groups.map(([gkey, label, list]) => (
+        <Collapse key={gkey} className="jc-section" ghost defaultActiveKey={[gkey]}>
+          <Collapse.Panel header={<b>{label}</b>} key={gkey}>
             <div className="jc-card-grid">
               {list.map((card) => (
                 <div key={card.id} className="jc-card">
@@ -318,7 +306,15 @@ export default function ExperiencePage() {
                     {card.role && <span className="jc-card-role">{card.role}</span>}
                     {card.period && <span className="jc-card-period">{card.period}</span>}
                   </div>
-                  <div className="jc-card-title">{card.title}</div>
+                  <div className="jc-card-title">
+                    {card.title}
+                    {card.card_type === 'project' && (
+                      <Tag color="purple" style={{ marginLeft: 8 }}>项目</Tag>
+                    )}
+                    {card.card_type === 'intern' && (
+                      <Tag color="blue" style={{ marginLeft: 8 }}>实习</Tag>
+                    )}
+                  </div>
                   {card.tags.length > 0 && (
                     <div style={{ marginBottom: 8 }}>
                       {card.tags.map((tag) => (
@@ -326,14 +322,11 @@ export default function ExperiencePage() {
                       ))}
                     </div>
                   )}
-                  {renderAchievements(card)}
+                  {renderSummary(card)}
                   <Divider style={{ margin: '12px 0' }} />
                   <Space>
                     <Button size="small" icon={<FileTextOutlined />} onClick={() => openDetail(card)}>
                       详情
-                    </Button>
-                    <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(card)}>
-                      编辑
                     </Button>
                     <Tooltip title="AI 结构化分析（S/A/R）">
                       <Button
@@ -369,12 +362,26 @@ export default function ExperiencePage() {
 
       <Modal
         open={modalOpen}
-        title={editingId ? '编辑经历' : '新建经历'}
+        title="新建经历"
         onCancel={() => setModalOpen(false)}
         onOk={() => form.submit()}
         width={720}
       >
         <Form form={form} layout="vertical" onFinish={handleSave}>
+          <Form.Item
+            name="card_type"
+            label="经历类型"
+            initialValue="work"
+            rules={[{ required: true, message: '请选择经历类型' }]}
+          >
+            <Select
+              options={[
+                { label: '工作经历', value: 'work' },
+                { label: '实习经历', value: 'intern' },
+                { label: '项目经历', value: 'project' },
+              ]}
+            />
+          </Form.Item>
           <Form.Item
             name="title"
             label="标题"
@@ -400,7 +407,7 @@ export default function ExperiencePage() {
         card={detailCard}
         open={detailOpen}
         onClose={() => setDetailOpen(false)}
-        onSave={handleSaveStructured}
+        onSave={handleSaveDetail}
       />
     </div>
   )
@@ -410,16 +417,18 @@ function DetailModal({ card, open, onClose, onSave }: {
   card: ExperienceCard | null
   open: boolean
   onClose: () => void
-  onSave: (structured: Record<string, any>) => void
+  onSave: (payload: Record<string, any>) => void
 }) {
   const cache = card?.ai_structured as Record<string, any> | null | undefined
   const achievements = (cache?.achievements || []) as Record<string, any>[]
   const [summary, setSummary] = useState(cache?.summary || '')
   const [items, setItems] = useState<Record<string, any>[]>([])
+  const [form] = Form.useForm<CardFormState>()
 
   useEffect(() => {
     setSummary(cache?.summary || '')
     setItems(achievements.map(a => ({ ...a, action: { ...(a.action || {}) } })))
+    form.setFieldsValue(makeFormState(card ?? undefined))
   }, [card])
 
   const updateItem = (i: number, field: string, value: string) => {
@@ -438,21 +447,61 @@ function DetailModal({ card, open, onClose, onSave }: {
     })
   }
 
-  const handleSave = () => {
-    onSave({ summary, achievements: items })
+  const handleSave = async () => {
+    const values = await form.validateFields()
+    const basic = parseFormState(values)
+    onSave({
+      ...basic,
+      ai_structured: { summary, achievements: items },
+    })
   }
 
   return (
     <Modal
       open={open}
-      title={`结构化详情 — ${card?.title || ''}`}
+      title={`经历详情 — ${card?.title || ''}`}
       onCancel={onClose}
       onOk={handleSave}
       width={800}
     >
-      <div style={{ maxHeight: 520, overflowY: 'auto' }}>
+      <div style={{ maxHeight: 560, overflowY: 'auto' }}>
+        <Form form={form} layout="vertical" initialValues={makeFormState(card ?? undefined)}>
+          <Form.Item
+            name="card_type"
+            label="经历类型"
+            rules={[{ required: true, message: '请选择经历类型' }]}
+          >
+            <Select
+              options={[
+                { label: '工作经历', value: 'work' },
+                { label: '实习经历', value: 'intern' },
+                { label: '项目经历', value: 'project' },
+              ]}
+            />
+          </Form.Item>
+          <Form.Item
+            name="title"
+            label="标题"
+            rules={[{ required: true, message: '请输入标题' }]}
+          >
+            <Input placeholder="例如：负责用户增长项目 DAU 5w→15w" />
+          </Form.Item>
+          <Form.Item
+            name="raw_text"
+            label="经历描述"
+            extra="自由书写即可，不必拘泥于 STAR 格式。AI 后续会帮你结构化。"
+          >
+            <Input.TextArea rows={4} placeholder="写下这段经历的关键信息：项目背景、你的工作、困难、结果……" />
+          </Form.Item>
+          <Form.Item name="tags" label="标签（逗号分隔，可空）">
+            <Input placeholder="例如 用户增长, 数据分析, 项目管理" />
+          </Form.Item>
+        </Form>
+        <Divider style={{ margin: '8px 0 16px' }} />
         {!cache ? (
-          <div style={{ textAlign: 'center', padding: 32, color: 'var(--jc-muted)' }}>暂无 AI 结构化数据，请先点击「AI 分析」</div>
+          <div style={{ textAlign: 'center', padding: 24, color: 'var(--jc-muted)' }}>
+            暂无 AI 结构化数据，可先保存基础信息，再点击卡片上的「AI 分析」
+          </div>
         ) : (
           <>
             <div style={{ marginBottom: 16 }}>

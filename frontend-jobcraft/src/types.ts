@@ -49,6 +49,7 @@ export interface ExperienceCard {
   role?: string | null
   period?: string | null
   source: string
+  card_type: string
   version: number
   is_active: boolean
   created_at?: string

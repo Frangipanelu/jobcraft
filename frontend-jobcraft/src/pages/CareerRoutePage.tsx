@@ -9,8 +9,6 @@ import {
 } from '@ant-design/icons'
 import {
   Button,
-  Card,
-  Empty,
   Input,
   message,
   Modal,
@@ -26,6 +24,7 @@ import {
 import {
   createManualSubmission,
   getDashboard,
+  getSubmission,
   step1AtsRecommend,
   updateSubmission,
   type DashboardItem,
@@ -50,6 +49,7 @@ type BtnState = 'todo' | 'done' | 'locked' | 'ready'
 interface BtnConfig {
   key: string
   label: string
+  sub?: string
   icon: React.ReactNode
   state: BtnState
   tooltip: string
@@ -72,6 +72,10 @@ export default function CareerRoutePage() {
   const [jdTargetId, setJdTargetId] = useState<number | null>(null)
   const [jdText, setJdText] = useState('')
   const [jdAnalyzing, setJdAnalyzing] = useState(false)
+
+  // 查看简历弹窗
+  const [showResume, setShowResume] = useState(false)
+  const [resumeMarkdown, setResumeMarkdown] = useState('')
 
   const loadData = useCallback(async () => {
     setLoading(true)
@@ -103,6 +107,17 @@ export default function CareerRoutePage() {
       await fetch(`/api/jobcraft/submission/${id}`, { method: 'DELETE' })
       message.success('已删除')
       loadData()
+    } catch (err) {
+      message.error((err as Error).message)
+    }
+  }
+
+  // 查看已投简历（Markdown 原文）
+  const handleViewResume = async (id: number) => {
+    try {
+      const sub = await getSubmission(id)
+      setResumeMarkdown(sub.resume_markdown || '（暂无简历内容）')
+      setShowResume(true)
     } catch (err) {
       message.error((err as Error).message)
     }
@@ -173,12 +188,15 @@ export default function CareerRoutePage() {
     // 📄 简历
     const resumeBtn: BtnConfig = {
       key: 'resume',
-      label: isManual && !hasResume ? '上传已投简历' : '查看简历',
+      label: '简历',
+      sub: hasResume ? '已上传' : '待上传',
       icon: <FileTextOutlined />,
       state: hasResume ? 'done' : 'todo',
-      tooltip: hasResume ? '查看简历' : '上传已投递的简历文件',
+      tooltip: hasResume ? '查看简历原文' : '上传已投递的简历文件',
       onClick: () => {
-        if (!hasResume) {
+        if (hasResume) {
+          handleViewResume(item.id)
+        } else {
           setUpCompany(item.company)
           setUpPosition(item.position)
           setShowUpload(true)
@@ -189,7 +207,8 @@ export default function CareerRoutePage() {
     // 🔍 JD分析
     const jdBtn: BtnConfig = {
       key: 'jd',
-      label: isManual && !hasAnalysis ? '粘贴 JD' : '查看分析',
+      label: 'JD 分析',
+      sub: hasAnalysis ? '已完成' : hasResume ? '待分析' : '需简历',
       icon: <AimOutlined />,
       state: hasAnalysis ? 'done' : !hasResume ? 'locked' : 'todo',
       tooltip: hasAnalysis
@@ -208,7 +227,8 @@ export default function CareerRoutePage() {
     // 📝 润色卡片
     const polishBtn: BtnConfig = {
       key: 'polish',
-      label: isManual ? `已自动抽取${item.card_count}张` : `已润色${item.card_version_count}张`,
+      label: '润色',
+      sub: isManual ? `已抽 ${item.card_count} 张` : `已润色 ${item.card_version_count} 张`,
       icon: <FileTextOutlined />,
       state: 'done',
       tooltip: isManual
@@ -220,6 +240,11 @@ export default function CareerRoutePage() {
     const prepBtn: BtnConfig = {
       key: 'prep',
       label: '面试准备',
+      sub: prepEnabled
+        ? item.prep_count > 0
+          ? `${item.prep_count} 份`
+          : '待生成'
+        : '需≥面试邀约',
       icon: <AudioOutlined />,
       state: prepEnabled ? (item.prep_count > 0 ? 'done' : 'ready') : 'locked',
       tooltip: prepEnabled
@@ -238,6 +263,11 @@ export default function CareerRoutePage() {
     const reviewBtn: BtnConfig = {
       key: 'review',
       label: '复盘',
+      sub: reviewEnabled
+        ? item.review_count > 0
+          ? `${item.review_count} 次`
+          : '待复盘'
+        : '需≥一面',
       icon: <FormOutlined />,
       state: reviewEnabled ? (item.review_count > 0 ? 'done' : 'ready') : 'locked',
       tooltip: reviewEnabled
@@ -265,7 +295,7 @@ export default function CareerRoutePage() {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 24 }}>
+      <div className="jc-page-header">
         <Title level={4} style={{ margin: 0 }}>我的求职路线</Title>
         <Button icon={<UploadOutlined />} onClick={() => setShowUpload(true)}>
           上传已投简历
@@ -273,10 +303,34 @@ export default function CareerRoutePage() {
       </div>
 
       {items.length === 0 ? (
-        <Empty
-          description="还没有投递记录，点击右上角上传已投简历开始"
-          style={{ padding: 60 }}
-        />
+        <div className="jc-route-card">
+          <div className="jc-route-head">
+            <Text strong style={{ fontSize: 16 }}>还没有投递记录</Text>
+            <Button icon={<UploadOutlined />} onClick={() => setShowUpload(true)}>
+              上传已投简历
+            </Button>
+          </div>
+          <div className="jc-route-meta">上传一份已投简历，或手动补录后，每家公司会呈现这条求职路线。</div>
+          <div className="jc-route-flow">
+            {['resume', 'jd', 'polish', 'prep', 'review'].map((key, i) => (
+              <div key={key} className="jc-route-step-wrap">
+                {i > 0 && <span className="jc-route-link" />}
+                <div className="jc-route-step locked">
+                  <span className="jc-route-node">
+                    {key === 'resume' && <FileTextOutlined />}
+                    {key === 'jd' && <AimOutlined />}
+                    {key === 'polish' && <FileTextOutlined />}
+                    {key === 'prep' && <AudioOutlined />}
+                    {key === 'review' && <FormOutlined />}
+                  </span>
+                  <div className="jc-route-label">
+                    {key === 'resume' ? '简历' : key === 'jd' ? 'JD 分析' : key === 'polish' ? '润色' : key === 'prep' ? '面试准备' : '复盘'}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
       ) : (
         items.map((item) => {
           const btns = buildButtons(item)
@@ -290,21 +344,21 @@ export default function CareerRoutePage() {
                   : 'processing'
 
           return (
-            <Card key={item.id} style={{ marginBottom: 16 }} bodyStyle={{ padding: 16 }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-                <Space size={16}>
-                  <div>
-                    <Text strong style={{ fontSize: 16 }}>{item.position}</Text>
-                    {item.company && (
-                      <>
-                        <Text type="secondary" style={{ margin: '0 8px' }}>·</Text>
-                        <Text>{item.company}</Text>
-                      </>
-                    )}
-                    {item.is_manual && (
-                      <Tag style={{ marginLeft: 8 }}>手动</Tag>
-                    )}
-                  </div>
+            <div key={item.id} className="jc-route-card">
+              <div className="jc-route-head">
+                <div className="jc-route-title">
+                  <Text strong style={{ fontSize: 16 }}>{item.position}</Text>
+                  {item.company && (
+                    <>
+                      <Text type="secondary" style={{ margin: '0 8px' }}>·</Text>
+                      <Text>{item.company}</Text>
+                    </>
+                  )}
+                  {item.is_manual && (
+                    <Tag style={{ marginLeft: 8 }}>手动</Tag>
+                  )}
+                </div>
+                <Space size={8}>
                   <Select
                     value={item.status}
                     onChange={(v) => handleStatusChange(item.id, v)}
@@ -316,78 +370,37 @@ export default function CareerRoutePage() {
                     ))}
                   </Select>
                   <Tag color={statusColor}>{item.status}</Tag>
+                  <Popconfirm title="确定删除？" onConfirm={() => handleDelete(item.id)}>
+                    <Button size="small" danger icon={<DeleteOutlined />} />
+                  </Popconfirm>
                 </Space>
-                <Popconfirm title="确定删除？" onConfirm={() => handleDelete(item.id)}>
-                  <Button size="small" danger icon={<DeleteOutlined />} />
-                </Popconfirm>
               </div>
 
-              <div style={{ color: 'var(--jc-muted)', fontSize: 12, marginBottom: 12 }}>
+              <div className="jc-route-meta">
                 {item.created_at && <>创建 {new Date(item.created_at).toLocaleDateString('zh-CN')}</>}
               </div>
 
-              <Space size={8} wrap>
-                {btns.map((btn) => {
-                  const btnStyle: React.CSSProperties = {
-                    width: 90,
-                    height: 56,
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: 12,
-                    borderRadius: 6,
-                    border: '1px solid var(--jc-line)',
-                  }
-
-                  if (btn.state === 'locked') {
-                    return (
-                      <Tooltip key={btn.key} title={btn.tooltip}>
-                        <Button style={{ ...btnStyle, opacity: 0.35, cursor: 'not-allowed' }} disabled>
-                          {btn.icon}{'\n'}{btn.label}
-                        </Button>
-                      </Tooltip>
-                    )
-                  }
-
-                  if (btn.state === 'todo') {
-                    return (
-                      <Tooltip key={btn.key} title={btn.tooltip}>
+              <div className="jc-route-flow">
+                {btns.map((btn, i) => (
+                  <div key={btn.key} className="jc-route-step-wrap">
+                    {i > 0 && <span className={`jc-route-link ${btns[i - 1].state === 'done' ? 'is-done' : ''}`} />}
+                    <div className={`jc-route-step ${btn.state}`}>
+                      <Tooltip title={btn.tooltip}>
                         <Button
-                          type="primary"
-                          style={{ ...btnStyle, border: 'none' }}
+                          className="jc-route-node"
+                          icon={btn.icon}
+                          disabled={btn.state === 'locked'}
                           onClick={btn.onClick}
-                        >
-                          {btn.icon}{'\n'}{btn.label}
-                        </Button>
+                          aria-label={btn.label}
+                        />
                       </Tooltip>
-                    )
-                  }
-
-                  if (btn.state === 'done') {
-                    return (
-                      <Tooltip key={btn.key} title={btn.tooltip}>
-                        <Button
-                          style={{ ...btnStyle, borderColor: 'var(--jc-success)', color: 'var(--jc-success)' }}
-                          onClick={btn.onClick}
-                        >
-                          {btn.icon}{'\n'}{btn.label}
-                        </Button>
-                      </Tooltip>
-                    )
-                  }
-
-                  // ready
-                  return (
-                    <Tooltip key={btn.key} title={btn.tooltip}>
-                      <Button style={btnStyle} onClick={btn.onClick}>
-                        {btn.icon}{'\n'}{btn.label}
-                      </Button>
-                    </Tooltip>
-                  )
-                })}
-              </Space>
-            </Card>
+                      <div className="jc-route-label">{btn.label}</div>
+                      {btn.sub && <div className="jc-route-sub">{btn.sub}</div>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
           )
         })
       )}
@@ -445,6 +458,19 @@ export default function CareerRoutePage() {
           value={jdText}
           onChange={(e) => setJdText(e.target.value)}
         />
+      </Modal>
+
+      {/* 查看简历弹窗 */}
+      <Modal
+        title="已投简历原文"
+        open={showResume}
+        onCancel={() => setShowResume(false)}
+        footer={null}
+        width={680}
+      >
+        <div className="jc-resume-preview" style={{ maxHeight: 520 }}>
+          {resumeMarkdown}
+        </div>
       </Modal>
     </div>
   )
