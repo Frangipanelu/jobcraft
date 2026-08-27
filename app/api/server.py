@@ -5,6 +5,7 @@ JobCraft 求职助手 — FastAPI 接口层
 """
 
 import logging
+import os
 import shutil
 import uuid
 from contextlib import asynccontextmanager
@@ -35,6 +36,9 @@ from app.schemas.jobcraft import (
     ExperienceCardUpdate,
 )
 from app.tools.upload_file_read_tool import read_file_content
+from app.auth.router import router as auth_router
+from app.auth.dependencies import get_current_user, get_optional_user
+from app.monitoring import setup_monitoring
 
 
 @asynccontextmanager
@@ -47,6 +51,12 @@ current_dir = Path(__file__).resolve().parent
 project_root = current_dir.parent.parent
 
 app = FastAPI(title="JobCraft API", lifespan=lifespan)
+
+# 注册认证路由
+app.include_router(auth_router)
+
+# 设置监控
+setup_monitoring(app)
 
 # 统一 logger: 让 /api/jobcraft/* 路由里的 logger.exception 真正写到 stderr
 logging.basicConfig(
@@ -63,13 +73,17 @@ output_dir.mkdir(exist_ok=True)
 updated_dir = project_root / "updated"
 updated_dir.mkdir(exist_ok=True)
 
-# 教学项目通常前后端分别本地启动，这里放开跨域以便 Vite 页面直接调用 API
+# CORS 配置：从环境变量读取允许的来源，限制方法和头
+ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "http://localhost:5173,http://localhost:5174,http://localhost:5175").split(",")
+ALLOWED_METHODS = ["GET", "POST", "PATCH", "DELETE", "OPTIONS"]
+ALLOWED_HEADERS = ["Authorization", "Content-Type", "Accept"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=ALLOWED_METHODS,
+    allow_headers=ALLOWED_HEADERS,
 )
 
 
@@ -117,6 +131,192 @@ async def general_exception_handler(_request: Request, exc: Exception) -> JSONRe
         status_code=500,
         content=APIResponse.error(code=500, msg="服务器内部错误，请稍后重试"),
     )
+
+
+# ============================================================
+#  健康检查与监控
+# ============================================================
+
+
+@app.get("/health")
+async def health_check():
+    """
+    健康检查接口
+
+    用于负载均衡器和监控系统检查服务状态。
+    """
+    return {
+        "status": "healthy",
+        "service": "jobcraft-api",
+        "version": "0.6.0",
+    }
+
+
+@app.get("/api/jobcraft/health")
+async def api_health_check():
+    """
+    API 健康检查接口
+
+    包含数据库连接检查。
+    """
+    try:
+        # 检查数据库连接
+        from app.db import engine
+        with engine.connect() as conn:
+            conn.execute("SELECT 1")
+        db_status = "healthy"
+    except Exception as e:
+        logger.warning(f"数据库健康检查失败: {e}")
+        db_status = "unhealthy"
+
+    return {
+        "status": "healthy" if db_status == "healthy" else "degraded",
+        "service": "jobcraft-api",
+        "version": "0.6.0",
+        "checks": {
+            "database": db_status,
+        },
+    }
+
+
+# ============================================================
+#  异步任务管理
+# ============================================================
+
+
+@app.post("/api/jobcraft/tasks/submit")
+async def submit_task(payload: Dict[str, Any]):
+    """
+    提交异步任务
+
+    支持的任务类型：
+    - resume_generate: 简历生成
+    - interview_prep: 面试准备
+    - export_pdf: PDF导出
+    """
+    try:
+        from app.tasks import get_task_manager
+        from app.tasks.handlers import get_task_handler
+
+        task_type = payload.get("task_type")
+        if not task_type:
+            raise HTTPException(status_code=400, detail="task_type 不能为空")
+
+        handler = get_task_handler(task_type)
+        if not handler:
+            raise HTTPException(status_code=400, detail=f"不支持的任务类型: {task_type}")
+
+        manager = get_task_manager()
+        task_id = manager.submit_task(
+            task_type=task_type,
+            params=payload.get("params", {}),
+        )
+
+        return {
+            "task_id": task_id,
+            "task_type": task_type,
+            "status": "pending",
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"提交任务失败: {e}")
+
+
+@app.get("/api/jobcraft/tasks/{task_id}")
+async def get_task_status(task_id: str):
+    """
+    查询任务状态
+
+    :param task_id: 任务 ID
+    :return: 任务信息
+    """
+    try:
+        from app.tasks import get_task_manager
+
+        manager = get_task_manager()
+        task = manager.get_task(task_id)
+
+        if not task:
+            raise HTTPException(status_code=404, detail="任务不存在")
+
+        return task.to_dict()
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"查询任务失败: {e}")
+
+
+@app.post("/api/jobcraft/tasks/{task_id}/cancel")
+async def cancel_task(task_id: str):
+    """
+    取消任务
+
+    :param task_id: 任务 ID
+    :return: 操作结果
+    """
+    try:
+        from app.tasks import get_task_manager
+
+        manager = get_task_manager()
+        success = manager.cancel_task(task_id)
+
+        if not success:
+            raise HTTPException(
+                status_code=400,
+                detail="任务不存在或已完成，无法取消"
+            )
+
+        return {"message": "任务已取消"}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"取消任务失败: {e}")
+
+
+@app.get("/api/jobcraft/tasks")
+async def list_tasks(
+    status: Optional[str] = None,
+    limit: int = 50,
+):
+    """
+    列出任务
+
+    :param status: 过滤状态（pending/running/completed/failed/cancelled）
+    :param limit: 返回数量限制
+    :return: 任务列表
+    """
+    try:
+        from app.tasks import get_task_manager
+        from app.tasks.worker import TaskStatus
+
+        manager = get_task_manager()
+
+        # 转换状态参数
+        task_status = None
+        if status:
+            try:
+                task_status = TaskStatus(status)
+            except ValueError:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"无效的状态值: {status}"
+                )
+
+        tasks = manager.list_tasks(status=task_status, limit=limit)
+
+        return {
+            "items": [task.to_dict() for task in tasks],
+            "total": len(tasks),
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"列出任务失败: {e}")
 
 
 # ============================================================
@@ -263,22 +463,37 @@ async def jobcraft_experience_upload(
         logger.warning("简历解析失败，降级为单卡")
         entries = []
 
-    # 创建经历卡
+    # 创建经历卡：逐段原文存 raw_text，识别 card_type，同公司+同岗位去重
     created_cards = []
+    seen: set = set()
     try:
         if entries:
             for ent in entries:
+                company = (ent.get("company") or "").strip()
+                role = (ent.get("role") or "").strip()
+                # 去重：同公司 + 同岗位（active 卡）只保留最原始真实的一份
+                dedup_key = f"{company}::{role}"
+                if company and dedup_key in seen:
+                    continue
+                existing = db_tools.find_card_by_company_role(user_id, company, role)
+                if existing:
+                    seen.add(dedup_key)
+                    continue
+                seen.add(dedup_key)
                 card_data = {
                     "user_id": user_id,
                     "title": ent.get("title")
-                    or ent.get("company")
+                    or role
+                    or company
                     or file.filename
                     or "未命名经历",
-                    "raw_text": resume_text.strip(),
-                    "company": ent.get("company", ""),
-                    "role": ent.get("role", ""),
+                    "raw_text": db_tools._rebuild_entry_text(ent),
+                    "company": company,
+                    "role": role,
                     "period": ent.get("period", ""),
+                    "card_type": (ent.get("card_type") or "work"),
                     "source": "resume_upload",
+                    "tags": [],
                     "ai_structured": {
                         "summary": ent.get("summary", ""),
                         "achievements": ent.get("achievements", []),
@@ -324,12 +539,387 @@ async def jobcraft_experience_upload(
 def jobcraft_experience_list(
     user_id: int = 1,
     include_inactive: bool = False,
+    page: int = 1,
+    page_size: int = 20,
 ):
-    """列出用户经历卡,默认只看激活状态"""
+    """
+    列出用户经历卡（支持分页）
+
+    :param user_id: 用户 ID
+    :param include_inactive: 是否包含归档卡片
+    :param page: 页码（从1开始）
+    :param page_size: 每页数量（1-100）
+    :return: 分页后的经历卡列表
+    """
     try:
-        return {"cards": db_tools.list_cards(user_id, include_inactive)}
+        # 参数校验
+        if page < 1:
+            page = 1
+        if page_size < 1:
+            page_size = 20
+        if page_size > 100:
+            page_size = 100
+
+        # 计算偏移量
+        offset = (page - 1) * page_size
+
+        # 获取总数和数据
+        total = db_tools.count_cards(user_id, include_inactive)
+        cards = db_tools.list_cards_paginated(user_id, include_inactive, offset, page_size)
+
+        # 计算总页数
+        total_pages = (total + page_size - 1) // page_size if page_size > 0 else 0
+
+        return {
+            "items": cards,
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "total_pages": total_pages,
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"查询失败: {e}")
+
+
+@app.get("/api/jobcraft/experience/cards/search")
+def jobcraft_experience_search(
+    q: str,
+    user_id: int = 1,
+    include_inactive: bool = False,
+    page: int = 1,
+    page_size: int = 20,
+):
+    """
+    搜索用户经历卡
+
+    支持按标题、公司、角色、标签、内容进行全文搜索。
+
+    :param q: 搜索关键词
+    :param user_id: 用户 ID
+    :param include_inactive: 是否包含归档卡片
+    :param page: 页码（从1开始）
+    :param page_size: 每页数量（1-100）
+    :return: 搜索结果（分页格式）
+    """
+    try:
+        # 参数校验
+        if not q or not q.strip():
+            raise HTTPException(status_code=400, detail="搜索关键词不能为空")
+        if page < 1:
+            page = 1
+        if page_size < 1:
+            page_size = 20
+        if page_size > 100:
+            page_size = 100
+
+        # 计算偏移量
+        offset = (page - 1) * page_size
+
+        # 获取搜索结果总数和数据
+        total = db_tools.count_search_cards(user_id, q, include_inactive)
+        cards = db_tools.search_cards(user_id, q, include_inactive, offset, page_size)
+
+        # 计算总页数
+        total_pages = (total + page_size - 1) // page_size if page_size > 0 else 0
+
+        return {
+            "items": cards,
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "total_pages": total_pages,
+            "query": q,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"搜索失败: {e}")
+
+
+@app.get("/api/jobcraft/experience/export")
+def jobcraft_experience_export(
+    user_id: int = 1,
+    card_ids: Optional[List[int]] = None,
+    format: str = "json",
+):
+    """
+    导出用户经历卡
+
+    支持导出格式：
+    - json: JSON 格式（默认）
+    - csv: CSV 格式
+    - markdown: Markdown 格式
+
+    :param user_id: 用户 ID
+    :param card_ids: 要导出的卡片 ID 列表（为空则导出全部）
+    :param format: 导出格式
+    :return: 导出数据
+    """
+    try:
+        # 获取要导出的卡片
+        if card_ids:
+            cards = [db_tools.get_card(cid) for cid in card_ids if db_tools.get_card(cid)]
+        else:
+            cards = db_tools.list_cards(user_id, include_inactive=True)
+
+        if not cards:
+            raise HTTPException(status_code=404, detail="没有可导出的经历卡")
+
+        # 根据格式返回
+        if format == "json":
+            return {
+                "format": "json",
+                "count": len(cards),
+                "data": cards,
+            }
+
+        elif format == "csv":
+            # 构建 CSV 内容
+            import csv
+            import io
+
+            output = io.StringIO()
+            writer = csv.writer(output)
+
+            # 写入表头
+            headers = ["id", "company", "role", "period", "title", "tags", "is_active", "created_at"]
+            writer.writerow(headers)
+
+            # 写入数据
+            for card in cards:
+                row = [
+                    card.get("id", ""),
+                    card.get("company", ""),
+                    card.get("role", ""),
+                    card.get("period", ""),
+                    card.get("title", ""),
+                    ",".join(card.get("tags", [])),
+                    card.get("is_active", True),
+                    card.get("created_at", ""),
+                ]
+                writer.writerow(row)
+
+            return {
+                "format": "csv",
+                "count": len(cards),
+                "content": output.getvalue(),
+                "filename": f"experience_cards_{user_id}.csv",
+            }
+
+        elif format == "markdown":
+            # 构建 Markdown 内容
+            md_lines = ["# 经历卡导出\n"]
+            md_lines.append(f"导出时间: {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+            md_lines.append(f"用户ID: {user_id}\n")
+            md_lines.append(f"卡片数量: {len(cards)}\n\n")
+
+            for card in cards:
+                md_lines.append(f"## {card.get('company', '未知公司')} - {card.get('role', '未知岗位')}\n")
+                md_lines.append(f"- **时间段**: {card.get('period', '未知')}\n")
+                md_lines.append(f"- **标题**: {card.get('title', '无标题')}\n")
+                md_lines.append(f"- **标签**: {', '.join(card.get('tags', []))}\n")
+                md_lines.append(f"- **状态**: {'活跃' if card.get('is_active') else '归档'}\n")
+                if card.get("raw_text"):
+                    md_lines.append(f"\n### 详细内容\n\n{card['raw_text']}\n")
+                md_lines.append("\n---\n\n")
+
+            return {
+                "format": "markdown",
+                "count": len(cards),
+                "content": "\n".join(md_lines),
+                "filename": f"experience_cards_{user_id}.md",
+            }
+
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail=f"不支持的导出格式: {format}，支持: json, csv, markdown"
+            )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"导出失败: {e}")
+
+
+@app.post("/api/jobcraft/experience/cards/batch")
+def jobcraft_experience_batch(payload: Dict[str, Any]):
+    """
+    批量操作经历卡
+
+    支持的操作类型：
+    - archive: 批量归档
+    - restore: 批量恢复
+    - delete: 批量删除
+    - tag: 批量添加标签
+
+    请求体示例：
+    {
+        "action": "archive",
+        "card_ids": [1, 2, 3],
+        "params": {}
+    }
+    """
+    try:
+        action = payload.get("action")
+        card_ids = payload.get("card_ids", [])
+        params = payload.get("params", {})
+
+        if not action:
+            raise HTTPException(status_code=400, detail="action 不能为空")
+        if not card_ids:
+            raise HTTPException(status_code=400, detail="card_ids 不能为空")
+
+        results = {"success": [], "failed": []}
+
+        if action == "archive":
+            # 批量归档
+            for card_id in card_ids:
+                try:
+                    ok = db_tools.update_card(card_id, {"is_active": False})
+                    if ok:
+                        results["success"].append(card_id)
+                    else:
+                        results["failed"].append({"card_id": card_id, "reason": "卡片不存在"})
+                except Exception as e:
+                    results["failed"].append({"card_id": card_id, "reason": str(e)})
+
+        elif action == "restore":
+            # 批量恢复
+            for card_id in card_ids:
+                try:
+                    ok = db_tools.update_card(card_id, {"is_active": True})
+                    if ok:
+                        results["success"].append(card_id)
+                    else:
+                        results["failed"].append({"card_id": card_id, "reason": "卡片不存在"})
+                except Exception as e:
+                    results["failed"].append({"card_id": card_id, "reason": str(e)})
+
+        elif action == "delete":
+            # 批量删除
+            for card_id in card_ids:
+                try:
+                    ok = db_tools.delete_card(card_id)
+                    if ok:
+                        results["success"].append(card_id)
+                    else:
+                        results["failed"].append({"card_id": card_id, "reason": "卡片不存在"})
+                except Exception as e:
+                    results["failed"].append({"card_id": card_id, "reason": str(e)})
+
+        elif action == "tag":
+            # 批量添加标签
+            tags_to_add = params.get("tags", [])
+            if not tags_to_add:
+                raise HTTPException(status_code=400, detail="tags 不能为空")
+
+            for card_id in card_ids:
+                try:
+                    card = db_tools.get_card(card_id)
+                    if not card:
+                        results["failed"].append({"card_id": card_id, "reason": "卡片不存在"})
+                        continue
+
+                    existing_tags = card.get("tags", [])
+                    new_tags = list(set(existing_tags + tags_to_add))
+                    ok = db_tools.update_card(card_id, {"tags": new_tags})
+
+                    if ok:
+                        results["success"].append(card_id)
+                    else:
+                        results["failed"].append({"card_id": card_id, "reason": "更新失败"})
+                except Exception as e:
+                    results["failed"].append({"card_id": card_id, "reason": str(e)})
+
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail=f"不支持的操作类型: {action}，支持: archive, restore, delete, tag"
+            )
+
+        return {
+            "action": action,
+            "total": len(card_ids),
+            "success_count": len(results["success"]),
+            "failed_count": len(results["failed"]),
+            "results": results,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"批量操作失败: {e}")
+
+
+@app.get("/api/jobcraft/experience/cards/{card_id}/versions")
+def jobcraft_experience_versions(card_id: int):
+    """
+    获取经历卡版本历史
+
+    :param card_id: 卡片 ID
+    :return: 版本历史列表
+    """
+    try:
+        # 检查卡片是否存在
+        card = db_tools.get_card(card_id)
+        if not card:
+            raise HTTPException(status_code=404, detail="卡片不存在")
+
+        # 获取版本历史
+        versions = db_tools.get_card_versions_by_card_id(card_id)
+
+        return {
+            "card_id": card_id,
+            "versions": versions,
+            "total": len(versions),
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取版本历史失败: {e}")
+
+
+@app.post("/api/jobcraft/experience/cards/{card_id}/versions")
+def jobcraft_experience_create_version(card_id: int, payload: Dict[str, Any]):
+    """
+    创建经历卡新版本
+
+    :param card_id: 卡片 ID
+    :param payload: 版本信息
+    :return: 新创建的版本
+    """
+    try:
+        # 检查卡片是否存在
+        card = db_tools.get_card(card_id)
+        if not card:
+            raise HTTPException(status_code=404, detail="卡片不存在")
+
+        # 构建版本数据
+        version_data = {
+            "card_id": card_id,
+            "version_type": payload.get("version_type", "manual"),
+            "source_type": payload.get("source_type", "manual"),
+            "source_id": payload.get("source_id", 0),
+            "title": payload.get("title", card.get("title", "")),
+            "raw_text": payload.get("raw_text", card.get("raw_text", "")),
+            "tags": payload.get("tags", card.get("tags", [])),
+            "note": payload.get("note", ""),
+        }
+
+        # 创建版本
+        version_id = db_tools.insert_card_version(version_data)
+
+        return {
+            "version_id": version_id,
+            "message": "版本创建成功",
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"创建版本失败: {e}")
 
 
 @app.post("/api/jobcraft/experience/cards")
@@ -996,30 +1586,56 @@ async def jobcraft_submission_manual(
 
     resume_text = resume_text.strip()
 
-    # 创建经历卡
+    # 解析简历 → 逐段经历卡（识别 card_type + 去重）
     try:
-        card_data = {
-            "user_id": user_id,
-            "title": file.filename or "已投简历",
-            "raw_text": resume_text,
-            "source": "manual_upload",
-        }
-        card_id = db_tools.insert_card(card_data)
-        # 后台自动触发结构化抽取
-        try:
-            from app.workflows.extract_flow import (
-                run_extract_structured_workflow,
-                run_recommend_tags_workflow,
-            )
+        from app.workflows.extract_flow import run_parse_resume_entries_workflow
 
-            cache = run_extract_structured_workflow(resume_text)
-            if cache:
-                db_tools.update_card(card_id, {"ai_structured": cache})
-            tags = run_recommend_tags_workflow(resume_text)
-            if tags:
-                db_tools.update_card(card_id, {"tags": tags})
-        except Exception:
-            logger.warning("经历卡自动抽取失败", exc_info=True)
+        entries = run_parse_resume_entries_workflow(resume_text)
+    except Exception:
+        logger.warning("简历解析失败，降级为单卡")
+        entries = []
+
+    created_ids: List[int] = []
+    seen: set = set()
+    try:
+        if entries:
+            for ent in entries:
+                company = (ent.get("company") or "").strip()
+                role = (ent.get("role") or "").strip()
+                dedup_key = f"{company}::{role}"
+                if company and dedup_key in seen:
+                    continue
+                if db_tools.find_card_by_company_role(user_id, company, role):
+                    seen.add(dedup_key)
+                    continue
+                seen.add(dedup_key)
+                card_id = db_tools.insert_card(
+                    {
+                        "user_id": user_id,
+                        "title": ent.get("title") or role or company or file.filename,
+                        "raw_text": db_tools._rebuild_entry_text(ent),
+                        "company": company,
+                        "role": role,
+                        "period": ent.get("period", ""),
+                        "card_type": (ent.get("card_type") or "work"),
+                        "source": "manual_upload",
+                        "tags": [],
+                        "ai_structured": {
+                            "summary": ent.get("summary", ""),
+                            "achievements": ent.get("achievements", []),
+                        },
+                    }
+                )
+                created_ids.append(card_id)
+        else:
+            card_data = {
+                "user_id": user_id,
+                "title": file.filename or "已投简历",
+                "raw_text": resume_text,
+                "source": "manual_upload",
+            }
+            card_id = db_tools.insert_card(card_data)
+            created_ids.append(card_id)
     except Exception as e:
         logger.exception("创建经历卡失败")
         raise HTTPException(status_code=500, detail=f"创建经历卡失败: {e}")

@@ -582,6 +582,7 @@ def _ensure_experience_card_columns() -> None:
     new_columns = [
         ("raw_text", "LONGTEXT"),
         ("ai_structured", "JSON"),
+        ("card_type", "VARCHAR(32) DEFAULT 'work'"),
     ]
     with connect(**config) as conn:
         with conn.cursor() as cur:
@@ -641,6 +642,7 @@ def _row_to_card(row: Dict[str, Any]) -> Dict[str, Any]:
         "result": row.get("result", ""),
         "dimensions": _parse_json(row.get("dimensions")) or [],
         "source": row["source"],
+        "card_type": row.get("card_type") or "work",
         "version": row["version"],
         "is_active": bool(row["is_active"]),
         "created_at": row["created_at"].isoformat() if row.get("created_at") else None,
@@ -673,6 +675,178 @@ def list_cards(user_id: int, include_inactive: bool = False) -> List[Dict[str, A
     return [_row_to_card(r) for r in rows]
 
 
+def count_cards(user_id: int, include_inactive: bool = False) -> int:
+    """
+    统计用户经历卡数量
+
+    :param user_id: 用户 ID
+    :param include_inactive: 是否包含归档卡片
+    :return: 经历卡数量
+    """
+    _ensure_experience_card_columns()
+    config = _jc_config()
+    with connect(**config) as conn:
+        with conn.cursor() as cur:
+            if include_inactive:
+                cur.execute(
+                    "SELECT COUNT(*) FROM experience_card WHERE user_id=%s",
+                    (user_id,),
+                )
+            else:
+                cur.execute(
+                    "SELECT COUNT(*) FROM experience_card WHERE user_id=%s AND is_active=1",
+                    (user_id,),
+                )
+            return cur.fetchone()[0]
+
+
+def list_cards_paginated(
+    user_id: int,
+    include_inactive: bool = False,
+    offset: int = 0,
+    limit: int = 20,
+) -> List[Dict[str, Any]]:
+    """
+    分页获取用户经历卡列表
+
+    :param user_id: 用户 ID
+    :param include_inactive: 是否包含归档卡片
+    :param offset: 偏移量
+    :param limit: 限制数量
+    :return: 经历卡列表
+    """
+    _ensure_experience_card_columns()
+    config = _jc_config()
+    with connect(**config) as conn:
+        with conn.cursor(dictionary=True) as cur:
+            if include_inactive:
+                cur.execute(
+                    "SELECT * FROM experience_card WHERE user_id=%s ORDER BY company, period, updated_at DESC LIMIT %s OFFSET %s",
+                    (user_id, limit, offset),
+                )
+            else:
+                cur.execute(
+                    "SELECT * FROM experience_card WHERE user_id=%s AND is_active=1 ORDER BY company, period, updated_at DESC LIMIT %s OFFSET %s",
+                    (user_id, limit, offset),
+                )
+            rows = cur.fetchall()
+    return [_row_to_card(r) for r in rows]
+
+
+def search_cards(
+    user_id: int,
+    query: str,
+    include_inactive: bool = False,
+    offset: int = 0,
+    limit: int = 20,
+) -> List[Dict[str, Any]]:
+    """
+    搜索用户经历卡
+
+    支持按标题、公司、角色、标签、内容进行全文搜索。
+
+    :param user_id: 用户 ID
+    :param query: 搜索关键词
+    :param include_inactive: 是否包含归档卡片
+    :param offset: 偏移量
+    :param limit: 限制数量
+    :return: 匹配的经历卡列表
+    """
+    _ensure_experience_card_columns()
+    config = _jc_config()
+
+    # 构建搜索条件
+    search_pattern = f"%{query}%"
+    conditions = ["user_id=%s"]
+    params: List[Any] = [user_id]
+
+    if not include_inactive:
+        conditions.append("is_active=1")
+
+    # 搜索标题、公司、角色、原始内容
+    search_conditions = [
+        "title LIKE %s",
+        "company LIKE %s",
+        "role LIKE %s",
+        "raw_text LIKE %s",
+        "JSON_CONTAINS(tags, %s)",  # 搜索JSON数组中的标签
+    ]
+
+    # 为每个搜索条件添加参数
+    for _ in search_conditions:
+        params.append(search_pattern)
+
+    # 添加标签搜索的JSON格式
+    params[-1] = json.dumps(query, ensure_ascii=False)
+
+    where_clause = " AND ".join(conditions)
+    search_where = " OR ".join(search_conditions)
+
+    with connect(**config) as conn:
+        with conn.cursor(dictionary=True) as cur:
+            cur.execute(
+                f"""
+                SELECT * FROM experience_card
+                WHERE {where_clause} AND ({search_where})
+                ORDER BY updated_at DESC
+                LIMIT %s OFFSET %s
+                """,
+                (*params, limit, offset),
+            )
+            rows = cur.fetchall()
+    return [_row_to_card(r) for r in rows]
+
+
+def count_search_cards(
+    user_id: int,
+    query: str,
+    include_inactive: bool = False,
+) -> int:
+    """
+    统计搜索结果数量
+
+    :param user_id: 用户 ID
+    :param query: 搜索关键词
+    :param include_inactive: 是否包含归档卡片
+    :return: 匹配数量
+    """
+    _ensure_experience_card_columns()
+    config = _jc_config()
+
+    search_pattern = f"%{query}%"
+    conditions = ["user_id=%s"]
+    params: List[Any] = [user_id]
+
+    if not include_inactive:
+        conditions.append("is_active=1")
+
+    search_conditions = [
+        "title LIKE %s",
+        "company LIKE %s",
+        "role LIKE %s",
+        "raw_text LIKE %s",
+        "JSON_CONTAINS(tags, %s)",
+    ]
+
+    for _ in search_conditions:
+        params.append(search_pattern)
+    params[-1] = json.dumps(query, ensure_ascii=False)
+
+    where_clause = " AND ".join(conditions)
+    search_where = " OR ".join(search_conditions)
+
+    with connect(**config) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                f"""
+                SELECT COUNT(*) FROM experience_card
+                WHERE {where_clause} AND ({search_where})
+                """,
+                tuple(params),
+            )
+            return cur.fetchone()[0]
+
+
 def get_card(card_id: int) -> Optional[Dict[str, Any]]:
     """按主键获取单张经历卡"""
     _ensure_experience_card_columns()
@@ -680,6 +854,25 @@ def get_card(card_id: int) -> Optional[Dict[str, Any]]:
     with connect(**config) as conn:
         with conn.cursor(dictionary=True) as cur:
             cur.execute("SELECT * FROM experience_card WHERE id=%s", (card_id,))
+            row = cur.fetchone()
+    return _row_to_card(row) if row else None
+
+
+def find_card_by_company_role(
+    user_id: int, company: str, role: str
+) -> Optional[Dict[str, Any]]:
+    """按公司+岗位查找一张 active 经历卡（用于上传去重）"""
+    if not company:
+        return None
+    _ensure_experience_card_columns()
+    config = _jc_config()
+    with connect(**config) as conn:
+        with conn.cursor(dictionary=True) as cur:
+            cur.execute(
+                "SELECT * FROM experience_card WHERE user_id=%s AND is_active=1 "
+                "AND company=%s AND role=%s LIMIT 1",
+                (user_id, company, role),
+            )
             row = cur.fetchone()
     return _row_to_card(row) if row else None
 
@@ -695,9 +888,9 @@ def insert_card(data: Dict[str, Any]) -> int:
     sql = """
         INSERT INTO experience_card
             (user_id, title, raw_text, tags, ai_structured, summary, content,
-             company, role, period, background, problem, solution, execution, result,
+             company, role, period, card_type, background, problem, solution, execution, result,
              dimensions, source)
-        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
     """
     raw_text = data.get("raw_text", "")
     with connect(**config) as conn:
@@ -717,6 +910,7 @@ def insert_card(data: Dict[str, Any]) -> int:
                     data.get("company"),
                     data.get("role"),
                     data.get("period"),
+                    data.get("card_type") or "work",
                     data.get("background"),
                     data.get("problem"),
                     data.get("solution"),
@@ -745,6 +939,7 @@ def update_card(card_id: int, updates: Dict[str, Any]) -> bool:
         "company": "company",
         "role": "role",
         "period": "period",
+        "card_type": "card_type",
         "background": "background",
         "problem": "problem",
         "solution": "solution",
@@ -880,7 +1075,13 @@ def split_resume_card_by_entries(
     :return: 新建卡片 ID 列表
     """
     created_ids = []
+    seen: set = set()
     for e in entries:
+        company = (e.get("company") or "").strip()
+        role = (e.get("role") or "").strip()
+        if company and f"{company}::{role}" in seen:
+            continue
+        seen.add(f"{company}::{role}")
         title = e.get("title") or e.get("role") or "未命名经历"
         new_id = insert_card(
             {
@@ -888,10 +1089,11 @@ def split_resume_card_by_entries(
                 "title": title,
                 "raw_text": _rebuild_entry_text(e),
                 "tags": [],
-                "company": e.get("company") or "",
-                "role": e.get("role") or "",
+                "company": company,
+                "role": role,
                 "period": e.get("period") or "",
                 "summary": e.get("summary") or "",
+                "card_type": (e.get("card_type") or "work"),
                 "source": card.get("source", "manual"),
             }
         )
@@ -1590,3 +1792,169 @@ def get_card_versions_by_source(
             }
         )
     return result
+
+
+def get_card_versions_by_card_id(card_id: int) -> List[Dict[str, Any]]:
+    """按卡片ID获取所有版本"""
+    _ensure_card_versions_table()
+    config = _jc_config()
+    with connect(**config) as conn:
+        with conn.cursor(dictionary=True) as cur:
+            cur.execute(
+                "SELECT * FROM card_versions WHERE card_id=%s ORDER BY created_at DESC",
+                (card_id,),
+            )
+            rows = cur.fetchall()
+    result = []
+    for row in rows:
+        result.append(
+            {
+                "id": row["id"],
+                "card_id": row["card_id"],
+                "version_type": row["version_type"],
+                "source_type": row["source_type"],
+                "source_id": row["source_id"],
+                "title": row["title"],
+                "raw_text": row["raw_text"],
+                "tags": _parse_json(row["tags"]) or [],
+                "note": row["note"],
+                "created_at": row["created_at"].isoformat()
+                if row.get("created_at")
+                else None,
+            }
+        )
+    return result
+
+
+# ---------------- 用户表 (users) ----------------
+
+
+def _ensure_users_table() -> None:
+    """确保 users 表存在"""
+    config = _jc_config()
+    with connect(**config) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS users (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    username VARCHAR(100) UNIQUE NOT NULL,
+                    password_hash VARCHAR(255) NOT NULL,
+                    email VARCHAR(200),
+                    is_active TINYINT(1) DEFAULT 1,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                    KEY idx_username (username)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+                """
+            )
+
+
+def create_user(username: str, password_hash: str, email: Optional[str] = None) -> int:
+    """
+    创建用户，返回用户 ID
+
+    :param username: 用户名（唯一）
+    :param password_hash: 密码哈希
+    :param email: 邮箱（可选）
+    :return: 新用户 ID
+    """
+    _ensure_users_table()
+    config = _jc_config()
+    with connect(**config) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO users (username, password_hash, email)
+                VALUES (%s, %s, %s)
+                """,
+                (username, password_hash, email),
+            )
+            return cur.lastrowid
+
+
+def get_user(user_id: int) -> Optional[Dict[str, Any]]:
+    """
+    按 ID 获取用户
+
+    :param user_id: 用户 ID
+    :return: 用户信息字典或 None
+    """
+    _ensure_users_table()
+    config = _jc_config()
+    with connect(**config) as conn:
+        with conn.cursor(dictionary=True) as cur:
+            cur.execute("SELECT * FROM users WHERE id=%s", (user_id,))
+            row = cur.fetchone()
+    if not row:
+        return None
+    return {
+        "id": row["id"],
+        "username": row["username"],
+        "password_hash": row["password_hash"],
+        "email": row.get("email"),
+        "is_active": bool(row.get("is_active", 1)),
+        "created_at": row["created_at"].isoformat() if row.get("created_at") else None,
+        "updated_at": row["updated_at"].isoformat() if row.get("updated_at") else None,
+    }
+
+
+def get_user_by_username(username: str) -> Optional[Dict[str, Any]]:
+    """
+    按用户名获取用户
+
+    :param username: 用户名
+    :return: 用户信息字典或 None
+    """
+    _ensure_users_table()
+    config = _jc_config()
+    with connect(**config) as conn:
+        with conn.cursor(dictionary=True) as cur:
+            cur.execute("SELECT * FROM users WHERE username=%s", (username,))
+            row = cur.fetchone()
+    if not row:
+        return None
+    return {
+        "id": row["id"],
+        "username": row["username"],
+        "password_hash": row["password_hash"],
+        "email": row.get("email"),
+        "is_active": bool(row.get("is_active", 1)),
+        "created_at": row["created_at"].isoformat() if row.get("created_at") else None,
+        "updated_at": row["updated_at"].isoformat() if row.get("updated_at") else None,
+    }
+
+
+def update_user(user_id: int, updates: Dict[str, Any]) -> bool:
+    """
+    更新用户信息
+
+    :param user_id: 用户 ID
+    :param updates: 更新字段
+    :return: 是否更新成功
+    """
+    _ensure_users_table()
+    field_map = {
+        "email": "email",
+        "is_active": "is_active",
+    }
+    sets: List[str] = []
+    values: List[Any] = []
+    for k, col in field_map.items():
+        if k in updates and updates[k] is not None:
+            sets.append(f"{col}=%s")
+            values.append(updates[k])
+    if "password_hash" in updates:
+        sets.append("password_hash=%s")
+        values.append(updates["password_hash"])
+    if not sets:
+        return False
+    values.append(user_id)
+    config = _jc_config()
+    with connect(**config) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE users SET " + ", ".join(sets) + " WHERE id=%s",
+                tuple(values),
+            )
+            return cur.rowcount > 0

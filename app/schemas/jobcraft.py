@@ -49,6 +49,9 @@ class ResumeExperience(BaseModel):
     period: str = Field(default="", description="任职时间，如 '2020.03 - 2022.06'")
     title: str = Field(default="", description="经历标题")
     summary: str = Field(default="", description="一句话总概括，含背景+行动+量化成果")
+    card_type: str = Field(
+        default="work", description="经历类型: work(工作) / intern(实习) / project(项目)"
+    )
     achievements: List[Achievement] = Field(
         default_factory=list, description="工作项 bullet 列表"
     )
@@ -92,6 +95,9 @@ class ExperienceCardSchema(BaseModel):
     role: Optional[str] = None
     period: Optional[str] = None
     source: str = "manual"
+    card_type: str = Field(
+        "work", description="卡片分类: work(工作) / intern(实习) / project(项目)"
+    )
     version: int = 1
     is_active: bool = True
     created_at: Optional[str] = None
@@ -110,6 +116,9 @@ class ExperienceCardCreate(BaseModel):
     company: Optional[str] = None
     role: Optional[str] = None
     period: Optional[str] = None
+    card_type: str = Field(
+        "work", description="卡片分类: work(工作) / intern(实习) / project(项目)"
+    )
     background: Optional[str] = None
     problem: Optional[str] = None
     solution: Optional[str] = None
@@ -129,6 +138,7 @@ class ExperienceCardUpdate(BaseModel):
     company: Optional[str] = None
     role: Optional[str] = None
     period: Optional[str] = None
+    card_type: Optional[str] = None
     background: Optional[str] = None
     problem: Optional[str] = None
     solution: Optional[str] = None
