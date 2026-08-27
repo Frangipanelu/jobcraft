@@ -1,0 +1,63 @@
+name: JobCraft CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+
+      - name: Install dependencies
+        run: uv sync --dev
+
+      - name: Run linting
+        run: uv run ruff check .
+
+      - name: Run formatting check
+        run: uv run ruff format --check .
+
+      - name: Run tests
+        env:
+          JOBCRAFT_DB_HOST: localhost
+          JOBCRAFT_DB_PORT: "3306"
+          JOBCRAFT_DB_USER: test
+          JOBCRAFT_DB_PASS: test
+          JOBCRAFT_DB_NAME: jobcraft_test
+          JWT_SECRET_KEY: test-secret-key-for-ci
+        run: uv run pytest tests/ -v --tb=short
+
+  security-scan:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+
+      - name: Install dependencies
+        run: uv sync --dev
+
+      - name: Run security scan
+        run: uv run ruff check --select S .
