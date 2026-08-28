@@ -32,7 +32,7 @@ jobs:
         run: uv run ruff format --check .
 
       - name: Run tests
-        run: uv run pytest tests/ -v --tb=short -q
+        run: uv run pytest tests/ -v --tb=short
 
   security-scan:
     runs-on: ubuntu-latest
