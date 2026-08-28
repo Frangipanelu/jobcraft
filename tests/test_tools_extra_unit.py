@@ -240,9 +240,10 @@ class TestUploadFileRead:
         mock_pdfplumber_ctx = MagicMock()
         mock_pdfplumber_ctx.pages = [mock_pdfplumber_page]
 
-        with patch("app.tools.upload_file_read_tool.pypdf") as mock_pypdf, patch(
-            "app.tools.upload_file_read_tool.pdfplumber"
-        ) as mock_pdfplumber:
+        with (
+            patch("app.tools.upload_file_read_tool.pypdf") as mock_pypdf,
+            patch("app.tools.upload_file_read_tool.pdfplumber") as mock_pdfplumber,
+        ):
             mock_pypdf.PdfReader.return_value = mock_reader
             mock_pdfplumber.open.return_value.__enter__ = MagicMock(
                 return_value=mock_pdfplumber_ctx
@@ -258,8 +259,9 @@ class TestUploadFileRead:
         fake_pdf = tmp_path / "test.pdf"
         fake_pdf.write_bytes(b"fake")
 
-        with patch("app.tools.upload_file_read_tool.pypdf", None), patch(
-            "app.tools.upload_file_read_tool.pdfplumber", None
+        with (
+            patch("app.tools.upload_file_read_tool.pypdf", None),
+            patch("app.tools.upload_file_read_tool.pdfplumber", None),
         ):
             text, err = _read_pdf(fake_pdf)
             assert text == ""
@@ -288,8 +290,9 @@ class TestTavilyTool:
         mock_client = MagicMock()
         mock_client.search.return_value = {"results": [{"title": "test"}]}
 
-        with patch("app.tools.tavily_tool.tavily_client", mock_client), patch(
-            "app.tools.tavily_tool.monitor"
+        with (
+            patch("app.tools.tavily_tool.tavily_client", mock_client),
+            patch("app.tools.tavily_tool.monitor"),
         ):
             result = internet_search.invoke(
                 {"query": "test query", "topic": "general", "max_results": 3}
@@ -308,8 +311,9 @@ class TestTavilyTool:
         mock_client = MagicMock()
         mock_client.search.return_value = {"results": []}
 
-        with patch("app.tools.tavily_tool.tavily_client", mock_client), patch(
-            "app.tools.tavily_tool.monitor"
+        with (
+            patch("app.tools.tavily_tool.tavily_client", mock_client),
+            patch("app.tools.tavily_tool.monitor"),
         ):
             internet_search.invoke({"query": "AI"})
             mock_client.search.assert_called_once_with(
@@ -484,9 +488,11 @@ class TestDbExperience:
         from app.tools.db_experience import _looks_like_full_resume
 
         # Two separate date ranges trigger the >= 2 range detection
-        text = "2019年3月 - 2020年12月 负责A项目核心开发和维护，协调前后端团队完成上线\n" \
-               "2021年1月 - 2022年6月 负责B项目架构设计和团队协作，推动技术选型落地\n" \
-               "一些其他内容填充，确保文本长度达到一百字的最低要求确保测试能够正确运行通过"
+        text = (
+            "2019年3月 - 2020年12月 负责A项目核心开发和维护，协调前后端团队完成上线\n"
+            "2021年1月 - 2022年6月 负责B项目架构设计和团队协作，推动技术选型落地\n"
+            "一些其他内容填充，确保文本长度达到一百字的最低要求确保测试能够正确运行通过"
+        )
         assert len(text) >= 100
         assert _looks_like_full_resume(text) is True
 
@@ -494,10 +500,12 @@ class TestDbExperience:
         from app.tools.db_experience import _looks_like_full_resume
 
         # >= 2 resume section markers triggers detection
-        text = "个人简历，包含工作经历和项目经历两个主要章节，用于测试自动检测功能\n" \
-               "工作经历：在A公司负责XX项目的核心开发工作，涉及前后端架构设计\n" \
-               "项目经历：完成YY项目的架构设计和开发工作，推动技术选型和落地\n" \
-               "一些内容填充，确保文本长度达到一百字的最低要求来确保测试能够正确运行"
+        text = (
+            "个人简历，包含工作经历和项目经历两个主要章节，用于测试自动检测功能\n"
+            "工作经历：在A公司负责XX项目的核心开发工作，涉及前后端架构设计\n"
+            "项目经历：完成YY项目的架构设计和开发工作，推动技术选型和落地\n"
+            "一些内容填充，确保文本长度达到一百字的最低要求来确保测试能够正确运行"
+        )
         assert len(text) >= 100
         assert _looks_like_full_resume(text) is True
 
@@ -505,11 +513,13 @@ class TestDbExperience:
         from app.tools.db_experience import _looks_like_full_resume
 
         # >= 2 entry headers like "#### 经历1：xxx" triggers detection
-        text = "#### 经历1：A公司 - 高级工程师\n" \
-               "负责核心模块开发和维护工作，推动架构升级和技术选型落地\n" \
-               "#### 经历2：B公司 - 技术负责人\n" \
-               "负责架构设计和团队协作管理，推动技术选型和团队建设落地\n" \
-               "内容填充确保达到字符数要求，并且确保测试能够正确运行通过"
+        text = (
+            "#### 经历1：A公司 - 高级工程师\n"
+            "负责核心模块开发和维护工作，推动架构升级和技术选型落地\n"
+            "#### 经历2：B公司 - 技术负责人\n"
+            "负责架构设计和团队协作管理，推动技术选型和团队建设落地\n"
+            "内容填充确保达到字符数要求，并且确保测试能够正确运行通过"
+        )
         assert len(text) >= 100
         assert _looks_like_full_resume(text) is True
 
@@ -522,7 +532,11 @@ class TestDbExperience:
             "period": "2020-2022",
             "summary": "led recommendation system",
             "achievements": [
-                {"title": "redesigned strategy", "action": {"main": "led"}, "result": "CTR+12%"}
+                {
+                    "title": "redesigned strategy",
+                    "action": {"main": "led"},
+                    "result": "CTR+12%",
+                }
             ],
         }
         text = _rebuild_entry_text(entry)
@@ -579,9 +593,11 @@ class TestDbJob:
         mock_cursor.fetchall.return_value = []
         mock_conn = _make_mock_conn(mock_cursor)
 
-        with patch("app.tools.db_job._jc_config", return_value={"database": "jc"}), patch(
-            "app.tools.db_job.connect", return_value=mock_conn
-        ), patch("app.tools.db_tools.connect", return_value=mock_conn):
+        with (
+            patch("app.tools.db_job._jc_config", return_value={"database": "jc"}),
+            patch("app.tools.db_job.connect", return_value=mock_conn),
+            patch("app.tools.db_tools.connect", return_value=mock_conn),
+        ):
             result = get_job_analysis(999)
             assert result is None
 
@@ -604,9 +620,11 @@ class TestDbJob:
         mock_cursor.fetchall.return_value = []
         mock_conn = _make_mock_conn(mock_cursor)
 
-        with patch("app.tools.db_job._jc_config", return_value={"database": "jc"}), patch(
-            "app.tools.db_job.connect", return_value=mock_conn
-        ), patch("app.tools.db_tools.connect", return_value=mock_conn):
+        with (
+            patch("app.tools.db_job._jc_config", return_value={"database": "jc"}),
+            patch("app.tools.db_job.connect", return_value=mock_conn),
+            patch("app.tools.db_tools.connect", return_value=mock_conn),
+        ):
             result = get_job_analysis(1)
             assert result is not None
             assert result["company"] == "TestCo"
@@ -621,8 +639,9 @@ class TestDbJob:
         mock_cursor.rowcount = 0
         mock_conn = _make_mock_conn(mock_cursor)
 
-        with patch("app.tools.db_job._jc_config", return_value={"database": "jc"}), patch(
-            "app.tools.db_job.connect", return_value=mock_conn
+        with (
+            patch("app.tools.db_job._jc_config", return_value={"database": "jc"}),
+            patch("app.tools.db_job.connect", return_value=mock_conn),
         ):
             assert delete_job_analysis(999) is False
 
@@ -641,10 +660,12 @@ class TestDbSubmission:
         mock_cursor.fetchall.return_value = []
         mock_conn = _make_mock_conn(mock_cursor)
 
-        with patch(
-            "app.tools.db_submission._jc_config", return_value={"database": "jc"}
-        ), patch("app.tools.db_submission.connect", return_value=mock_conn), patch(
-            "app.tools.db_tools.connect", return_value=mock_conn
+        with (
+            patch(
+                "app.tools.db_submission._jc_config", return_value={"database": "jc"}
+            ),
+            patch("app.tools.db_submission.connect", return_value=mock_conn),
+            patch("app.tools.db_tools.connect", return_value=mock_conn),
         ):
             result = get_submission(999)
             assert result is None
@@ -672,10 +693,12 @@ class TestDbSubmission:
         mock_cursor.fetchall.return_value = []
         mock_conn = _make_mock_conn(mock_cursor)
 
-        with patch(
-            "app.tools.db_submission._jc_config", return_value={"database": "jc"}
-        ), patch("app.tools.db_submission.connect", return_value=mock_conn), patch(
-            "app.tools.db_tools.connect", return_value=mock_conn
+        with (
+            patch(
+                "app.tools.db_submission._jc_config", return_value={"database": "jc"}
+            ),
+            patch("app.tools.db_submission.connect", return_value=mock_conn),
+            patch("app.tools.db_tools.connect", return_value=mock_conn),
         ):
             result = get_submission(1)
             assert result is not None
@@ -689,9 +712,12 @@ class TestDbSubmission:
         mock_cursor = MagicMock()
         mock_conn = _make_mock_conn(mock_cursor)
 
-        with patch(
-            "app.tools.db_submission._jc_config", return_value={"database": "jc"}
-        ), patch("app.tools.db_submission.connect", return_value=mock_conn):
+        with (
+            patch(
+                "app.tools.db_submission._jc_config", return_value={"database": "jc"}
+            ),
+            patch("app.tools.db_submission.connect", return_value=mock_conn),
+        ):
             result = update_submission(1, {})
             assert result is False
 
@@ -710,10 +736,10 @@ class TestDbInterview:
         mock_cursor.fetchall.return_value = []
         mock_conn = _make_mock_conn(mock_cursor)
 
-        with patch(
-            "app.tools.db_interview._jc_config", return_value={"database": "jc"}
-        ), patch("app.tools.db_interview.connect", return_value=mock_conn), patch(
-            "app.tools.db_tools.connect", return_value=mock_conn
+        with (
+            patch("app.tools.db_interview._jc_config", return_value={"database": "jc"}),
+            patch("app.tools.db_interview.connect", return_value=mock_conn),
+            patch("app.tools.db_tools.connect", return_value=mock_conn),
         ):
             result = get_interview_prep_by_job(999)
             assert result is None
@@ -739,10 +765,10 @@ class TestDbInterview:
         mock_cursor.fetchall.return_value = []
         mock_conn = _make_mock_conn(mock_cursor)
 
-        with patch(
-            "app.tools.db_interview._jc_config", return_value={"database": "jc"}
-        ), patch("app.tools.db_interview.connect", return_value=mock_conn), patch(
-            "app.tools.db_tools.connect", return_value=mock_conn
+        with (
+            patch("app.tools.db_interview._jc_config", return_value={"database": "jc"}),
+            patch("app.tools.db_interview.connect", return_value=mock_conn),
+            patch("app.tools.db_tools.connect", return_value=mock_conn),
         ):
             result = get_interview_prep_by_job(10)
             assert result is not None
@@ -758,10 +784,10 @@ class TestDbInterview:
         mock_cursor.fetchall.return_value = []
         mock_conn = _make_mock_conn(mock_cursor)
 
-        with patch(
-            "app.tools.db_interview._jc_config", return_value={"database": "jc"}
-        ), patch("app.tools.db_interview.connect", return_value=mock_conn), patch(
-            "app.tools.db_tools.connect", return_value=mock_conn
+        with (
+            patch("app.tools.db_interview._jc_config", return_value={"database": "jc"}),
+            patch("app.tools.db_interview.connect", return_value=mock_conn),
+            patch("app.tools.db_tools.connect", return_value=mock_conn),
         ):
             result = get_interview_record(999)
             assert result is None
@@ -774,10 +800,10 @@ class TestDbInterview:
         mock_cursor.fetchone.return_value = None
         mock_conn = _make_mock_conn(mock_cursor)
 
-        with patch(
-            "app.tools.db_interview._jc_config", return_value={"database": "jc"}
-        ), patch("app.tools.db_interview.connect", return_value=mock_conn), patch(
-            "app.tools.db_tools.connect", return_value=mock_conn
+        with (
+            patch("app.tools.db_interview._jc_config", return_value={"database": "jc"}),
+            patch("app.tools.db_interview.connect", return_value=mock_conn),
+            patch("app.tools.db_tools.connect", return_value=mock_conn),
         ):
             result = list_interview_records()
             assert result == []

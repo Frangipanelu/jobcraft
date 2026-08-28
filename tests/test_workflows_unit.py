@@ -21,6 +21,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 #  Helpers
 # ============================================================
 
+
 def _fake_record(record_id=1):
     return {
         "id": record_id,
@@ -91,6 +92,7 @@ def _fake_job_analysis_db(job_id=10):
 # ============================================================
 #  1. interview_review_flow
 # ============================================================
+
 
 class TestInterviewReviewFlow:
     """面试复盘 Workflow 测试"""
@@ -306,6 +308,7 @@ class TestInterviewReviewFlow:
 #  2. job_analysis_flow
 # ============================================================
 
+
 class TestJobAnalysisFlow:
     """岗位分析 Workflow 测试"""
 
@@ -343,7 +346,12 @@ class TestJobAnalysisFlow:
         )
         monkeypatch.setattr(
             "app.workflows.job_analysis_flow.db_tools.get_card",
-            lambda cid: {"id": cid, "title": "卡", "raw_text": "文本", "is_active": True},
+            lambda cid: {
+                "id": cid,
+                "title": "卡",
+                "raw_text": "文本",
+                "is_active": True,
+            },
         )
 
         def fake_gap_run(self, data):
@@ -367,7 +375,8 @@ class TestJobAnalysisFlow:
             }
 
         monkeypatch.setattr(
-            "app.workflows.job_analysis_flow.jobcraft_analyze.fuse_gap_scores", fake_fuse
+            "app.workflows.job_analysis_flow.jobcraft_analyze.fuse_gap_scores",
+            fake_fuse,
         )
 
         result = run_step2_workflow(job_analysis_id=10, card_ids=[1])
@@ -394,7 +403,12 @@ class TestJobAnalysisFlow:
 
         monkeypatch.setattr(
             "app.workflows.job_analysis_flow.db_tools.get_card",
-            lambda cid: {"id": cid, "title": "卡", "raw_text": "文本", "is_active": True},
+            lambda cid: {
+                "id": cid,
+                "title": "卡",
+                "raw_text": "文本",
+                "is_active": True,
+            },
         )
 
         def fake_jd_ats_run(self, data):
@@ -420,14 +434,29 @@ class TestJobAnalysisFlow:
             return {
                 "overall": 72,
                 "per_card": [
-                    PerCardScore(card_id=1, score=80, local_score=70, llm_score=85, matched=[], missing=[]),
-                    PerCardScore(card_id=2, score=64, local_score=60, llm_score=67, matched=[], missing=[]),
+                    PerCardScore(
+                        card_id=1,
+                        score=80,
+                        local_score=70,
+                        llm_score=85,
+                        matched=[],
+                        missing=[],
+                    ),
+                    PerCardScore(
+                        card_id=2,
+                        score=64,
+                        local_score=60,
+                        llm_score=67,
+                        matched=[],
+                        missing=[],
+                    ),
                 ],
                 "gap": {"missing": ["Kafka"]},
             }
 
         monkeypatch.setattr(
-            "app.workflows.job_analysis_flow.jobcraft_analyze.compute_match", fake_compute_match
+            "app.workflows.job_analysis_flow.jobcraft_analyze.compute_match",
+            fake_compute_match,
         )
 
         def fake_sug_run(self, data):
@@ -444,10 +473,12 @@ class TestJobAnalysisFlow:
         )
 
         monkeypatch.setattr(
-            "app.workflows.job_analysis_flow.db_tools.insert_job_analysis", lambda data: 42
+            "app.workflows.job_analysis_flow.db_tools.insert_job_analysis",
+            lambda data: 42,
         )
         monkeypatch.setattr(
-            "app.workflows.job_analysis_flow.db_tools.upsert_job_mapping", lambda jid, cid: None
+            "app.workflows.job_analysis_flow.db_tools.upsert_job_mapping",
+            lambda jid, cid: None,
         )
 
         result = run_job_analysis_workflow(
@@ -504,7 +535,12 @@ class TestJobAnalysisFlow:
         )
         monkeypatch.setattr(
             "app.workflows.job_analysis_flow.db_tools.get_card",
-            lambda cid: {"id": cid, "title": "卡", "raw_text": "文本", "is_active": True},
+            lambda cid: {
+                "id": cid,
+                "title": "卡",
+                "raw_text": "文本",
+                "is_active": True,
+            },
         )
 
         def fake_jd_ats_run(self, data):
@@ -529,12 +565,20 @@ class TestJobAnalysisFlow:
             return {
                 "overall": 78,
                 "per_card": [
-                    {"card_id": 1, "score": 78, "local_score": 70, "llm_score": 85, "matched": [], "missing": []},
+                    {
+                        "card_id": 1,
+                        "score": 78,
+                        "local_score": 70,
+                        "llm_score": 85,
+                        "matched": [],
+                        "missing": [],
+                    },
                 ],
             }
 
         monkeypatch.setattr(
-            "app.workflows.job_analysis_flow.jobcraft_analyze.compute_match", fake_compute_match
+            "app.workflows.job_analysis_flow.jobcraft_analyze.compute_match",
+            fake_compute_match,
         )
 
         def fake_gen_md(**kwargs):
@@ -570,6 +614,7 @@ class TestJobAnalysisFlow:
 # ============================================================
 #  3. extract_flow
 # ============================================================
+
 
 class TestExtractFlow:
     """结构化抽取 Workflow 测试"""
@@ -711,6 +756,7 @@ class TestExtractFlow:
 #  4. interview_prep_flow
 # ============================================================
 
+
 class TestInterviewPrepFlow:
     """面试准备 Workflow 测试"""
 
@@ -722,7 +768,12 @@ class TestInterviewPrepFlow:
         )
         monkeypatch.setattr(
             "app.workflows.interview_prep_flow.db_tools.get_card",
-            lambda cid: {"id": cid, "title": "推荐系统", "raw_text": "做过推荐系统", "is_active": True},
+            lambda cid: {
+                "id": cid,
+                "title": "推荐系统",
+                "raw_text": "做过推荐系统",
+                "is_active": True,
+            },
         )
         monkeypatch.setattr(
             "app.workflows.interview_prep_flow.db_tools.get_card_versions_by_source",
@@ -751,7 +802,11 @@ class TestInterviewPrepFlow:
                     "duration": "15 分钟",
                     "elevator_pitch": "我是后端工程师",
                     "dimension_questions": [
-                        {"dimension": "D1 技术深度", "question": "说说技术选型", "answer_points": ["A", "B"]}
+                        {
+                            "dimension": "D1 技术深度",
+                            "question": "说说技术选型",
+                            "answer_points": ["A", "B"],
+                        }
                     ],
                     "full_version": "完整版本内容",
                     "html_content": "<div>预览</div>",
@@ -873,6 +928,7 @@ class TestInterviewPrepFlow:
 #  5. question_table_flow
 # ============================================================
 
+
 class TestQuestionTableFlow:
     """问题表生成 Workflow 测试"""
 
@@ -891,7 +947,10 @@ class TestQuestionTableFlow:
         # mock 解析函数，返回预设的 QA 对
         monkeypatch.setattr(
             "app.workflows.question_table_flow._parse_dialogue",
-            lambda text: [{"speaker": "面试官", "content": "问题1", "time": ""}, {"speaker": "候选人", "content": "回答1", "time": ""}],
+            lambda text: [
+                {"speaker": "面试官", "content": "问题1", "time": ""},
+                {"speaker": "候选人", "content": "回答1", "time": ""},
+            ],
         )
         monkeypatch.setattr(
             "app.workflows.question_table_flow._build_qa_pairs",
@@ -901,8 +960,16 @@ class TestQuestionTableFlow:
         def fake_agent_run(self, data):
             return {
                 "intent_by_seq": {
-                    1: {"intent": "考察自我介绍", "dimension": "D8 职业规划", "level": "L2"},
-                    2: {"intent": "考察项目经验", "dimension": "D1 技术深度", "level": "L4"},
+                    1: {
+                        "intent": "考察自我介绍",
+                        "dimension": "D8 职业规划",
+                        "level": "L2",
+                    },
+                    2: {
+                        "intent": "考察项目经验",
+                        "dimension": "D1 技术深度",
+                        "level": "L4",
+                    },
                 }
             }
 
@@ -991,7 +1058,10 @@ class TestQuestionTableFlow:
         # mock 解析函数，返回预设的 QA 对
         monkeypatch.setattr(
             "app.workflows.question_table_flow._parse_dialogue",
-            lambda text: [{"speaker": "面试官", "content": "问题1", "time": ""}, {"speaker": "候选人", "content": "回答1", "time": ""}],
+            lambda text: [
+                {"speaker": "面试官", "content": "问题1", "time": ""},
+                {"speaker": "候选人", "content": "回答1", "time": ""},
+            ],
         )
         monkeypatch.setattr(
             "app.workflows.question_table_flow._build_qa_pairs",
@@ -1004,7 +1074,11 @@ class TestQuestionTableFlow:
             captured_inputs.append(data)
             return {
                 "intent_by_seq": {
-                    1: {"intent": "自我介绍", "dimension": "D8 职业规划", "level": "L2"},
+                    1: {
+                        "intent": "自我介绍",
+                        "dimension": "D8 职业规划",
+                        "level": "L2",
+                    },
                     2: {"intent": "项目", "dimension": "D1 技术深度", "level": "L3"},
                 }
             }
