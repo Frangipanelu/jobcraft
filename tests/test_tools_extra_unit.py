@@ -285,43 +285,55 @@ class TestUploadFileRead:
 
 class TestTavilyTool:
     def test_internet_search_calls_tavily_client(self):
-        from app.tools.tavily_tool import internet_search
-
         mock_client = MagicMock()
         mock_client.search.return_value = {"results": [{"title": "test"}]}
 
         with (
-            patch("app.tools.tavily_tool.tavily_client", mock_client),
-            patch("app.tools.tavily_tool.monitor"),
+            patch("tavily.TavilyClient", return_value=mock_client),
+            patch.dict("os.environ", {"TAVILY_API_KEY": "fake-key"}),
         ):
-            result = internet_search.invoke(
-                {"query": "test query", "topic": "general", "max_results": 3}
-            )
-            mock_client.search.assert_called_once_with(
-                query="test query",
-                topic="general",
-                max_results=3,
-                include_raw_content=False,
-            )
-            assert result == {"results": [{"title": "test"}]}
+            import importlib
+            import app.tools.tavily_tool as mod
+
+            importlib.reload(mod)
+            with (
+                patch.object(mod, "tavily_client", mock_client),
+                patch.object(mod, "monitor"),
+            ):
+                result = mod.internet_search.invoke(
+                    {"query": "test query", "topic": "general", "max_results": 3}
+                )
+                mock_client.search.assert_called_once_with(
+                    query="test query",
+                    topic="general",
+                    max_results=3,
+                    include_raw_content=False,
+                )
+                assert result == {"results": [{"title": "test"}]}
 
     def test_internet_search_default_params(self):
-        from app.tools.tavily_tool import internet_search
-
         mock_client = MagicMock()
         mock_client.search.return_value = {"results": []}
 
         with (
-            patch("app.tools.tavily_tool.tavily_client", mock_client),
-            patch("app.tools.tavily_tool.monitor"),
+            patch("tavily.TavilyClient", return_value=mock_client),
+            patch.dict("os.environ", {"TAVILY_API_KEY": "fake-key"}),
         ):
-            internet_search.invoke({"query": "AI"})
-            mock_client.search.assert_called_once_with(
-                query="AI",
-                topic="general",
-                max_results=5,
-                include_raw_content=False,
-            )
+            import importlib
+            import app.tools.tavily_tool as mod
+
+            importlib.reload(mod)
+            with (
+                patch.object(mod, "tavily_client", mock_client),
+                patch.object(mod, "monitor"),
+            ):
+                mod.internet_search.invoke({"query": "AI"})
+                mock_client.search.assert_called_once_with(
+                    query="AI",
+                    topic="general",
+                    max_results=5,
+                    include_raw_content=False,
+                )
 
 
 # ============================================================
