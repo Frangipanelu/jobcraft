@@ -3,23 +3,15 @@
 # compiled output
 /dist
 /tmp
-app/output
-app/updated
 /out-tsc
-# Only exists if Bazel was run
-/bazel-out
 
 # dependencies
 /node_modules
-frontend/node_modules/
-frontend/dist/
-frontend/.vite/
 frontend-jobcraft/node_modules/
 frontend-jobcraft/dist/
 frontend-jobcraft/.vite/
 .pnpm-store/
 .npm-cache
-.angular/
 
 # Python
 .venv/
@@ -37,15 +29,10 @@ __pycache__/
 /updated/
 /_preview_test.txt
 
-# profiling files
-chrome-profiler-events*.json
-speed-measure-plugin*.json
-
 # IDEs and editors
 /.idea
 .project
 .classpath
-.c9/
 *.launch
 .settings/
 *.sublime-workspace
@@ -59,15 +46,9 @@ speed-measure-plugin*.json
 .history/*
 
 # misc
-/.angular/cache
-/.sass-cache
-/connect.lock
 /coverage
-/libpeerconnection.log
 npm-debug.log
 yarn-error.log
-testem.log
-/typings
 
 # System Files
 .DS_Store

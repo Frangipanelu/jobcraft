@@ -15,6 +15,7 @@ import {
   Tooltip,
   Typography,
   Select,
+  Spin,
 } from 'antd'
 import {
   PlusOutlined,
@@ -32,6 +33,8 @@ import {
   listCards,
   updateCard,
   uploadResume,
+  structureCard,
+  recommendTags,
   type ExperienceCard,
 } from '../api.ts'
 
@@ -68,6 +71,7 @@ function parseFormState(values: CardFormState): Partial<ExperienceCard> {
 
 export default function ExperiencePage() {
   const [cards, setCards] = useState<ExperienceCard[]>([])
+  const [loading, setLoading] = useState(true)
   const [modalOpen, setModalOpen] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [backfilling, setBackfilling] = useState(false)
@@ -84,6 +88,8 @@ export default function ExperiencePage() {
       setCards(data)
     } catch (err) {
       message.error((err as Error).message)
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -216,15 +222,7 @@ export default function ExperiencePage() {
   const handleStructure = async (cardId: number) => {
     setStructuring((prev) => new Set(prev).add(cardId))
     try {
-      const res = await fetch(`/api/jobcraft/experience/cards/${cardId}/structure`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({}),
-      })
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({ msg: '请求失败' }))
-        throw new Error(err.msg || err.detail || '结构化抽取失败')
-      }
+      await structureCard(cardId)
       message.success('AI 结构化分析完成')
       await load()
     } catch (err) {
@@ -240,12 +238,7 @@ export default function ExperiencePage() {
 
   const handleRecommendTags = async (cardId: number) => {
     try {
-      const res = await fetch(`/api/jobcraft/experience/cards/${cardId}/recommend-tags`, {
-        method: 'POST',
-      })
-      if (!res.ok) throw new Error('标签推荐失败')
-      const data = await res.json()
-      const recommended = data.tags || []
+      const recommended = await recommendTags(cardId)
       if (recommended.length === 0) {
         message.info('AI 暂无标签推荐')
         return
@@ -270,7 +263,8 @@ export default function ExperiencePage() {
   }
 
   return (
-    <div>
+    <Spin spinning={loading}>
+      <div>
       <div className="jc-page-header">
         <Title level={4} style={{ margin: 0 }}>经历卡片</Title>
         <Space wrap>
@@ -410,6 +404,7 @@ export default function ExperiencePage() {
         onSave={handleSaveDetail}
       />
     </div>
+    </Spin>
   )
 }
 

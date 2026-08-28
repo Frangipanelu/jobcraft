@@ -50,7 +50,8 @@ class ResumeExperience(BaseModel):
     title: str = Field(default="", description="经历标题")
     summary: str = Field(default="", description="一句话总概括，含背景+行动+量化成果")
     card_type: str = Field(
-        default="work", description="经历类型: work(工作) / intern(实习) / project(项目)"
+        default="work",
+        description="经历类型: work(工作) / intern(实习) / project(项目)",
     )
     achievements: List[Achievement] = Field(
         default_factory=list, description="工作项 bullet 列表"

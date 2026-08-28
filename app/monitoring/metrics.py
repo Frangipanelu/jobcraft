@@ -119,10 +119,12 @@ def setup_monitoring(app) -> None:
     :param app: FastAPI 应用实例
     """
     # 设置应用信息
-    app_info.info({
-        "version": "0.6.0",
-        "environment": "production",
-    })
+    app_info.info(
+        {
+            "version": "0.6.0",
+            "environment": "production",
+        }
+    )
 
     # 集成 FastAPI Instrumentator
     instrumentator = Instrumentator(
@@ -132,9 +134,7 @@ def setup_monitoring(app) -> None:
     )
 
     # 添加自定义信息
-    instrumentator.add(
-        lambda info: info
-    )
+    instrumentator.add(lambda info: info)
 
     # 暴露 /metrics 端点
     instrumentator.instrument(app).expose(app, endpoint="/metrics")

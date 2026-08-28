@@ -17,6 +17,9 @@ from app.schemas.jobcraft import (
     SuggestionsResult,
 )
 
+LOCAL_WEIGHT = 0.4
+LLM_WEIGHT = 0.6
+
 
 def _normalize(term: str) -> str:
     """归一化术语用于匹配"""
@@ -139,7 +142,7 @@ def compute_match(
         local_pct, matched, missing = _local_score(card, jd_req)
         # 融合 LLM 评分
         llm_pct = llm_scores.get(card["id"], 0.0) if llm_scores else 0.0
-        final_score = round(local_pct * 0.4 + llm_pct * 0.6, 1)
+        final_score = round(local_pct * LOCAL_WEIGHT + llm_pct * LLM_WEIGHT, 1)
 
         total_score += final_score
         per_card.append(
@@ -242,7 +245,7 @@ def fuse_gap_scores(
         llm_score = round(float(p.get("score") or 0.0), 1)
         card = card_by_id.get(p.get("card_id"))
         local_score = _local_score(card, jd_req)[0] if card else 0.0
-        final_score = round(local_score * 0.4 + llm_score * 0.6, 1)
+        final_score = round(local_score * LOCAL_WEIGHT + llm_score * LLM_WEIGHT, 1)
         per_card_out.append(
             {
                 **p,
@@ -260,5 +263,5 @@ def fuse_gap_scores(
         "per_card": per_card_out,
         "overall_score": overall_score,
         "match_level": _match_level(overall_score),
-        "score_weights": {"local": 0.4, "llm": 0.6},
+        "score_weights": {"local": LOCAL_WEIGHT, "llm": LLM_WEIGHT},
     }

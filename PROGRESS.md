@@ -219,12 +219,43 @@
   - 简历拼接 `generate_resume_html` 每张经历卡 bullet 截断为最多 4 条，控制 A4 一页篇幅
 - [x] 验证：`npm run build` 通过；`uv run ruff check .` 通过；`uv run pytest tests/ -q` 70 passed、6 skipped；上传接口实测 3 段简历拆 3 卡（不同公司/岗位）、raw_text 逐段、去重生效
 
+### v0.13 技术债清理（本轮）
+
+- [x] **CI 修复**：`frontend-ci.yml` 移除不存在的 `npm run lint` 步骤；`ci.yml` 移除无效的 DB 环境变量（e2e 测试通过 `server_available` fixture 自动跳过）
+- [x] **api.ts 统一错误处理**：新增 `requestFormData<T>()` 函数复用 `request<T>` 的错误解析逻辑；`uploadResume`/`uploadInterviewReview`/`parseInterviewReviewPreview`/`createManualSubmission` 四个 FormData 函数改为调用 `requestFormData`，消除重复手写错误处理
+- [x] **ExperiencePage 去 raw fetch**：`handleStructure`/`handleRecommendTags` 改为调用 `api.ts` 的 `structureCard()`/`recommendTags()`，统一走 `request<T>` 错误处理链路
+- [x] **全局 ErrorBoundary**：新增 `components/ErrorBoundary.tsx`，在 `App.tsx` 的 Suspense 外层包裹，捕获 JS 渲染错误并展示友好降级 UI
+- [x] **初始 loading 状态**：ExperiencePage / InterviewPrepPage / JobPage 补全局 `Spin` spinning 状态，消除数据加载期间的空白闪烁
+- [x] **评分权重常量化**：`jobcraft_analyze.py` 提取 `LOCAL_WEIGHT = 0.4`、`LLM_WEIGHT = 0.6` 常量，`compute_match`/`fuse_gap_scores` 两处引用统一
+- [x] **前后端阈值对齐**：`JobPage.tsx` 匹配等级颜色阈值从 70/40 改为 80/60/40，与后端 `_match_level()` 一致；评分构成文案改用常量计算
+- [x] **PDF 库动态 import**：`html2canvas`/`jspdf` 从静态 `import` 改为 `handleDownloadPdf` 内 `import()` 动态加载，减少主 bundle 体积
+- [x] **类型清理**：`api.ts` 新增 `SuggestionItem`/`JobAnalysisRecord`/`Step1AtsProfile` 接口；`analyzeJob` 参数类型从 `any` 改为具体类型；`listJobAnalyses` 返回类型从 `any[]` 改为 `JobAnalysisRecord[]`；`JDAnalysisPage` 的 `analyses`/`result`/table 列全部消除 `any`；`JobPage` 的 `ats` 从 `any` 改为 `Step1AtsProfile`
+- [x] 验证：`uv run ruff check .` 通过；`uv run ruff format .` 通过；`uv run pytest tests/ -q` 65 passed、11 skipped；`npm run build` 通过（tsc 严格）
+
+### v0.14 项目结构重新梳理（本轮）
+
+- [x] **.gitignore 清理**：移除过时的 `app/output`、`app/updated`、`frontend/` 等路径，统一为 `/output/`、`/updated/`、`/_preview_test.txt`
+- [x] **tests/ 调试脚本归类**：13 个 `check_*.py` / `parse_*.py` 调试脚本移入 `tests/debug/` 子目录，pytest 不再收集
+- [x] **docs/ 历史文档归档**：7 个历史文档（ACCEPTANCE_CRITERIA / EXECUTION_PLAN / SUMMARY / PROJECT_MINDMAP / REVIEW / REFACTORING_*）移入 `docs/archive/`
+- [x] **server.py 拆分**：2086 行 → 222 行（App 初始化 + health/tasks），业务路由拆为 5 个 APIRouter 模块：
+  - `experience.py`（494 行）：12 个经历卡路由
+  - `job_analysis.py`（236 行）：10 个岗位分析路由
+  - `submission.py`（174 行）：6 个投递记录 + dashboard 路由
+  - `interview_prep.py`（104 行）：3 个面试准备路由
+  - `interview_review.py`（323 行）：8 个面试复盘路由
+- [x] **db_tools.py 拆分**：1960 行 → 220 行（连接配置 + re-export），业务 CRUD 拆为 5 个实体模块：
+  - `db_experience.py`（658 行）：经历卡 + card_versions + company_research
+  - `db_interview.py`（360 行）：面试准备/复盘 CRUD
+  - `db_submission.py`（275 行）：投递记录 + dashboard
+  - `db_job.py`（125 行）：岗位分析 CRUD
+  - `db_user.py`（121 行）：用户 CRUD
+  - 向后兼容：`from app.tools.db_tools import insert_card` 仍然可用
+- [x] 验证：`uv run ruff check .` 通过；`uv run ruff format .` 通过；`uv run pytest tests/ -q` 65 passed、11 skipped；`npm run build` 通过
+
 ## 待办事项（v0.6 之后）
 
 - [ ] 面试复盘长文本稳定性优化（Groq TPM 限制下的平衡）— Multi-Agent 重构后单 Agent prompt 降至 1500~2000 tokens，显著缓解
 - [ ] 经历卡与 JD 匹配的 LLM 评分校准
-- [ ] 前端错误处理与加载状态统一
-- [ ] 配置 CI 自动运行 pytest + ruff
 - [ ] 用户注册/登录（Non-Goal，排期在 MVP 之后）
 
 ## 已知问题 / 技术债

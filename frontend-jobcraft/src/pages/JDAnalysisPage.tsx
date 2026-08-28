@@ -2,6 +2,9 @@ import { useEffect, useState } from 'react'
 import {
   listJobAnalyses,
   step1AtsRecommend,
+  type JobAnalysisRecord,
+  type Step1AtsProfile,
+  type SubtextDecode,
 } from '../api.ts'
 import { navigate as routeNavigate } from '../useRoute.ts'
 import {
@@ -28,7 +31,7 @@ const { Text, Title } = Typography
 const { TextArea } = Input
 
 export default function JDAnalysisPage() {
-  const [analyses, setAnalyses] = useState<any[]>([])
+  const [analyses, setAnalyses] = useState<JobAnalysisRecord[]>([])
   const [searchText, setSearchText] = useState('')
   const [selectedRowKeys, setSelectedRowKeys] = useState<number[]>([])
   const [loading, setLoading] = useState(false)
@@ -37,7 +40,11 @@ export default function JDAnalysisPage() {
   const [jdText, setJdText] = useState('')
   const [analyzing, setAnalyzing] = useState(false)
   const [analyzeElapsed, setAnalyzeElapsed] = useState(0)
-  const [result, setResult] = useState<any>(null)
+  const [result, setResult] = useState<{
+    job_analysis_id: number
+    ats: Step1AtsProfile
+    recommended_cards: { card_id: number; score: number; reason: string }[]
+  } | null>(null)
   const [analysisId, setAnalysisId] = useState<number | null>(null)
 
   const loadAnalyses = async () => {
@@ -68,7 +75,12 @@ export default function JDAnalysisPage() {
       const res = await fetch(`/api/jobcraft/job/analyze/${id}`)
       if (!res.ok) throw new Error('查询失败')
       const analysis = await res.json()
-      setResult(analysis.jd_requirements || analysis.ats)
+      const atsData = analysis.jd_requirements || analysis.ats || {}
+      setResult({
+        job_analysis_id: analysis.id,
+        ats: atsData,
+        recommended_cards: [],
+      })
       setAnalysisId(analysis.id)
       setPosition(analysis.position || '')
       setCompany(analysis.company || '')
@@ -100,7 +112,7 @@ export default function JDAnalysisPage() {
         company: company.trim(),
         jd_text: jdText.trim(),
       })
-      setResult(data.ats)
+      setResult(data)
       setAnalysisId(data.job_analysis_id)
       message.success('JD 分析完成')
       loadAnalyses()
@@ -141,7 +153,7 @@ export default function JDAnalysisPage() {
     ? analyses.filter(a => (a.position || '').includes(searchText) || (a.company || '').includes(searchText))
     : analyses
 
-  const ats = result as any
+  const ats = result?.ats
 
   return (
     <div>
@@ -225,7 +237,7 @@ export default function JDAnalysisPage() {
           {(ats.subtext_decoded || []).length > 0 && (
             <div style={{ marginTop: 12 }}>
               <Text strong style={{ color: 'var(--jc-warn-text)' }}>暗话分析（JD 潜台词）：</Text>
-              {(ats.subtext_decoded || []).map((s: any, i: number) => (
+              {(ats.subtext_decoded || []).map((s: SubtextDecode, i: number) => (
                 <div key={i} style={{ background: 'var(--jc-warn-bg)', border: '1px solid var(--jc-line)', borderRadius: 8, padding: '12px 16px', marginTop: 8 }}>
                   <Text strong>「{s.surface_requirement}」</Text>
                   <div style={{ color: 'var(--jc-warn-text)', marginTop: 4 }}>
@@ -277,19 +289,19 @@ export default function JDAnalysisPage() {
             size="small"
             rowSelection={{
               selectedRowKeys,
-              onChange: (keys: any) => setSelectedRowKeys(keys as number[]),
+              onChange: (keys: React.Key[]) => setSelectedRowKeys(keys as number[]),
             }}
             columns={[
               {
                 title: '岗位',
                 dataIndex: 'position',
-                render: (v: string, r: any) => <a onClick={() => handleViewAnalysis(r.id)}>{v || '-'}</a>,
+                render: (v: string, r: JobAnalysisRecord) => <a onClick={() => handleViewAnalysis(r.id)}>{v || '-'}</a>,
               },
               { title: '公司', dataIndex: 'company', render: (v: string) => v || '-' },
               { title: '时间', dataIndex: 'created_at', render: (v: string) => v ? new Date(v).toLocaleDateString('zh-CN') : '-' },
               {
                 title: '操作',
-                render: (_: any, record: any) => (
+                render: (_: unknown, record: JobAnalysisRecord) => (
                   <Popconfirm title="确定删除？" onConfirm={() => handleDelete(record.id)}>
                     <Button size="small" danger icon={<DeleteOutlined />} />
                   </Popconfirm>

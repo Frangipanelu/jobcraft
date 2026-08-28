@@ -14,6 +14,7 @@ T = TypeVar("T")
 
 class PaginationParams(BaseModel):
     """分页参数"""
+
     page: int = Field(1, ge=1, description="页码")
     page_size: int = Field(20, ge=1, le=100, description="每页数量")
 
@@ -30,6 +31,7 @@ class PaginationParams(BaseModel):
 
 class PaginatedResponse(GenericModel, Generic[T]):
     """分页响应"""
+
     items: List[T] = Field(..., description="数据列表")
     total: int = Field(..., description="总数量")
     page: int = Field(..., description="当前页码")
@@ -57,6 +59,7 @@ class PaginatedResponse(GenericModel, Generic[T]):
 
 class ApiResponse(BaseModel):
     """统一 API 响应"""
+
     code: int = Field(0, description="状态码，0 表示成功")
     msg: str = Field("success", description="消息")
     data: Optional[dict] = Field(None, description="数据")
@@ -64,6 +67,7 @@ class ApiResponse(BaseModel):
 
 class ErrorResponse(BaseModel):
     """错误响应"""
+
     code: int = Field(..., description="错误码")
     msg: str = Field(..., description="错误消息")
     data: Optional[dict] = Field(None, description="错误详情")

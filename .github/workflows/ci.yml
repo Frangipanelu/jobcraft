@@ -32,14 +32,7 @@ jobs:
         run: uv run ruff format --check .
 
       - name: Run tests
-        env:
-          JOBCRAFT_DB_HOST: localhost
-          JOBCRAFT_DB_PORT: "3306"
-          JOBCRAFT_DB_USER: test
-          JOBCRAFT_DB_PASS: test
-          JOBCRAFT_DB_NAME: jobcraft_test
-          JWT_SECRET_KEY: test-secret-key-for-ci
-        run: uv run pytest tests/ -v --tb=short
+        run: uv run pytest tests/ -v --tb=short -q
 
   security-scan:
     runs-on: ubuntu-latest

@@ -16,6 +16,7 @@ from redis import Redis
 
 class TaskStatus(str, Enum):
     """任务状态枚举"""
+
     PENDING = "pending"
     RUNNING = "running"
     COMPLETED = "completed"
@@ -124,11 +125,14 @@ class TaskManager:
         # 加入任务队列
         self.redis.lpush(
             self._queue_key,
-            json.dumps({
-                "task_id": task_id,
-                "task_type": task_type,
-                "params": params or {},
-            }, ensure_ascii=False),
+            json.dumps(
+                {
+                    "task_id": task_id,
+                    "task_type": task_type,
+                    "params": params or {},
+                },
+                ensure_ascii=False,
+            ),
         )
 
         return task_id

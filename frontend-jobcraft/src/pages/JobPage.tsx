@@ -1,6 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import html2canvas from 'html2canvas'
-import { jsPDF } from 'jspdf'
 import {
   Button,
   Card,
@@ -12,6 +10,7 @@ import {
   Modal,
   Progress,
   Space,
+  Spin,
   Steps,
   Tabs,
   Tag,
@@ -35,11 +34,15 @@ import {
   step2GapPolish,
   type ExperienceCard,
   type ResumePersonalInfo,
+  type Step1AtsProfile,
 } from '../api.ts'
 
 const { Step } = Steps
 const { TabPane } = Tabs
 const { Text } = Typography
+
+const LOCAL_WEIGHT = 0.4
+const LLM_WEIGHT = 0.6
 
 interface RecommendedCard {
   card_id: number
@@ -93,13 +96,14 @@ interface GapResult {
 
 export default function JobPage({ jobId }: { jobId?: string | null }) {
   const [form] = Form.useForm()
+  const [initialLoading, setInitialLoading] = useState(!!jobId)
   const [step, setStep] = useState(jobId ? 1 : 0)
   const [jdText, setJdText] = useState('')
   const [jobTitle, setJobTitle] = useState('')
   const [company, setCompany] = useState('')
   const [allCards, setAllCards] = useState<ExperienceCard[]>([])
   const [jobAnalysisId, setJobAnalysisId] = useState<number | null>(jobId ? Number(jobId) : null)
-  const [ats, setAts] = useState<any>(null)
+  const [ats, setAts] = useState<Step1AtsProfile | null>(null)
   const [recommendedCards, setRecommendedCards] = useState<RecommendedCard[]>([])
   const [selectedCardIds, setSelectedCardIds] = useState<number[]>([])
   const [analyzing, setAnalyzing] = useState(false)
@@ -146,6 +150,7 @@ export default function JobPage({ jobId }: { jobId?: string | null }) {
         setSelectedCardIds([])
       })
       .catch(e => message.error(e.message))
+      .finally(() => setInitialLoading(false))
   }, [jobId])
 
   const cardMap = useMemo(() => {
@@ -271,6 +276,10 @@ export default function JobPage({ jobId }: { jobId?: string | null }) {
     container.innerHTML = resumeHtml
     document.body.appendChild(container)
     try {
+      const [{ default: html2canvas }, { jsPDF }] = await Promise.all([
+        import('html2canvas'),
+        import('jspdf'),
+      ])
       // 等待字体与图片加载完成再截图
       await new Promise((r) => setTimeout(r, 300))
       const canvas = await html2canvas(container, {
@@ -315,7 +324,8 @@ export default function JobPage({ jobId }: { jobId?: string | null }) {
   }
 
   return (
-    <div>
+    <Spin spinning={initialLoading}>
+      <div>
       <Steps current={step} style={{ marginBottom: 24, background: 'var(--jc-panel)', padding: 16, borderRadius: 8 }}>
         <Step title="输入 JD" icon={<FileTextOutlined />} />
         <Step title="选择卡片" icon={<RobotOutlined />} />
@@ -445,17 +455,17 @@ export default function JobPage({ jobId }: { jobId?: string | null }) {
                       type="dashboard"
                       percent={gapResult.overall_score}
                       size={96}
-                      strokeColor={gapResult.overall_score >= 70 ? 'var(--jc-success)' : gapResult.overall_score >= 40 ? 'var(--jc-warn)' : 'var(--jc-danger)'}
+                      strokeColor={gapResult.overall_score >= 80 ? 'var(--jc-success)' : gapResult.overall_score >= 60 ? 'var(--jc-warn)' : 'var(--jc-danger)'}
                     />
                     <div>
                       <div style={{ fontSize: 16, fontWeight: 600 }}>
                         整体匹配度：{gapResult.overall_score} 分
-                        <Tag color={gapResult.overall_score >= 70 ? 'success' : gapResult.overall_score >= 40 ? 'warning' : 'error'} style={{ marginLeft: 8 }}>
+                        <Tag color={gapResult.overall_score >= 80 ? 'success' : gapResult.overall_score >= 60 ? 'warning' : 'error'} style={{ marginLeft: 8 }}>
                           {gapResult.match_level}
                         </Tag>
                       </div>
                       <div style={{ color: 'var(--jc-muted)', marginTop: 4 }}>
-                        评分构成：本地关键词命中 40% + LLM 语义匹配 60%，按所选卡片融合分取平均
+                        评分构成：本地关键词命中 {Math.round(LOCAL_WEIGHT * 100)}% + LLM 语义匹配 {Math.round(LLM_WEIGHT * 100)}%，按所选卡片融合分取平均
                       </div>
                     </div>
                   </Space>
@@ -478,7 +488,7 @@ export default function JobPage({ jobId }: { jobId?: string | null }) {
                           type="circle"
                           percent={item.score}
                           size={24}
-                          strokeColor={item.score >= 70 ? 'var(--jc-success)' : item.score >= 40 ? 'var(--jc-warn)' : 'var(--jc-danger)'}
+                          strokeColor={item.score >= 80 ? 'var(--jc-success)' : item.score >= 60 ? 'var(--jc-warn)' : 'var(--jc-danger)'}
                         />
                       </Space>
                     }
@@ -505,7 +515,7 @@ export default function JobPage({ jobId }: { jobId?: string | null }) {
                             {item.dimension_analysis.map((d, i) => (
                               <div key={i} title={d.note}>
                                 <Tag
-                                  color={d.score >= 70 ? 'green' : d.score >= 40 ? 'orange' : 'red'}
+                                    color={d.score >= 80 ? 'green' : d.score >= 60 ? 'orange' : 'red'}
                                   style={{ cursor: 'help' }}
                                 >
                                   {d.dimension} {d.score} 分
@@ -655,5 +665,6 @@ export default function JobPage({ jobId }: { jobId?: string | null }) {
         </Form>
       </Modal>
     </div>
+    </Spin>
   )
 }

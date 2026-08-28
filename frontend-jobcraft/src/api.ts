@@ -80,6 +80,13 @@ export interface DimensionQuestion {
   card_ids: number[]
 }
 
+export interface SuggestionItem {
+  card_id?: number
+  type: string
+  message: string
+  priority: number
+}
+
 export interface AnalyzeJobResult {
   job_analysis_id: number
   match_score: number
@@ -88,7 +95,7 @@ export interface AnalyzeJobResult {
   gap_analysis: string[]
   gap_items: GapItem[]
   per_card_scores: PerCardScore[]
-  suggestions: any[]
+  suggestions: SuggestionItem[]
   ats_profile: AtsProfile
   company_context: CompanyContext
   dimension_requirements: DimensionRequirement[]
@@ -114,7 +121,7 @@ export interface InterviewPrepResult {
 interface UnifiedErrorBody {
   code?: number
   msg?: string
-  data?: any
+  data?: unknown
 }
 
 async function parseUnifiedError(res: Response, fallback: string): Promise<Error> {
@@ -143,6 +150,14 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
     headers: { 'Content-Type': 'application/json' },
     ...options,
   })
+  if (!res.ok) {
+    throw await parseUnifiedError(res, `Request failed: ${res.status}`)
+  }
+  return res.json() as Promise<T>
+}
+
+async function requestFormData<T>(url: string, formData: FormData, method = 'POST'): Promise<T> {
+  const res = await fetch(`${BASE_URL}${url}`, { method, body: formData })
   if (!res.ok) {
     throw await parseUnifiedError(res, `Request failed: ${res.status}`)
   }
@@ -181,20 +196,8 @@ export async function uploadResume(
 ): Promise<ExperienceCard[]> {
   const formData = new FormData()
   formData.append('file', file)
-  const res = await fetch(`${BASE_URL}/api/jobcraft/experience/upload`, { method: 'POST', body: formData })
-  if (!res.ok) {
-    const text = await res.text().catch(() => 'Unknown error')
-    let body: UnifiedErrorBody | string = text
-    try {
-      body = JSON.parse(text) as UnifiedErrorBody
-    } catch {
-      // 保持原始 text
-    }
-    const message = parseErrorMessage(res, body, `Upload failed: ${res.status}`)
-    throw new Error(message)
-  }
-  const data = await res.json()
-  return (data.cards || []) as ExperienceCard[]
+  const data = await requestFormData<{ cards?: ExperienceCard[] }>('/api/jobcraft/experience/upload', formData)
+  return data.cards || []
 }
 
 export interface SubtextDecode {
@@ -204,23 +207,27 @@ export interface SubtextDecode {
   how_to_prove: string
 }
 
+export interface Step1AtsProfile {
+  job_title: string
+  required_skills: string[]
+  preferred_skills: string[]
+  responsibilities: string[]
+  key_metrics: string[]
+  culture_keywords: string[]
+  education?: string
+  years_of_experience?: string
+  salary?: string
+  location?: string
+  subtext_decoded?: SubtextDecode[]
+}
+
 export async function step1AtsRecommend(payload: {
   position: string
   company: string
   jd_text: string
 }): Promise<{
   job_analysis_id: number
-  ats: {
-    job_title: string
-    required_skills: string[]
-    preferred_skills: string[]
-    responsibilities: string[]
-    key_metrics: string[]
-    culture_keywords: string[]
-    education?: string
-    years_of_experience?: string
-    subtext_decoded?: SubtextDecode[]
-  }
+  ats: Step1AtsProfile
   recommended_cards: { card_id: number; score: number; reason: string }[]
   all_cards: ExperienceCard[]
 }> {
@@ -298,7 +305,12 @@ export async function saveCardVersion(payload: {
   })
 }
 
-export async function analyzeJob(payload: any): Promise<AnalyzeJobResult> {
+export async function analyzeJob(payload: {
+  position: string
+  company: string
+  jd_text: string
+  card_ids?: number[]
+}): Promise<AnalyzeJobResult> {
   return request<AnalyzeJobResult>('/api/jobcraft/job/analyze', {
     method: 'POST',
     body: JSON.stringify(payload),
@@ -385,22 +397,7 @@ export async function uploadInterviewReview(
       formData.append(key, String(value))
     }
   })
-  const res = await fetch(`${BASE_URL}/api/jobcraft/interview-review/upload`, {
-    method: 'POST',
-    body: formData,
-  })
-  if (!res.ok) {
-    const text = await res.text().catch(() => 'Unknown error')
-    let body: UnifiedErrorBody | string = text
-    try {
-      body = JSON.parse(text) as UnifiedErrorBody
-    } catch {
-      // 保持原始 text
-    }
-    const message = parseErrorMessage(res, body, `Upload failed: ${res.status}`)
-    throw new Error(message)
-  }
-  return res.json() as Promise<InterviewReviewCreateResult>
+  return requestFormData<InterviewReviewCreateResult>('/api/jobcraft/interview-review/upload', formData)
 }
 
 export async function parseInterviewReviewPreview(params: {
@@ -438,22 +435,7 @@ export async function parseInterviewReviewPreview(params: {
   if (params.with_intent) {
     formData.append('with_intent', 'true')
   }
-  const res = await fetch(`${BASE_URL}/api/jobcraft/interview-review/parse-preview`, {
-    method: 'POST',
-    body: formData,
-  })
-  if (!res.ok) {
-    const text = await res.text().catch(() => 'Unknown error')
-    let body: UnifiedErrorBody | string = text
-    try {
-      body = JSON.parse(text) as UnifiedErrorBody
-    } catch {
-      // 保持原始 text
-    }
-    const message = parseErrorMessage(res, body, `Preview failed: ${res.status}`)
-    throw new Error(message)
-  }
-  return res.json() as Promise<InterviewReviewParsePreviewResult>
+  return requestFormData<InterviewReviewParsePreviewResult>('/api/jobcraft/interview-review/parse-preview', formData)
 }
 
 export async function generateInterviewReviewQuestionTable(
@@ -480,9 +462,17 @@ export async function analyzeInterviewReview(
   })
 }
 
-export async function listJobAnalyses(userId?: number): Promise<{ analyses: any[] }> {
+export interface JobAnalysisRecord {
+  id: number
+  company: string
+  position: string
+  match_score: number | null
+  created_at: string | null
+}
+
+export async function listJobAnalyses(userId?: number): Promise<{ analyses: JobAnalysisRecord[] }> {
   const qs = userId !== undefined ? `?user_id=${userId}` : ''
-  return request<{ analyses: any[] }>(`/api/jobcraft/job/analyses${qs}`)
+  return request<{ analyses: JobAnalysisRecord[] }>(`/api/jobcraft/job/analyses${qs}`)
 }
 
 // ============================================================
@@ -566,21 +556,13 @@ export async function getDashboard(userId?: number): Promise<{ submissions: Dash
 export async function createManualSubmission(
   file: File,
   payload: { position: string; company?: string; jd_text?: string },
-): Promise<any> {
+): Promise<Submission> {
   const formData = new FormData()
   formData.append('file', file)
   formData.append('position', payload.position)
   formData.append('company', payload.company || '')
   formData.append('jd_text', payload.jd_text || '')
-  const res = await fetch('/api/jobcraft/submission/manual', {
-    method: 'POST',
-    body: formData,
-  })
-  if (!res.ok) {
-    const text = await res.text().catch(() => 'Upload failed')
-    throw new Error(text)
-  }
-  return res.json()
+  return requestFormData<Submission>('/api/jobcraft/submission/manual', formData)
 }
 
 export interface ResumePersonalInfo {
@@ -603,5 +585,19 @@ export async function saveResume(payload: {
     method: 'POST',
     body: JSON.stringify(payload),
   })
+}
+
+export async function structureCard(cardId: number): Promise<void> {
+  await request(`/api/jobcraft/experience/cards/${cardId}/structure`, {
+    method: 'POST',
+    body: JSON.stringify({}),
+  })
+}
+
+export async function recommendTags(cardId: number): Promise<string[]> {
+  const data = await request<{ tags?: string[] }>(`/api/jobcraft/experience/cards/${cardId}/recommend-tags`, {
+    method: 'POST',
+  })
+  return data.tags || []
 }
 

@@ -20,6 +20,7 @@ const ROUND_OPTIONS = [
 
 export default function InterviewPrepPage({ submissionId }: { submissionId: string | null }) {
   const [submission, setSubmission] = useState<Submission | null>(null)
+  const [initialLoading, setInitialLoading] = useState(true)
   const [roundType, setRoundType] = useState<string>('技术面')
   const [cards, setCards] = useState<{ id: number; title: string }[]>([])
   const [selectedCardIds, setSelectedCardIds] = useState<number[]>([])
@@ -41,6 +42,9 @@ export default function InterviewPrepPage({ submissionId }: { submissionId: stri
           }
         })
         .catch((e) => message.error(e.message))
+        .finally(() => setInitialLoading(false))
+    } else {
+      setInitialLoading(false)
     }
     listCards()
       .then((data) => setCards(data.map((c) => ({ id: c.id, title: c.title }))))
@@ -100,7 +104,8 @@ export default function InterviewPrepPage({ submissionId }: { submissionId: stri
   }
 
   return (
-    <div>
+    <Spin spinning={initialLoading}>
+      <div>
       {submission && (
         <Card className="jc-section" style={{ marginBottom: 16 }}>
           <Space size="large">
@@ -198,5 +203,6 @@ export default function InterviewPrepPage({ submissionId }: { submissionId: stri
         </Tabs>
       )}
     </div>
+    </Spin>
   )
 }
