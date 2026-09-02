@@ -30,20 +30,27 @@ Phase 5  清理与观测（监控/dead-code/依赖/docs 修正）  【P3】
 # 2. Task Dependency Graph
 
 ```text
-TASK-AUTH-001 ──────────────┐
-TASK-OWN-001 ──────────────┤
-TASK-INJ-001 ──────────────┼─→ 阶段 0 安全基线
-                           │
-TASK-AUTH-001 ─┐           │   (并行可独立提交，但建议先 AUTH)
-TASK-TYPE-001 ─┼─→ TASK-REAL-DATA-001 → TASK-REAL-DATA-002 → ...   
-TASK-FETCH-001 ┘
-        │
-        └─→ TASK-RESUME-001 (依赖 TASK-TYPE-001)
-        └─→ TASK-STATUS-001 (依赖 TASK-AUTH-001)
+TASK-AUTH-001 ─────────────────┐
+TASK-OWN-001 ──────────────────┤
+TASK-INJ-001 ──────────────────┼─→ 阶段 0 安全基线 ✅ 全部完成
+                               │
+TASK-TYPE-001 ─┬─→ TASK-FETCH-001（文档固化，随 TYPE 合并提交）
+               ├─→ TASK-REAL-DATA-001 → TASK-REAL-DATA-002
+               ├─→ TASK-REAL-DATA-003
+               ├─→ TASK-INTERVIEW-001（面试持久化）
+               └─→ TASK-TASK-SYS-001（任务系统接线）
 
-TASK-DB-MIG-001 → TASK-DB-FK-001      (阶段 3)
-TASK-AI-TASK-001 → TASK-AI-CACHE-001  (阶段 4)
-TASK-OBS-001 / TASK-DEPS-001 / TASK-DOCS-001  (阶段 5)
+TASK-INTERVIEW-001 ──→ TASK-REAL-DATA-002（mock-chat 依赖 interviews 持久化）
+TASK-INTERVIEW-001 ──→ TASK-REAL-DATA-003（复盘依赖 interview 数据持久化）
+
+TASK-RESUME-001 (依赖 TASK-TYPE-001)
+TASK-STATUS-001 (依赖 TASK-AUTH-001)
+TASK-FIX-001 (独立)
+
+TASK-DB-MIG-001 → TASK-DB-FK-001                    (阶段 3)
+TASK-AI-001 → TASK-AI-002 → TASK-AI-003             (阶段 4)
+TASK-OBS-001 / TASK-DEPS-001 / TASK-CLEAN-001       (阶段 5)
+TASK-CLEANUP-WIP-001                                 (随时可做，无依赖)
 ```
 
 **可并行**：阶段 0 内 AUTH/OWN/INJ；阶段 1 内 TYPE/FETCH；阶段 2 的 RESUME/STATUS 可并行（各自独立 Task）。
@@ -118,51 +125,84 @@ TASK-OBS-001 / TASK-DEPS-001 / TASK-DOCS-001  (阶段 5)
 
 > Baseline R5/R6/R7/R10 及 §15 MISMATCH。前端接入真实后端。
 
-### TASK-TYPE-001 统一前端类型系统
+### TASK-TYPE-001 文档化两层类型 + 收紧 any 泄漏
 
-- **Goal**：消除双重类型系统，统一为后端 snake_case DTO。
-- **Why**：Baseline R10。`src/types/jobcraft.ts`（camelCase）与 `src/api/types.ts`（snake_case）并行，靠 mapper 桥接易漂移。
-- **Current State**：`JobCraftContext.tsx:159/186/241` 三处 mapper。
-- **Scope**：以 `src/api/types.ts`（后端 DTO）为唯一契约；迁移 `types/jobcraft.ts`，删除 mapper 或改为纯字段映射。
-- **Non-goals**：不引入 tRPC/OpenAPI 代码生成（P2 再考虑）。
-- **Files**：`src/types/jobcraft.ts`、`src/api/types.ts`、`src/context/JobCraftContext.tsx`、各页面组件。
-- **Tests**：`npm run build`（tsc 严格）+ 需新增前端单测（若配置 vitest）。
-- **Expected Commit**：`refactor(frontend): unify API types to backend DTOs`
+- **Goal**：记录双层类型为有意设计；收紧后端 api 层 7 处 `any`，消除契约模糊。
+- **Why**：Baseline R10 提出"统一为 api/types.ts"。实际校准（2026-09-02）：该两层系统是**有意的架构设计**——`api/types.ts`（snake_case 后端 DTO）仅在 `JobCraftContext.tsx` 映射层使用；`types/jobcraft.ts`（camelCase 领域模型）被 10 个组件消费，零死代码，115 处活跃引用。真正问题是 api 层的 `any` 泄漏（模糊返回结构）。
+- **Current State**：`src/api/types.ts:10` `APIResponse<T=any>`、`:128` `Record<string, any>`、`:191` `any[]`；`src/api/job.ts:43` `ats: any`、`:45` `all_cards: any[]`、`:57` `per_card: any[]`、`:58` `global_suggestions: any[]`（共 7 处）。
+- **Scope**：
+  - `api/types.ts:10` → 保留 `any` 作为泛型默认并加 JSDoc 注释（安全，下游类型已约束）；或改为 `Record<string, unknown>` 视调用方兼容性；
+  - `api/types.ts:128` → `company_context: Record<string, string | number | boolean | null> | null`；
+  - `api/types.ts:191` → `parsed_dialogue?: InterviewReviewParsePreviewItem[]`（复用已有接口）；
+  - `api/job.ts:43` → `ats: ATSProfile`（复用已有类型）；
+  - `api/job.ts:45` → `all_cards: ExperienceCard[]`（复用已有类型）；
+  - `api/job.ts:57` → 新增 `PerCardGap { card_id: number; gap_score: number; suggestions: string[] }`；
+  - `api/job.ts:58` → 新增 `GlobalSuggestion { dimension: string; kind: string; message: string }`；
+  - 在 `types.ts` 或 `JobCraftContext.tsx` 顶部添加 JSDoc 注释说明双层架构及职责。
+- **Non-goals**：不删除 mapper；不改 `types/jobcraft.ts`；不引入 tRPC/OpenAPI 代码生成（P2）。
+- **Dependencies**：无（独立提交）。
+- **Tests**：`cd frontend-jobcraft && npm run build && npm run lint`（vite + tsc --noEmit）。
+- **Verify**：需先核对 `app/workflows/job_analysis_flow.py` 的 `step2-gap-polish` 返回结构来确认 `PerCardGap`/`GlobalSuggestion` 字段（Design 阶段读取）。
+- **Expected Commit**：`refactor(frontend): tighten api layer any types, document type architecture`
 
-### TASK-FETCH-001 审计并固化 fetch 出口
+### TASK-FETCH-001 fetch 出口审计（✅ 已核验，仅需文档固化）
 
-- **Goal**：确认无组件直连后端之外的非标请求，token/错误处理统一。
-- **Why**：Baseline 已确认 fetch 集中在 `api/client.ts` ✅（基线正面项，需保持并固化为规范）。
-- **Current State**：`api/client.ts` 为唯一 fetch 出口。
-- **Scope**：补充 README/文档强调；可选将 `any`（`api/job.ts:43,45,57,58` 等）收紧为具体类型。
-- **Expected Commit**：`docs(frontend): document api client as single fetch source`
+- **Goal**：确认 `api/client.ts` 为唯一 fetch 出口。
+- **Why**：Baseline 审计项。
+- **Current State（2026-09-02 校准）**：✅ 已确认。扫描 `frontend-jobcraft/src/**`：fetch 仅出现在 `api/client.ts:53`（JSON）与 `:71`（FormData）；组件层无任何直接 fetch/axios/XHR/WebSocket。auth token 通过 `setAuthToken()`/`getAuthToken()` 集中管理，注入 `Authorization: Bearer` header。
+- **Remaining Work**：`api/job.ts` 的 4 处 `any` 收紧纳入 TASK-TYPE-001 一并完成；本 task 仅需在 `api/client.ts` 顶部添加 JSDoc 注释标注为唯一 fetch 出口 + auth 注入点。
+- **Scope（简化）**：添加 JSDoc 注释。
+- **Expected Commit**：随 TASK-TYPE-001 合并提交（`docs(api): document client.ts as single fetch source`）或独立 commit。
+- **Status（2026-09-02）**：实质性完成，待文档固化。
 
-### TASK-REAL-DATA-001 首页（WorkbenchView）接真实数据
+### TASK-REAL-DATA-001 首页（WorkbenchView）+ JD 报告接真实数据
 
-- **Goal**：`WorkbenchView.tsx` 从硬编码改为读取后端 dashboard 数据。
-- **Why**：Baseline §11.1。`WorkbenchView.tsx:30-102` 硬编码计数/步骤/评分/公司名。
-- **Current State**：首页显示假数据（12/3/5/2、字节跳动/腾讯、82/76/68）。
-- **Scope**：用 Context 已加载的 dashboard/submissions/jobs 渲染真实计数与列表。
-- **Files**：`src/components/workbench/WorkbenchView.tsx`、`src/context/JobCraftContext.tsx`。
-- **Tests**：前端构建通过；必要时补充渲染单测。
-- **Expected Commit**：`feat(frontend): drive workbench from real dashboard data`
+- **Goal**：`WorkbenchView.tsx` 和 `JDReportDetailView.tsx` 从硬编码改为读取后端数据。
+- **Why**：Baseline §11.1。`WorkbenchView.tsx:30-102` 硬编码计数/步骤/评分/公司名；`JDReportDetailView.tsx:29-99` 硬编码 `FALLBACK_DATA`（goals/competencies/atsGroups/subtextSections）。
+- **Current State**：
+  - `WorkbenchView.tsx`：`:30-33` 四个 hardcoded 计数（`deliveredCount=12` 等）；`:38-67` `getJobSteps()` 硬编码步骤映射；`:87-102` `getJobMatchScore()`/`getRoleName()`/`getCompanyName()` 硬编码查找；`:322-324`/`:337` 硬编码公司名字符串。Context 已加载 `jobs`（`loadDashboard` → `submissionToJob`）但被忽略。
+  - `JDReportDetailView.tsx`：`:221-246` 用 `jdAnalyses` 真实字段（company/position/date/matchScore），但 `:29-99` `FALLBACK_DATA` 用于 goals/competencies/atsGroups/subtextSections/recommended。
+- **Scope**：
+  - `WorkbenchView`：移除 `:30-33` hardcoded 计数，改用 `jobs.length` 等真实字段；移除 `:38-67` `getJobSteps()`，改用 `jobs` 的 `submission.status`；移除 `:87-102` 硬编码查找，改用 `jobs[index].company`/`.position`/`.matchScore`；补充空状态 fallback（无数据时显示引导而非假数据）。
+  - `JDReportDetailView`：移除 `:29-99` `FALLBACK_DATA`，改为从 `currentAnalysis` 的 `jd_requirements`/`ats_profile` 填充 goals/competencies/atsGroups/subtextSections；若后端未返回这些字段则显示"待分析"占位。
+- **Files**：`src/components/workbench/WorkbenchView.tsx`、`src/components/jd/JDReportDetailView.tsx`、`src/context/JobCraftContext.tsx`。
+- **Tests**：`cd frontend-jobcraft && npm run build && npm run lint`。
+- **Expected Commit**：`feat(frontend): drive workbench and JD report from real backend data`
 
-### TASK-REAL-DATA-002 MockInterview 去 Mock
+### TASK-REAL-DATA-002 MockInterview 去 Mock（后端 endpoint 已就绪，前端未接线）
 
-- **Goal**：模拟面试由真实后端 mock-chat/复盘数据驱动，去掉 `Math.random` 假评分。
+- **Goal**：模拟面试由真实后端 mock-chat 驱动，去掉 `Math.random` 假评分。
 - **Why**：Baseline §11.1。`MockInterviewModal.tsx:42-99` 硬编码题目/假评分/假录音。
-- **Current State**：模拟面试验证结论由 `Math.random()` 生成。
-- **Scope**：复用现有 `/interview-review/mock-chat`（`interview_review.py:359`）或明确该能力边界；评分改真实 AI。
-- **Dependencies**：TASK-TYPE-001。
-- **Expected Commit**：`feat(frontend): real mock interview scoring from backend`
+- **Current State**：
+  - 后端 `POST /api/jobcraft/interview-review/mock-chat`（`interview_review.py:361-404`）已实现：`MockChatPayload`（messages/company/position/round_type/experience_context）→ `{ reply: str, role: "interviewer" }`，使用 `openai.OpenAI` + `LLM_model` env。
+  - 前端 `MockInterviewModal.tsx` **零 API 调用**：`:42-55` `mockQuestions` hardcoded 数组；`:65` `setTimeout` fake delay；`:68-72` `Math.random()` 评分；`:96-105` `handleToggleRecording()` 用 `setTimeout` 模拟录音。
+  - `src/api/interview.ts` 无 `mockChat()` 函数。
+- **Scope**：
+  - `src/api/interview.ts` 新增 `mockChat(payload)` 调用后端 `/interview-review/mock-chat`；
+  - `MockInterviewModal` 改为多轮对话模式：用户输入 → POST mock-chat → 展示 LLM 面试官回复 → 循环；
+  - 对话结束后调用 `interviewApi.createInterviewReview()` 获取真实 AI 评分，替换 `Math.floor(78+Math.random()*12)` 假分数；
+  - 移除 `:42-55` `mockQuestions`、`:65` fake delay、`:68-72` `Math.random()`。
+- **Dependencies**：TASK-TYPE-001、TASK-INTERVIEW-001（面试持久化）。
+- **Files**：`src/components/interview/MockInterviewModal.tsx`、`src/api/interview.ts`。
+- **Tests**：`cd frontend-jobcraft && npm run build && npm run lint`。
+- **Expected Commit**：`feat(frontend): real mock interview via backend mock-chat endpoint`
 
-### TASK-REAL-DATA-003 复盘/新增向导去 Mock 评分
+### TASK-REAL-DATA-003 复盘/新增向导/面试准备去 Mock 评分
 
-- **Goal**：`JobCraftContext.tsx:1126/1189` 及 `NewReviewModal.tsx:51-86` 的假评分/占位改为后端真实分析。
+- **Goal**：复盘、新增向导、面试准备的假评分/占位改为后端真实分析。
 - **Why**：Baseline §11.1。
-- **Scope**：复用现有 `interview-review/analyze`、`question-table` 返回结构化结果，去掉手工 `overallScore/qaBreakdown` 假数据。
-- **Dependencies**：TASK-TYPE-001。
-- **Expected Commit**：`feat(frontend): use backend review analysis instead of mock scores`
+- **Current State**：
+  - `JobCraftContext.tsx` 的 `createReviewFromTranscript()`（`:1173-1230`）已调用 `interviewApi.createInterviewReview()`（真实后端），但之后**忽略响应**，改为 `Math.floor(75+Math.random()*12)` 假评分（`:1181,1244`）。
+  - `NewReviewModal.tsx:51-86` 全部 hardcoded：`overallScore:88`、`highlights`、`drawbacks`、`qaBreakdown`，`setTimeout` fake delay，**不调用任何后端 API**。
+  - `InterviewPrepCenterView.tsx` 的 `createInterview()` 中 `companyResearch`/`aiStrategy`/`highFreqQuestions`（context `:978-1033`）全部 hardcoded；后端 `POST /api/jobcraft/job/{job_id}/interview-prep`（`interview.ts:21`）已实现但从未被调用。
+- **Scope**：
+  - `createReviewFromTranscript()`：用 API 返回的 `InterviewReviewResult`（`overall_score`/`strengths`/`weaknesses`/`questions`）直接赋给 review 对象，删除 `Math.random()` 代码；
+  - `NewReviewModal`：移除 hardcoded 评分，改为调用 `interviewApi.createInterviewReview()` 并使用返回值；
+  - `InterviewPrepCenterView`：`createInterview()` 改为调用后端 `/interview-prep`（`interview.ts:21`），用返回的 `InterviewPrepResult` 驱动（`elevator_pitch`/`dimension_questions`/`full_version`）。
+- **Dependencies**：TASK-TYPE-001、TASK-INTERVIEW-001（面试持久化）。
+- **Files**：`src/context/JobCraftContext.tsx`、`src/components/review/NewReviewModal.tsx`、`src/components/interview/InterviewPrepCenterView.tsx`。
+- **Tests**：`cd frontend-jobcraft && npm run build && npm run lint`。
+- **Expected Commit**：`feat(frontend): use backend review/prep analysis instead of mock scores`
 
 ### TASK-DOCFIX-001 修正文档与代码 MISMATCH
 
@@ -170,6 +210,45 @@ TASK-OBS-001 / TASK-DEPS-001 / TASK-DOCS-001  (阶段 5)
 - **Why**：Baseline §10/§15。`AGENTS.md` 强制 Ant Design（实际 Tailwind）、`pyproject` v0.6.0（实际 v0.14）、缺失的 v2 文档引用。
 - **Scope**：更新 `AGENTS.md`（UI 规范改为 Tailwind 事实）、校正版本号、删除孤儿引用或补建缺失文档。
 - **Expected Commit**：`docs: align AGENTS.md and version with actual code`
+
+### TASK-INTERVIEW-001 面试记录后端持久化
+
+- **Goal**：面试记录（interviews）从后端加载/保存，不再仅存内存。
+- **Why**：`JobCraftContext.tsx` 的 `interviews` state 永不从后端加载——`createInterview()` 创建的记录全部在内存，刷新即丢失。后端 `GET /api/jobcraft/interview-review`（`interview.ts:54`）已实现但从未被 `loadInterviews()` 调用。
+- **Current State**：`interviews` 数组由 `createInterview()` 手动构建（context `:953-1077`）；后端有 `listInterviewRecords`（`db_interview.py`）但无 `loadInterviews()` 函数。`InterviewPrepCenterView` 的 `companyResearch`/`aiStrategy`/`highFreqQuestions`（context `:978-1033`）全部 hardcoded。
+- **Scope**：
+  - `JobCraftContext.tsx` 新增 `loadInterviews()` 调用 `interviewApi.listInterviewRecords()`；
+  - `loadUserProfileAndData()` 中集成调用；
+  - `createInterview()` 改为先调用后端 `POST /api/jobcraft/interview-review`（`interview.ts:61`）创建记录，再用返回的 `record_id` 更新本地 state；
+  - 删除 context 中 hardcoded 的 `companyResearch`/`aiStrategy`/`highFreqQuestions`（`$:978-1033`），改为从 `interviewApi.getJobInterviewPrep` 返回数据填充。
+- **Dependencies**：TASK-TYPE-001（类型对齐）。
+- **Files**：`src/context/JobCraftContext.tsx`、`src/api/interview.ts`、`src/components/interview/InterviewPrepCenterView.tsx`。
+- **Tests**：`cd frontend-jobcraft && npm run build && npm run lint`。
+- **Expected Commit**：`feat(frontend): load interviews from backend, remove in-memory-only state`
+
+### TASK-TASK-SYS-001 接线前端任务系统
+
+- **Goal**：前端接入后端异步任务轮询（`/api/jobcraft/tasks/*`），为长 AI 调用提供进度反馈。
+- **Why**：后端 `server.py` 已定义 4 个 task 路由（`/tasks/submit`、`/tasks/{task_id}`、`/tasks/{task_id}/cancel`、`/tasks`），前端完全未调用（无 `api/tasks.ts`），AI 调用无进度指示。
+- **Current State**：后端 4 个 task endpoint 已定义但无 consumer worker（`tasks/handlers.py:78` 错误 import `interview_flow`）；前端零引用。
+- **Scope**：新建 `src/api/tasks.ts`；在 AI workflow 调用（JD 分析/面试准备/复盘分析）启动时提交 task 并轮询进度，UI 显示加载状态。
+- **Dependencies**：TASK-TYPE-001、TASK-FIX-001（修 task handler import）。
+- **Files**：`src/api/tasks.ts`（新建）、`src/context/JobCraftContext.tsx`、`app/api/server.py`。
+- **Tests**：`cd frontend-jobcraft && npm run build && npm run lint`。
+- **Expected Commit**：`feat(frontend): wire task system for AI operation progress feedback`
+
+### TASK-CLEANUP-WIP-001 清理未提交 WIP
+
+- **Goal**：归档/删除与 roadmap 无关的未提交 WIP 文件，避免干扰后续提交。
+- **Why**：`git status --short` 显示 18+ 个未提交修改文件、7 个已删除 docs、12 个 untracked 文件，其中多数与当前 roadmap 无关。
+- **Scope**：
+  - `frontend-jobcraft-backup/`（整个旧前端备份）→ 归档或删除；
+  - `docker/`（Dockerfile×2、dump SQL×5、nginx.conf）→ 独立 commit 或 `.gitignore`；
+  - 7 个已删除 docs（`ACCEPTANCE_CRITERIA.md` 等）→ 确认无用后提交删除；
+  - `app/tools/db_config.py`（未跟踪，INJ-001 不再引用）→ 确认无用后删除；
+  - `.pre-commit-config.yaml`/`.python-version`/`.vscode/settings.json` → 确认是否为有意变更后 commit。
+- **Non-goals**：不修改业务逻辑；`app/api/interview_review.py` 的 mock-chat endpoint 保留在 WIP（归属 TASK-REAL-DATA-002）。
+- **Expected Commit**：`chore: clean up untracked WIP artifacts`（或拆为多个独立 commit）
 
 ---
 
@@ -281,18 +360,24 @@ TASK-OBS-001 / TASK-DEPS-001 / TASK-DOCS-001  (阶段 5)
 
 ---
 
-# 9. 优先实施清单（前 6 个 Task）
+# 9. 优先实施清单
 
 | 顺序 | Task | 优先级 | 依赖 | 用户价值 | 状态 |
-|---|---:|---|---|---|---|
-| 1 | TASK-AUTH-001 强制认证 | P0 | — | 安全 | ✅ 完成 |
-| 2 | TASK-OWN-001 所有权过滤 | P0 | AUTH | 安全 | ✅ 完成 |
-| 3 | TASK-INJ-001 注入收敛 | P0 | — | 安全 | ✅ 完成 |
-| 4 | TASK-AUTH-002 移除默认凭据 | P0 | AUTH | 安全 | ✅ 完成 |
-| 5 | TASK-TYPE-001 统一类型 | P0 | — | 契约稳定 | ⏳ 待办 |
-| 6 | TASK-REAL-DATA-001 首页真实数据 | P0 | TYPE | 产品可信 | ⏳ 待办 |
+|---|---|---|---|---|---|
+| 1 | TASK-AUTH-001 强制认证 | P0 | — | 安全 | ✅ 完成 `6a0f121` |
+| 2 | TASK-OWN-001 所有权过滤 | P0 | AUTH | 安全 | ✅ 完成 `09aa805` |
+| 3 | TASK-INJ-001 注入收敛 | P0 | — | 安全 | ✅ 完成 `b681f2c` |
+| 4 | TASK-AUTH-002 移除默认凭据 | P0 | AUTH | 安全 | ✅ 完成 `8878459` |
+| 5 | TASK-TYPE-001 any 收紧 + 文档 | P0 | — | 契约清晰 | ⏳ 待办 |
+| 6 | TASK-FETCH-001 fetch 审计 | P0 | TYPE | 安全合规 | ⏳ 待办（仅文档） |
+| 7 | TASK-REAL-DATA-001 Workbench 真实数据 | P0 | TYPE | 产品可信 | ⏳ 待办 |
+| 8 | TASK-REAL-DATA-002 MockInterview 去 Mock | P0 | INTERVIEW | 产品可信 | ⏳ 待办 |
+| 9 | TASK-REAL-DATA-003 复盘/向导去 Mock | P0 | INTERVIEW | 产品可信 | ⏳ 待办 |
+| 10 | TASK-INTERVIEW-001 面试持久化 | P0 | TYPE | 数据不丢失 | ⏳ 待办 |
+| 11 | TASK-CLEANUP-WIP-001 清理 WIP | P1 | — | 仓库整洁 | ⏳ 待办 |
 
-> 前 4 个安全基线任务已于 2026-09-02 全部完成（`8599e80`/`6a0f121`/`b681f2c`/`09aa805`/`8878459`）；随后进入 Contract 对齐。
+> 安全基线（Phase 0）4 个 task 全部完成（commit `6a0f121`→`8878459`→`09aa805`→`b681f2c`）。
+> Phase 1 核心发现（2026-09-02 校准）：两层类型系统是有意设计（非漂移），真正问题是 api 层 7 处 any + 接口未接线（interviews/task system）。
 
 ---
 
@@ -307,13 +392,20 @@ TASK-OBS-001 / TASK-DEPS-001 / TASK-DOCS-001  (阶段 5)
 
 # 11. 退出标准（Phase 1 完成 = 新 UI 真实数据驱动）
 
+> 校准后版本（2026-09-02）
+
 ```
-[ ] 所有业务端点已强制认证 + 所有权过滤（P0 安全基线完成）
-[ ] 前端类型统一为后端 DTO，无 mapper 桥接
-[ ] 首页/复盘/模拟面试/向导 无 Math.random 假数据
-[ ] Resume 编辑可用且读写真实 resume_markdown
-[ ] 新 frontend-jobcraft 核心路径（经历卡→JD 分析→投递→面试准备→复盘）全部由后端数据驱动
-[ ] 测试通过：uv run ruff check . && uv run pytest tests/ -q && npm run build
+[ ] 所有业务端点已强制认证 + 所有权过滤（P0 安全基线完成）✅
+[ ] api 层无 any 泄漏（7 处收紧）—— TASK-TYPE-001
+[ ] 双层类型架构有明确 JSDoc 注释 —— TASK-TYPE-001
+[ ] fetch 出口有文档标注 —— TASK-FETCH-001
+[ ] WorkbenchView / JDReportDetailView 从硬编码改为后端数据驱动 —— TASK-REAL-DATA-001
+[ ] MockInterview 接通 /mock-chat 端点，移除 Math.random 假评分 —— TASK-REAL-DATA-002
+[ ] InterviewPrepCenterView 从后端加载面试准备数据 —— TASK-REAL-DATA-003
+[ ] 复盘/新增向导（NewReviewModal）用后端 analyze 返回结果 —— TASK-REAL-DATA-003
+[ ] 面试记录从后端持久化（刷新不丢失）—— TASK-INTERVIEW-001
+[ ] 核心路径全部后端数据驱动（经历卡→JD分析→投递→面试准备→复盘）
+[ ] 测试通过：uv run ruff check . && uv run pytest tests/ -q && cd frontend-jobcraft && npm run build && npm run lint
 ```
 
 ---
