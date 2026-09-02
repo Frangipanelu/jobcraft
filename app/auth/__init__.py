@@ -9,10 +9,17 @@ from datetime import datetime, timedelta
 from typing import Optional
 
 import bcrypt
+from dotenv import load_dotenv
 from jose import JWTError, jwt
 
-# JWT 配置（从环境变量读取，提供默认值用于开发）
-SECRET_KEY = os.getenv("JWT_SECRET_KEY", "jobcraft-dev-secret-key-change-in-production")
+# 强制使用环境变量中的密钥，缺失则启动失败，避免在源码中兜底硬编码密钥
+load_dotenv(override=True)
+
+_JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY")
+if not _JWT_SECRET_KEY:
+    raise RuntimeError("缺失 JWT_SECRET_KEY 环境变量，请通过 .env 或环境变量注入")
+
+SECRET_KEY = _JWT_SECRET_KEY
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("JWT_EXPIRE_MINUTES", "10080"))  # 默认7天
 

@@ -7,11 +7,18 @@ JobCraft 数据库配置
 import os
 from typing import Generator
 
+from dotenv import load_dotenv
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
+# 加载 .env 文件
+load_dotenv(override=True)
+
 # 数据库连接 URL
-DATABASE_URL = f"mysql+mysqlconnector://{os.getenv('MYSQL_USER', 'root')}:{os.getenv('MYSQL_PASSWORD', 'root')}@{os.getenv('MYSQL_HOST', 'localhost')}:{os.getenv('MYSQL_PORT', '3306')}/{os.getenv('MYSQL_DATABASE', 'jobcraft')}"
+# user/password 必须从环境注入，不提供 root/root 兜底，避免默认弱口令
+_db_user = os.getenv("MYSQL_USER")
+_db_password = os.getenv("MYSQL_PASSWORD")
+DATABASE_URL = f"mysql+mysqlconnector://{_db_user}:{_db_password}@{os.getenv('MYSQL_HOST', 'localhost')}:{os.getenv('MYSQL_PORT', '3306')}/{os.getenv('MYSQL_DATABASE', 'jobcraft')}"
 
 # 创建引擎（带连接池）
 engine = create_engine(
