@@ -1,13 +1,20 @@
 /**
- * 后端 API 响应类型定义
- * 从旧前端 types.ts 和 api.ts 提取
+ * 后端 API 响应类型（snake_case，wire 格式）
+ *
+ * 双层类型架构说明：
+ * - 本文件（api/types.ts）：描述后端 HTTP 响应结构（snake_case），
+ *   仅用于 api/* 层与 JobCraftContext 映射层内部。
+ * - src/types/jobcraft.ts：camelCase 领域模型，被各业务组件消费。
+ * - JobCraftContext.tsx 中 3 个 mapper（cardToExperience/analysisToJD/submissionToJob）
+ *   负责两层的转换桥接。
+ * 由此隔离「后端契约」与「前端领域模型」，避免组件直接耦合后端字段命名。
  */
 
 // ============================================================
 // 通用
 // ============================================================
 
-export interface APIResponse<T = any> {
+export interface APIResponse<T = Record<string, unknown>> {
   code: number
   msg: string
   data: T
@@ -125,7 +132,7 @@ export interface JobAnalysisResult {
   jd_text: string
   jd_requirements: JDRequirements | null
   ats_profile: ATSProfile | null
-  company_context: Record<string, any> | null
+  company_context: Record<string, string | number | boolean | null> | null
   match_score: number | null
   match_level: string | null
   customization_needed: boolean | null
@@ -188,7 +195,7 @@ export interface InterviewReviewRecord {
 
 export interface InterviewReviewDetailRecord extends InterviewReviewRecord {
   raw_text?: string
-  parsed_dialogue?: any[]
+  parsed_dialogue?: InterviewReviewParsePreviewItem[]
   analysis?: InterviewReviewResult
 }
 
@@ -346,6 +353,38 @@ export interface Step1AtsProfile {
   salary?: string
   location?: string
   subtext_decoded?: SubtextDecode[]
+}
+
+export interface CardDimensionScore {
+  dimension: string
+  score: number
+  note: string
+}
+
+// 对齐后端 app/agents/gap_polish_agent.py:CardGapItem + fuse_gap_scores 覆盖字段
+export interface CardGapItem {
+  card_id: number
+  score: number
+  local_score: number
+  llm_score: number
+  matched: string[]
+  missing: string[]
+  action: string
+  rewrite_suggestion?: string | null
+  supplement_suggestion?: string | null
+  supplement_steps: string[]
+  dimension_analysis: CardDimensionScore[]
+  transferable_skills: string[]
+  domain_overlap: string
+  quantified_note: string
+}
+
+// 对齐后端 app/agents/gap_polish_agent.py:GlobalSuggestion
+export interface GlobalSuggestion {
+  missing_ability: string
+  priority: 'high' | 'medium' | 'low'
+  action: string
+  steps: string[]
 }
 
 export interface BackfillResult {

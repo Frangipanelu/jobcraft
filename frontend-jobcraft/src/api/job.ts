@@ -9,6 +9,10 @@ import type {
   DashboardItem,
   SaveResumeResult,
   ResumePersonalInfo,
+  ATSProfile,
+  ExperienceCard,
+  CardGapItem,
+  GlobalSuggestion,
 } from './types'
 
 // ============================================================
@@ -40,9 +44,9 @@ export async function step1AtsRecommend(payload: {
   jd_text: string
 }): Promise<{
   job_analysis_id: number
-  ats: any
+  ats: ATSProfile
   recommended_cards: { card_id: number; score: number; reason: string }[]
-  all_cards: any[]
+  all_cards: ExperienceCard[]
 }> {
   return request('/api/jobcraft/job/step1-ats-recommend', {
     method: 'POST',
@@ -54,10 +58,11 @@ export async function step2GapPolish(payload: {
   job_analysis_id: number
   card_ids: number[]
 }): Promise<{
-  per_card: any[]
-  global_suggestions: any[]
+  per_card: CardGapItem[]
+  global_suggestions: GlobalSuggestion[]
   overall_score: number
   match_level: string
+  score_weights: { local: number; llm: number }
 }> {
   return request('/api/jobcraft/job/step2-gap-polish', {
     method: 'POST',

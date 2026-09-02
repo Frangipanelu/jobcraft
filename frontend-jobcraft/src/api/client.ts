@@ -1,3 +1,11 @@
+/**
+ * API 客户端 —— 全项目唯一的 fetch 出口
+ *
+ * - 所有 HTTP 请求必须经由本文件的 request()/requestFormData()，禁止在
+ *   组件/context 层直接调用 fetch/axios/XHR/WebSocket。
+ * - auth token 在此集中注入（Authorization: Bearer），错误处理统一收敛。
+ */
+
 const BASE_URL = ''
 
 let authToken: string | null = localStorage.getItem('jobcraft_token')

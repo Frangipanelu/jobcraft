@@ -136,13 +136,13 @@ TASK-CLEANUP-WIP-001                                 (随时可做，无依赖)
   - `api/types.ts:191` → `parsed_dialogue?: InterviewReviewParsePreviewItem[]`（复用已有接口）；
   - `api/job.ts:43` → `ats: ATSProfile`（复用已有类型）；
   - `api/job.ts:45` → `all_cards: ExperienceCard[]`（复用已有类型）；
-  - `api/job.ts:57` → 新增 `PerCardGap { card_id: number; gap_score: number; suggestions: string[] }`；
-  - `api/job.ts:58` → 新增 `GlobalSuggestion { dimension: string; kind: string; message: string }`；
+  - `api/job.ts:57` → 新增 `CardGapItem`（对齐后端 `app/agents/gap_polish_agent.py` `CardGapItem` + fuse 覆盖字段）；
+  - `api/job.ts:58` → 新增 `GlobalSuggestion`（对齐后端 `GlobalSuggestion`：`missing_ability`/`priority`/`action`/`steps`）；
   - 在 `types.ts` 或 `JobCraftContext.tsx` 顶部添加 JSDoc 注释说明双层架构及职责。
 - **Non-goals**：不删除 mapper；不改 `types/jobcraft.ts`；不引入 tRPC/OpenAPI 代码生成（P2）。
 - **Dependencies**：无（独立提交）。
 - **Tests**：`cd frontend-jobcraft && npm run build && npm run lint`（vite + tsc --noEmit）。
-- **Verify**：需先核对 `app/workflows/job_analysis_flow.py` 的 `step2-gap-polish` 返回结构来确认 `PerCardGap`/`GlobalSuggestion` 字段（Design 阶段读取）。
+- **Verify（2026-09-02 已核对）**：`step2-gap-polish` 返回 `{ per_card, global_suggestions, overall_score, match_level, score_weights }`；`per_card` 元素 = `CardGapItem`{card_id, score, local_score, llm_score, matched[], missing[], action, rewrite_suggestion?, supplement_suggestion?, supplement_steps[], dimension_analysis[], transferable_skills[], domain_overlap, quantified_note}；`global_suggestions` 元素 = `GlobalSuggestion`{missing_ability, priority, action, steps[]}（见 `app/agents/gap_polish_agent.py:25-62`、`app/tools/jobcraft_analyze.py:243-256`）。step1 的 `ats` 为 `ATSProfile`、`all_cards` 为 `ExperienceCard[]`（`app/api/job_analysis.py:69,88-93`）。
 - **Expected Commit**：`refactor(frontend): tighten api layer any types, document type architecture`
 
 ### TASK-FETCH-001 fetch 出口审计（✅ 已核验，仅需文档固化）
