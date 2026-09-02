@@ -307,4 +307,22 @@
 
 ---
 
+### v0.17 阶段 1 Contract 对齐：roadmap 校准 + 类型收紧（TASK-TYPE-001）（本轮）
+
+- [x] **roadmap 重新校准（`82bf6c3`）**：按实际代码全面扫描 24 个 task——
+  - 修正过时前提：`TASK-TYPE-001` 两层类型确认为**有意架构**（api/types.ts=后端 DTO / types/jobcraft.ts=camelCase 领域模型，10 组件消费），从「删除 camelCase+mapper」重定位为「收紧 any + 文档化」；`TASK-FETCH-001` 已核验唯一 fetch 出口（client.ts）→仅需文档固化
+  - 精化 3 个 REAL-DATA 任务范围（Workbench/JDReport 硬编码、mock-chat 后端已就绪但前端零接线、复盘/向导 Math.random 假评分）
+  - 新增 3 个经代码证实的新任务：`TASK-INTERVIEW-001`（interviews 永不从后端加载）、`TASK-TASK-SYS-001`（后端 4 个 task 路由前端零接线）、`TASK-CLEANUP-WIP-001`（18+ 未提交 WIP 清理）
+  - 同步更新依赖图、优先清单（11 行）、退出标准（11 条）
+- [x] **核验 step2-gap-polish 返回结构**：`per_card` 元素 = CardGapItem{card_id, score, local_score, llm_score, matched[], missing[], action, rewrite_suggestion?, supplement_suggestion?, supplement_steps[], dimension_analysis[], transferable_skills[], domain_overlap, quantified_note}；`global_suggestions` 元素 = GlobalSuggestion{missing_ability, priority, action, steps[]}（`app/agents/gap_polish_agent.py:25-62`、`app/tools/jobcraft_analyze.py:243-256`）；step1 的 `ats`=ATSProfile、`all_cards`=ExperienceCard[]（`app/api/job_analysis.py:69,88-93`）
+- [x] **收紧 api 层 7 处 any（TASK-TYPE-001）**：
+  - `api/types.ts`：`APIResponse<T = any>`→`Record<string, unknown>`；`company_context: Record<string, any>`→`Record<string, string|number|boolean|null>`；`parsed_dialogue?: any[]`→`InterviewReviewParsePreviewItem[]`；新增 `CardGapItem`/`GlobalSuggestion`（对齐后端 schema）
+  - `api/job.ts`：`ats: any`→`ATSProfile`；`all_cards: any[]`→`ExperienceCard[]`；`per_card: any[]`→`CardGapItem[]`；`global_suggestions: any[]`→`GlobalSuggestion[]`；step2 补 `score_weights: {local,llm}`
+  - **文档**：`types.ts` 顶部加双层类型架构 JSDoc；`client.ts` 顶部加「唯一 fetch 出口 + auth 注入」JSDoc（TASK-FETCH-001 文档固化项，随本 commit）
+- [x] **验证**：`npm run lint`（tsc --noEmit）通过；`npm run build`（vite）成功——1701 modules，仅有既有 CSS @import 顺序 warning（与本次改动无关）；确认 step1/step2 API 函数无组件调用点（收紧不破坏现有 UI）
+- [x] **commits**：`82bf6c3` docs: recalibrate roadmap to actual code（已本地，未 push，待与后续任务一起推送）；`4e0d14e` refactor(frontend): tighten api layer any types, document type architecture（TASK-TYPE-001，4 文件：3 前端 + roadmap Verify 记录，未 push）
+- [x] **过程信息**：工作区仍有大量既有 WIP（前端重构、db_config.py、mock-chat、docs 删除、docker、frontend-jobcraft-backup/ 等），全部通过显式 `git add <file>` 只纳入本任务文件；roadmap 上一轮整体校准已在 `82bf6c3` 提交，本轮仅提交 Verify 字段修正 3 行
+
+---
+
 **更新规则**：每次会话结束时，AI 必须根据本次实际完成的工作，移动或新增上述列表中的条目，并简要描述进展。
