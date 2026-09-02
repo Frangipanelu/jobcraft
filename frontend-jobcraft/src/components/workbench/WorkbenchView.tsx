@@ -1,5 +1,6 @@
 import React from 'react';
 import { useJobCraft } from '../../context/JobCraftContext';
+import type { Job } from '../../types/jobcraft';
 import {
   Plus,
   ChevronRight,
@@ -26,80 +27,130 @@ export const WorkbenchView: React.FC<WorkbenchViewProps> = ({
     navigateTo
   } = useJobCraft();
 
-  // Metrics aligned with Image 7
-  const deliveredCount = 12;
-  const interviewingCount = 3;
-  const pendingCount = 5;
-  const finishedCount = 2;
+  // Metrics derived from real jobs data (dashboard → submissionToJob)
+  const deliveredCount = jobs.filter(
+    (j) => j.status !== 'pending'
+  ).length;
+  const interviewingCount = jobs.filter(
+    (j) => j.status === 'interviewing'
+  ).length;
+  const pendingCount = jobs.filter(
+    (j) => j.status === 'pending'
+  ).length;
+  const finishedCount = jobs.filter(
+    (j) => j.status === 'finished'
+  ).length;
 
-  // Render 6-step pipeline tracker for each job matching Image 7
-  const getJobSteps = (index: number): StepItem[] => {
-    if (index === 0) {
-      // 字节跳动: ✓ JD分析 — ✓ 经历匹配 — ✓ 定制简历 — ✓ 已投递 — ● 面试准备 — ○ 面试复盘
-      return [
-        { key: 'jd', name: 'JD分析', status: 'done' },
-        { key: 'match', name: '经历匹配', status: 'done' },
-        { key: 'resume', name: '定制简历', status: 'done' },
-        { key: 'applied', name: '已投递', status: 'done' },
-        { key: 'prep', name: '面试准备', status: 'active' },
-        { key: 'review', name: '面试复盘', status: 'pending' }
-      ];
-    } else if (index === 1) {
-      // 腾讯: ✓ JD分析 — ✓ 经历匹配 — ✓ 定制简历 — ● 已投递 — ○ 面试准备 — ○ 面试复盘
-      return [
-        { key: 'jd', name: 'JD分析', status: 'done' },
-        { key: 'match', name: '经历匹配', status: 'done' },
-        { key: 'resume', name: '定制简历', status: 'done' },
-        { key: 'applied', name: '已投递', status: 'active' },
-        { key: 'prep', name: '面试准备', status: 'pending' },
-        { key: 'review', name: '面试复盘', status: 'pending' }
-      ];
-    } else {
-      // 某科技创业公司: ● JD分析 — ○ 经历匹配 — ○ 定制简历 — ○ 已投递 — ○ 面试准备 — ○ 面试复盘
-      return [
-        { key: 'jd', name: 'JD分析', status: 'active' },
-        { key: 'match', name: '经历匹配', status: 'pending' },
-        { key: 'resume', name: '定制简历', status: 'pending' },
-        { key: 'applied', name: '已投递', status: 'pending' },
-        { key: 'prep', name: '面试准备', status: 'pending' },
-        { key: 'review', name: '面试复盘', status: 'pending' }
-      ];
-    }
+  const activeCount = jobs.filter(
+    (j) => j.status !== 'finished'
+  ).length;
+
+  // jobs applied within the last 7 days (for the "本周新增" badge)
+  const appliedThisWeekCount = jobs.filter((j) => {
+    const d = j.applyDate ? new Date(j.applyDate).getTime() : NaN;
+    if (Number.isNaN(d)) return false;
+    return Date.now() - d < 7 * 24 * 60 * 60 * 1000;
+  }).length;
+
+  // Map real Job.steps (dashboard flags) to the 6-step pipeline tracker
+  const JOB_STEPS: { key: string; name: string }[] = [
+    { key: 'jd', name: 'JD分析' },
+    { key: 'match', name: '经历匹配' },
+    { key: 'resume', name: '定制简历' },
+    { key: 'applied', name: '已投递' },
+    { key: 'prep', name: '面试准备' },
+    { key: 'review', name: '面试复盘' }
+  ];
+
+  const getJobSteps = (job: Job): StepItem[] => {
+    const s = job.steps;
+    const statusMap: Record<string, 'done' | 'active' | 'pending'> = {
+      jd: s.jdAnalysis ? 'done' : 'pending',
+      match: s.expMatched ? 'done' : 'pending',
+      resume: s.customResume ? 'done' : 'pending',
+      applied: s.applied ? 'done' : 'pending',
+      prep: s.prepStage === 'done' ? 'done' : 'pending',
+      review: s.reviewStage === 'done' ? 'done' : 'pending'
+    };
+    // Mark the first non-done step as 'active'
+    let markedActive = false;
+    return JOB_STEPS.map((step) => {
+      let status = statusMap[step.key];
+      if (status === 'pending' && !markedActive) {
+        status = 'active';
+        markedActive = true;
+      }
+      return { key: step.key, name: step.name, status };
+    });
   };
 
-  const getStatusBadge = (index: number) => {
-    if (index === 0) {
-      return { text: '面试中', className: 'bg-sage-soft text-sage border border-sage/20' };
-    }
-    if (index === 1) {
-      return { text: '已受邀', className: 'bg-warning-bg text-warning border border-warning/20' };
-    }
-    return { text: 'JD分析中', className: 'bg-info-bg text-info border border-info/20' };
+  const STATUS_BADGE: Record<Job['status'], { text: string; className: string }> = {
+    interviewing: { text: '面试中', className: 'bg-warning-bg text-warning border border-warning/20' },
+    delivered: { text: '已投递', className: 'bg-sage-soft text-sage border border-sage/20' },
+    finished: { text: '已完成', className: 'bg-page text-muted border border-edge' },
+    pending: { text: '待处理', className: 'bg-info-bg text-info border border-info/20' }
   };
 
-  const getNextStepText = (index: number) => {
-    if (index === 0) return '准备第一轮业务面';
-    if (index === 1) return '等待面试通知';
-    return '查看 JD 分析结果';
+  const getStatusBadge = (job: Job) =>
+    STATUS_BADGE[job.status] || STATUS_BADGE.pending;
+
+  const NEXT_STEP_TEXT: Record<Job['status'], string> = {
+    interviewing: '准备下一轮面试',
+    delivered: '等待面试通知',
+    pending: '查看 JD 分析结果',
+    finished: '复盘已完成'
   };
 
-  const getJobMatchScore = (index: number) => {
-    if (index === 0) return 82;
-    if (index === 1) return 76;
-    return 68;
+  const getNextStepText = (job: Job) => NEXT_STEP_TEXT[job.status];
+
+  // "下一步行动": up to 3 jobs still in progress, prioritized by pipeline position
+  const nextUpJobs = [...jobs]
+    .filter((j) => j.status !== 'finished')
+    .sort((a, b) => {
+      const order: Record<Job['status'], number> = {
+        interviewing: 0,
+        delivered: 1,
+        pending: 2,
+        finished: 3
+      };
+      return order[a.status] - order[b.status];
+    })
+    .slice(0, 3);
+
+  const formatRelativeTime = (iso?: string): string => {
+    if (!iso) return '';
+    const then = new Date(iso).getTime();
+    const diffMs = Math.max(0, Date.now() - then);
+    const mins = Math.floor(diffMs / 60000);
+    if (mins < 1) return '刚刚';
+    if (mins < 60) return `${mins} 分钟前`;
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return `${hours} 小时前`;
+    const days = Math.floor(hours / 24);
+    return days === 1 ? '昨天' : `${days} 天前`;
   };
 
-  const getRoleName = (index: number) => {
-    if (index === 0) return 'AI 产品经理';
-    if (index === 1) return '产品经理';
-    return 'AI 产品经理';
-  };
+  // "最近活动": derive one event per in-progress job from real fields
+  const recentEvents = jobs
+    .filter((j) => j.status !== 'pending')
+    .map((j) => ({
+      company: j.company || '未命名岗位',
+      action:
+        j.status === 'interviewing'
+          ? '进入面试准备阶段'
+          : j.status === 'finished'
+          ? '面试复盘完成'
+          : '已投递',
+      time: formatRelativeTime(j.applyDate || j.lastUpdated)
+    }))
+    .slice(0, 4);
 
-  const getCompanyName = (index: number, job: any) => {
-    if (index === 0) return '字节跳动';
-    if (index === 1) return '腾讯';
-    return '某科技创业公司';
-  };
+  // "AI 建议": data-driven hint (no invented counts)
+  const aiSuggestion = pendingCount > 0
+    ? `有 ${pendingCount} 个岗位还停留在待处理阶段，建议先完成 JD 分析，以明确匹配方向。`
+    : jobs.length === 0
+    ? '尚未开始跟踪任何岗位，识别目标 JD 后即可获得定制化的求职推进建议。'
+    : '所有在推进的岗位状态正常，保持投递节奏并针对反馈持续优化经历描述。';
 
   return (
     <div className="p-6 md:p-8 max-w-7xl mx-auto space-y-6 animate-in fade-in duration-300">
@@ -110,7 +161,7 @@ export const WorkbenchView: React.FC<WorkbenchViewProps> = ({
             晚上好，{user.name || '菁菁'}
           </h1>
           <p className="text-xs sm:text-[13px] text-[#4E5B53] mt-1 font-medium">
-            <span className="text-sage font-bold">3 个岗位</span> 正在推进，今天有 <span className="text-warning font-bold">1 个重要任务</span> 需要完成。
+            <span className="text-sage font-bold">{activeCount} 个岗位</span> 正在推进，今天有 <span className="text-warning font-bold">{pendingCount} 个重要任务</span> 需要完成。
           </p>
         </div>
 
@@ -139,7 +190,7 @@ export const WorkbenchView: React.FC<WorkbenchViewProps> = ({
           <div>
             <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-0.5 rounded-md bg-sage-soft text-sage border border-sage/20">
               <TrendingUp className="w-3 h-3" />
-              <span>+3 本周新增</span>
+              <span>+{appliedThisWeekCount} 本周新增</span>
             </span>
           </div>
         </div>
@@ -214,14 +265,27 @@ export const WorkbenchView: React.FC<WorkbenchViewProps> = ({
           </div>
 
           {/* Job Cards */}
+          {jobs.length === 0 ? (
+            <div className="bg-white rounded-2xl border border-[#E2E8E4] p-8 text-center space-y-2">
+              <div className="text-[15px] font-bold text-[#111814]">还没有跟踪的岗位</div>
+              <p className="text-xs text-[#6B7280]">
+                点击右上角「跟踪新的岗位」，从 JD 分析开始建立你的求职推进记录。
+              </p>
+              <button
+                onClick={onOpenNewJob}
+                className="mt-3 inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#234937] hover:bg-[#1A382A] text-white text-xs font-bold shadow-xs transition-all duration-200 cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                <span>跟踪新的岗位</span>
+              </button>
+            </div>
+          ) : (
           <div className="space-y-4">
             {jobs.slice(0, 3).map((job, index) => {
-              const badge = getStatusBadge(index);
-              const steps = getJobSteps(index);
-              const nextStep = getNextStepText(index);
-              const matchScore = getJobMatchScore(index);
-              const companyName = getCompanyName(index, job);
-              const roleName = getRoleName(index);
+              const badge = getStatusBadge(job);
+              const steps = getJobSteps(job);
+              const nextStep = getNextStepText(job);
+              const matchScore = job.matchScore > 0 ? `${job.matchScore}%` : '—';
 
               return (
                 <div
@@ -231,21 +295,21 @@ export const WorkbenchView: React.FC<WorkbenchViewProps> = ({
                   {/* Row 1: Company & Status Badge & Match score */}
                   <div className="flex items-center justify-between">
                     <div className="text-[16px] font-bold text-[#111814]">
-                      {companyName}
+                      {job.company || '未命名岗位'}
                     </div>
                     <div className="flex items-center gap-2">
                       <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${badge.className}`}>
                         {badge.text}
                       </span>
                       <span className="text-xs text-[#6B7280] font-medium">
-                        匹配度 <strong className="font-bold text-[#111814]">{matchScore}%</strong>
+                        匹配度 <strong className="font-bold text-[#111814]">{matchScore}</strong>
                       </span>
                     </div>
                   </div>
 
                   {/* Row 2: Role */}
                   <div className="text-xs text-[#6B7280] -mt-1">
-                    {roleName}
+                    {job.role || '—'}
                   </div>
 
                   {/* Row 3: 6-Step Pipeline Tracker (Image 7 Stepper Style) */}
@@ -303,6 +367,7 @@ export const WorkbenchView: React.FC<WorkbenchViewProps> = ({
               );
             })}
           </div>
+          )}
         </div>
 
         {/* Right Column (4 cols): 下一步行动 / 最近活动 / AI 建议 (Image 7) */}
@@ -317,47 +382,30 @@ export const WorkbenchView: React.FC<WorkbenchViewProps> = ({
             </div>
 
             <div className="space-y-3.5">
-              {/* Item 1 */}
-              <div className="space-y-1.5">
-                <div className="text-xs font-bold text-ink">
-                  准备字节跳动第一轮面试
+              {nextUpJobs.length === 0 && (
+                <div className="text-xs text-faint py-1.5">
+                  暂无待推进的岗位，跟踪新的 JD 后这里会显示你的下一步行动。
                 </div>
-                <div className="text-xs text-muted">明天 14:00</div>
-                <button
-                  onClick={() => navigateTo('interview_prep_workspace', { jobId: 'job-1' })}
-                  className="px-3.5 py-1.5 rounded-lg bg-sage hover:bg-sage-dim text-white text-xs font-semibold shadow-2xs transition cursor-pointer"
+              )}
+              {nextUpJobs.map((job, idx) => (
+                <div
+                  key={job.id || `next-${idx}`}
+                  className={`space-y-1.5 ${idx > 0 ? 'pt-3 border-t border-[#EDF1EE]' : ''}`}
                 >
-                  开始准备
-                </button>
-              </div>
-
-              {/* Item 2 */}
-              <div className="space-y-1.5 pt-3 border-t border-[#EDF1EE]">
-                <div className="text-xs font-bold text-ink">
-                  查看腾讯产品经理 JD 分析
+                  <div className="text-xs font-bold text-ink">
+                    {job.company || '未命名岗位'} · {getNextStepText(job)}
+                  </div>
+                  <div className="text-xs text-muted">
+                    {job.status === 'interviewing' ? '面试准备阶段' : job.status === 'pending' ? 'JD 分析待完成' : '等待反馈'}
+                  </div>
+                  <button
+                    onClick={() => navigateTo('job_workspace', { jobId: job.id })}
+                    className="px-3.5 py-1.5 rounded-lg bg-sage hover:bg-sage-dim text-white text-xs font-semibold shadow-2xs transition cursor-pointer"
+                  >
+                    {job.status === 'pending' ? '去分析' : '进入岗位'}
+                  </button>
                 </div>
-                <div className="text-xs text-muted">AI 已完成岗位匹配</div>
-                <button
-                  onClick={() => navigateTo('jd_report', { jdId: 'jd-tencent-1' })}
-                  className="px-3.5 py-1.5 rounded-lg border border-edge bg-white hover:bg-page text-ink text-xs font-medium transition cursor-pointer shadow-2xs"
-                >
-                  查看分析
-                </button>
-              </div>
-
-              {/* Item 3 */}
-              <div className="space-y-1.5 pt-3 border-t border-[#EDF1EE]">
-                <div className="text-xs font-bold text-ink">
-                  完成某科技公司定制简历
-                </div>
-                <div className="text-xs text-faint">草稿未完成</div>
-                <button
-                  onClick={() => navigateTo('resume_editor', { jobId: 'job-3' })}
-                  className="px-3.5 py-1.5 rounded-lg border border-edge bg-white hover:bg-page text-ink text-xs font-medium transition cursor-pointer shadow-2xs"
-                >
-                  继续编辑
-                </button>
-              </div>
+              ))}
             </div>
 
             <div className="border-t border-[#EDF1EE] pt-2.5">
@@ -380,37 +428,22 @@ export const WorkbenchView: React.FC<WorkbenchViewProps> = ({
             </div>
 
             <div className="space-y-3 text-xs">
-              <div className="space-y-0.5">
-                <div className="flex items-center gap-1.5 font-medium text-[#111814]">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#111814]" />
-                  <span>JD 分析完成</span>
+              {recentEvents.length === 0 && (
+                <div className="text-[11px] text-faint">
+                  暂无活动记录，开始跟踪岗位后这里会显示最近更新。
                 </div>
-                <div className="text-[11px] text-[#6B7280] pl-3">腾讯 · 2小时前</div>
-              </div>
-
-              <div className="space-y-0.5">
-                <div className="flex items-center gap-1.5 font-medium text-[#111814]">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#111814]" />
-                  <span>经历匹配完成</span>
+              )}
+              {recentEvents.map((ev, idx) => (
+                <div key={`${ev.company}-${idx}`} className="space-y-0.5">
+                  <div className="flex items-center gap-1.5 font-medium text-[#111814]">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#111814]" />
+                    <span>{ev.action}</span>
+                  </div>
+                  <div className="text-[11px] text-[#6B7280] pl-3">
+                    {ev.company} · {ev.time || '最近'}
+                  </div>
                 </div>
-                <div className="text-[11px] text-[#6B7280] pl-3">字节跳动 · 5小时前</div>
-              </div>
-
-              <div className="space-y-0.5">
-                <div className="flex items-center gap-1.5 font-medium text-[#111814]">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#111814]" />
-                  <span>简历已生成</span>
-                </div>
-                <div className="text-[11px] text-[#6B7280] pl-3">字节跳动 · 昨天 18:20</div>
-              </div>
-
-              <div className="space-y-0.5">
-                <div className="flex items-center gap-1.5 font-medium text-[#111814]">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#111814]" />
-                  <span>状态更新为已投递</span>
-                </div>
-                <div className="text-[11px] text-[#6B7280] pl-3">某科技公司 · 昨天 14:00</div>
-              </div>
+              ))}
             </div>
 
             <div className="border-t border-[#F3F4F6] pt-2">
@@ -430,7 +463,7 @@ export const WorkbenchView: React.FC<WorkbenchViewProps> = ({
               <span>AI 建议</span>
             </div>
             <p className="text-xs text-[#4B5563] leading-relaxed">
-              有 3 条经历没有量化成果，完成后可以提升岗位匹配度。
+              {aiSuggestion}
             </p>
             <button
               onClick={() => navigateTo('experiences')}

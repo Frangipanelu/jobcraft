@@ -155,19 +155,35 @@ TASK-CLEANUP-WIP-001                                 (随时可做，无依赖)
 - **Expected Commit**：随 TASK-TYPE-001 合并提交（`docs(api): document client.ts as single fetch source`）或独立 commit。
 - **Status（2026-09-02）**：实质性完成，待文档固化。
 
-### TASK-REAL-DATA-001 首页（WorkbenchView）+ JD 报告接真实数据
+### TASK-REAL-DATA-001 首页（WorkbenchView）接真实数据
 
-- **Goal**：`WorkbenchView.tsx` 和 `JDReportDetailView.tsx` 从硬编码改为读取后端数据。
-- **Why**：Baseline §11.1。`WorkbenchView.tsx:30-102` 硬编码计数/步骤/评分/公司名；`JDReportDetailView.tsx:29-99` 硬编码 `FALLBACK_DATA`（goals/competencies/atsGroups/subtextSections）。
-- **Current State**：
-  - `WorkbenchView.tsx`：`:30-33` 四个 hardcoded 计数（`deliveredCount=12` 等）；`:38-67` `getJobSteps()` 硬编码步骤映射；`:87-102` `getJobMatchScore()`/`getRoleName()`/`getCompanyName()` 硬编码查找；`:322-324`/`:337` 硬编码公司名字符串。Context 已加载 `jobs`（`loadDashboard` → `submissionToJob`）但被忽略。
-  - `JDReportDetailView.tsx`：`:221-246` 用 `jdAnalyses` 真实字段（company/position/date/matchScore），但 `:29-99` `FALLBACK_DATA` 用于 goals/competencies/atsGroups/subtextSections/recommended。
+- **Goal**：`WorkbenchView.tsx` 从硬编码改为读取后端 dashboard 数据。
+- **Why**：Baseline §11.1。`WorkbenchView.tsx:30-102` 硬编码计数/步骤/评分/公司名。
+- **Current State**：首页显示假数据（12/3/5/2、字节跳动/腾讯、82/76/68）——硬编码计数、公司名、匹配度、最近活动均与真实 `jobs` 无关；`jobs` 已由 `loadDashboard`→`submissionToJob` 加载但被忽略。
 - **Scope**：
-  - `WorkbenchView`：移除 `:30-33` hardcoded 计数，改用 `jobs.length` 等真实字段；移除 `:38-67` `getJobSteps()`，改用 `jobs` 的 `submission.status`；移除 `:87-102` 硬编码查找，改用 `jobs[index].company`/`.position`/`.matchScore`；补充空状态 fallback（无数据时显示引导而非假数据）。
-  - `JDReportDetailView`：移除 `:29-99` `FALLBACK_DATA`，改为从 `currentAnalysis` 的 `jd_requirements`/`ats_profile` 填充 goals/competencies/atsGroups/subtextSections；若后端未返回这些字段则显示"待分析"占位。
-- **Files**：`src/components/workbench/WorkbenchView.tsx`、`src/components/jd/JDReportDetailView.tsx`、`src/context/JobCraftContext.tsx`。
+  - 移除 `:30-33` hardcoded 计数（`deliveredCount=12` 等），改用 `jobs.length` 与 `jobs.filter(status)` 派生真实计数；
+  - 移除 `:38-67` `getJobSteps()` 硬编码步骤映射，改用 `job.steps`（真实，来自 dashboard）；
+  - 移除 `:70-102` `getStatusBadge()`/`getNextStepText()`/`getJobMatchScore()`/`getRoleName()`/`getCompanyName()` 硬编码查找，改用 `job.company`/`job.role`/`job.status`/`job.currentStage`；
+  - 匹配度：真实 `job.matchScore`（当前 mapper 恒为 0）无 dashboard 数据来源，显示 `—` 或隐藏，不造假数；
+  - 移除「下一步行动/最近活动」区块的硬编码「字节跳动/腾讯」字串，改为基于真实 jobs 或空态占位；
+  - 补充空状态：无数据时显示引导文案而非假数据。
+- **Files**：`src/components/workbench/WorkbenchView.tsx`、`src/context/JobCraftContext.tsx`。
 - **Tests**：`cd frontend-jobcraft && npm run build && npm run lint`。
-- **Expected Commit**：`feat(frontend): drive workbench and JD report from real backend data`
+- **Expected Commit**：`feat(frontend): drive workbench from real dashboard data`
+
+### TASK-REAL-DATA-004 JD 报告详情页去 FALLBACK_DATA
+
+- **Goal**：`JDReportDetailView.tsx` 移除 `:29-99` 写死的字节跳动模板，改为真实 `jdAnalyses` 数据 + 空态占位。
+- **Why**：Baseline §11.1。`:221-246` 用 `jdAnalyses` 真实字段（company/position/date/matchScore），但 `:29-99` `FALLBACK_DATA` 用于 goals/competencies/atsGroups/subtextSections/recommended。
+- **Current State（2026-09-02 校准）**：`JDAnalysis` 已含真实字段（`whyMatch`/`resumeAdvice`/`coreRequirements`/`atsKeywords`/`recommendedExperiences`），但 mapper（`analysisToJD`）部分字段未填充——`subtextAnalysis=[]`、`skillGaps` 的 `userEvidence`/`requirement`/`recommendation` 为空占位；因此细节区块即使接真数据也会渲染成空态。
+- **Scope**：
+  - 核心字段（company/position/score/date/verdict/职责/ATS关键词/推荐经历）改用 `currentAnalysis` 真实字段；
+  - 隐含要求解析、能力匹配佐证区块：后端未填时显示「待分析」占位，不显示假数据；
+  - 视需要扩展 `analysisToJD` mapper 补填字段（关联后端 `gap_items`/`gap_analysis`/`subtext`），属可选增强；
+  - 删除整个 `FALLBACK_DATA` 常量。
+- **Files**：`src/components/jd/JDReportDetailView.tsx`、`src/context/JobCraftContext.tsx`。
+- **Tests**：`cd frontend-jobcraft && npm run build && npm run lint`。
+- **Expected Commit**：`feat(frontend): remove fallback mock data from JD report detail`
 
 ### TASK-REAL-DATA-002 MockInterview 去 Mock（后端 endpoint 已就绪，前端未接线）
 
@@ -371,6 +387,7 @@ TASK-CLEANUP-WIP-001                                 (随时可做，无依赖)
 | 5 | TASK-TYPE-001 any 收紧 + 文档 | P0 | — | 契约清晰 | ⏳ 待办 |
 | 6 | TASK-FETCH-001 fetch 审计 | P0 | TYPE | 安全合规 | ⏳ 待办（仅文档） |
 | 7 | TASK-REAL-DATA-001 Workbench 真实数据 | P0 | TYPE | 产品可信 | ⏳ 待办 |
+| 12 | TASK-REAL-DATA-004 JD 报告去 FALLBACK | P0 | TYPE | 产品可信 | ⏳ 待办 |
 | 8 | TASK-REAL-DATA-002 MockInterview 去 Mock | P0 | INTERVIEW | 产品可信 | ⏳ 待办 |
 | 9 | TASK-REAL-DATA-003 复盘/向导去 Mock | P0 | INTERVIEW | 产品可信 | ⏳ 待办 |
 | 10 | TASK-INTERVIEW-001 面试持久化 | P0 | TYPE | 数据不丢失 | ⏳ 待办 |
@@ -399,7 +416,8 @@ TASK-CLEANUP-WIP-001                                 (随时可做，无依赖)
 [ ] api 层无 any 泄漏（7 处收紧）—— TASK-TYPE-001
 [ ] 双层类型架构有明确 JSDoc 注释 —— TASK-TYPE-001
 [ ] fetch 出口有文档标注 —— TASK-FETCH-001
-[ ] WorkbenchView / JDReportDetailView 从硬编码改为后端数据驱动 —— TASK-REAL-DATA-001
+[ ] WorkbenchView 从硬编码改为后端数据驱动（真实 jobs 计数/步骤/状态）—— TASK-REAL-DATA-001
+[ ] JDReportDetailView 移除 FALLBACK_DATA，真实字段 + 空态占位 —— TASK-REAL-DATA-004
 [ ] MockInterview 接通 /mock-chat 端点，移除 Math.random 假评分 —— TASK-REAL-DATA-002
 [ ] InterviewPrepCenterView 从后端加载面试准备数据 —— TASK-REAL-DATA-003
 [ ] 复盘/新增向导（NewReviewModal）用后端 analyze 返回结果 —— TASK-REAL-DATA-003
