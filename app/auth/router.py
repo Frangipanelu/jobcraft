@@ -139,33 +139,6 @@ async def login(payload: LoginRequest):
     )
 
 
-@router.post("/default-login", response_model=TokenResponse)
-async def default_login():
-    """
-    默认用户自动登录
-
-    个人单用户工具，自动创建默认用户并返回 Token。
-    """
-    username = "default_user"
-
-    # 检查默认用户是否存在，不存在则创建
-    user = db_tools.get_user_by_username(username)
-    if not user:
-        password_hash = get_password_hash("default_password_123")
-        user_id = db_tools.create_user(
-            username=username, password_hash=password_hash, email=None
-        )
-        user = {"id": user_id, "username": username}
-
-    access_token = create_access_token(
-        data={"user_id": user["id"], "username": user["username"]}
-    )
-
-    return TokenResponse(
-        access_token=access_token, user_id=user["id"], username=user["username"]
-    )
-
-
 @router.get("/me", response_model=UserInfo)
 async def get_me(user_id: int = Depends(get_current_user)):
     """

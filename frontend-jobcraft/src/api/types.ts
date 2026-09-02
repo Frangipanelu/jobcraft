@@ -1,6 +1,6 @@
 /**
- * 本文件由 app/schemas/jobcraft.py 自动生成/维护。
- * 当后端 Pydantic Schema 变更时，应同步更新此文件，保持前后端类型一致。
+ * 后端 API 响应类型定义
+ * 从旧前端 types.ts 和 api.ts 提取
  */
 
 // ============================================================
@@ -42,7 +42,6 @@ export interface ExperienceCard {
   raw_text: string
   tags: string[]
   ai_structured: CardStructuredCache | null
-  // 向下兼容
   summary?: string
   content?: string
   company?: string | null
@@ -112,20 +111,6 @@ export interface SuggestionItem {
   message: string
   priority: number
   optimization: string | null
-}
-
-export interface SuggestionsResult {
-  gap_analysis: string
-  gap_items: string[]
-  suggestions: SuggestionItem[]
-}
-
-export interface CardLLMMatchItem {
-  card_id: number
-  match: number
-  covered: string[]
-  missing: string[]
-  reason: string
 }
 
 // ============================================================
@@ -281,25 +266,40 @@ export interface InterviewPrepResult {
 }
 
 // ============================================================
-// 公司背调
+// 投递记录
 // ============================================================
 
-export interface CompanyResearchInfo {
-  basic: Record<string, any>
-  business: Record<string, any>
-  funding: Record<string, any>
-  team: Record<string, any>
-  industry: Record<string, any>
-  news: Record<string, any>[]
-  sources: string[]
+export interface Submission {
+  id: number
+  user_id: number
+  job_analysis_id: number | null
+  position: string
+  company: string
+  jd_text: string
+  resume_markdown: string
+  resume_file_path: string | null
+  card_version_ids: number[]
+  status: string
+  notes: string
+  created_at: string | null
+  updated_at: string | null
 }
 
-export interface CompanyResearchResult {
+export interface DashboardItem {
+  id: number
+  position: string
   company: string
-  info: CompanyResearchInfo
-  cached_at: string | null
-  from_cache: boolean
-  fresh: boolean
+  status: string
+  job_analysis_id: number | null
+  has_analysis: boolean
+  card_version_count: number
+  card_count: number
+  has_resume: boolean
+  is_manual: boolean
+  prep_count: number
+  review_count: number
+  created_at: string | null
+  updated_at: string | null
 }
 
 // ============================================================
@@ -311,4 +311,48 @@ export interface SaveResumeResult {
   file_name: string
   size_bytes: number
   selected_count: number
+}
+
+export interface ResumePersonalInfo {
+  name: string
+  phone: string
+  email: string
+  city: string
+  github: string
+  education: string
+  years: string
+}
+
+// ============================================================
+// Step1/Step2 结果
+// ============================================================
+
+export interface SubtextDecode {
+  surface_requirement: string
+  hidden_meaning: string
+  key_ability: string
+  how_to_prove: string
+}
+
+export interface Step1AtsProfile {
+  job_title: string
+  required_skills: string[]
+  preferred_skills: string[]
+  responsibilities: string[]
+  key_metrics: string[]
+  culture_keywords: string[]
+  education?: string
+  years_of_experience?: string
+  salary?: string
+  location?: string
+  subtext_decoded?: SubtextDecode[]
+}
+
+export interface BackfillResult {
+  checked: number
+  splits: {
+    from_card_id: number
+    from_title: string
+    created_ids: number[]
+  }[]
 }
