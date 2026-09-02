@@ -141,7 +141,9 @@ async def jobcraft_experience_upload(
 
                     cache = run_extract_structured_workflow(resume_text.strip())
                     if cache:
-                        db_tools.update_card(card_id, {"ai_structured": cache}, current_user)
+                        db_tools.update_card(
+                            card_id, {"ai_structured": cache}, current_user
+                        )
                     tags = run_recommend_tags_workflow(resume_text.strip())
                     if tags:
                         db_tools.update_card(card_id, {"tags": tags}, current_user)
@@ -354,7 +356,9 @@ def jobcraft_experience_batch(
         if action == "archive":
             for card_id in card_ids:
                 try:
-                    ok = db_tools.update_card(card_id, {"is_active": False}, current_user)
+                    ok = db_tools.update_card(
+                        card_id, {"is_active": False}, current_user
+                    )
                     if ok:
                         results["success"].append(card_id)
                     else:
@@ -367,7 +371,9 @@ def jobcraft_experience_batch(
         elif action == "restore":
             for card_id in card_ids:
                 try:
-                    ok = db_tools.update_card(card_id, {"is_active": True}, current_user)
+                    ok = db_tools.update_card(
+                        card_id, {"is_active": True}, current_user
+                    )
                     if ok:
                         results["success"].append(card_id)
                     else:

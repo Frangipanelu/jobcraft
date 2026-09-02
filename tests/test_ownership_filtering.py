@@ -22,6 +22,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 # DAO 层：SQL 应包含 user_id 过滤
 # ============================================================
 
+
 class _FakeCursor:
     def __init__(self, rowcount=0, row=None, rows=None):
         self._rowcount = rowcount
@@ -73,6 +74,7 @@ class _FakeConn:
 def _capture(cursor_holder):
     def fake_connect(**kwargs):
         return _FakeConn(cursor_holder[0])
+
     return fake_connect
 
 
@@ -165,9 +167,7 @@ def test_by_id_dao_appends_user_id_filter(
     assert cursor.executed, "应至少执行一条 SQL"
     # 校验任意一句 SQL 携带 user_id 过滤（delete_* 会先跑关联表 DELETE）
     matched = [
-        (sql, a)
-        for sql, a in cursor.executed
-        if expect_sql in sql and 7 in (a or ())
+        (sql, a) for sql, a in cursor.executed if expect_sql in sql and 7 in (a or ())
     ]
     assert matched, f"未找到带 user_id 过滤的 SQL: {[s for s, _ in cursor.executed]}"
 
@@ -270,6 +270,7 @@ def test_delete_interview_record_appends_user_id_filter(monkeypatch):
 # API 层：控制器把 current_user 透传给 by-id DAO
 # ============================================================
 
+
 def _call_endpoint_direct(module_import, func_name, **kwargs):
     """直接调用控制器函数，验证其把 current_user 传入 db_tools 调用。"""
     import importlib
@@ -315,13 +316,20 @@ def test_experience_versions_passes_current_user():
 
 def test_job_analysis_get_passes_current_user():
     """job_analysis get_job_analysis 控制器必须把 current_user 传入 DAO。"""
-    seen = _call_endpoint_direct("app.api.job_analysis", "jobcraft_job_get", job_id=5, current_user=99)
+    seen = _call_endpoint_direct(
+        "app.api.job_analysis", "jobcraft_job_get", job_id=5, current_user=99
+    )
     args, _ = seen["get_job_analysis"]
     assert args == (5, 99)
 
 
 def test_submission_get_passes_current_user():
     """submission get_submission 控制器必须把 current_user 传入 DAO。"""
-    seen = _call_endpoint_direct("app.api.submission", "jobcraft_submission_get", submission_id=5, current_user=99)
+    seen = _call_endpoint_direct(
+        "app.api.submission",
+        "jobcraft_submission_get",
+        submission_id=5,
+        current_user=99,
+    )
     args, _ = seen["get_submission"]
     assert args == (5, 99)
