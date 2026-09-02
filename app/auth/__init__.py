@@ -8,11 +8,8 @@ import os
 from datetime import datetime, timedelta
 from typing import Optional
 
+import bcrypt
 from jose import JWTError, jwt
-from passlib.context import CryptContext
-
-# 密码哈希
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 # JWT 配置（从环境变量读取，提供默认值用于开发）
 SECRET_KEY = os.getenv("JWT_SECRET_KEY", "jobcraft-dev-secret-key-change-in-production")
@@ -22,12 +19,18 @@ ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("JWT_EXPIRE_MINUTES", "10080"))  # �
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """验证密码"""
-    return pwd_context.verify(plain_password, hashed_password)
+    return bcrypt.checkpw(
+        plain_password.encode("utf-8"),
+        hashed_password.encode("utf-8"),
+    )
 
 
 def get_password_hash(password: str) -> str:
     """生成密码哈希"""
-    return pwd_context.hash(password)
+    return bcrypt.hashpw(
+        password.encode("utf-8"),
+        bcrypt.gensalt(),
+    ).decode("utf-8")
 
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:

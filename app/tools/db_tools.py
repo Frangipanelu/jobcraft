@@ -230,6 +230,7 @@ if __name__ == "__main__":
 from app.tools.db_user import (  # noqa: E402, F401
     create_user,
     get_user,
+    get_user_by_email,
     get_user_by_username,
     update_user,
 )

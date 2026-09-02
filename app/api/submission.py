@@ -3,10 +3,11 @@ import shutil
 import uuid
 from typing import List, Optional
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
 
 from app.api.context import set_session_context, reset_session_context
+from app.auth.dependencies import get_current_user
 from app.tools import db_tools
 from app.tools.upload_file_read_tool import read_file_content
 
@@ -16,7 +17,6 @@ logger = logging.getLogger("jobcraft.api.submission")
 
 
 class CreateSubmissionPayload(BaseModel):
-    user_id: int = 1
     job_analysis_id: Optional[int] = None
     position: str
     company: str = ""
@@ -44,9 +44,14 @@ def _get_updated_dir():
 
 
 @router.post("/api/jobcraft/submission")
-def jobcraft_submission_create(payload: CreateSubmissionPayload):
+def jobcraft_submission_create(
+    payload: CreateSubmissionPayload,
+    current_user: int = Depends(get_current_user),
+):
     try:
-        sid = db_tools.insert_submission(payload.model_dump())
+        data = payload.model_dump()
+        data["user_id"] = current_user
+        sid = db_tools.insert_submission(data)
         return db_tools.get_submission(sid)
     except Exception as e:
         logger.exception("创建投递失败")
@@ -54,7 +59,9 @@ def jobcraft_submission_create(payload: CreateSubmissionPayload):
 
 
 @router.get("/api/jobcraft/submission/{submission_id}")
-def jobcraft_submission_get(submission_id: int):
+def jobcraft_submission_get(
+    submission_id: int, current_user: int = Depends(get_current_user)
+):
     s = db_tools.get_submission(submission_id)
     if not s:
         raise HTTPException(status_code=404, detail="投递记录不存在")
@@ -62,7 +69,11 @@ def jobcraft_submission_get(submission_id: int):
 
 
 @router.patch("/api/jobcraft/submission/{submission_id}")
-def jobcraft_submission_update(submission_id: int, payload: UpdateSubmissionPayload):
+def jobcraft_submission_update(
+    submission_id: int,
+    payload: UpdateSubmissionPayload,
+    current_user: int = Depends(get_current_user),
+):
     updates = {k: v for k, v in payload.model_dump().items() if v is not None}
     try:
         ok = db_tools.update_submission(submission_id, updates)
@@ -76,7 +87,9 @@ def jobcraft_submission_update(submission_id: int, payload: UpdateSubmissionPayl
 
 
 @router.delete("/api/jobcraft/submission/{submission_id}")
-def jobcraft_submission_delete(submission_id: int):
+def jobcraft_submission_delete(
+    submission_id: int, current_user: int = Depends(get_current_user)
+):
     try:
         ok = db_tools.delete_submission(submission_id)
         if not ok:
@@ -92,7 +105,7 @@ async def jobcraft_submission_manual(
     position: str = Form(...),
     company: str = Form(""),
     jd_text: str = Form(""),
-    user_id: int = Form(1),
+    current_user: int = Depends(get_current_user),
 ):
     MAX_BYTES = 10 * 1024 * 1024
     if file.size is not None and file.size > MAX_BYTES:
@@ -144,13 +157,13 @@ async def jobcraft_submission_manual(
                 dedup_key = f"{company}::{role}"
                 if company and dedup_key in seen:
                     continue
-                if db_tools.find_card_by_company_role(user_id, company, role):
+                if db_tools.find_card_by_company_role(current_user, company, role):
                     seen.add(dedup_key)
                     continue
                 seen.add(dedup_key)
                 card_id = db_tools.insert_card(
                     {
-                        "user_id": user_id,
+                        "user_id": current_user,
                         "title": ent.get("title") or role or company or file.filename,
                         "raw_text": db_tools._rebuild_entry_text(ent),
                         "company": company,
@@ -168,7 +181,7 @@ async def jobcraft_submission_manual(
                 created_ids.append(card_id)
         else:
             card_data = {
-                "user_id": user_id,
+                "user_id": current_user,
                 "title": file.filename or "已投简历",
                 "raw_text": resume_text,
                 "source": "manual_upload",
@@ -182,7 +195,7 @@ async def jobcraft_submission_manual(
     try:
         sid = db_tools.insert_submission(
             {
-                "user_id": user_id,
+                "user_id": current_user,
                 "position": position,
                 "company": company,
                 "jd_text": jd_text,
@@ -198,9 +211,9 @@ async def jobcraft_submission_manual(
 
 
 @router.get("/api/jobcraft/dashboard")
-def jobcraft_dashboard(user_id: int = 1):
+def jobcraft_dashboard(current_user: int = Depends(get_current_user)):
     try:
-        return {"submissions": db_tools.get_dashboard(user_id)}
+        return {"submissions": db_tools.get_dashboard(current_user)}
     except Exception as e:
         logger.exception("获取主页数据失败")
         raise HTTPException(status_code=500, detail=f"获取主页数据失败: {e}")

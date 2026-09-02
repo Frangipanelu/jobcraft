@@ -4,10 +4,11 @@ import uuid
 from pathlib import Path
 from typing import List, Optional
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
 
 from app.api.context import set_session_context, reset_session_context
+from app.auth.dependencies import get_current_user
 from app.tools import db_tools
 from app.tools.upload_file_read_tool import read_file_content
 
@@ -17,7 +18,6 @@ logger = logging.getLogger("jobcraft.api.interview_review")
 
 
 class InterviewReviewCreatePayload(BaseModel):
-    user_id: int = 1
     title: str = ""
     company: str = ""
     position: str = ""
@@ -43,14 +43,17 @@ def _get_updated_dir():
 
 
 @router.post("")
-def jobcraft_interview_review_create(payload: InterviewReviewCreatePayload):
+def jobcraft_interview_review_create(
+    payload: InterviewReviewCreatePayload,
+    current_user: int = Depends(get_current_user),
+):
     from app.tools import interview_review
 
     if not payload.raw_text or not payload.raw_text.strip():
         raise HTTPException(status_code=400, detail="面试记录文本不能为空")
     try:
         record_id = interview_review.create_interview_record(
-            user_id=payload.user_id,
+            user_id=current_user,
             title=payload.title,
             company=payload.company,
             position=payload.position,
@@ -63,7 +66,7 @@ def jobcraft_interview_review_create(payload: InterviewReviewCreatePayload):
         from app.workflows.question_table_flow import run_question_table_workflow
 
         qa_pairs_with_intent = run_question_table_workflow(
-            record_id, user_id=payload.user_id
+            record_id, user_id=current_user
         )
         return {
             "record_id": record_id,
@@ -94,7 +97,7 @@ def jobcraft_interview_review_create(payload: InterviewReviewCreatePayload):
 @router.post("/upload")
 async def jobcraft_interview_review_upload(
     file: UploadFile = File(...),
-    user_id: int = Form(1),
+    current_user: int = Depends(get_current_user),
     title: str = Form(""),
     company: str = Form(""),
     position: str = Form(""),
@@ -152,7 +155,7 @@ async def jobcraft_interview_review_upload(
 
     try:
         record_id = interview_review.create_interview_record(
-            user_id=user_id,
+            user_id=current_user,
             title=title,
             company=company,
             position=position,
@@ -164,7 +167,9 @@ async def jobcraft_interview_review_upload(
         dialogue = interview_review._parse_dialogue(raw_text)
         from app.workflows.question_table_flow import run_question_table_workflow
 
-        qa_pairs_with_intent = run_question_table_workflow(record_id, user_id=user_id)
+        qa_pairs_with_intent = run_question_table_workflow(
+            record_id, user_id=current_user
+        )
         return {
             "record_id": record_id,
             "status": "parsed",
@@ -193,6 +198,7 @@ async def jobcraft_interview_review_upload(
 
 @router.post("/parse-preview")
 async def jobcraft_interview_review_parse_preview(
+    current_user: int = Depends(get_current_user),
     raw_text: str = Form(""),
     file: Optional[UploadFile] = File(None),
     company: str = Form(""),
@@ -291,9 +297,9 @@ async def jobcraft_interview_review_parse_preview(
 
 
 @router.get("")
-def jobcraft_interview_review_list(user_id: int = 1):
+def jobcraft_interview_review_list(current_user: int = Depends(get_current_user)):
     try:
-        return {"records": db_tools.list_interview_records(user_id=user_id)}
+        return {"records": db_tools.list_interview_records(user_id=current_user)}
     except Exception as e:
         logger.exception("获取面试复盘列表失败")
         raise HTTPException(status_code=500, detail=f"获取面试复盘列表失败: {e}")
@@ -301,13 +307,13 @@ def jobcraft_interview_review_list(user_id: int = 1):
 
 @router.post("/{record_id}/question-table")
 def jobcraft_interview_review_question_table(
-    record_id: int, payload: InterviewReviewQuestionTablePayload
+    record_id: int, current_user: int = Depends(get_current_user)
 ):
     from app.workflows.question_table_flow import run_question_table_workflow
 
     try:
         questions = run_question_table_workflow(
-            record_id=record_id, user_id=payload.user_id
+            record_id=record_id, user_id=current_user
         )
         return {
             "record_id": record_id,
@@ -323,7 +329,9 @@ def jobcraft_interview_review_question_table(
 
 @router.post("/{record_id}/analyze")
 def jobcraft_interview_review_analyze(
-    record_id: int, payload: InterviewReviewAnalyzePayload
+    record_id: int,
+    payload: InterviewReviewAnalyzePayload,
+    current_user: int = Depends(get_current_user),
 ):
     from app.workflows.interview_review_flow import run_interview_review_workflow
 
@@ -337,7 +345,7 @@ def jobcraft_interview_review_analyze(
         result = run_interview_review_workflow(
             record_id=record_id,
             selected_sequences=payload.selected_sequences,
-            user_id=payload.user_id,
+            user_id=current_user,
         )
         return result
     except ValueError as e:
@@ -348,7 +356,9 @@ def jobcraft_interview_review_analyze(
 
 
 @router.get("/{record_id}")
-def jobcraft_interview_review_detail(record_id: int, user_id: int = 1):
+def jobcraft_interview_review_detail(
+    record_id: int, current_user: int = Depends(get_current_user)
+):
     try:
         record = db_tools.get_interview_record(record_id)
         if not record:
@@ -366,7 +376,9 @@ def jobcraft_interview_review_detail(record_id: int, user_id: int = 1):
 
 
 @router.delete("/{record_id}")
-def jobcraft_interview_review_delete(record_id: int, user_id: int = 1):
+def jobcraft_interview_review_delete(
+    record_id: int, current_user: int = Depends(get_current_user)
+):
     try:
         db_tools.delete_interview_record(record_id)
         return {"status": "deleted", "record_id": record_id}

@@ -2,9 +2,10 @@ import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from app.auth.dependencies import get_current_user
 from app.tools import db_tools, jobcraft_resume
 from app.workflows.job_analysis_flow import run_job_analysis_workflow
 
@@ -14,7 +15,6 @@ logger = logging.getLogger("jobcraft.api.job_analysis")
 
 
 class JobAnalyzePayload(BaseModel):
-    user_id: int = 1
     company: str = ""
     position: str
     jd_text: str
@@ -22,7 +22,6 @@ class JobAnalyzePayload(BaseModel):
 
 
 class ATSRecommendPayload(BaseModel):
-    user_id: int = 1
     company: str
     position: str
     jd_text: str
@@ -30,12 +29,10 @@ class ATSRecommendPayload(BaseModel):
 
 class GapPolishPayload(BaseModel):
     job_analysis_id: int
-    user_id: int = 1
     card_ids: List[int]
 
 
 class SaveCardVersionPayload(BaseModel):
-    user_id: int = 1
     card_id: int
     source_type: str = "job_analysis"
     source_id: int
@@ -46,7 +43,6 @@ class SaveCardVersionPayload(BaseModel):
 
 
 class ATSOnlyPayload(BaseModel):
-    user_id: int = 1
     position: str = ""
     jd_text: str
 
@@ -59,7 +55,10 @@ class SaveResumePayload(BaseModel):
 
 
 @router.post("/step1-ats-recommend")
-def jobcraft_step1_ats_recommend(payload: ATSRecommendPayload):
+def jobcraft_step1_ats_recommend(
+    payload: ATSRecommendPayload,
+    current_user: int = Depends(get_current_user),
+):
     if not payload.jd_text or not payload.jd_text.strip():
         raise HTTPException(status_code=400, detail="JD 文本不能为空")
     if len(payload.jd_text) > 10000:
@@ -67,9 +66,9 @@ def jobcraft_step1_ats_recommend(payload: ATSRecommendPayload):
     try:
         from app.workflows.job_analysis_flow import run_step1_workflow
 
-        all_cards = db_tools.list_cards(payload.user_id, include_inactive=False)
+        all_cards = db_tools.list_cards(current_user, include_inactive=False)
         result = run_step1_workflow(
-            user_id=payload.user_id,
+            user_id=current_user,
             company=payload.company,
             position=payload.position,
             jd_text=payload.jd_text,
@@ -78,7 +77,7 @@ def jobcraft_step1_ats_recommend(payload: ATSRecommendPayload):
 
         job_id = db_tools.insert_job_analysis(
             {
-                "user_id": payload.user_id,
+                "user_id": current_user,
                 "company": payload.company,
                 "position": payload.position or result["ats"].get("job_title", ""),
                 "jd_text": payload.jd_text,
@@ -98,7 +97,10 @@ def jobcraft_step1_ats_recommend(payload: ATSRecommendPayload):
 
 
 @router.post("/step2-gap-polish")
-def jobcraft_step2_gap_polish(payload: GapPolishPayload):
+def jobcraft_step2_gap_polish(
+    payload: GapPolishPayload,
+    current_user: int = Depends(get_current_user),
+):
     if not payload.card_ids:
         raise HTTPException(status_code=400, detail="请至少选择 1 张经历卡")
     try:
@@ -114,7 +116,10 @@ def jobcraft_step2_gap_polish(payload: GapPolishPayload):
 
 
 @router.post("/save-card-version")
-def jobcraft_job_save_card_version(payload: SaveCardVersionPayload):
+def jobcraft_job_save_card_version(
+    payload: SaveCardVersionPayload,
+    current_user: int = Depends(get_current_user),
+):
     if not payload.raw_text or not payload.raw_text.strip():
         raise HTTPException(status_code=400, detail="内容不能为空")
     try:
@@ -137,7 +142,10 @@ def jobcraft_job_save_card_version(payload: SaveCardVersionPayload):
 
 
 @router.post("/analyze")
-def jobcraft_job_analyze(payload: JobAnalyzePayload):
+def jobcraft_job_analyze(
+    payload: JobAnalyzePayload,
+    current_user: int = Depends(get_current_user),
+):
     if not payload.company or not payload.company.strip():
         raise HTTPException(status_code=400, detail="公司名不能为空")
     if not payload.position or not payload.position.strip():
@@ -152,7 +160,7 @@ def jobcraft_job_analyze(payload: JobAnalyzePayload):
         raise HTTPException(status_code=400, detail="请至少选择 1 张经历卡")
     try:
         return run_job_analysis_workflow(
-            user_id=payload.user_id,
+            user_id=current_user,
             company=payload.company,
             position=payload.position,
             jd_text=payload.jd_text,
@@ -166,15 +174,15 @@ def jobcraft_job_analyze(payload: JobAnalyzePayload):
 
 
 @router.get("/analyses")
-def jobcraft_job_list(user_id: int = 1, limit: int = 20):
+def jobcraft_job_list(current_user: int = Depends(get_current_user), limit: int = 20):
     try:
-        return {"analyses": db_tools.list_job_analyses(user_id, limit)}
+        return {"analyses": db_tools.list_job_analyses(current_user, limit)}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"查询失败: {e}")
 
 
 @router.get("/analyze/{job_id}")
-def jobcraft_job_get(job_id: int):
+def jobcraft_job_get(job_id: int, current_user: int = Depends(get_current_user)):
     try:
         analysis = db_tools.get_job_analysis(job_id)
         if not analysis:
@@ -187,7 +195,7 @@ def jobcraft_job_get(job_id: int):
 
 
 @router.delete("/analyze/{job_id}")
-def jobcraft_job_delete(job_id: int):
+def jobcraft_job_delete(job_id: int, current_user: int = Depends(get_current_user)):
     try:
         ok = db_tools.delete_job_analysis(job_id)
         if not ok:
@@ -200,7 +208,10 @@ def jobcraft_job_delete(job_id: int):
 
 
 @router.post("/save-resume")
-def jobcraft_job_save_resume(payload: SaveResumePayload):
+def jobcraft_job_save_resume(
+    payload: SaveResumePayload,
+    current_user: int = Depends(get_current_user),
+):
     if not payload.selected_card_ids:
         raise HTTPException(status_code=400, detail="请至少选择 1 张经历卡")
     try:
@@ -217,7 +228,10 @@ def jobcraft_job_save_resume(payload: SaveResumePayload):
 
 
 @router.post("/analyze-ats")
-def jobcraft_job_analyze_ats(payload: ATSOnlyPayload):
+def jobcraft_job_analyze_ats(
+    payload: ATSOnlyPayload,
+    current_user: int = Depends(get_current_user),
+):
     if not payload.jd_text or not payload.jd_text.strip():
         raise HTTPException(status_code=400, detail="JD 文本不能为空")
     if len(payload.jd_text) > 10000:
@@ -235,7 +249,11 @@ def jobcraft_job_analyze_ats(payload: ATSOnlyPayload):
 
 
 @router.post("/{job_id}/resume-preview")
-def jobcraft_job_resume_preview(job_id: int, payload: Optional[dict] = None):
+def jobcraft_job_resume_preview(
+    job_id: int,
+    payload: Optional[dict] = None,
+    current_user: int = Depends(get_current_user),
+):
     payload = payload or {}
     try:
         analysis = db_tools.get_job_analysis(job_id)
@@ -266,7 +284,7 @@ def jobcraft_job_resume_preview(job_id: int, payload: Optional[dict] = None):
 
 
 @router.get("/resume/download")
-def jobcraft_resume_download(path: str):
+def jobcraft_resume_download(path: str, current_user: int = Depends(get_current_user)):
     from app.api.server import output_dir
 
     try:

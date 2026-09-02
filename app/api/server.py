@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 import uvicorn
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -21,6 +21,7 @@ from app.api.job_analysis import router as job_analysis_router
 from app.api.submission import router as submission_router
 from app.api.interview_prep import router as interview_prep_router
 from app.api.interview_review import router as interview_review_router
+from app.auth.dependencies import get_current_user
 from app.auth.router import router as auth_router
 from app.monitoring import setup_monitoring
 
@@ -160,7 +161,10 @@ async def api_health_check():
 
 
 @app.post("/api/jobcraft/tasks/submit")
-async def submit_task(payload: Dict[str, Any]):
+async def submit_task(
+    payload: Dict[str, Any],
+    current_user: int = Depends(get_current_user),
+):
     """
     提交异步任务
 
@@ -202,7 +206,7 @@ async def submit_task(payload: Dict[str, Any]):
 
 
 @app.get("/api/jobcraft/tasks/{task_id}")
-async def get_task_status(task_id: str):
+async def get_task_status(task_id: str, current_user: int = Depends(get_current_user)):
     """
     查询任务状态
 
@@ -227,7 +231,7 @@ async def get_task_status(task_id: str):
 
 
 @app.post("/api/jobcraft/tasks/{task_id}/cancel")
-async def cancel_task(task_id: str):
+async def cancel_task(task_id: str, current_user: int = Depends(get_current_user)):
     """
     取消任务
 
@@ -255,6 +259,7 @@ async def cancel_task(task_id: str):
 async def list_tasks(
     status: Optional[str] = None,
     limit: int = 50,
+    current_user: int = Depends(get_current_user),
 ):
     """
     列出任务

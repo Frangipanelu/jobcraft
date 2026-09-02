@@ -40,10 +40,36 @@ def api_url(path: str) -> str:
     return f"{BASE_URL}{path}"
 
 
+_AUTH_HEADERS: Dict[str, str] = {}
+
+
+def _get_auth_headers() -> Dict[str, str]:
+    """注册一次性 e2e 用户并获取认证头（缓存于模块级）"""
+    global _AUTH_HEADERS
+    if _AUTH_HEADERS:
+        return _AUTH_HEADERS
+    import uuid
+
+    username = f"e2e_{uuid.uuid4().hex[:10]}"
+    resp = requests.post(
+        api_url("/api/auth/register"),
+        json={"username": username, "password": "E2eTest123"},
+        timeout=30,
+    )
+    assert resp.ok, f"注册 e2e 用户失败: {resp.status_code} {resp.text[:300]}"
+    _AUTH_HEADERS = {"Authorization": f"Bearer {resp.json()['access_token']}"}
+    return _AUTH_HEADERS
+
+
 def req(method: str, path: str, **kwargs) -> Dict[str, Any]:
-    """封装请求并做基础断言"""
+    """封装请求并做基础断言（自动携带认证头）"""
     url = api_url(path)
-    resp = requests.request(method, url, timeout=kwargs.pop("timeout", 120), **kwargs)
+    headers = kwargs.pop("headers", {})
+    merged = dict(_get_auth_headers())
+    merged.update(headers)
+    resp = requests.request(
+        method, url, timeout=kwargs.pop("timeout", 120), headers=merged, **kwargs
+    )
     if not resp.ok:
         raise AssertionError(
             f"{method.upper()} {url} failed: {resp.status_code} {resp.text[:500]}"
@@ -147,7 +173,7 @@ def test_create_experience_card(sample_card: Dict[str, Any]):
 
 def test_list_cards(sample_card: Dict[str, Any]):
     data = req("GET", "/api/jobcraft/experience/cards", params={"user_id": USER_ID})
-    cards = data["cards"]
+    cards = data["items"]
     assert any(c["id"] == sample_card["id"] for c in cards)
 
 

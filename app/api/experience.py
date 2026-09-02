@@ -5,10 +5,11 @@ import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel
 
 from app.api.context import set_session_context, reset_session_context
+from app.auth.dependencies import get_current_user
 from app.schemas.jobcraft import ExperienceCardCreate, ExperienceCardUpdate
 from app.tools import db_tools
 from app.tools.upload_file_read_tool import read_file_content
@@ -18,12 +19,7 @@ router = APIRouter(prefix="/api/jobcraft/experience", tags=["experience"])
 logger = logging.getLogger("jobcraft.api.experience")
 
 
-class StructCachePayload(BaseModel):
-    user_id: int = 1
-
-
 class BackfillPayload(BaseModel):
-    user_id: int = 1
     min_chars: int = 100
 
 
@@ -36,7 +32,7 @@ def _get_updated_dir() -> Path:
 @router.post("/upload")
 async def jobcraft_experience_upload(
     file: UploadFile = File(...),
-    user_id: int = Form(1),
+    current_user: int = Depends(get_current_user),
 ):
     MAX_BYTES = 10 * 1024 * 1024
     if file.size is not None and file.size > MAX_BYTES:
@@ -97,13 +93,15 @@ async def jobcraft_experience_upload(
                 dedup_key = f"{company}::{role}"
                 if company and dedup_key in seen:
                     continue
-                existing = db_tools.find_card_by_company_role(user_id, company, role)
+                existing = db_tools.find_card_by_company_role(
+                    current_user, company, role
+                )
                 if existing:
                     seen.add(dedup_key)
                     continue
                 seen.add(dedup_key)
                 card_data = {
-                    "user_id": user_id,
+                    "user_id": current_user,
                     "title": ent.get("title")
                     or role
                     or company
@@ -127,7 +125,7 @@ async def jobcraft_experience_upload(
                     created_cards.append(card)
         else:
             card_data = {
-                "user_id": user_id,
+                "user_id": current_user,
                 "title": file.filename or "未命名经历",
                 "raw_text": resume_text.strip(),
                 "source": "resume_upload",
@@ -158,7 +156,7 @@ async def jobcraft_experience_upload(
 
 @router.get("/cards")
 def jobcraft_experience_list(
-    user_id: int = 1,
+    current_user: int = Depends(get_current_user),
     include_inactive: bool = False,
     page: int = 1,
     page_size: int = 20,
@@ -173,9 +171,9 @@ def jobcraft_experience_list(
 
         offset = (page - 1) * page_size
 
-        total = db_tools.count_cards(user_id, include_inactive)
+        total = db_tools.count_cards(current_user, include_inactive)
         cards = db_tools.list_cards_paginated(
-            user_id, include_inactive, offset, page_size
+            current_user, include_inactive, offset, page_size
         )
 
         total_pages = (total + page_size - 1) // page_size if page_size > 0 else 0
@@ -194,7 +192,7 @@ def jobcraft_experience_list(
 @router.get("/cards/search")
 def jobcraft_experience_search(
     q: str,
-    user_id: int = 1,
+    current_user: int = Depends(get_current_user),
     include_inactive: bool = False,
     page: int = 1,
     page_size: int = 20,
@@ -211,8 +209,10 @@ def jobcraft_experience_search(
 
         offset = (page - 1) * page_size
 
-        total = db_tools.count_search_cards(user_id, q, include_inactive)
-        cards = db_tools.search_cards(user_id, q, include_inactive, offset, page_size)
+        total = db_tools.count_search_cards(current_user, q, include_inactive)
+        cards = db_tools.search_cards(
+            current_user, q, include_inactive, offset, page_size
+        )
 
         total_pages = (total + page_size - 1) // page_size if page_size > 0 else 0
 
@@ -232,7 +232,7 @@ def jobcraft_experience_search(
 
 @router.get("/export")
 def jobcraft_experience_export(
-    user_id: int = 1,
+    current_user: int = Depends(get_current_user),
     card_ids: Optional[List[int]] = None,
     format: str = "json",
 ):
@@ -242,7 +242,7 @@ def jobcraft_experience_export(
                 db_tools.get_card(cid) for cid in card_ids if db_tools.get_card(cid)
             ]
         else:
-            cards = db_tools.list_cards(user_id, include_inactive=True)
+            cards = db_tools.list_cards(current_user, include_inactive=True)
 
         if not cards:
             raise HTTPException(status_code=404, detail="没有可导出的经历卡")
@@ -290,13 +290,13 @@ def jobcraft_experience_export(
                 "format": "csv",
                 "count": len(cards),
                 "content": output.getvalue(),
-                "filename": f"experience_cards_{user_id}.csv",
+                "filename": f"experience_cards_{current_user}.csv",
             }
 
         elif format == "markdown":
             md_lines = ["# 经历卡导出\n"]
             md_lines.append(f"导出时间: {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
-            md_lines.append(f"用户ID: {user_id}\n")
+            md_lines.append(f"用户ID: {current_user}\n")
             md_lines.append(f"卡片数量: {len(cards)}\n\n")
 
             for card in cards:
@@ -317,7 +317,7 @@ def jobcraft_experience_export(
                 "format": "markdown",
                 "count": len(cards),
                 "content": "\n".join(md_lines),
-                "filename": f"experience_cards_{user_id}.md",
+                "filename": f"experience_cards_{current_user}.md",
             }
 
         else:
@@ -333,7 +333,10 @@ def jobcraft_experience_export(
 
 
 @router.post("/cards/batch")
-def jobcraft_experience_batch(payload: Dict[str, Any]):
+def jobcraft_experience_batch(
+    payload: Dict[str, Any],
+    current_user: int = Depends(get_current_user),
+):
     try:
         action = payload.get("action")
         card_ids = payload.get("card_ids", [])
@@ -433,7 +436,9 @@ def jobcraft_experience_batch(payload: Dict[str, Any]):
 
 
 @router.get("/cards/{card_id}/versions")
-def jobcraft_experience_versions(card_id: int):
+def jobcraft_experience_versions(
+    card_id: int, current_user: int = Depends(get_current_user)
+):
     try:
         card = db_tools.get_card(card_id)
         if not card:
@@ -454,7 +459,11 @@ def jobcraft_experience_versions(card_id: int):
 
 
 @router.post("/cards/{card_id}/versions")
-def jobcraft_experience_create_version(card_id: int, payload: Dict[str, Any]):
+def jobcraft_experience_create_version(
+    card_id: int,
+    payload: Dict[str, Any],
+    current_user: int = Depends(get_current_user),
+):
     try:
         card = db_tools.get_card(card_id)
         if not card:
@@ -485,10 +494,14 @@ def jobcraft_experience_create_version(card_id: int, payload: Dict[str, Any]):
 
 
 @router.post("/cards")
-def jobcraft_experience_create(payload: ExperienceCardCreate):
+def jobcraft_experience_create(
+    payload: ExperienceCardCreate,
+    current_user: int = Depends(get_current_user),
+):
     try:
         data = payload.model_dump()
         data["source"] = "manual"
+        data["user_id"] = current_user
         card_id = db_tools.insert_card(data)
         return db_tools.get_card(card_id)
     except Exception as e:
@@ -496,10 +509,12 @@ def jobcraft_experience_create(payload: ExperienceCardCreate):
 
 
 @router.patch("/cards/{card_id}")
-def jobcraft_experience_update(card_id: int, payload: ExperienceCardUpdate):
+def jobcraft_experience_update(
+    card_id: int,
+    payload: ExperienceCardUpdate,
+    current_user: int = Depends(get_current_user),
+):
     updates = {k: v for k, v in payload.model_dump().items() if v is not None}
-    if "user_id" in updates:
-        updates.pop("user_id")
     try:
         ok = db_tools.update_card(card_id, updates)
         if not ok:
@@ -512,7 +527,9 @@ def jobcraft_experience_update(card_id: int, payload: ExperienceCardUpdate):
 
 
 @router.delete("/cards/{card_id}")
-def jobcraft_experience_delete(card_id: int):
+def jobcraft_experience_delete(
+    card_id: int, current_user: int = Depends(get_current_user)
+):
     try:
         ok = db_tools.delete_card(card_id)
         if not ok:
@@ -525,7 +542,9 @@ def jobcraft_experience_delete(card_id: int):
 
 
 @router.post("/cards/{card_id}/structure")
-def jobcraft_experience_structure(card_id: int, payload: StructCachePayload):
+def jobcraft_experience_structure(
+    card_id: int, current_user: int = Depends(get_current_user)
+):
     try:
         card = db_tools.get_card(card_id)
         if not card:
@@ -554,7 +573,9 @@ def jobcraft_experience_structure(card_id: int, payload: StructCachePayload):
 
 
 @router.post("/cards/{card_id}/recommend-tags")
-def jobcraft_experience_recommend_tags(card_id: int):
+def jobcraft_experience_recommend_tags(
+    card_id: int, current_user: int = Depends(get_current_user)
+):
     try:
         card = db_tools.get_card(card_id)
         if not card:
@@ -571,11 +592,14 @@ def jobcraft_experience_recommend_tags(card_id: int):
 
 
 @router.post("/cards/backfill")
-def jobcraft_experience_backfill(payload: BackfillPayload):
+def jobcraft_experience_backfill(
+    payload: BackfillPayload,
+    current_user: int = Depends(get_current_user),
+):
     try:
         from app.workflows.extract_flow import run_backfill_workflow
 
-        result = run_backfill_workflow(payload.user_id, payload.min_chars)
+        result = run_backfill_workflow(current_user, payload.min_chars)
         return result
     except Exception as e:
         logger.exception("卡片回填失败")

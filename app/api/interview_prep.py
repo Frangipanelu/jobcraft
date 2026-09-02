@@ -1,9 +1,10 @@
 import logging
 from typing import List, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from app.auth.dependencies import get_current_user
 from app.tools import db_tools
 
 router = APIRouter(tags=["interview_prep"])
@@ -12,7 +13,6 @@ logger = logging.getLogger("jobcraft.api.interview_prep")
 
 
 class InterviewPrepPayload(BaseModel):
-    user_id: int = 1
     round_type: str = "技术面"
     card_ids: List[int]
     submission_id: Optional[int] = None
@@ -40,7 +40,11 @@ def _get_previous_review_summary(submission_id: Optional[int]) -> Optional[str]:
 
 
 @router.post("/api/jobcraft/job/{job_id}/interview-prep")
-def jobcraft_job_interview_prep(job_id: int, payload: InterviewPrepPayload):
+def jobcraft_job_interview_prep(
+    job_id: int,
+    payload: InterviewPrepPayload,
+    current_user: int = Depends(get_current_user),
+):
     from app.workflows.interview_prep_flow import run_interview_prep_workflow
 
     card_ids = payload.card_ids
@@ -66,7 +70,7 @@ def jobcraft_job_interview_prep(job_id: int, payload: InterviewPrepPayload):
         if payload.submission_id:
             submission = db_tools.get_submission(payload.submission_id)
         elif analysis:
-            subs = db_tools.list_submissions(payload.user_id)
+            subs = db_tools.list_submissions(current_user)
             for s in subs:
                 if s.get("job_analysis_id") == job_id:
                     submission = db_tools.get_submission(s["id"])
@@ -85,7 +89,7 @@ def jobcraft_job_interview_prep(job_id: int, payload: InterviewPrepPayload):
             job_analysis_id=job_id,
             round_type=payload.round_type,
             card_ids=card_ids,
-            user_id=payload.user_id,
+            user_id=current_user,
             submission_id=payload.submission_id,
             company_research=company_research,
             resume_markdown=resume_markdown,
@@ -100,7 +104,9 @@ def jobcraft_job_interview_prep(job_id: int, payload: InterviewPrepPayload):
 
 
 @router.get("/api/jobcraft/job/{job_id}/selected-cards")
-def jobcraft_job_get_selected_cards(job_id: int):
+def jobcraft_job_get_selected_cards(
+    job_id: int, current_user: int = Depends(get_current_user)
+):
     try:
         card_ids = db_tools.get_selected_card_ids_by_job(job_id)
         return {"card_ids": card_ids}
@@ -110,7 +116,9 @@ def jobcraft_job_get_selected_cards(job_id: int):
 
 
 @router.get("/api/jobcraft/job/{job_id}/interview-prep")
-def jobcraft_job_get_interview_prep(job_id: int, user_id: int = 1):
+def jobcraft_job_get_interview_prep(
+    job_id: int, current_user: int = Depends(get_current_user)
+):
     from app.tools import interview_pre
 
     try:

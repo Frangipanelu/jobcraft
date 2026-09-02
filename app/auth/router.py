@@ -4,6 +4,7 @@ JobCraft 认证路由
 提供用户注册、登录接口。
 """
 
+import re
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -14,6 +15,8 @@ from .dependencies import get_current_user
 from app.tools import db_tools
 
 router = APIRouter(prefix="/api/auth", tags=["认证"])
+
+_EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
 class RegisterRequest(BaseModel):
@@ -48,6 +51,25 @@ class UserInfo(BaseModel):
     email: Optional[str] = None
 
 
+def _validate_register_input(
+    username: str, password: str, email: Optional[str]
+) -> None:
+    """校验注册输入：密码强度与邮箱格式"""
+    if (
+        len(password) < 8
+        or not re.search(r"[A-Za-z]", password)
+        or not re.search(r"\d", password)
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="密码长度至少 8 位，且必须同时包含字母和数字",
+        )
+    if email and not _EMAIL_PATTERN.match(email):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="邮箱格式不正确"
+        )
+
+
 @router.post("/register", response_model=TokenResponse)
 async def register(payload: RegisterRequest):
     """
@@ -61,6 +83,15 @@ async def register(payload: RegisterRequest):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="用户名已存在"
         )
+
+    _validate_register_input(payload.username, payload.password, payload.email)
+
+    if payload.email:
+        existing_email = db_tools.get_user_by_email(payload.email)
+        if existing_email:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail="邮箱已被使用"
+            )
 
     # 创建用户
     password_hash = get_password_hash(payload.password)
@@ -99,6 +130,33 @@ async def login(payload: LoginRequest):
         )
 
     # 生成 Token
+    access_token = create_access_token(
+        data={"user_id": user["id"], "username": user["username"]}
+    )
+
+    return TokenResponse(
+        access_token=access_token, user_id=user["id"], username=user["username"]
+    )
+
+
+@router.post("/default-login", response_model=TokenResponse)
+async def default_login():
+    """
+    默认用户自动登录
+
+    个人单用户工具，自动创建默认用户并返回 Token。
+    """
+    username = "default_user"
+
+    # 检查默认用户是否存在，不存在则创建
+    user = db_tools.get_user_by_username(username)
+    if not user:
+        password_hash = get_password_hash("default_password_123")
+        user_id = db_tools.create_user(
+            username=username, password_hash=password_hash, email=None
+        )
+        user = {"id": user_id, "username": username}
+
     access_token = create_access_token(
         data={"user_id": user["id"], "username": user["username"]}
     )

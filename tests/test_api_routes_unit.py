@@ -13,9 +13,40 @@ from fastapi.testclient import TestClient
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from app.auth import create_access_token
 from app.api.server import app
 
-client = TestClient(app, raise_server_exceptions=False)
+_TEST_TOKEN = create_access_token({"user_id": 1, "username": "unittest"})
+_AUTH_HEADERS = {"Authorization": f"Bearer {_TEST_TOKEN}"}
+
+
+class _AuthedClient:
+    """为每个请求自动携带认证头，保持既有测试调用方式不变。"""
+
+    def __init__(self, inner):
+        self.inner = inner
+
+    def _with_headers(self, kwargs):
+        headers = kwargs.pop("headers", {})
+        merged = dict(_AUTH_HEADERS)
+        merged.update(headers)
+        kwargs["headers"] = merged
+        return kwargs
+
+    def get(self, url, **kwargs):
+        return self.inner.get(url, **self._with_headers(kwargs))
+
+    def post(self, url, **kwargs):
+        return self.inner.post(url, **self._with_headers(kwargs))
+
+    def patch(self, url, **kwargs):
+        return self.inner.patch(url, **self._with_headers(kwargs))
+
+    def delete(self, url, **kwargs):
+        return self.inner.delete(url, **self._with_headers(kwargs))
+
+
+client = _AuthedClient(TestClient(app, raise_server_exceptions=False))
 
 
 # ============================================================
@@ -34,7 +65,8 @@ RESUME_TEXT = "这是一段用于测试的简历内容，包含足够多的字�
 class TestExperienceCards:
     """GET /api/jobcraft/experience/cards"""
 
-    def test_cards_missing_user_id_uses_default(self, monkeypatch):
+    def test_cards_without_user_id_param_succeeds(self, monkeypatch):
+        """身份来自 JWT，不再需要客户端传 user_id"""
         monkeypatch.setattr("app.api.experience.db_tools.count_cards", lambda *a: 0)
         monkeypatch.setattr(
             "app.api.experience.db_tools.list_cards_paginated", lambda *a: []

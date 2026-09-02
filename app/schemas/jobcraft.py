@@ -108,7 +108,6 @@ class ExperienceCardSchema(BaseModel):
 class ExperienceCardCreate(BaseModel):
     """前端创建经历卡请求体"""
 
-    user_id: int = 1
     title: str = Field(..., description="经历标题")
     raw_text: str = Field(..., description="原始文本")
     tags: List[str] = Field(default_factory=list, description="扁平标签")

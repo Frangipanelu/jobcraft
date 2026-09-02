@@ -106,6 +106,32 @@ def get_user_by_username(username: str) -> Optional[Dict[str, Any]]:
     }
 
 
+def get_user_by_email(email: str) -> Optional[Dict[str, Any]]:
+    """
+    按邮箱获取用户
+
+    :param email: 邮箱
+    :return: 用户信息字典或 None
+    """
+    _ensure_users_table()
+    config = _jc_config()
+    with connect(**config) as conn:
+        with conn.cursor(dictionary=True) as cur:
+            cur.execute("SELECT * FROM users WHERE email=%s", (email,))
+            row = cur.fetchone()
+    if not row:
+        return None
+    return {
+        "id": row["id"],
+        "username": row["username"],
+        "password_hash": row["password_hash"],
+        "email": row.get("email"),
+        "is_active": bool(row.get("is_active", 1)),
+        "created_at": row["created_at"].isoformat() if row.get("created_at") else None,
+        "updated_at": row["updated_at"].isoformat() if row.get("updated_at") else None,
+    }
+
+
 def update_user(user_id: int, updates: Dict[str, Any]) -> bool:
     """
     更新用户信息
