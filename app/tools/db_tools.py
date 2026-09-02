@@ -1,31 +1,22 @@
 """
-MySQL 数据库查询工具模块
+MySQL 数据库工具模块（兼容层）
 
-封装数据库查询助手使用的三个 LangChain 工具：
-list_sql_tables 用于发现真实表名，get_table_data 用于预览字段和样例数据，
-execute_sql_query 用于在确认结构后执行自定义查询。
+业务 CRUD 已拆分至 db_user / db_experience / db_job / db_submission /
+db_interview 模块，本文件保留通用辅助函数与向后兼容的 re-export。
 """
 
 import json
-import logging
 import os
 from typing import Any, Dict, Optional
 
 from dotenv import load_dotenv
-from langchain_core.tools import tool
-from mysql.connector import Error, connect
-
-from app.api.monitor import monitor
-
-logger = logging.getLogger("jobcraft.db_tools")
+from mysql.connector import connect  # noqa: F401  # 供复用方与测试 import
 
 # override=True: 强制用 .env 覆盖系统环境里的同名变量, 避免旧 key 干扰
 load_dotenv(override=True)
 
-
-# ============================================================
-# 连接配置（子模块共用）
-# ============================================================
+# JobCraft 求职助手统一使用此配置 (database=jobcraft)
+JOBCRAFT_DB = "jobcraft"
 
 
 def get_db_config(overrides: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
@@ -54,7 +45,7 @@ def get_db_config(overrides: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     if overrides:
         config.update({k: v for k, v in overrides.items() if v is not None})
 
-    # user/password/database 是本教程工具能正常查询业务库的最小必要配置
+    # user/password/database 是本工具能正常查询业务库的最小必要配置
     required_keys = ["user", "password", "database"]
     missing_keys = [k for k in required_keys if k not in config]
     if missing_keys:
@@ -63,17 +54,9 @@ def get_db_config(overrides: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     return config
 
 
-# JobCraft 求职助手统一使用此配置 (database=jobcraft)
-JOBCRAFT_DB = "jobcraft"
-
-
 def _jc_config() -> Dict[str, Any]:
+    """返回统一使用的 jobcraft 库连接配置"""
     return get_db_config({"database": JOBCRAFT_DB})
-
-
-# ============================================================
-# 通用辅助函数
-# ============================================================
 
 
 def _parse_json(value: Any) -> Any:
@@ -91,135 +74,6 @@ def _parse_json(value: Any) -> Any:
         return json.loads(value)
     except (TypeError, ValueError):
         return value
-
-
-# ============================================================
-# LangChain 工具
-# ============================================================
-
-
-@tool
-def list_sql_tables() -> str:
-    """
-    查询当前数据库中所有可用表
-
-    作用：让模型先识别真实可用的表名，方便后续预览表结构和编写自定义 SQL。
-    :return: 有表：可用的表有：表1,表2,表3...
-             没有表：没有可用的表
-             出现异常：查询出现异常：异常信息
-    """
-
-    # 埋点：工具一被调用，前端可以展示当前正在查询数据库表名
-    monitor.report_tool(tool_name="数据库表名查询工具：list_sql_tables", args={})
-
-    # 加载数据库连接信息
-    config = get_db_config()
-
-    try:
-        with connect(**config) as conn:
-            with conn.cursor() as cursor:
-                sql = "SHOW TABLES"
-                cursor.execute(sql)
-
-                tables = cursor.fetchall()
-                if not tables:
-                    return "没有可用的表"
-
-                table_names = [table[0] for table in tables]
-                return f"可用的表有：{', '.join(table_names)}"
-    except Error as e:
-        return f"查询出现异常：{str(e)}"
-
-
-@tool
-def get_table_data(table_name) -> str:
-    """
-    查询指定表的前 100 行数据
-
-    当前工具调用之前，应先调用 list_sql_tables 完成表名校验。
-    此工具的作用：
-    1. 完成单表样例数据查询
-    2. 为多表查询提供表结构信息和数据格式参考
-    :param table_name: 表名
-    :return: CSV 格式数据
-    """
-    monitor.report_tool(
-        tool_name="数据库表数据查询工具：get_table_data",
-        args={"table_name": table_name},
-    )
-
-    config = get_db_config()
-
-    try:
-        with connect(**config) as conn:
-            with conn.cursor() as cursor:
-                sql = f"SELECT * FROM {table_name} LIMIT 100"
-                cursor.execute(sql)
-
-                description = cursor.description
-                if not description:
-                    return f"数据表 {table_name} 暂无数据。"
-
-                columns = [desc[0] for desc in description]
-                rows = cursor.fetchall()
-
-                results = [",".join(map(str, row)) for row in rows]
-
-                header_str = ",".join(columns)
-                data_str = "\n".join(results)
-                return f"{header_str}\n{data_str}"
-    except Error as e:
-        return f"查询出现异常：{str(e)}"
-
-
-@tool
-def execute_sql_query(query) -> str:
-    """
-    执行自定义 SQL 查询
-
-    切记：执行之前，需要通过 list_sql_tables 明确真实表名，
-    再通过 get_table_data 明确表结构和数据格式。
-    适合多表关联、筛选、聚合、排序等复杂查询。
-    :param query: 要执行的自定义 SQL 语句
-    :return: CSV 格式数据
-    """
-    monitor.report_tool(
-        tool_name="数据库表数据查询工具：execute_sql_query", args={"query": query}
-    )
-
-    config = get_db_config()
-
-    try:
-        with connect(**config) as conn:
-            with conn.cursor() as cursor:
-                cursor.execute(query)
-
-                description = cursor.description
-                if not description:
-                    return f"执行自定义 SQL 语句没有查询结果，SQL 为：{query}"
-                columns = [desc[0] for desc in description]
-
-                rows = cursor.fetchall()
-
-                results = [",".join(map(str, row)) for row in rows]
-
-                header_str = ",".join(columns)
-                data_str = "\n".join(results)
-                return f"{header_str}\n{data_str}"
-    except Error as e:
-        return f"查询出现异常：{str(e)}"
-
-
-if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
-    logger.info(
-        "%s",
-        execute_sql_query.invoke(
-            {
-                "query": "SELECT * FROM `drugs` dgs join sales_records srd on dgs.drug_id = srd.drug_id"
-            }
-        ),
-    )
 
 
 # ============================================================
