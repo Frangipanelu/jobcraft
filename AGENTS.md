@@ -201,4 +201,39 @@ npm run build
 2. **明确范围**：与用户确认需求边界，避免过度设计。
 3. **方案先行**：对于非 trivial 改动，先给出变更方案再执行。
 4. **更新进度**：完成子任务后立即更新 `PROGRESS.md`。
-5. **关闭会话**：简要汇报完成项、待
+5. **关闭会话**：简要汇报完成项、待办事项。
+
+## 7. Engineering Development Workflow
+
+所有开发任务必须遵循：
+
+`docs/engineering-development-workflow-v1.md`
+
+标准流程：
+
+```
+Read Docs
+→ Analyze
+→ Task
+→ Design
+→ Implement
+→ Test
+→ Documentation
+→ Git Commit
+→ PROGRESS
+→ Next Task
+```
+
+Agent 不得跳过分析、测试、文档或 Git 回溯阶段。
+
+Agent 不得未经 Task Scope 允许进行大范围重构。
+
+Frontend-first：优先复用已有前端需求与后端能力；仅在确认后端缺失时新增后端能力。
+
+所有数据库变更必须通过 Migration。
+
+所有 AI 输出必须经过 Schema Validation。
+
+所有 AI Prompt 必须版本化。
+
+所有独立 Task 必须有明确的 Git Commit。
