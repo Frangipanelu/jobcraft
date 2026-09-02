@@ -279,4 +279,20 @@
 
 ---
 
-**更新规则**：每次会话结束时，AI 必须根据本次实际完成的工作，移动或新增上述列表中的条目，并简要
+### v0.15 认证闭环：强制 JWT + 登录/注册（本轮）
+
+- [x] **产品设计决议**：认证闭环采用方案 A——所有业务端点强制 JWT + 注册加固 + 移除 `default-login` 后门；保留公开端点仅 4 个（register/login/health×2）
+- [x] **后端强制认证**：`experience/job_analysis/submission/interview_prep/interview_review` 全部端点改为 `user_id: int = Depends(get_current_user)`（token 中的 user_id），移除 payload/Form 里的 user_id 入参；`server.py` tasks 4 端点同步加认证
+- [x] **注册加固**：密码强度校验（≥8 位含字母+数字）、邮箱格式正则（不引入 email-validator 第三方库）、用户名/邮箱唯一性校验
+- [x] **契约调整（前向兼容）**：`ExperienceCardCreate.user_id` 移除；question-table 端点去掉空 body 参数（前端多余字段被 FastAPI 忽略）
+- [x] `db_user.py` 新增 `get_user_by_email` 并 re-export
+- [x] **测试**：`test_auth_security.py`（56 用例：401 参数化、token 注入用户身份、公开端点、注册校验、登录成败）；`test_api_routes_unit.py` 用 `_AuthedClient` 包装器；e2e 自动注册一次性用户拿 token；修 e2e 陈旧断言 `cards`→`items`
+- [x] **前端认证闭环**：`auth.ts` 新增 `login/register`、`autoLogin` 改为仅校验已有 token（无 token/失效返回 null 进登录页）；Context 暴露 `isAuthenticated/login/register/logout` 并修 `loadDashboard/loadExperiences` 传显式 user_id（防新用户加载错数据）；新增 `src/pages/AuthPage.tsx`；App 认证门 + loading gate；TopHeader 登出实连
+- [x] **移除后门**：删除 `POST /api/auth/default-login`（commit 2 随前端一起提交），并同步删除前端对该端点的唯一引用
+- [x] **验证**：工作区 `ruff check .` 绿；`uv run pytest tests/ -q` 315 passed、6 skipped；提交快照（worktree）同样 315 passed/6 skipped；前端 `npm run build` + `npx tsc --noEmit` 通过
+- [x] **commits**：`8599e80` feat(auth): enforce JWT on business endpoints and harden registration（14 文件）；`6a0f121` feat(frontend): add login and register flow; remove default-login（60 文件，含既有前端重构 WIP 一并落库）
+- [x] **过程信息**：main 下存在大量与本任务无关的既有 WIP（前端重构、db_config 迁移、mock-chat 端点、docs 删除等），通过 hunk 级暂存 + git plumbing 只纳入认证相关改动；`db_tools.py` 曾因 `ruff --fix` 误删 WIP 的 `_jc_config` re-export 导致既有单测失败，已按文件 re-export 模式恢复
+
+---
+
+**更新规则**：每次会话结束时，AI 必须根据本次实际完成的工作，移动或新增上述列表中的条目，并简要描述进展。
