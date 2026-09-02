@@ -386,7 +386,7 @@ TASK-CLEANUP-WIP-001                                 (随时可做，无依赖)
 | 4 | TASK-AUTH-002 移除默认凭据 | P0 | AUTH | 安全 | ✅ 完成 `8878459` |
 | 5 | TASK-TYPE-001 any 收紧 + 文档 | P0 | — | 契约清晰 | ⏳ 待办 |
 | 6 | TASK-FETCH-001 fetch 审计 | P0 | TYPE | 安全合规 | ⏳ 待办（仅文档） |
-| 7 | TASK-REAL-DATA-001 Workbench 真实数据 | P0 | TYPE | 产品可信 | ⏳ 待办 |
+| 7 | TASK-REAL-DATA-001 Workbench 真实数据 | P0 | TYPE | 产品可信 | ✅ 完成 `3c03cde` |
 | 12 | TASK-REAL-DATA-004 JD 报告去 FALLBACK | P0 | TYPE | 产品可信 | ⏳ 待办 |
 | 8 | TASK-REAL-DATA-002 MockInterview 去 Mock | P0 | INTERVIEW | 产品可信 | ⏳ 待办 |
 | 9 | TASK-REAL-DATA-003 复盘/向导去 Mock | P0 | INTERVIEW | 产品可信 | ⏳ 待办 |
@@ -416,7 +416,7 @@ TASK-CLEANUP-WIP-001                                 (随时可做，无依赖)
 [ ] api 层无 any 泄漏（7 处收紧）—— TASK-TYPE-001
 [ ] 双层类型架构有明确 JSDoc 注释 —— TASK-TYPE-001
 [ ] fetch 出口有文档标注 —— TASK-FETCH-001
-[ ] WorkbenchView 从硬编码改为后端数据驱动（真实 jobs 计数/步骤/状态）—— TASK-REAL-DATA-001
+[x] WorkbenchView 从硬编码改为后端数据驱动（真实 jobs 计数/步骤/状态）—— TASK-REAL-DATA-001 ✅ `3c03cde`
 [ ] JDReportDetailView 移除 FALLBACK_DATA，真实字段 + 空态占位 —— TASK-REAL-DATA-004
 [ ] MockInterview 接通 /mock-chat 端点，移除 Math.random 假评分 —— TASK-REAL-DATA-002
 [ ] InterviewPrepCenterView 从后端加载面试准备数据 —— TASK-REAL-DATA-003

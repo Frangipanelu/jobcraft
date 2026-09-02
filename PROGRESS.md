@@ -323,6 +323,20 @@
 - [x] **commits**：`82bf6c3` docs: recalibrate roadmap to actual code（已本地，未 push，待与后续任务一起推送）；`4e0d14e` refactor(frontend): tighten api layer any types, document type architecture（TASK-TYPE-001，4 文件：3 前端 + roadmap Verify 记录，未 push）
 - [x] **过程信息**：工作区仍有大量既有 WIP（前端重构、db_config.py、mock-chat、docs 删除、docker、frontend-jobcraft-backup/ 等），全部通过显式 `git add <file>` 只纳入本任务文件；roadmap 上一轮整体校准已在 `82bf6c3` 提交，本轮仅提交 Verify 字段修正 3 行
 
+### v0.18 阶段 1 Contract 对齐：Workbench 接真实数据（TASK-REAL-DATA-001）（本轮）
+
+- [x] **范围确认**：与用户对齐后，本轮只做 `WorkbenchView` 去硬编码；`JDReportDetailView` 的 `FALLBACK_DATA` 假模板拆为独立后续任务 `TASK-REAL-DATA-004`（此前分析确认其细节区块受 mapper `analysisToJD` 未填充字段限制——`subtextAnalysis=[]`、`skillGaps` 的 evidence/requirement 为空占位）
+- [x] **roadmap 更新**：`TASK-REAL-DATA-001` 收窄为 Workbench-only；新增 `TASK-REAL-DATA-004 JD 报告去 FALLBACK`；优先清单加第 12 行、退出标准拆为两条
+- [x] **WorkbenchView 去硬编码（核心）**：
+  - 计数：`deliveredCount=12/interviewing=3/pending=5/finished=2` → 从真实 `jobs` 按 `status` 派生；`activeCount`/`appliedThisWeekCount`（本周新增）同步数据化
+  - 6 步管线：`getJobSteps(index)` 硬编码三份假数据 → `getJobSteps(job)` 用 `job.steps`（jdAnalysis/expMatched/customResume/applied/prepStage/reviewStage），首个未 done 标记为 active
+  - 卡片：公司/角色/状态徽章/匹配度从 `job.company`/`job.role`/`job.status`/`job.matchScore` 读取；匹配度因后端 mapper 恒为 0 显示 `—`（不造数）
+  - 下一步行动：改为 `nextUpJobs`（未 finished 按状态优先级排序取前 3）渲染；最近活动：改为 `recentEvents`（从真实 applyDate/lastUpdated 派生相对时间）；AI 建议：改为数据驱动文案（无数据/待处理/正常三态），删除「3 条经历」假声明
+  - 空状态：无 jobs 时展示引导卡而非假数据
+- [x] **验证**：`npm run lint`（tsc --noEmit）通过；`npm run build` 成功——1701 modules，仅有既有 CSS @import 顺序 warning（与本次改动无关）
+- [x] **commits**：`3c03cde` feat(frontend): drive workbench from real dashboard data（2 文件：WorkbenchView.tsx + roadmap；未 push，待用户确认后与 `82bf6c3`/`4e0d14e`/`52fab9f` 一起推送）
+- [x] **过程信息**：工作区既有 WIP 依旧通过显式 `git add` 只纳入本任务文件（WorkbenchView.tsx + roadmap）；匹配度 `matchScore` 恒为 0 为 mapper `submissionToJob` 硬编码所致（后端 dashboard 无 match_score 字段），诚实显示 `—`，后续如需真分数需后端补充返回
+
 ---
 
 **更新规则**：每次会话结束时，AI 必须根据本次实际完成的工作，移动或新增上述列表中的条目，并简要描述进展。
