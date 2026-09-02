@@ -120,7 +120,7 @@ async def jobcraft_experience_upload(
                     },
                 }
                 card_id = db_tools.insert_card(card_data)
-                card = db_tools.get_card(card_id)
+                card = db_tools.get_card(card_id, current_user)
                 if card:
                     created_cards.append(card)
         else:
@@ -131,7 +131,7 @@ async def jobcraft_experience_upload(
                 "source": "resume_upload",
             }
             card_id = db_tools.insert_card(card_data)
-            card = db_tools.get_card(card_id)
+            card = db_tools.get_card(card_id, current_user)
             if card:
                 try:
                     from app.workflows.extract_flow import (
@@ -141,10 +141,10 @@ async def jobcraft_experience_upload(
 
                     cache = run_extract_structured_workflow(resume_text.strip())
                     if cache:
-                        db_tools.update_card(card_id, {"ai_structured": cache})
+                        db_tools.update_card(card_id, {"ai_structured": cache}, current_user)
                     tags = run_recommend_tags_workflow(resume_text.strip())
                     if tags:
-                        db_tools.update_card(card_id, {"tags": tags})
+                        db_tools.update_card(card_id, {"tags": tags}, current_user)
                 except Exception:
                     logger.warning("自动结构化抽取失败")
                 created_cards.append(card)
@@ -239,7 +239,9 @@ def jobcraft_experience_export(
     try:
         if card_ids:
             cards = [
-                db_tools.get_card(cid) for cid in card_ids if db_tools.get_card(cid)
+                db_tools.get_card(cid, current_user)
+                for cid in card_ids
+                if db_tools.get_card(cid, current_user)
             ]
         else:
             cards = db_tools.list_cards(current_user, include_inactive=True)
@@ -352,7 +354,7 @@ def jobcraft_experience_batch(
         if action == "archive":
             for card_id in card_ids:
                 try:
-                    ok = db_tools.update_card(card_id, {"is_active": False})
+                    ok = db_tools.update_card(card_id, {"is_active": False}, current_user)
                     if ok:
                         results["success"].append(card_id)
                     else:
@@ -365,7 +367,7 @@ def jobcraft_experience_batch(
         elif action == "restore":
             for card_id in card_ids:
                 try:
-                    ok = db_tools.update_card(card_id, {"is_active": True})
+                    ok = db_tools.update_card(card_id, {"is_active": True}, current_user)
                     if ok:
                         results["success"].append(card_id)
                     else:
@@ -378,7 +380,7 @@ def jobcraft_experience_batch(
         elif action == "delete":
             for card_id in card_ids:
                 try:
-                    ok = db_tools.delete_card(card_id)
+                    ok = db_tools.delete_card(card_id, current_user)
                     if ok:
                         results["success"].append(card_id)
                     else:
@@ -395,7 +397,7 @@ def jobcraft_experience_batch(
 
             for card_id in card_ids:
                 try:
-                    card = db_tools.get_card(card_id)
+                    card = db_tools.get_card(card_id, current_user)
                     if not card:
                         results["failed"].append(
                             {"card_id": card_id, "reason": "卡片不存在"}
@@ -404,7 +406,7 @@ def jobcraft_experience_batch(
 
                     existing_tags = card.get("tags", [])
                     new_tags = list(set(existing_tags + tags_to_add))
-                    ok = db_tools.update_card(card_id, {"tags": new_tags})
+                    ok = db_tools.update_card(card_id, {"tags": new_tags}, current_user)
 
                     if ok:
                         results["success"].append(card_id)
@@ -440,7 +442,7 @@ def jobcraft_experience_versions(
     card_id: int, current_user: int = Depends(get_current_user)
 ):
     try:
-        card = db_tools.get_card(card_id)
+        card = db_tools.get_card(card_id, current_user)
         if not card:
             raise HTTPException(status_code=404, detail="卡片不存在")
 
@@ -465,7 +467,7 @@ def jobcraft_experience_create_version(
     current_user: int = Depends(get_current_user),
 ):
     try:
-        card = db_tools.get_card(card_id)
+        card = db_tools.get_card(card_id, current_user)
         if not card:
             raise HTTPException(status_code=404, detail="卡片不存在")
 
@@ -503,7 +505,7 @@ def jobcraft_experience_create(
         data["source"] = "manual"
         data["user_id"] = current_user
         card_id = db_tools.insert_card(data)
-        return db_tools.get_card(card_id)
+        return db_tools.get_card(card_id, current_user)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"新建失败: {e}")
 
@@ -516,10 +518,10 @@ def jobcraft_experience_update(
 ):
     updates = {k: v for k, v in payload.model_dump().items() if v is not None}
     try:
-        ok = db_tools.update_card(card_id, updates)
+        ok = db_tools.update_card(card_id, updates, current_user)
         if not ok:
             raise HTTPException(status_code=404, detail="卡片不存在或无变化")
-        return db_tools.get_card(card_id)
+        return db_tools.get_card(card_id, current_user)
     except HTTPException:
         raise
     except Exception as e:
@@ -531,7 +533,7 @@ def jobcraft_experience_delete(
     card_id: int, current_user: int = Depends(get_current_user)
 ):
     try:
-        ok = db_tools.delete_card(card_id)
+        ok = db_tools.delete_card(card_id, current_user)
         if not ok:
             raise HTTPException(status_code=404, detail="卡片不存在")
         return {"deleted": True, "card_id": card_id}
@@ -546,7 +548,7 @@ def jobcraft_experience_structure(
     card_id: int, current_user: int = Depends(get_current_user)
 ):
     try:
-        card = db_tools.get_card(card_id)
+        card = db_tools.get_card(card_id, current_user)
         if not card:
             raise HTTPException(status_code=404, detail="卡片不存在")
         raw_text = card.get("raw_text", "")
@@ -563,8 +565,8 @@ def jobcraft_experience_structure(
                 status_code=500,
                 detail="AI 结构化抽取失败，请检查经历内容是否清晰完整",
             )
-        db_tools.update_card(card_id, {"ai_structured": cache})
-        return db_tools.get_card(card_id)
+        db_tools.update_card(card_id, {"ai_structured": cache}, current_user)
+        return db_tools.get_card(card_id, current_user)
     except HTTPException:
         raise
     except Exception as e:
@@ -577,7 +579,7 @@ def jobcraft_experience_recommend_tags(
     card_id: int, current_user: int = Depends(get_current_user)
 ):
     try:
-        card = db_tools.get_card(card_id)
+        card = db_tools.get_card(card_id, current_user)
         if not card:
             raise HTTPException(status_code=404, detail="卡片不存在")
         from app.workflows.extract_flow import run_recommend_tags_workflow

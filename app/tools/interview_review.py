@@ -830,7 +830,7 @@ def _get_job_context(record: Dict[str, Any], user_id: int = 1) -> Dict[str, Any]
         context["cards"] = db_tools.list_cards(user_id=user_id, include_inactive=False)
         return context
 
-    analysis = db_tools.get_job_analysis(job_id)
+    analysis = db_tools.get_job_analysis(job_id, user_id)
     if analysis:
         context["jd_text"] = analysis.get("jd_text", "")
         context["dimension_requirements"] = analysis.get("dimension_requirements") or []
@@ -840,7 +840,7 @@ def _get_job_context(record: Dict[str, Any], user_id: int = 1) -> Dict[str, Any]
     if selected_ids:
         cards = []
         for cid in selected_ids:
-            card = db_tools.get_card(cid)
+            card = db_tools.get_card(cid, user_id)
             if card:
                 cards.append(card)
         context["cards"] = cards

@@ -18,11 +18,15 @@ class InterviewPrepPayload(BaseModel):
     submission_id: Optional[int] = None
 
 
-def _get_previous_review_summary(submission_id: Optional[int]) -> Optional[str]:
+def _get_previous_review_summary(
+    submission_id: Optional[int], user_id: Optional[int] = None
+) -> Optional[str]:
     if not submission_id:
         return None
     try:
-        rows = db_tools.list_interview_records_by_submission(submission_id)
+        rows = db_tools.list_interview_records_by_submission(
+            submission_id, user_id=user_id
+        )
         if not rows:
             return None
         latest = rows[0]
@@ -59,7 +63,7 @@ def jobcraft_job_interview_prep(
     resume_markdown = None
     previous_review_summary = None
     try:
-        analysis = db_tools.get_job_analysis(job_id)
+        analysis = db_tools.get_job_analysis(job_id, current_user)
         company = (analysis or {}).get("company", "")
         if company:
             from app.agents.company_research_agent import get_or_search_company
@@ -68,18 +72,19 @@ def jobcraft_job_interview_prep(
 
         submission = None
         if payload.submission_id:
-            submission = db_tools.get_submission(payload.submission_id)
+            submission = db_tools.get_submission(payload.submission_id, current_user)
         elif analysis:
             subs = db_tools.list_submissions(current_user)
             for s in subs:
                 if s.get("job_analysis_id") == job_id:
-                    submission = db_tools.get_submission(s["id"])
+                    submission = db_tools.get_submission(s["id"], current_user)
                     break
         if submission:
             resume_markdown = submission.get("resume_markdown")
 
         previous_review_summary = _get_previous_review_summary(
-            payload.submission_id or (submission.get("id") if submission else None)
+            payload.submission_id or (submission.get("id") if submission else None),
+            current_user,
         )
     except Exception:
         logger.warning("加载面试增强数据失败", exc_info=True)
@@ -122,7 +127,7 @@ def jobcraft_job_get_interview_prep(
     from app.tools import interview_pre
 
     try:
-        result = interview_pre.get_interview_prep(job_id)
+        result = interview_pre.get_interview_prep(job_id, current_user)
         if not result:
             raise HTTPException(status_code=404, detail="面试稿不存在")
         return result.model_dump()

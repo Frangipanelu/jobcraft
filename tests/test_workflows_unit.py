@@ -104,7 +104,7 @@ class TestInterviewReviewFlow:
         # mock db_tools
         monkeypatch.setattr(
             "app.workflows.interview_review_flow.db_tools.get_interview_record",
-            lambda rid: _fake_record(rid),
+            lambda rid, user_id=None: _fake_record(rid),
         )
         monkeypatch.setattr(
             "app.workflows.interview_review_flow._get_job_context",
@@ -199,7 +199,7 @@ class TestInterviewReviewFlow:
 
         monkeypatch.setattr(
             "app.workflows.interview_review_flow.db_tools.get_interview_record",
-            lambda rid: _fake_record(rid),
+            lambda rid, user_id=None: _fake_record(rid),
         )
         monkeypatch.setattr(
             "app.workflows.interview_review_flow._get_job_context",
@@ -218,7 +218,7 @@ class TestInterviewReviewFlow:
 
         monkeypatch.setattr(
             "app.workflows.interview_review_flow.db_tools.get_interview_record",
-            lambda rid: None,
+            lambda rid, user_id=None: None,
         )
 
         with pytest.raises(ValueError, match="面试记录不存在"):
@@ -232,7 +232,7 @@ class TestInterviewReviewFlow:
 
         monkeypatch.setattr(
             "app.workflows.interview_review_flow.db_tools.get_interview_record",
-            lambda rid: _fake_record(rid),
+            lambda rid, user_id=None: _fake_record(rid),
         )
         monkeypatch.setattr(
             "app.workflows.interview_review_flow._get_job_context",
@@ -342,11 +342,11 @@ class TestJobAnalysisFlow:
 
         monkeypatch.setattr(
             "app.workflows.job_analysis_flow.db_tools.get_job_analysis",
-            lambda jid: _fake_job_analysis_db(jid),
+            lambda jid, user_id=None: _fake_job_analysis_db(jid),
         )
         monkeypatch.setattr(
             "app.workflows.job_analysis_flow.db_tools.get_card",
-            lambda cid: {
+            lambda cid, user_id=None: {
                 "id": cid,
                 "title": "卡",
                 "raw_text": "文本",
@@ -390,7 +390,7 @@ class TestJobAnalysisFlow:
 
         monkeypatch.setattr(
             "app.workflows.job_analysis_flow.db_tools.get_job_analysis",
-            lambda jid: None,
+            lambda jid, user_id=None: None,
         )
 
         with pytest.raises(ValueError, match="不存在"):
@@ -403,7 +403,7 @@ class TestJobAnalysisFlow:
 
         monkeypatch.setattr(
             "app.workflows.job_analysis_flow.db_tools.get_card",
-            lambda cid: {
+            lambda cid, user_id=None: {
                 "id": cid,
                 "title": "卡",
                 "raw_text": "文本",
@@ -498,7 +498,7 @@ class TestJobAnalysisFlow:
 
         monkeypatch.setattr(
             "app.workflows.job_analysis_flow.db_tools.get_card",
-            lambda cid: None,
+            lambda cid, user_id=None: None,
         )
 
         with pytest.raises(ValueError, match="所选卡片均不可用"):
@@ -531,11 +531,11 @@ class TestJobAnalysisFlow:
 
         monkeypatch.setattr(
             "app.workflows.job_analysis_flow.db_tools.get_job_analysis",
-            lambda jid: _fake_job_analysis_db(jid),
+            lambda jid, user_id=None: _fake_job_analysis_db(jid),
         )
         monkeypatch.setattr(
             "app.workflows.job_analysis_flow.db_tools.get_card",
-            lambda cid: {
+            lambda cid, user_id=None: {
                 "id": cid,
                 "title": "卡",
                 "raw_text": "文本",
@@ -600,11 +600,11 @@ class TestJobAnalysisFlow:
 
         monkeypatch.setattr(
             "app.workflows.job_analysis_flow.db_tools.get_job_analysis",
-            lambda jid: _fake_job_analysis_db(jid),
+            lambda jid, user_id=None: _fake_job_analysis_db(jid),
         )
         monkeypatch.setattr(
             "app.workflows.job_analysis_flow.db_tools.get_card",
-            lambda cid: None,
+            lambda cid, user_id=None: None,
         )
 
         with pytest.raises(ValueError, match="无可用经历卡"):
@@ -764,11 +764,11 @@ class TestInterviewPrepFlow:
         """统一 mock 面试准备依赖"""
         monkeypatch.setattr(
             "app.workflows.interview_prep_flow.db_tools.get_job_analysis",
-            lambda jid: _fake_job_analysis_db(jid),
+            lambda jid, user_id=None: _fake_job_analysis_db(jid),
         )
         monkeypatch.setattr(
             "app.workflows.interview_prep_flow.db_tools.get_card",
-            lambda cid: {
+            lambda cid, user_id=None: {
                 "id": cid,
                 "title": "推荐系统",
                 "raw_text": "做过推荐系统",
@@ -838,7 +838,7 @@ class TestInterviewPrepFlow:
 
         monkeypatch.setattr(
             "app.workflows.interview_prep_flow.db_tools.get_job_analysis",
-            lambda jid: None,
+            lambda jid, user_id=None: None,
         )
 
         with pytest.raises(ValueError, match="不存在"):
@@ -854,11 +854,11 @@ class TestInterviewPrepFlow:
 
         monkeypatch.setattr(
             "app.workflows.interview_prep_flow.db_tools.get_job_analysis",
-            lambda jid: _fake_job_analysis_db(jid),
+            lambda jid, user_id=None: _fake_job_analysis_db(jid),
         )
         monkeypatch.setattr(
             "app.workflows.interview_prep_flow.db_tools.get_card",
-            lambda cid: None,
+            lambda cid, user_id=None: None,
         )
         monkeypatch.setattr(
             "app.workflows.interview_prep_flow.db_tools.get_card_versions_by_source",
@@ -938,11 +938,11 @@ class TestQuestionTableFlow:
 
         monkeypatch.setattr(
             "app.workflows.question_table_flow.db_tools.get_interview_record",
-            lambda rid: _fake_record(rid),
+            lambda rid, user_id=None: _fake_record(rid),
         )
         monkeypatch.setattr(
             "app.workflows.question_table_flow.db_tools.get_job_analysis",
-            lambda jid: _fake_job_analysis_db(jid),
+            lambda jid, user_id=None: _fake_job_analysis_db(jid),
         )
         # mock 解析函数，返回预设的 QA 对
         monkeypatch.setattr(
@@ -1000,7 +1000,7 @@ class TestQuestionTableFlow:
 
         monkeypatch.setattr(
             "app.workflows.question_table_flow.db_tools.get_interview_record",
-            lambda rid: None,
+            lambda rid, user_id=None: None,
         )
 
         with pytest.raises(ValueError, match="面试记录不存在"):
@@ -1012,7 +1012,11 @@ class TestQuestionTableFlow:
 
         monkeypatch.setattr(
             "app.workflows.question_table_flow.db_tools.get_interview_record",
-            lambda rid: {"id": rid, "raw_text": "", "job_analysis_id": None},
+            lambda rid, user_id=None: {
+                "id": rid,
+                "raw_text": "",
+                "job_analysis_id": None,
+            },
         )
 
         # 无 QA 对时 agent 返回空 intent
@@ -1049,11 +1053,11 @@ class TestQuestionTableFlow:
 
         monkeypatch.setattr(
             "app.workflows.question_table_flow.db_tools.get_interview_record",
-            lambda rid: record,
+            lambda rid, user_id=None: record,
         )
         monkeypatch.setattr(
             "app.workflows.question_table_flow.db_tools.get_job_analysis",
-            lambda jid: _fake_job_analysis_db(jid),
+            lambda jid, user_id=None: _fake_job_analysis_db(jid),
         )
         # mock 解析函数，返回预设的 QA 对
         monkeypatch.setattr(

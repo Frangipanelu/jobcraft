@@ -37,8 +37,9 @@ class QuestionTableState(TypedDict):
 def _load_record(state: Dict[str, Any]) -> Dict[str, Any]:
     """第 1 步：加载面试记录与 QA 对（无 LLM）"""
     record_id = state["record_id"]
+    user_id = state.get("user_id")
 
-    record = db_tools.get_interview_record(record_id)
+    record = db_tools.get_interview_record(record_id, user_id)
     if not record:
         raise ValueError(f"面试记录不存在: {record_id}")
 
@@ -47,7 +48,7 @@ def _load_record(state: Dict[str, Any]) -> Dict[str, Any]:
 
     jd_text = ""
     if record.get("job_analysis_id"):
-        analysis = db_tools.get_job_analysis(record["job_analysis_id"])
+        analysis = db_tools.get_job_analysis(record["job_analysis_id"], user_id)
         if analysis:
             jd_text = analysis.get("jd_text", "")
 

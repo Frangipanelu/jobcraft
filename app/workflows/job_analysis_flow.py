@@ -43,6 +43,7 @@ class Step1State(TypedDict):
 
 
 class Step2State(TypedDict):
+    user_id: Optional[int]
     job_analysis_id: int
     card_ids: List[int]
     result: Optional[Dict[str, Any]]
@@ -54,6 +55,7 @@ class ATSOnlyState(TypedDict):
 
 
 class ResumePreviewState(TypedDict):
+    user_id: Optional[int]
     job_id: int
     selected_card_ids: List[int]
     result: Optional[Dict[str, Any]]
@@ -103,7 +105,7 @@ def run_step1_workflow(
 
 def _run_step2(state: Dict[str, Any]) -> Dict[str, Any]:
     job_analysis_id = state["job_analysis_id"]
-    analysis = db_tools.get_job_analysis(job_analysis_id)
+    analysis = db_tools.get_job_analysis(job_analysis_id, state.get("user_id"))
     if not analysis:
         raise ValueError(f"job_analysis #{job_analysis_id} 不存在")
 
@@ -112,7 +114,7 @@ def _run_step2(state: Dict[str, Any]) -> Dict[str, Any]:
 
     cards = []
     for cid in state.get("card_ids", []):
-        c = db_tools.get_card(cid)
+        c = db_tools.get_card(cid, state.get("user_id"))
         if c and c.get("is_active"):
             cards.append(c)
 
@@ -146,6 +148,7 @@ def _run_step2(state: Dict[str, Any]) -> Dict[str, Any]:
 def run_step2_workflow(
     job_analysis_id: int,
     card_ids: List[int],
+    user_id: Optional[int] = None,
 ) -> Dict[str, Any]:
     """Step 2: 缺口分析 + 润色建议。返回 {per_card, global_suggestions, ...}。"""
     workflow = StateGraph(Step2State)
@@ -155,6 +158,7 @@ def run_step2_workflow(
 
     app = workflow.compile()
     initial_state: Step2State = {
+        "user_id": user_id,
         "job_analysis_id": job_analysis_id,
         "card_ids": card_ids,
         "result": None,
@@ -177,7 +181,7 @@ def _run_legacy_analysis(state: Dict[str, Any]) -> Dict[str, Any]:
 
     cards = []
     for cid in card_ids:
-        c = db_tools.get_card(cid)
+        c = db_tools.get_card(cid, user_id)
         if c and c.get("is_active"):
             cards.append(c)
     if not cards:
@@ -309,14 +313,15 @@ def run_analyze_ats_workflow(jd_text: str) -> Dict[str, Any]:
 
 def _run_resume_preview(state: Dict[str, Any]) -> Dict[str, Any]:
     job_id = state["job_id"]
-    analysis = db_tools.get_job_analysis(job_id)
+    user_id = state.get("user_id")
+    analysis = db_tools.get_job_analysis(job_id, user_id)
     if not analysis:
         raise ValueError(f"job_analysis #{job_id} 不存在")
 
     selected_ids = state.get("selected_card_ids") or []
     cards = []
     for cid in selected_ids:
-        c = db_tools.get_card(cid)
+        c = db_tools.get_card(cid, user_id)
         if c and c.get("is_active"):
             cards.append(c)
     if not cards:
@@ -360,6 +365,7 @@ def _run_resume_preview(state: Dict[str, Any]) -> Dict[str, Any]:
 def run_resume_preview_workflow(
     job_id: int,
     selected_card_ids: List[int],
+    user_id: Optional[int] = None,
 ) -> Dict[str, Any]:
     """简历预览重新匹配。返回 {job_analysis_id, resume_markdown, match_score, ats_profile}。"""
     workflow = StateGraph(ResumePreviewState)
@@ -369,6 +375,7 @@ def run_resume_preview_workflow(
 
     app = workflow.compile()
     initial_state: ResumePreviewState = {
+        "user_id": user_id,
         "job_id": job_id,
         "selected_card_ids": selected_card_ids,
         "result": None,

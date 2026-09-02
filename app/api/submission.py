@@ -52,7 +52,7 @@ def jobcraft_submission_create(
         data = payload.model_dump()
         data["user_id"] = current_user
         sid = db_tools.insert_submission(data)
-        return db_tools.get_submission(sid)
+        return db_tools.get_submission(sid, current_user)
     except Exception as e:
         logger.exception("创建投递失败")
         raise HTTPException(status_code=500, detail=f"创建投递失败: {e}")
@@ -62,7 +62,7 @@ def jobcraft_submission_create(
 def jobcraft_submission_get(
     submission_id: int, current_user: int = Depends(get_current_user)
 ):
-    s = db_tools.get_submission(submission_id)
+    s = db_tools.get_submission(submission_id, current_user)
     if not s:
         raise HTTPException(status_code=404, detail="投递记录不存在")
     return s
@@ -76,10 +76,10 @@ def jobcraft_submission_update(
 ):
     updates = {k: v for k, v in payload.model_dump().items() if v is not None}
     try:
-        ok = db_tools.update_submission(submission_id, updates)
+        ok = db_tools.update_submission(submission_id, updates, current_user)
         if not ok:
             raise HTTPException(status_code=404, detail="投递记录不存在或无变化")
-        return db_tools.get_submission(submission_id)
+        return db_tools.get_submission(submission_id, current_user)
     except HTTPException:
         raise
     except Exception as e:
@@ -91,7 +91,7 @@ def jobcraft_submission_delete(
     submission_id: int, current_user: int = Depends(get_current_user)
 ):
     try:
-        ok = db_tools.delete_submission(submission_id)
+        ok = db_tools.delete_submission(submission_id, current_user)
         if not ok:
             raise HTTPException(status_code=404, detail="投递记录不存在")
         return {"deleted": True}
@@ -204,7 +204,7 @@ async def jobcraft_submission_manual(
                 "status": "已投递",
             }
         )
-        return db_tools.get_submission(sid)
+        return db_tools.get_submission(sid, current_user)
     except Exception as e:
         logger.exception("创建投递记录失败")
         raise HTTPException(status_code=500, detail=f"创建投递记录失败: {e}")

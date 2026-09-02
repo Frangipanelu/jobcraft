@@ -132,9 +132,11 @@ def _build_interview_prompt(
     )
 
 
-def get_interview_prep(job_analysis_id: int) -> Optional[InterviewPrepResult]:
-    """从数据库读取面试准备稿"""
-    row = db_tools.get_interview_prep_by_job(job_analysis_id)
+def get_interview_prep(
+    job_analysis_id: int, user_id: Optional[int] = None
+) -> Optional[InterviewPrepResult]:
+    """从数据库读取面试准备稿（可选按 user 过滤所有权）"""
+    row = db_tools.get_interview_prep_by_job(job_analysis_id, user_id)
     if not row:
         return None
 

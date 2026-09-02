@@ -73,16 +73,26 @@ VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             return cur.lastrowid
 
 
-def get_interview_prep_by_job(job_id: int) -> Optional[Dict[str, Any]]:
-    """按 job_analysis_id 获取最新面试准备稿"""
+def get_interview_prep_by_job(
+    job_id: int, user_id: Optional[int] = None
+) -> Optional[Dict[str, Any]]:
+    """按 job_analysis_id 获取最新面试准备稿（可选按 user_id 过滤所有权）"""
     _ensure_interview_preps_table()
     config = _jc_config()
+    sql = (
+        "SELECT * FROM interview_preps WHERE job_analysis_id=%s "
+        "ORDER BY created_at DESC LIMIT 1"
+    )
+    params: List[Any] = [job_id]
+    if user_id is not None:
+        sql = (
+            "SELECT * FROM interview_preps WHERE job_analysis_id=%s AND user_id=%s "
+            "ORDER BY created_at DESC LIMIT 1"
+        )
+        params.append(user_id)
     with connect(**config) as conn:
         with conn.cursor(dictionary=True) as cur:
-            cur.execute(
-                "SELECT * FROM interview_preps WHERE job_analysis_id=%s ORDER BY created_at DESC LIMIT 1",
-                (job_id,),
-            )
+            cur.execute(sql, tuple(params))
             row = cur.fetchone()
     if not row:
         return None
@@ -233,13 +243,20 @@ def update_interview_record_status(record_id: int, status: str) -> None:
             )
 
 
-def get_interview_record(record_id: int) -> Optional[Dict[str, Any]]:
-    """获取单条面试记录"""
+def get_interview_record(
+    record_id: int, user_id: Optional[int] = None
+) -> Optional[Dict[str, Any]]:
+    """获取单条面试记录（可选按 user_id 过滤所有权）"""
     _ensure_interview_records_table()
     config = _jc_config()
+    sql = "SELECT * FROM interview_records WHERE id=%s"
+    params: List[Any] = [record_id]
+    if user_id is not None:
+        sql += " AND user_id=%s"
+        params.append(user_id)
     with connect(**config) as conn:
         with conn.cursor(dictionary=True) as cur:
-            cur.execute("SELECT * FROM interview_records WHERE id=%s", (record_id,))
+            cur.execute(sql, tuple(params))
             row = cur.fetchone()
     if not row:
         return None
@@ -385,14 +402,21 @@ def list_interview_qa_pairs(record_id: int) -> List[Dict[str, Any]]:
     ]
 
 
-def delete_interview_record(record_id: int) -> None:
-    """删除面试记录及其 QA 对"""
+def delete_interview_record(record_id: int, user_id: Optional[int] = None) -> None:
+    """删除面试记录及其 QA 对（可选按 user_id 过滤所有权，越权时无操作）"""
     _ensure_interview_records_table()
     _ensure_interview_qa_pairs_table()
     config = _jc_config()
     with connect(**config) as conn:
         with conn.cursor() as cur:
+            sql = "DELETE FROM interview_records WHERE id=%s"
+            params: List[Any] = [record_id]
+            if user_id is not None:
+                sql += " AND user_id=%s"
+                params.append(user_id)
+            cur.execute(sql, tuple(params))
+            if cur.rowcount == 0:
+                return
             cur.execute(
                 "DELETE FROM interview_qa_pairs WHERE record_id=%s", (record_id,)
             )
-            cur.execute("DELETE FROM interview_records WHERE id=%s", (record_id,))

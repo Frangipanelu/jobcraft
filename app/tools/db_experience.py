@@ -297,13 +297,18 @@ def count_search_cards(
             return cur.fetchone()[0]
 
 
-def get_card(card_id: int) -> Optional[Dict[str, Any]]:
-    """按主键获取单张经历卡"""
+def get_card(card_id: int, user_id: Optional[int] = None) -> Optional[Dict[str, Any]]:
+    """按主键获取单张经历卡（可选按 user_id 过滤所有权）"""
     _ensure_experience_card_columns()
     config = _jc_config()
+    sql = "SELECT * FROM experience_card WHERE id=%s"
+    params: List[Any] = [card_id]
+    if user_id is not None:
+        sql += " AND user_id=%s"
+        params.append(user_id)
     with connect(**config) as conn:
         with conn.cursor(dictionary=True) as cur:
-            cur.execute("SELECT * FROM experience_card WHERE id=%s", (card_id,))
+            cur.execute(sql, tuple(params))
             row = cur.fetchone()
     return _row_to_card(row) if row else None
 
@@ -373,12 +378,14 @@ def insert_card(data: Dict[str, Any]) -> int:
             return cur.lastrowid
 
 
-def update_card(card_id: int, updates: Dict[str, Any]) -> bool:
+def update_card(
+    card_id: int, updates: Dict[str, Any], user_id: Optional[int] = None
+) -> bool:
     """
     按字段白名单增量更新
 
     只更新调用方实际传入的字段,避免覆盖空值;
-    JSON 字段统一序列化
+    JSON 字段统一序列化; 可选按 user_id 过滤所有权
     """
     _ensure_experience_card_columns()
     field_map = {
@@ -412,18 +419,21 @@ def update_card(card_id: int, updates: Dict[str, Any]) -> bool:
         return False
     values.append(card_id)
     config = _jc_config()
+    sql = "UPDATE experience_card SET " + ", ".join(sets) + " WHERE id=%s"
+    if user_id is not None:
+        sql += " AND user_id=%s"
+        values.append(user_id)
     with connect(**config) as conn:
         with conn.cursor() as cur:
-            cur.execute(
-                "UPDATE experience_card SET " + ", ".join(sets) + " WHERE id=%s",
-                tuple(values),
-            )
+            cur.execute(sql, tuple(values))
             return cur.rowcount > 0
 
 
-def delete_card(card_id: int) -> bool:
+def delete_card(card_id: int, user_id: Optional[int] = None) -> bool:
     """
     物理删除一张经历卡, 同时清理 experience_job_mapping 关联 (FK 已设 CASCADE 也行)
+
+    可选按 user_id 过滤所有权: 越权删除时返回 False
     """
     config = _jc_config()
     with connect(**config) as conn:
@@ -434,10 +444,12 @@ def delete_card(card_id: int) -> bool:
                 "DELETE FROM experience_job_mapping WHERE experience_id=%s",
                 (card_id,),
             )
-            cur.execute(
-                "DELETE FROM experience_card WHERE id=%s",
-                (card_id,),
-            )
+            sql = "DELETE FROM experience_card WHERE id=%s"
+            params: List[Any] = [card_id]
+            if user_id is not None:
+                sql += " AND user_id=%s"
+                params.append(user_id)
+            cur.execute(sql, tuple(params))
             return cur.rowcount > 0
 
 

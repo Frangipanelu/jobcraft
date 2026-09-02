@@ -69,7 +69,7 @@ def _load_data(state: Dict[str, Any]) -> Dict[str, Any]:
     record_id = state["record_id"]
     user_id = state.get("user_id", 1)
 
-    record = db_tools.get_interview_record(record_id)
+    record = db_tools.get_interview_record(record_id, user_id)
     if not record:
         raise ValueError(f"面试记录不存在: {record_id}")
 

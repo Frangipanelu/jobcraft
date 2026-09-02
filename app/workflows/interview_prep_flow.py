@@ -39,7 +39,7 @@ def _generate_prep(state: Dict[str, Any]) -> Dict[str, Any]:
     user_id = state.get("user_id", 1)
     submission_id = state.get("submission_id")
 
-    analysis = db_tools.get_job_analysis(job_analysis_id)
+    analysis = db_tools.get_job_analysis(job_analysis_id, user_id)
     if not analysis:
         raise ValueError(f"job_analysis #{job_analysis_id} 不存在")
 
@@ -52,7 +52,7 @@ def _generate_prep(state: Dict[str, Any]) -> Dict[str, Any]:
     cards = []
     card_versions: Dict[int, str] = {}
     for cid in card_ids:
-        c = db_tools.get_card(cid)
+        c = db_tools.get_card(cid, user_id)
         if c and c.get("is_active"):
             cards.append(c)
     for version in db_tools.get_card_versions_by_source(

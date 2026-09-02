@@ -102,12 +102,19 @@ def insert_submission(data: Dict[str, Any]) -> int:
             return cur.lastrowid
 
 
-def get_submission(submission_id: int) -> Optional[Dict[str, Any]]:
+def get_submission(
+    submission_id: int, user_id: Optional[int] = None
+) -> Optional[Dict[str, Any]]:
     _ensure_resume_submission_table()
     config = _jc_config()
+    sql = "SELECT * FROM resume_submission WHERE id=%s"
+    params: List[Any] = [submission_id]
+    if user_id is not None:
+        sql += " AND user_id=%s"
+        params.append(user_id)
     with connect(**config) as conn:
         with conn.cursor(dictionary=True) as cur:
-            cur.execute("SELECT * FROM resume_submission WHERE id=%s", (submission_id,))
+            cur.execute(sql, tuple(params))
             row = cur.fetchone()
     if not row:
         return None
@@ -160,7 +167,9 @@ def list_submissions(user_id: int = 1, limit: int = 50) -> List[Dict[str, Any]]:
     return result
 
 
-def update_submission(submission_id: int, updates: Dict[str, Any]) -> bool:
+def update_submission(
+    submission_id: int, updates: Dict[str, Any], user_id: Optional[int] = None
+) -> bool:
     _ensure_resume_submission_table()
     field_map = {
         "position": "position",
@@ -187,21 +196,27 @@ def update_submission(submission_id: int, updates: Dict[str, Any]) -> bool:
         return False
     values.append(submission_id)
     config = _jc_config()
+    sql = "UPDATE resume_submission SET " + ", ".join(sets) + " WHERE id=%s"
+    if user_id is not None:
+        sql += " AND user_id=%s"
+        values.append(user_id)
     with connect(**config) as conn:
         with conn.cursor() as cur:
-            cur.execute(
-                "UPDATE resume_submission SET " + ", ".join(sets) + " WHERE id=%s",
-                tuple(values),
-            )
+            cur.execute(sql, tuple(values))
             return cur.rowcount > 0
 
 
-def delete_submission(submission_id: int) -> bool:
+def delete_submission(submission_id: int, user_id: Optional[int] = None) -> bool:
     _ensure_resume_submission_table()
     config = _jc_config()
+    sql = "DELETE FROM resume_submission WHERE id=%s"
+    params: List[Any] = [submission_id]
+    if user_id is not None:
+        sql += " AND user_id=%s"
+        params.append(user_id)
     with connect(**config) as conn:
         with conn.cursor() as cur:
-            cur.execute("DELETE FROM resume_submission WHERE id=%s", (submission_id,))
+            cur.execute(sql, tuple(params))
             return cur.rowcount > 0
 
 
@@ -220,19 +235,27 @@ def get_submission_prep_count(submission_id: int) -> int:
 
 
 def list_interview_records_by_submission(
-    submission_id: int, limit: int = 5
+    submission_id: int, user_id: Optional[int] = None, limit: int = 5
 ) -> List[Dict[str, Any]]:
-    """按 submission_id 获取面试记录"""
+    """按 submission_id 获取面试记录（可选按 user_id 过滤所有权）"""
     from app.tools.db_interview import _ensure_interview_records_table
 
     _ensure_interview_records_table()
     config = _jc_config()
+    sql = (
+        "SELECT * FROM interview_records WHERE submission_id=%s "
+        "ORDER BY created_at DESC LIMIT %s"
+    )
+    params: List[Any] = [submission_id, limit]
+    if user_id is not None:
+        sql = (
+            "SELECT * FROM interview_records WHERE submission_id=%s AND user_id=%s "
+            "ORDER BY created_at DESC LIMIT %s"
+        )
+        params = [submission_id, user_id, limit]
     with connect(**config) as conn:
         with conn.cursor(dictionary=True) as cur:
-            cur.execute(
-                "SELECT * FROM interview_records WHERE submission_id=%s ORDER BY created_at DESC LIMIT %s",
-                (submission_id, limit),
-            )
+            cur.execute(sql, tuple(params))
             rows = cur.fetchall()
     result = []
     for row in rows:

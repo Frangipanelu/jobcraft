@@ -106,7 +106,9 @@ def jobcraft_step2_gap_polish(
     try:
         from app.workflows.job_analysis_flow import run_step2_workflow
 
-        result = run_step2_workflow(payload.job_analysis_id, payload.card_ids)
+        result = run_step2_workflow(
+            payload.job_analysis_id, payload.card_ids, current_user
+        )
         return result
     except HTTPException:
         raise
@@ -184,7 +186,7 @@ def jobcraft_job_list(current_user: int = Depends(get_current_user), limit: int 
 @router.get("/analyze/{job_id}")
 def jobcraft_job_get(job_id: int, current_user: int = Depends(get_current_user)):
     try:
-        analysis = db_tools.get_job_analysis(job_id)
+        analysis = db_tools.get_job_analysis(job_id, current_user)
         if not analysis:
             raise HTTPException(status_code=404, detail="记录不存在")
         return analysis
@@ -197,7 +199,7 @@ def jobcraft_job_get(job_id: int, current_user: int = Depends(get_current_user))
 @router.delete("/analyze/{job_id}")
 def jobcraft_job_delete(job_id: int, current_user: int = Depends(get_current_user)):
     try:
-        ok = db_tools.delete_job_analysis(job_id)
+        ok = db_tools.delete_job_analysis(job_id, current_user)
         if not ok:
             raise HTTPException(status_code=404, detail="记录不存在")
         return {"ok": True}
@@ -220,6 +222,7 @@ def jobcraft_job_save_resume(
             selected_card_ids=payload.selected_card_ids,
             card_versions=payload.card_versions,
             personal_info=payload.personal_info,
+            user_id=current_user,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -256,7 +259,7 @@ def jobcraft_job_resume_preview(
 ):
     payload = payload or {}
     try:
-        analysis = db_tools.get_job_analysis(job_id)
+        analysis = db_tools.get_job_analysis(job_id, current_user)
         if not analysis:
             raise HTTPException(
                 status_code=404, detail=f"job_analysis #{job_id} 不存在"
@@ -266,7 +269,7 @@ def jobcraft_job_resume_preview(
         )
         cards = []
         for cid in selected_ids:
-            c = db_tools.get_card(cid)
+            c = db_tools.get_card(cid, current_user)
             if c and c.get("is_active"):
                 cards.append(c)
         if not cards:
@@ -274,7 +277,7 @@ def jobcraft_job_resume_preview(
 
         from app.workflows.job_analysis_flow import run_resume_preview_workflow
 
-        result = run_resume_preview_workflow(job_id, selected_ids)
+        result = run_resume_preview_workflow(job_id, selected_ids, current_user)
         return result
     except HTTPException:
         raise

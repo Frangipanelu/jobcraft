@@ -268,7 +268,7 @@ async def jobcraft_interview_review_parse_preview(
 
     jd_text = ""
     if job_analysis_id:
-        analysis = db_tools.get_job_analysis(job_analysis_id)
+        analysis = db_tools.get_job_analysis(job_analysis_id, current_user)
         if analysis:
             jd_text = analysis.get("jd_text", "")
 
@@ -360,7 +360,7 @@ def jobcraft_interview_review_detail(
     record_id: int, current_user: int = Depends(get_current_user)
 ):
     try:
-        record = db_tools.get_interview_record(record_id)
+        record = db_tools.get_interview_record(record_id, current_user)
         if not record:
             raise HTTPException(status_code=404, detail="面试记录不存在")
         qa_pairs = db_tools.list_interview_qa_pairs(record_id)
@@ -380,7 +380,7 @@ def jobcraft_interview_review_delete(
     record_id: int, current_user: int = Depends(get_current_user)
 ):
     try:
-        db_tools.delete_interview_record(record_id)
+        db_tools.delete_interview_record(record_id, current_user)
         return {"status": "deleted", "record_id": record_id}
     except Exception as e:
         logger.exception("删除面试复盘失败")

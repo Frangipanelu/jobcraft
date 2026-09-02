@@ -54,13 +54,20 @@ def insert_job_analysis(data: Dict[str, Any]) -> int:
             return cur.lastrowid
 
 
-def get_job_analysis(job_id: int) -> Optional[Dict[str, Any]]:
-    """按主键获取岗位分析记录"""
+def get_job_analysis(
+    job_id: int, user_id: Optional[int] = None
+) -> Optional[Dict[str, Any]]:
+    """按主键获取岗位分析记录（可选按 user_id 过滤所有权）"""
     _ensure_job_analysis_columns()
     config = _jc_config()
+    sql = "SELECT * FROM job_analysis WHERE id=%s"
+    params: List[Any] = [job_id]
+    if user_id is not None:
+        sql += " AND user_id=%s"
+        params.append(user_id)
     with connect(**config) as conn:
         with conn.cursor(dictionary=True) as cur:
-            cur.execute("SELECT * FROM job_analysis WHERE id=%s", (job_id,))
+            cur.execute(sql, tuple(params))
             row = cur.fetchone()
     if not row:
         return None
@@ -99,8 +106,8 @@ def list_job_analyses(user_id: int, limit: int = 20) -> List[Dict[str, Any]]:
     return rows
 
 
-def delete_job_analysis(job_id: int) -> bool:
-    """删除岗位分析记录（同时清理关联的 mapping 与 prep 记录）"""
+def delete_job_analysis(job_id: int, user_id: Optional[int] = None) -> bool:
+    """删除岗位分析记录（同时清理关联的 mapping 与 prep 记录；可选按 user_id 过滤所有权）"""
     config = _jc_config()
     with connect(**config) as conn:
         with conn.cursor() as cur:
@@ -110,7 +117,12 @@ def delete_job_analysis(job_id: int) -> bool:
             cur.execute(
                 "DELETE FROM interview_preps WHERE job_analysis_id=%s", (job_id,)
             )
-            cur.execute("DELETE FROM job_analysis WHERE id=%s", (job_id,))
+            sql = "DELETE FROM job_analysis WHERE id=%s"
+            params: List[Any] = [job_id]
+            if user_id is not None:
+                sql += " AND user_id=%s"
+                params.append(user_id)
+            cur.execute(sql, tuple(params))
             return cur.rowcount > 0
 
 

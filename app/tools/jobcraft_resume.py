@@ -30,21 +30,23 @@ def generate_resume(
     selected_card_ids: List[int],
     card_versions: Optional[Dict[int, str]] = None,
     personal_info: Optional[Dict[str, Any]] = None,
+    user_id: Optional[int] = None,
 ) -> Dict[str, Any]:
     """
     生成定制简历
 
     :param card_versions: {card_id: edited_text}，前端保存后的版本 map
     :param personal_info: {name/phone/email/city/github/education/years}
+    :param user_id: 按用户过滤所有权（越权时 404）
     :return: {job_analysis_id, resume_path, resume_markdown, resume_html}
     """
-    analysis = db_tools.get_job_analysis(job_analysis_id)
+    analysis = db_tools.get_job_analysis(job_analysis_id, user_id)
     if not analysis:
         raise ValueError(f"job_analysis #{job_analysis_id} 不存在")
 
     cards = []
     for cid in selected_card_ids:
-        c = db_tools.get_card(cid)
+        c = db_tools.get_card(cid, user_id)
         if c and c.get("is_active"):
             cards.append(c)
     if not cards:
