@@ -75,7 +75,7 @@ TASK-OBS-001 / TASK-DEPS-001 / TASK-DOCS-001  (阶段 5)
 - **Acceptance Criteria**：无 token 访问业务端点返回 401；有 token 以 token 用户身份访问。
 - **Expected Commit**：`feat(auth): enforce JWT on business endpoints`
 - **Status（2026-09-02）**：✅ 已完成——commit `8599e80`（后端强制认证+注册加固+测试，合法）与 `6a0f121`（前端登录/注册闭环，移除 default-login）。工作区与提交快照 `pytest 315 passed / 6 skipped`，`ruff check .` 与前端 `npm run build`/`tsc --noEmit` 通过。
-- **遗留**：R2（TASK-OWN-001 按 ID 的所有权过滤）与前端合同已记账为后续阶段，本次未做（后端认证注入用户后，按 ID 读取仍以客户端传入 ID 为准，需下一任务跟进）。
+- **遗留**：~~R2（TASK-OWN-001 按 ID 的所有权过滤）~~ 已于 commit `09aa805` 完成；前端合同已记账为后续阶段。
 
 ### TASK-OWN-001 get/update/delete DAO 增加所有权过滤
 
@@ -88,6 +88,7 @@ TASK-OBS-001 / TASK-DEPS-001 / TASK-DOCS-001  (阶段 5)
 - **Tests**：越权测试（用户 A 的 ID，用户 B 访问 → 404/403，不得返回数据）。
 - **Acceptance Criteria**：跨用户按 ID 访问返回空/404；同级用户不可读他人数据。
 - **Expected Commit**：`fix(security): enforce ownership on by-id DAO operations`
+- **Status（2026-09-02）**：✅ 已完成——commit `09aa805`。`get_card/update_card/delete_card`（db_experience）、`get_job_analysis/delete_job_analysis`（db_job）、`get_submission/update_submission/delete_submission`（db_submission）、`get_interview_prep_by_job/get_interview_record/delete_interview_record`（db_interview）均增加 `user_id`（可选）参数，传入时 WHERE 追加 `AND user_id=%s`；Controller/工具/工作流全部传入 `current_user`。新增 `get_submission` 复盘摘要路径过滤（`list_interview_records_by_submission`）。新增 `tests/test_ownership_filtering.py`（15 passed），提交快照 `pytest 184 passed` 且 `ruff check` 绿。
 
 ### TASK-INJ-001 收敛 SQL 注入面
 
@@ -100,6 +101,7 @@ TASK-OBS-001 / TASK-DEPS-001 / TASK-DOCS-001  (阶段 5)
 - **Files**：`app/tools/db_tools.py` 及调用方。
 - **Tests**：注入 payload 测试（`'; DROP TABLE ...`）。
 - **Expected Commit**：`fix(security): remove raw SQL execution surface`
+- **Status（2026-09-02）**：✅ 已完成——commit `b681f2c`。确认 `list_sql_tables/get_table_data/execute_sql_query` 三个 `@tool` 无任何调用方（死代码），予以下线；`db_tools.py` 改为自包含的兼容层（本地定义 `get_db_config/_jc_config/JOBCRAFT_DB`，保留 `connect` 与各 `db_*` re-export），提交快照不引用未跟踪的 `db_config.py`。`tests/test_tools_extra_unit.py` 恢复全绿（53 passed）。
 
 ### TASK-AUTH-002 移除默认凭据与后门
 
@@ -108,7 +110,7 @@ TASK-OBS-001 / TASK-DEPS-001 / TASK-DOCS-001  (阶段 5)
 - **Scope**：secret 改为启动时强制 env（缺失则失败）；`default-login` 移入 dev-only 或删除；DB 默认账号移除。
 - **Dependencies**：TASK-AUTH-001。
 - **Expected Commit**：`fix(security): remove hardcoded secrets and default-login backdoor`
-- **Status（2026-09-02）**：⏳ 部分完成——`default-login` 已随 commit `6a0f121` 移除；`auth/__init__.py` 的 JWT secret 兜底与 `db/config.py` 的 `root/root` 默认账号仍未处理，留待本任务（或后续安全任务）跟进。
+- **Status（2026-09-02）**：✅ 已完成——`default-login` 已随 commit `6a0f121` 移除；commit `8878459` 处理剩余两项：`auth/__init__.py` 改为 `load_dotenv(override=True)` 后强制要求 `JWT_SECRET_KEY`（缺失即 `RuntimeError`），移除硬编码 dev secret 兜底；`db/config.py` 移除 `root/root` 默认账号，`MYSQL_USER/MYSQL_PASSWORD` 必须由 env 注入。已验证缺失时启动即失败。
 
 ---
 
@@ -281,16 +283,16 @@ TASK-OBS-001 / TASK-DEPS-001 / TASK-DOCS-001  (阶段 5)
 
 # 9. 优先实施清单（前 6 个 Task）
 
-| 顺序 | Task | 优先级 | 依赖 | 用户价值 |
-|---|---|---:|---|---|
-| 1 | TASK-AUTH-001 强制认证 | P0 | — | 安全 |
-| 2 | TASK-OWN-001 所有权过滤 | P0 | AUTH | 安全 |
-| 3 | TASK-INJ-001 注入收敛 | P0 | — | 安全 |
-| 4 | TASK-AUTH-002 移除默认凭据 | P0 | AUTH | 安全 |
-| 5 | TASK-TYPE-001 统一类型 | P0 | — | 契约稳定 |
-| 6 | TASK-REAL-DATA-001 首页真实数据 | P0 | TYPE | 产品可信 |
+| 顺序 | Task | 优先级 | 依赖 | 用户价值 | 状态 |
+|---|---:|---|---|---|---|
+| 1 | TASK-AUTH-001 强制认证 | P0 | — | 安全 | ✅ 完成 |
+| 2 | TASK-OWN-001 所有权过滤 | P0 | AUTH | 安全 | ✅ 完成 |
+| 3 | TASK-INJ-001 注入收敛 | P0 | — | 安全 | ✅ 完成 |
+| 4 | TASK-AUTH-002 移除默认凭据 | P0 | AUTH | 安全 | ✅ 完成 |
+| 5 | TASK-TYPE-001 统一类型 | P0 | — | 契约稳定 | ⏳ 待办 |
+| 6 | TASK-REAL-DATA-001 首页真实数据 | P0 | TYPE | 产品可信 | ⏳ 待办 |
 
-> 前 4 个为安全基线，建议一次性按顺序在同一次迭代内完成；随后再进入 Contract 对齐。
+> 前 4 个安全基线任务已于 2026-09-02 全部完成（`8599e80`/`6a0f121`/`b681f2c`/`09aa805`/`8878459`）；随后进入 Contract 对齐。
 
 ---
 

@@ -295,4 +295,16 @@
 
 ---
 
+### v0.16 安全基线收尾：所有权过滤 + 注入收敛 + 移除默认凭据（本轮）
+
+- [x] **R2 所有权过滤（TASK-OWN-001）**：`get_card/update_card/delete_card`（db_experience）、`get_job_analysis/delete_job_analysis`（db_job）、`get_submission/update_submission/delete_submission`（db_submission）、`get_interview_prep_by_job/get_interview_record/delete_interview_record`（db_interview）全部增加可选 `user_id` 参数，传入时 WHERE 追加 `AND user_id=%s`；Controller/工具/工作流全部透传 `current_user`；另补 `list_interview_records_by_submission` 的 user_id 过滤（复盘摘要泄漏路径）
+- [x] **新增越权测试**：`tests/test_ownership_filtering.py`（15 passed）——DAO 层验证 SQL 含 `AND user_id=%s` + 参数含 user_id；无 user_id 时不强制过滤；API 层验证 Controller 把 current_user 传入 get_card/get_job_analysis/get_submission
+- [x] **R3 注入收敛（TASK-INJ-001）**：确认 `list_sql_tables/get_table_data/execute_sql_query` 三个 `@tool` 无调用方（死代码）后下线；`db_tools.py` 自重写为自包含兼容层（本地定义 `get_db_config/_jc_config/JOBCRAFT_DB`、保留 `connect` 与各 `db_*` re-export），提交快照不引用未跟踪的 `db_config.py`
+- [x] **R4 移除默认凭据（TASK-AUTH-002）**：`auth/__init__.py` `load_dotenv(override=True)` 后强制要求 `JWT_SECRET_KEY`（缺失即 `RuntimeError`），移除硬编码 dev secret 兜底；`db/config.py` 移除 `root/root` 默认用户/密码，`MYSQL_USER/MYSQL_PASSWORD` 必须由 env 注入（已验证缺失时启动即失败）
+- [x] **修复既有测试回归**：`test_workflows_unit.py` 29 个失败源于 DAO 加 `user_id` 参数后 mock lambda 参数不匹配，统一改为接受 `user_id=None` 可选参；`test_tools_extra_unit.py` 11 个失败源于 WIP `db_tools.py` 丢失 `connect/get_db_config`，随 INJ-001 自包含重构修复
+- [x] **验证**：工作区全量 `uv run pytest tests/ -q` 330 passed、6 skipped；`ruff check .` 绿；OWN-001/AUTH-002 提交快照经独立 worktree 验证 `ruff` 绿 + 相关测试通过；INJ-001 提交后 `test_tools_extra_unit.py` 53 passed
+- [x] **commits**：`b681f2c` refactor(security): remove SQL injection tools（INJ-001）；`09aa805` feat(security): owner scoping for by-id DAO + tests（OWN-001，18 文件）；`8878459` fix(security): require JWT secret and DB credentials via env（AUTH-002）
+
+---
+
 **更新规则**：每次会话结束时，AI 必须根据本次实际完成的工作，移动或新增上述列表中的条目，并简要描述进展。
