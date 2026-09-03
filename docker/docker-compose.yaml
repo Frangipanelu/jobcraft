@@ -1,6 +1,8 @@
-# JobCraft 本地 MySQL 环境
+# JobCraft 本地开发环境
 #
-# 运行位置：在项目根目录执行 docker compose -f docker/docker-compose.yaml up -d。
+# 启动方式：
+#   开发模式（仅 MySQL）：docker compose -f docker/docker-compose.yaml up -d mysql
+#   生产模式（全部服务）：docker compose -f docker/docker-compose.yaml up -d --build
 
 name: jobcraft
 
@@ -20,7 +22,7 @@ services:
       - --default-time-zone=+08:00
       - --sql-mode=TRADITIONAL
     ports:
-      - "${MYSQL_PORT:-3306}:3306"
+      - "3308:3306"
     volumes:
       - jobcraft_mysql_data:/var/lib/mysql
       - ./mysql/jobcraft.sql:/docker-entrypoint-initdb.d/01-init-jobcraft.sql:ro
@@ -34,6 +36,36 @@ services:
       timeout: 5s
       retries: 10
       start_period: 30s
+
+  backend:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.backend
+    container_name: jobcraft-backend
+    restart: unless-stopped
+    env_file: ../.env
+    environment:
+      MYSQL_HOST: mysql
+      ALLOWED_ORIGINS: http://localhost,http://localhost:80,http://localhost:3000
+    ports:
+      - "8000:8000"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    volumes:
+      - ../output:/app/output
+      - ../updated:/app/updated
+
+  frontend:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.frontend
+    container_name: jobcraft-frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
 
 volumes:
   jobcraft_mysql_data:
