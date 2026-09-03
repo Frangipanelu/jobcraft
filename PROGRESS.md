@@ -401,6 +401,16 @@
 > - [x] 说明：因 mock-chat 端点只返回 `reply`（无逐题四维评分），改为整体完成后生成真实复盘，而非保留逐题假分数卡
 >   - `commit_id: 59ab3f0`（已推 `origin/main`）
 
+> **TASK-REAL-DATA-003 复盘/新增向导去 Mock 评分**
+>
+> - [x] `buildReviewPatchFromAnalysis`（新增 mapper）：把后端 `InterviewReviewResult`（overall_score/summary/strengths/weaknesses/action_items/questions）映射为前端 `InterviewReview`，只使用真实数据（四维诊断沿用每题真实 score 派生，不造随机数）
+> - [x] `createReviewFromTranscript`：create + analyze 串联，用真实分析结果填充 review，删除 `Math.random()`、硬编码 competencies/aiDiagnosis，复用 `addInterviewReview` 统一落库
+> - [x] `addInterviewReview`：移除 `Math.random()` 与硬编码 passProbability/competencies 默认值，未传真实数据时用 `0`/空兜底（不伪造）
+> - [x] `NewReviewModal`：删除 `setTimeout` 假延迟与 hardcoded 数据，改调 `createReviewFromTranscript` 走真实后端
+> - [x] **InterviewPrepCenterView createInterview**：经核查已由 TASK-INTERVIEW-001 接通真实后端（`generateInterviewPrep`→`buildInterviewFromPrep`），无硬编码，无需改动
+> - [x] 验证：`npm run lint` 通过；`npm run build` 成功
+>   - `commit_id: 5eb2810`（已推 `origin/main`）
+
 ---
 
 **更新规则**：每次会话结束时，AI 必须根据本次实际完成的工作，移动或新增上述列表中的条目，并简要描述进展。

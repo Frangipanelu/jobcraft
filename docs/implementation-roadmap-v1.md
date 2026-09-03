@@ -207,18 +207,13 @@ TASK-CLEANUP-WIP-001                                 (随时可做，无依赖)
 
 - **Goal**：复盘、新增向导、面试准备的假评分/占位改为后端真实分析。
 - **Why**：Baseline §11.1。
-- **Current State**：
-  - `JobCraftContext.tsx` 的 `createReviewFromTranscript()`（`:1173-1230`）已调用 `interviewApi.createInterviewReview()`（真实后端），但之后**忽略响应**，改为 `Math.floor(75+Math.random()*12)` 假评分（`:1181,1244`）。
-  - `NewReviewModal.tsx:51-86` 全部 hardcoded：`overallScore:88`、`highlights`、`drawbacks`、`qaBreakdown`，`setTimeout` fake delay，**不调用任何后端 API**。
-  - `InterviewPrepCenterView.tsx` 的 `createInterview()` 中 `companyResearch`/`aiStrategy`/`highFreqQuestions`（context `:978-1033`）全部 hardcoded；后端 `POST /api/jobcraft/job/{job_id}/interview-prep`（`interview.ts:21`）已实现但从未被调用。
-- **Scope**：
-  - `createReviewFromTranscript()`：用 API 返回的 `InterviewReviewResult`（`overall_score`/`strengths`/`weaknesses`/`questions`）直接赋给 review 对象，删除 `Math.random()` 代码；
-  - `NewReviewModal`：移除 hardcoded 评分，改为调用 `interviewApi.createInterviewReview()` 并使用返回值；
-  - `InterviewPrepCenterView`：`createInterview()` 改为调用后端 `/interview-prep`（`interview.ts:21`），用返回的 `InterviewPrepResult` 驱动（`elevator_pitch`/`dimension_questions`/`full_version`）。
-- **Dependencies**：TASK-TYPE-001、TASK-INTERVIEW-001（面试持久化）。
-- **Files**：`src/context/JobCraftContext.tsx`、`src/components/review/NewReviewModal.tsx`、`src/components/interview/InterviewPrepCenterView.tsx`。
-- **Tests**：`cd frontend-jobcraft && npm run build && npm run lint`。
-- **Expected Commit**：`feat(frontend): use backend review/prep analysis instead of mock scores`
+- **Current State（2026-09-03 校准）**：`createReviewFromTranscript` 已改为 create+analyze 串联并用真实 `InterviewReviewResult` 填充缓存（`buildReviewPatchFromAnalysis`），删除 `Math.random`；`NewReviewModal` 改调 `createReviewFromTranscript`，删除 `setTimeout` 假延迟与 hardcoded 数据；`addInterviewReview` 移除伪造默认值；`createInterview` 已由 TASK-INTERVIEW-001 接通真实 `/interview-prep`。
+- **Completed**：
+  - `buildReviewPatchFromAnalysis(analysis, qaCount)`：真实映射 overall_score/summary/strengths/weaknesses/questions→qaList；
+  - `createReviewFromTranscript`：删除 `Math.floor` 假分 + 硬编码 competencies/aiDiagnosis，复用 `addInterviewReview` 落库；
+  - `NewReviewModal`：删除 hardcoded overallScore=88/highlights/drawbacks/qaBreakdown 与 1000ms fake delay；
+  - 面试准备：经核查无硬编码（`generateInterviewPrep`→`buildInterviewFromPrep`）。
+- **Status（2026-09-03）**：✅ 完成 `5eb2810`
 
 ### TASK-DOCFIX-001 修正文档与代码 MISMATCH
 
@@ -389,7 +384,7 @@ TASK-CLEANUP-WIP-001                                 (随时可做，无依赖)
 | 7 | TASK-REAL-DATA-001 Workbench 真实数据 | P0 | TYPE | 产品可信 | ✅ 完成 `3c03cde` |
 | 12 | TASK-REAL-DATA-004 JD 报告去 FALLBACK | P0 | TYPE | 产品可信 | ✅ 完成 `8870c26` |
 | 8 | TASK-REAL-DATA-002 MockInterview 去 Mock | P0 | INTERVIEW | 产品可信 | ✅ 完成 `59ab3f0` |
-| 9 | TASK-REAL-DATA-003 复盘/向导去 Mock | P0 | INTERVIEW | 产品可信 | ⏳ 待办 |
+| 9 | TASK-REAL-DATA-003 复盘/向导去 Mock | P0 | INTERVIEW | 产品可信 | ✅ 完成 `5eb2810` |
 | 10 | TASK-INTERVIEW-001 面试持久化 | P0 | TYPE | 数据不丢失 | ✅ 完成（列表/详情 + createInterview 真实生成 + 工作台 UI 板块重组）|
 | 11 | TASK-CLEANUP-WIP-001 清理 WIP | P1 | — | 仓库整洁 | ⏳ 待办 |
 
@@ -419,8 +414,8 @@ TASK-CLEANUP-WIP-001                                 (随时可做，无依赖)
 [x] WorkbenchView 从硬编码改为后端数据驱动（真实 jobs 计数/步骤/状态）—— TASK-REAL-DATA-001 ✅ `3c03cde`
 [x] JDReportDetailView 移除 FALLBACK_DATA，真实字段 + 空态占位 —— TASK-REAL-DATA-004 ✅ `8870c26`
 [ ] MockInterview 接通 /mock-chat 端点，移除 Math.random 假评分 —— TASK-REAL-DATA-002
-[ ] InterviewPrepCenterView 从后端加载面试准备数据 —— TASK-REAL-DATA-003
-[ ] 复盘/新增向导（NewReviewModal）用后端 analyze 返回结果 —— TASK-REAL-DATA-003
+[x] InterviewPrepCenterView 从后端加载面试准备数据 —— TASK-REAL-DATA-003
+[x] 复盘/新增向导（NewReviewModal）用后端 analyze 返回结果 —— TASK-REAL-DATA-003
 [ ] 面试记录从后端持久化（刷新不丢失）—— TASK-INTERVIEW-001
 [ ] 核心路径全部后端数据驱动（经历卡→JD分析→投递→面试准备→复盘）
 [ ] 测试通过：uv run ruff check . && uv run pytest tests/ -q && cd frontend-jobcraft && npm run build && npm run lint
