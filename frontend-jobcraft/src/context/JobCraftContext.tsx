@@ -1120,7 +1120,27 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
         company_research: result.company_research,
         created_at: result.created_at
       },
-      { id: newId, jobId: data.jobId, company: data.company, role: data.role }
+      {
+        id: newId,
+        jobId: data.jobId,
+        company: data.company,
+        role: data.role,
+        prepSource: {
+          id: -Date.now(),
+          job_analysis_id: jobAnalysisId,
+          company: data.company,
+          position: data.role,
+          submission_id: null,
+          round_type: result.round_type,
+          duration: result.duration,
+          elevator_pitch: result.elevator_pitch || '',
+          dimension_questions: result.dimension_questions || [],
+          full_version: result.full_version || '',
+          html_content: result.html_content || '',
+          created_at: result.created_at,
+          company_research: result.company_research
+        }
+      }
     );
     const newInterview: Interview = {
       ...baseInterview,
