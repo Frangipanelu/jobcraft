@@ -22,6 +22,7 @@ import * as authApi from '../api/auth'
 import * as experienceApi from '../api/experience'
 import * as jobApi from '../api/job'
 import * as interviewApi from '../api/interview'
+import { SUBMISSION_STATUS_CN } from '../api/types'
 import type { ExperienceCard, JobAnalysisResult, Submission, DashboardItem, InterviewPrepResult, InterviewPrepRecord as ApiInterviewPrepRecord, InterviewReviewResult } from '../api/types'
 
 export interface ToastMessage {
@@ -325,11 +326,12 @@ function analysisToJD(result: JobAnalysisResult, jobId?: string): JDAnalysis {
  */
 function submissionToJob(sub: DashboardItem): Job {
   const statusMap: Record<string, Job['status']> = {
-    'pending': 'pending',
-    'applied': 'delivered',
-    'interviewing': 'interviewing',
-    'finished': 'finished',
-    'rejected': 'finished'
+    APPLIED: 'delivered',
+    INVITED: 'interviewing',
+    ROUND_1: 'interviewing',
+    ROUND_2: 'interviewing',
+    OFFER: 'finished',
+    CLOSED: 'finished',
   }
 
   return {
@@ -341,13 +343,13 @@ function submissionToJob(sub: DashboardItem): Job {
     matchScore: 0,
     applyDate: sub.created_at?.split('T')[0] || new Date().toISOString().split('T')[0],
     lastUpdated: sub.updated_at || '刚刚',
-    currentStage: sub.status === 'interviewing' ? '面试中' : '待处理',
+    currentStage: SUBMISSION_STATUS_CN[sub.status] || '待处理',
     nextAction: '',
     steps: {
       jdAnalysis: sub.has_analysis,
       expMatched: sub.card_count > 0,
       customResume: sub.has_resume,
-      applied: ['applied', 'interviewing', 'finished'].includes(sub.status),
+      applied: true,
       prepStage: sub.prep_count > 0 ? 'done' : 'pending',
       reviewStage: sub.review_count > 0 ? 'done' : 'pending'
     },

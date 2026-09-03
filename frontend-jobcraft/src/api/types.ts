@@ -284,6 +284,29 @@ export interface InterviewPrepRecord extends InterviewPrepResult {
 // 投递记录
 // ============================================================
 
+/**
+ * 投递记录状态机（后端英文枚举，中文仅前端显示）
+ * 合法流转：APPLIED → INVITED → ROUND_1 → ROUND_2 → OFFER / CLOSED，
+ * 任一步骤均可提前 CLOSED。
+ */
+export type SubmissionStatus =
+  | 'APPLIED'
+  | 'INVITED'
+  | 'ROUND_1'
+  | 'ROUND_2'
+  | 'OFFER'
+  | 'CLOSED'
+
+/** 后端状态码 → 中文显示 */
+export const SUBMISSION_STATUS_CN: Record<SubmissionStatus, string> = {
+  APPLIED: '已投递',
+  INVITED: '面试邀约',
+  ROUND_1: '一面',
+  ROUND_2: '二面',
+  OFFER: 'Offer',
+  CLOSED: '已关闭',
+}
+
 export interface Submission {
   id: number
   user_id: number
@@ -294,7 +317,7 @@ export interface Submission {
   resume_markdown: string
   resume_file_path: string | null
   card_version_ids: number[]
-  status: string
+  status: SubmissionStatus
   notes: string
   created_at: string | null
   updated_at: string | null
@@ -304,7 +327,7 @@ export interface DashboardItem {
   id: number
   position: string
   company: string
-  status: string
+  status: SubmissionStatus
   job_analysis_id: number | null
   has_analysis: boolean
   card_version_count: number
