@@ -337,6 +337,22 @@
 - [x] **commits**：`3c03cde` feat(frontend): drive workbench from real dashboard data（2 文件：WorkbenchView.tsx + roadmap；未 push，待用户确认后与 `82bf6c3`/`4e0d14e`/`52fab9f` 一起推送）
 - [x] **过程信息**：工作区既有 WIP 依旧通过显式 `git add` 只纳入本任务文件（WorkbenchView.tsx + roadmap）；匹配度 `matchScore` 恒为 0 为 mapper `submissionToJob` 硬编码所致（后端 dashboard 无 match_score 字段），诚实显示 `—`，后续如需真分数需后端补充返回
 
+### v0.19 阶段 1 Contract 对齐：JD 报告去 FALLBACK_DATA（TASK-REAL-DATA-004）（本轮）
+
+- [x] **TASK-REAL-DATA-004**：移除 `JDReportDetailView.tsx` 的 `FALLBACK_DATA`（字节跳动模板），改为真实 `currentAnalysis` 渲染 + 空态占位
+  - 核心字段：`company/position/createdAt/matchScore` 已有真实来源 → 直接渲染（匹配度 0 时显示「—」）
+  - 岗位理解（职责）：从 `coreRequirements` 实时派生，删除硬编码的 4 条职责
+  - 关键词匹配（ATS）：从 `atsKeywords.hardSkills/softSkills/expKeywords` 实时派生（high/partial/unmatched 三组），全空时显示空态占位
+  - 能力匹配表：从 `skillGaps` 实时派生，evidence/requirement 为空时显示「待分析」；删除 `ScoreDots` 组件（不再造假分数）
+  - 推荐经历：从 `recommendedExperiences` + `experiences` 标题查找实时派生，tags 为空时不渲染
+  - 隐含要求：从 `subtextAnalysis` 实时派生，后端未填时显示「暂无」空态占位
+  - 岗位目标/verdict.risk/verdict.why：分别映射到 `verdictSummary`/`keyRisks`/`whyMatch`（或「待分析」占位）
+  - 底部行动指引：从 `verdictScore` 派生文案（不再硬编码「92%」）
+  - 无分析数据时：早期 return 友好空态引导，不渲染假报告
+- [x] **CI 修复**：`uv run ruff format .` 修复 `experience.py` / `test_ownership_filtering.py` 格式（pre-commit 问题，非本次改动）→ commit `fdf2cde`
+- [x] **验证**：`npm run lint`（tsc --noEmit）通过；`npm run build` 成功——1701 modules；`rg` 确认无 `字节跳动/腾讯/FALLBACK_DATA/as any` 残留
+- [x] **commits**：`8870c26` feat(frontend): remove fallback mock data from JD report detail
+
 ---
 
 **更新规则**：每次会话结束时，AI 必须根据本次实际完成的工作，移动或新增上述列表中的条目，并简要描述进展。

@@ -387,7 +387,7 @@ TASK-CLEANUP-WIP-001                                 (随时可做，无依赖)
 | 5 | TASK-TYPE-001 any 收紧 + 文档 | P0 | — | 契约清晰 | ⏳ 待办 |
 | 6 | TASK-FETCH-001 fetch 审计 | P0 | TYPE | 安全合规 | ⏳ 待办（仅文档） |
 | 7 | TASK-REAL-DATA-001 Workbench 真实数据 | P0 | TYPE | 产品可信 | ✅ 完成 `3c03cde` |
-| 12 | TASK-REAL-DATA-004 JD 报告去 FALLBACK | P0 | TYPE | 产品可信 | ⏳ 待办 |
+| 12 | TASK-REAL-DATA-004 JD 报告去 FALLBACK | P0 | TYPE | 产品可信 | ✅ 完成 `8870c26` |
 | 8 | TASK-REAL-DATA-002 MockInterview 去 Mock | P0 | INTERVIEW | 产品可信 | ⏳ 待办 |
 | 9 | TASK-REAL-DATA-003 复盘/向导去 Mock | P0 | INTERVIEW | 产品可信 | ⏳ 待办 |
 | 10 | TASK-INTERVIEW-001 面试持久化 | P0 | TYPE | 数据不丢失 | ⏳ 待办 |
@@ -417,7 +417,7 @@ TASK-CLEANUP-WIP-001                                 (随时可做，无依赖)
 [ ] 双层类型架构有明确 JSDoc 注释 —— TASK-TYPE-001
 [ ] fetch 出口有文档标注 —— TASK-FETCH-001
 [x] WorkbenchView 从硬编码改为后端数据驱动（真实 jobs 计数/步骤/状态）—— TASK-REAL-DATA-001 ✅ `3c03cde`
-[ ] JDReportDetailView 移除 FALLBACK_DATA，真实字段 + 空态占位 —— TASK-REAL-DATA-004
+[x] JDReportDetailView 移除 FALLBACK_DATA，真实字段 + 空态占位 —— TASK-REAL-DATA-004 ✅ `8870c26`
 [ ] MockInterview 接通 /mock-chat 端点，移除 Math.random 假评分 —— TASK-REAL-DATA-002
 [ ] InterviewPrepCenterView 从后端加载面试准备数据 —— TASK-REAL-DATA-003
 [ ] 复盘/新增向导（NewReviewModal）用后端 analyze 返回结果 —— TASK-REAL-DATA-003
