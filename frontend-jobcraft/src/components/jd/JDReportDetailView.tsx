@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useJobCraft } from '../../context/JobCraftContext';
+import type { Experience } from '../../types/jobcraft';
 import {
   ArrowLeft,
   ArrowRight,
@@ -25,138 +26,6 @@ interface JDReportDetailViewProps {
   embedded?: boolean;
 }
 
-// Default structured high-fidelity mock data matching Image 1
-const FALLBACK_DATA = {
-  company: '字节跳动',
-  position: 'AI 产品经理（搜索与生成方向）',
-  location: '上海',
-  date: '2026.08.30',
-  tags: ['AI 产品经理', '搜索 / 推荐', '大模型', '0-1 产品'],
-  verdict: {
-    label: '值得投递',
-    score: 92,
-    stars: 5,
-    matchLabel: 'MATCH',
-    why: '你的 AI 产品、搜索和数据分析经验与岗位核心要求高度重合，从 0 到 1 的经历和数据驱动决策能力尤其匹配。',
-    advantagesCount: 3,
-    gapsCount: 2,
-    weaknessCount: 1,
-    risk: '缺少大型 AI 产品商业化变现经验，以及 B2B 方向的规模化落地案例。',
-    suggestions: [
-      '简历重点突出 AI 搜索与评测体系建设从 0 到 1 过程',
-      '补充 Prompt 工程与大模型微调相关的评测指标描述',
-      '强化业务数据闭环（如 nDCG、MRR、留存率等具体量化指标）'
-    ]
-  },
-  goal: '通过 AI 技术提升搜索体验与效率，构建智能化产品能力，驱动业务增长。',
-  responsibilities: [
-    { num: '01', title: '产品规划与设计' },
-    { num: '02', 用户需求: '用户需求分析与产品策略', title: '用户需求分析与产品策略' },
-    { num: '03', title: '跨团队协作与项目推进' },
-    { num: '04', title: '数据驱动产品优化' }
-  ],
-  competencyMatch: [
-    {
-      ability: 'AI 产品设计',
-      requirement: '精通 AI 产品从 0 到 1 全流程',
-      evidence: 'AI 搜索评测体系、MVP 项目',
-      score: 5,
-      level: 'high'
-    },
-    {
-      ability: '搜索 / 推荐',
-      requirement: '搜索相关产品经验',
-      evidence: 'AI 搜索优化项目',
-      score: 5,
-      level: 'high'
-    },
-    {
-      ability: '数据分析',
-      requirement: '数据驱动，能通过数据发现问题',
-      evidence: 'NDCG / MRR / AB 实验',
-      score: 5,
-      level: 'high'
-    },
-    {
-      ability: '商业化',
-      requirement: '了解商业模式与变现',
-      evidence: '部分项目有付费探索经验',
-      score: 3,
-      level: 'medium'
-    },
-    {
-      ability: 'B2B SaaS',
-      requirement: 'B2B 产品经验',
-      evidence: '暂无相关经验',
-      score: 1,
-      level: 'low'
-    }
-  ],
-  atsGrouped: {
-    high: ['AI 产品', '搜索', '大模型', '数据分析', '用户体验', '产品设计'],
-    partial: ['Prompt', '商业化', '用户增长'],
-    unmatched: ['B2B', 'SaaS 销售']
-  },
-  subtext: [
-    {
-      num: '01',
-      original: '“大模型 / AIGC 产品经验优先”',
-      literal: '候选人需要有 LLM / AIGC 相关产品经验',
-      actual:
-        '这是核心门槛之一，非加分项。没有 AI 产品经验很可能直接被简历过滤。建议你将 AI 搜索评测与大模型 MVP 项目置于简历最前面。'
-    },
-    {
-      num: '02',
-      original: '“推动跨团队协作、高效落地”',
-      literal: '有跨部门协作推进项目上线的经验',
-      actual:
-        '团队内部跨算法、工程、业务协同链条长。这里实际考察的是你在资源受限或多方阻力下如何强力推进行动，需准备真实冲突解决案例。'
-    },
-    {
-      num: '03',
-      original: '“对 AI 和搜索产品有深度思考”',
-      literal: '对行业有认知和见解',
-      actual:
-        '面试中大概率会有开放题考察产品哲学与技术边界判断，例如“你觉得 AI 搜索的核心体验瓶颈是什么”。建议提前准备独立观点。'
-    }
-  ],
-  recommended: [
-    {
-      id: '1',
-      num: '#1',
-      title: 'AI 搜索优化项目',
-      type: '项目经历',
-      year: '2026',
-      matchScore: 95,
-      tags: ['AI 产品能力', '数据分析', '搜索评测'],
-      reason:
-        '直接命中岗位核心要求，具备 AI + 搜索 + 数据分析三大核心关键词，建议作为简历与面试首选主打项目。'
-    },
-    {
-      id: '2',
-      num: '#2',
-      title: 'AI 产品 MVP 项目',
-      type: '项目经历',
-      year: '2025',
-      matchScore: 88,
-      tags: ['0-1产品经历', '用户研究', '敏捷落地'],
-      reason:
-        '具备完整产品闭环，展现从需求发现到上线的推动力，有效印证你的产品感与用户洞察能力。'
-    },
-    {
-      id: '3',
-      num: '#3',
-      title: '数据平台产品经理',
-      type: '工作经历',
-      year: '2023–2025',
-      matchScore: 62,
-      tags: ['跨团队协作', '指标体系'],
-      reason:
-        '跨团队推进经验可作为协作能力的佐证，重点突出可迁移的数据驱动能力。'
-    }
-  ]
-};
-
 // Section Header matching Image 1: 01 岗位理解  这个岗位需要解决什么问题
 function SectionHeaderImageStyle({
   num,
@@ -176,29 +45,6 @@ function SectionHeaderImageStyle({
   );
 }
 
-// 5-dot score indicator
-function ScoreDots({ score, level }: { score: number; level: 'high' | 'medium' | 'low' }) {
-  const dotColor =
-    level === 'high'
-      ? 'bg-sage'
-      : level === 'medium'
-      ? 'bg-warning'
-      : 'bg-warning';
-
-  return (
-    <div className="flex items-center gap-1.5">
-      {Array.from({ length: 5 }).map((_, i) => (
-        <span
-          key={i}
-          className={`w-2.5 h-2.5 rounded-full ${
-            i < score ? dotColor : 'bg-[#E4E7E3]'
-          }`}
-        />
-      ))}
-    </div>
-  );
-}
-
 export const JDReportDetailView: React.FC<JDReportDetailViewProps> = ({
   analysisId,
   onNavigateToResume,
@@ -208,6 +54,7 @@ export const JDReportDetailView: React.FC<JDReportDetailViewProps> = ({
   const {
     jdAnalyses,
     jobs,
+    experiences,
     setSelectedJobId,
     setSelectedJDId,
     jdAnalysisReturnTarget,
@@ -218,33 +65,119 @@ export const JDReportDetailView: React.FC<JDReportDetailViewProps> = ({
 
   const [isReanalyzing, setIsReanalyzing] = useState(false);
 
-  const currentAnalysis = jdAnalyses.find((a) => a.id === analysisId) || jdAnalyses[0];
+  const currentAnalysis =
+    jdAnalyses.find((a) => a.id === analysisId) || jdAnalyses[0];
+
+  const a = currentAnalysis?.atsKeywords;
+  const expById = new Map<string, Experience>(experiences.map((e) => [e.id, e]));
+
+  const responsibilities = (currentAnalysis?.coreRequirements || []).flatMap(
+    (group) =>
+      group.items.map((title, i) => ({
+        num: String(i + 1).padStart(2, '0'),
+        title
+      }))
+  );
+
+  const competencyMatch = (currentAnalysis?.skillGaps || []).map((g) => ({
+    ability: g.capability,
+    requirement: g.requirement || '',
+    evidence: g.userEvidence || '',
+    score: 0,
+    level: '待分析' as const
+  }));
+
+  const atsGrouped = {
+    high: a?.hardSkills || [],
+    partial: [...(a?.softSkills || []), ...(a?.expKeywords || [])],
+    unmatched: [] as string[]
+  };
+
+  const recommended = (currentAnalysis?.recommendedExperiences || []).map(
+    (r, i) => {
+      const exp = expById.get(r.experienceId);
+      return {
+        id: r.experienceId,
+        num: `#${i + 1}`,
+        title: exp?.title || '未命名经历',
+        type: exp?.category || '经历',
+        year: '',
+        matchScore: r.matchScore,
+        tags: exp?.capabilityTags || [],
+        reason:
+          r.reason ||
+          (r.matchingJDReq
+            ? `命中岗位要求「${r.matchingJDReq}」，建议作为重点展示经历。`
+            : '根据岗位要求推荐。')
+      };
+    }
+  );
+
+  const verdictScore = currentAnalysis?.matchScore || 0;
 
   const data = {
-    company: currentAnalysis?.company || FALLBACK_DATA.company,
-    position: currentAnalysis?.role || FALLBACK_DATA.position,
-    location: currentAnalysis?.location || FALLBACK_DATA.location,
-    date: currentAnalysis?.createdAt ? currentAnalysis.createdAt.replace(/-/g, '.') : FALLBACK_DATA.date,
-    tags: FALLBACK_DATA.tags,
+    company: currentAnalysis?.company || '未命名公司',
+    position: currentAnalysis?.role || '未命名岗位',
+    location: '—',
+    date: currentAnalysis?.createdAt
+      ? currentAnalysis.createdAt.replace(/-/g, '.')
+      : '—',
+    tags: [...(a?.hardSkills || []), ...(a?.softSkills || [])].slice(0, 6),
     verdict: {
-      label: currentAnalysis?.matchScore && currentAnalysis.matchScore >= 85 ? '值得投递' : '值得投递',
-      score: currentAnalysis?.matchScore || FALLBACK_DATA.verdict.score,
+      label:
+        !verdictScore
+          ? '待分析'
+          : verdictScore >= 85
+          ? '值得投递'
+          : verdictScore >= 60
+          ? '可以尝试'
+          : '谨慎评估',
+      score: verdictScore,
       stars: 5,
-      matchLabel: 'MATCH',
-      why: currentAnalysis?.keyInsights?.[0] || FALLBACK_DATA.verdict.why,
-      advantagesCount: 3,
-      gapsCount: 2,
-      weaknessCount: 1,
-      risk: currentAnalysis?.keyRisks?.[0] || FALLBACK_DATA.verdict.risk,
-      suggestions: currentAnalysis?.strategicAdvice || FALLBACK_DATA.verdict.suggestions
+      matchLabel: currentAnalysis?.whyMatch || 'MATCH',
+      why: currentAnalysis?.verdictSummary || '待分析',
+      advantagesCount: (currentAnalysis?.recommendedExperiences || []).length,
+      gapsCount: (currentAnalysis?.skillGaps || []).length,
+      weaknessCount: 0,
+      risk: currentAnalysis?.keyRisks || '待分析',
+      suggestions: currentAnalysis?.resumeAdvice || []
     },
-    goal: FALLBACK_DATA.goal,
-    responsibilities: FALLBACK_DATA.responsibilities,
-    competencyMatch: FALLBACK_DATA.competencyMatch,
-    atsGrouped: FALLBACK_DATA.atsGrouped,
-    subtext: FALLBACK_DATA.subtext,
-    recommended: FALLBACK_DATA.recommended
+    goal: '待分析',
+    responsibilities,
+    competencyMatch,
+    atsGrouped,
+    subtext: (currentAnalysis?.subtextAnalysis || []).map((s, i) => ({
+      num: `#${i + 1}`,
+      original: s.rawJD,
+      literal: s.literalMeaning,
+      actual: s.realEvaluation
+    })),
+    recommended
   };
+
+  // 无分析数据时展示空态，不渲染伪造报告
+  if (!currentAnalysis) {
+    return (
+      <div className="min-h-full bg-white pb-24 flex items-center justify-center">
+        <div className="text-center space-y-3 max-w-sm px-6">
+          <div className="text-[15px] font-bold text-[#111814]">
+            暂无 JD 分析数据
+          </div>
+          <p className="text-xs text-[#6B7280] leading-relaxed">
+            请先在「JD 分析」中提交岗位 JD，生成分析报告后再查看详细的岗位理解、能力匹配与关键词覆盖。
+          </p>
+          <button
+            type="button"
+            onClick={() => navigateTo('jd_analysis_center')}
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#1E4D3C] hover:bg-[#153B2E] text-white text-xs font-bold shadow-2xs transition cursor-pointer"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <span>去分析岗位</span>
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   const matchedJob = currentAnalysis
     ? jobs.find(
@@ -414,7 +347,7 @@ export const JDReportDetailView: React.FC<JDReportDetailViewProps> = ({
             {/* Right Column: Score, MATCH, Stars, 匹配度 (Exact match with Image 1) */}
             <div className="flex flex-col items-center justify-center shrink-0 self-center md:self-auto px-6 py-2">
               <div className="text-[46px] sm:text-[52px] font-black text-[#1E3A2F] leading-none tracking-tight">
-                {data.verdict.score}%
+                {data.verdict.score > 0 ? `${data.verdict.score}%` : '—'}
               </div>
               <div className="text-[11px] font-bold text-[#737873] tracking-widest mt-1 mb-1.5 uppercase">
                 {data.verdict.matchLabel}
@@ -490,6 +423,11 @@ export const JDReportDetailView: React.FC<JDReportDetailViewProps> = ({
             </div>
 
             {/* Table Body */}
+            {data.competencyMatch.length === 0 ? (
+              <div className="px-5 py-6 text-center text-xs text-[#737873]">
+                暂无能力匹配数据，完成 JD 分析后这里会展示各项能力的匹配情况。
+              </div>
+            ) : (
             <div className="divide-y divide-[#EFEFEA]">
               {data.competencyMatch.map((item, i) => (
                 <div
@@ -497,14 +435,21 @@ export const JDReportDetailView: React.FC<JDReportDetailViewProps> = ({
                   className="grid grid-cols-[140px_1fr_1fr_110px] px-5 py-3.5 items-center text-xs sm:text-[13px] bg-white hover:bg-[#FAFBF9] transition"
                 >
                   <span className="font-bold text-[#111814]">{item.ability}</span>
-                  <span className="text-[#526058] pr-3 leading-relaxed">{item.requirement}</span>
-                  <span className="text-[#2B3830] pr-3 font-medium leading-relaxed">{item.evidence}</span>
+                  <span className="text-[#526058] pr-3 leading-relaxed">
+                    {item.requirement || '待分析'}
+                  </span>
+                  <span className="text-[#2B3830] pr-3 font-medium leading-relaxed">
+                    {item.evidence || '待分析'}
+                  </span>
                   <div className="flex items-center">
-                    <ScoreDots score={item.score} level={item.level as any} />
+                    <span className="text-[11px] font-medium px-2 py-0.5 bg-[#F2F4F1] text-[#737873] rounded">
+                      待分析
+                    </span>
                   </div>
                 </div>
               ))}
             </div>
+            )}
           </div>
         </div>
 
@@ -517,6 +462,13 @@ export const JDReportDetailView: React.FC<JDReportDetailViewProps> = ({
           />
 
           <div className="bg-[#FAFBF9] border border-[#E2E6E2] rounded-xl p-5 sm:p-6 shadow-2xs">
+            {data.atsGrouped.high.length === 0 &&
+             data.atsGrouped.partial.length === 0 &&
+             data.atsGrouped.unmatched.length === 0 ? (
+              <div className="text-xs text-[#737873] leading-relaxed">
+                暂无 ATS 关键词数据。AI 将从 JD 中提取硬技能、软技能与经历关键词并进行分类匹配。
+              </div>
+            ) : (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               
               {/* 高匹配 */}
@@ -574,6 +526,7 @@ export const JDReportDetailView: React.FC<JDReportDetailViewProps> = ({
               </div>
 
             </div>
+            )}
           </div>
         </div>
 
@@ -586,6 +539,11 @@ export const JDReportDetailView: React.FC<JDReportDetailViewProps> = ({
           />
 
           <div className="space-y-3.5">
+            {data.subtext.length === 0 && (
+              <div className="bg-[#FAFBF9] border border-[#E2E6E2] rounded-xl p-5 text-xs text-[#737873] leading-relaxed">
+                暂无隐含要求解析数据。AI 将从 JD 中识别隐性要求（如「经验优先」背后的真实门槛）。
+              </div>
+            )}
             {data.subtext.map((item) => (
               <div
                 key={item.num}
@@ -621,6 +579,11 @@ export const JDReportDetailView: React.FC<JDReportDetailViewProps> = ({
             subtitle="根据岗位要求精选出的最佳经历素材"
           />
 
+          {data.recommended.length === 0 ? (
+            <div className="bg-[#FAFBF9] border border-[#E2E6E2] rounded-xl p-5 text-xs text-[#737873] leading-relaxed">
+              暂无推荐经历数据。完成 JD 分析并选择经历卡后，AI 将基于岗位要求精选最佳经历素材。
+            </div>
+          ) : (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {data.recommended.map((exp) => (
               <div
@@ -630,10 +593,10 @@ export const JDReportDetailView: React.FC<JDReportDetailViewProps> = ({
                 <div>
                   <div className="flex justify-between items-start mb-2">
                     <span className="text-[11px] font-medium text-[#737873] bg-[#F2F4F1] px-2 py-0.5 rounded">
-                      {exp.type} · {exp.year}
+                      {exp.type}{exp.year ? ` · ${exp.year}` : ''}
                     </span>
                     <span className="text-xs font-bold text-[#1E4D3C] bg-[#E4ECE7] px-2 py-0.5 rounded">
-                      {exp.matchScore}% 匹配
+                      {exp.matchScore > 0 ? `${exp.matchScore}% 匹配` : '推荐'}
                     </span>
                   </div>
 
@@ -641,6 +604,7 @@ export const JDReportDetailView: React.FC<JDReportDetailViewProps> = ({
                     {exp.title}
                   </h3>
 
+                  {exp.tags.length > 0 && (
                   <div className="flex flex-wrap gap-1.5 mb-2.5">
                     {exp.tags.map((t) => (
                       <span
@@ -651,6 +615,7 @@ export const JDReportDetailView: React.FC<JDReportDetailViewProps> = ({
                       </span>
                     ))}
                   </div>
+                  )}
 
                   <p className="text-xs text-[#737873] leading-relaxed m-0">
                     {exp.reason}
@@ -676,6 +641,7 @@ export const JDReportDetailView: React.FC<JDReportDetailViewProps> = ({
               </div>
             ))}
           </div>
+          )}
         </div>
 
         {/* ── 底部行动指引 (Next Step Action) ── */}
@@ -709,7 +675,9 @@ export const JDReportDetailView: React.FC<JDReportDetailViewProps> = ({
                 下一步建议：针对 JD 要求定制专属简历
               </div>
               <p className="text-xs text-[#737873] m-0">
-                当前岗位综合匹配度高达 92%，重点在简历中突出 AI 搜索与 0 到 1 评测经验。
+                {verdictScore > 0
+                  ? `当前岗位综合匹配度 ${verdictScore}%，建议重点突出与岗位核心要求最相关的经历。`
+                  : '完成 JD 分析后，AI 将基于匹配结果给出简历定制建议。'}
               </p>
             </div>
             <button
