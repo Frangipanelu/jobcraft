@@ -424,4 +424,16 @@
 
 ---
 
+> **TASK-FIX-001 启用 Redis 异步任务消费循环**
+>
+> - [x] 修复 `execute_interview_prep` 错误 import（`interview_flow` → `interview_prep_flow` 的 `run_interview_prep_workflow`），并对齐真实签名（补 `job_analysis_id` 必填校验 + `submission_id/company_research/resume_markdown/previous_review_summary` 透传）
+> - [x] `app/tasks/worker.py` 新增 `_dispatch_one`（按 task_type 分发 handler，未知类型标记 failed）与 `run_worker`（`blpop` 消费循环 + JSON 解析容错 + 单任务失败不终止 daemon + `python -m app.tasks.worker` 启动入口）
+> - [x] 4 个 `/tasks/*` 端点对 Redis 不可用优雅降级为 503（原 500）
+> - [x] 新增 `redis>=5.0.0` 依赖声明并安装（redis 8.1.0）
+> - [x] 新增 `tests/test_tasks_handlers_unit.py`（5 用例：注册表、job_analysis_id 必填、handler 参数对齐、未知类型标记 failed、已知类型分发补 task_id）
+> - [x] 验证：`uv run pytest tests/ -q` 330 passed、11 skipped；`ruff check` 通过
+>   - `commit_id: d3dee83`（已本地，待推送）
+
+---
+
 **更新规则**：每次会话结束时，AI 必须根据本次实际完成的工作，移动或新增上述列表中的条目，并简要描述进展。

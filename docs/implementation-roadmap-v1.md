@@ -294,6 +294,11 @@ TASK-CLEANUP-WIP-001                                 (随时可做，无依赖)
 - **Current State**：任务系统无消费 worker + 错误 import。
 - **Scope**：修 import；评估是否启用 Redis 消费循环或下线该路径。
 - **Expected Commit**：`fix(tasks): correct workflow import and enable worker`
+- **Status**：✅ 完成（决策：**启用** Redis 异步消费循环，非下线）。`d3dee83`
+  - 修 import 并对齐真实签名（`job_analysis_id` 必填校验 + 透传 submission_id/company_research/resume_markdown/previous_review_summary）
+  - `worker.py` 新增 `_dispatch_one` + `run_worker` 消费循环 + `python -m app.tasks.worker` 入口
+  - 4 个 `/tasks/*` 端点对 Redis 不可用降级 503；新增 `redis>=5.0.0` 依赖；单测 `test_tasks_handlers_unit.py` 5 用例
+  - 验证：`uv run pytest tests/ -q` 330 passed/11 skipped；`ruff check` 绿
 
 ---
 
