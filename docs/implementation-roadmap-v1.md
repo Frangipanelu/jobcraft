@@ -286,6 +286,12 @@ TASK-CLEANUP-WIP-001                                 (随时可做，无依赖)
 - **Scope**：定义 `SUBMISSION_STATUS` 枚举；后端校验流转（APPLIED/INVITED/ROUND_1/ROUND_2/OFFER/CLOSED）；前端显示映射中文。
 - **Dependencies**：TASK-AUTH-001、TASK-TYPE-001。
 - **Expected Commit**：`feat(submission): introduce status enum and transitions`
+- **Status**：✅ 完成。后端 `d3254a8`、前端 `1a16001`
+  - 新增 `app/schemas/submission_status.py`（枚举 + 中文映射 + 合法流转 §4.2 + 存量中文字符串读时归一化，前向兼容）
+  - `db_submission` 建表默认/insert/update 用枚举码；get/list 读取归一化
+  - submission API 创建校验状态合法性、更新校验流转（非法 400）；manual 默认 APPLIED
+  - 前端 `SubmissionStatus` 类型 + `SUBMISSION_STATUS_CN` 映射 + `submissionToJob.statusMap` 对齐新枚举
+  - 单测 `test_submission_status_unit.py` 9 用例；验证 `uv run pytest tests/ -q` 340 passed/11 skipped；`ruff` 绿；`npm run build` + `tsc --noEmit` 通过
 
 ### TASK-FIX-001 修复 AI 后台任务系统
 

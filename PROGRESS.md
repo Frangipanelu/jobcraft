@@ -434,6 +434,16 @@
 > - [x] 验证：`uv run pytest tests/ -q` 330 passed、11 skipped；`ruff check` 通过
 >   - `commit_id: d3dee83`（已本地，待推送）
 
+> **TASK-STATUS-001 引入 Submission 状态机**
+>
+> - [x] 新增 `app/schemas/submission_status.py`：`SUBMISSION_STATUS` 枚举（APPLIED/INVITED/ROUND_1/ROUND_2/OFFER/CLOSED）+ 中文显示映射 + 合法流转校验（§4.2，任意阶段可提前 CLOSED）+ 存量中文字符串读时归一化（前向兼容）
+> - [x] `db_submission`：建表默认值 / insert / update 用枚举码；get / list 读取时旧中文自动归一化为枚举码
+> - [x] submission API：创建校验状态合法性（非法 400）；更新时校验状态流转（非法流转 400）；manual 端点默认 APPLIED
+> - [x] 前端：`SubmissionStatus` 联合类型 + `SUBMISSION_STATUS_CN` 中文映射；`Submission/DashboardItem.status` 收紧为枚举；`submissionToJob.statusMap` 对齐新枚举（APPLIED→delivered / INVITED/ROUND_x→interviewing / OFFER/CLOSED→finished），currentStage 用中文映射
+> - [x] 新增 `tests/test_submission_status_unit.py`（9 用例）；更新路由测试（含非法流转 400 用例）
+> - [x] 验证：`uv run pytest tests/ -q` 340 passed、11 skipped；`ruff check` 绿；`npm run build` + `tsc --noEmit` 通过
+>   - commit：后端 `d3254a8`、前端 `1a16001`（已本地，待推送）
+
 ---
 
 **更新规则**：每次会话结束时，AI 必须根据本次实际完成的工作，移动或新增上述列表中的条目，并简要描述进展。
