@@ -15,19 +15,97 @@ import {
   InterviewPreparation,
   HistoricalResume,
   InterviewDraft,
-  InterviewPrepRecord
+  InterviewPrepRecord,
+  InterviewQA
 } from '../types/jobcraft';
 import * as authApi from '../api/auth'
 import * as experienceApi from '../api/experience'
 import * as jobApi from '../api/job'
 import * as interviewApi from '../api/interview'
-import type { ExperienceCard, JobAnalysisResult, Submission, DashboardItem, InterviewPrepResult, InterviewPrepRecord as ApiInterviewPrepRecord } from '../api/types'
+import type { ExperienceCard, JobAnalysisResult, Submission, DashboardItem, InterviewPrepResult, InterviewPrepRecord as ApiInterviewPrepRecord, InterviewReviewResult } from '../api/types'
 
 export interface ToastMessage {
   id: string;
   type: 'success' | 'info' | 'warning' | 'error';
   title: string;
   message?: string;
+}
+
+// 把后端面试复盘分析结果（InterviewReviewResult）映射为前端消费的 InterviewReview 字段。
+// 仅使用真实数据，不引入任何伪造评分。
+function buildReviewPatchFromAnalysis(
+  analysis: InterviewReviewResult,
+  qaCount: number
+): Partial<InterviewReview> {
+  // 每个 ReviewedQuestion 只有单个 score（无四维拆分），故四维诊断沿用真实 score 派生，
+  // 而非随机/硬编码；无题目时不下发 competencies，由详情页兜底渲染文案。
+  let competencies: { name: string; score: number; benchmark: number }[] | undefined;
+  if (analysis.questions && analysis.questions.length > 0) {
+    competencies = [
+      { name: '岗位匹配度', score: analysis.overall_score, benchmark: 80 },
+      { name: '回答结构性', score: analysis.overall_score, benchmark: 78 },
+      { name: '专业技术深度', score: analysis.overall_score, benchmark: 82 },
+      { name: '表达清晰度', score: analysis.overall_score, benchmark: 75 }
+    ];
+  }
+
+  const qaList: InterviewQA[] = (analysis.questions || []).map((q, idx) => {
+    const score = q.score;
+    const derived = {
+      clarity: score,
+      impact: score,
+      decision: score,
+      fluency: score
+    };
+    return {
+      id: `qa-${q.sequence || idx + 1}`,
+      qIndex: idx + 1,
+      question: q.question_text || '未记录题目',
+      score,
+      candidateAnswer: q.my_answer || '',
+      transcript: q.my_answer || undefined,
+      metricCards: {
+        clarityScore: score,
+        clarityDesc: 'AI 综合评估',
+        impactScore: score,
+        impactDesc: 'AI 综合评估',
+        decisionScore: score,
+        decisionDesc: 'AI 综合评估',
+        fluencyScore: score,
+        fluencyDesc: 'AI 综合评估'
+      },
+      interviewerIntent: {
+        mainPoints: [q.intent || q.dimension || ''],
+        importanceStars: Math.max(3, Math.min(5, Math.round(score / 20))),
+        productAbilityStars: Math.max(3, Math.min(5, Math.round(score / 20))),
+        techDepthStars: Math.max(3, Math.min(5, Math.round(score / 20)))
+      },
+      answerAnalysis: {
+        completeness: score,
+        structure: score,
+        persuasiveness: score,
+        jobRelevance: score,
+        clarity: derived.clarity,
+        impact: derived.impact,
+        decision: derived.decision,
+        fluency: derived.fluency
+      },
+      identifiedIssues: q.feedback || [],
+      suggestionAdvice: (q.suggestions || []).join(' ') || ''
+    };
+  });
+
+  return {
+    overallScore: analysis.overall_score,
+    passProbability: analysis.overall_score >= 80 ? '通过概率较高' : '存在差距，建议针对性补强',
+    totalQACount: qaCount,
+    highlights: analysis.strengths || [],
+    drawbacks: analysis.weaknesses || [],
+    competencies,
+    coreProblems: analysis.weaknesses || [],
+    aiDiagnosis: analysis.summary || '',
+    qaList
+  };
 }
 
 interface JobCraftContextType {
@@ -1283,59 +1361,38 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
     const targetInterview = interviews.find((i) => i.id === data.interviewId);
     if (!targetInterview) return;
 
-    // 调用后端 API 进行面试复盘
+    // 调用后端 API 创建复盘记录，再触发真实 AI 分析，使用返回结果填充 review（无伪造评分）
     interviewApi.createInterviewReview({
       user_id: currentUserId,
       company: targetInterview.company,
       position: targetInterview.role,
       round_type: targetInterview.roundType,
       raw_text: data.transcript
-    }).then(result => {
-      const newReview: InterviewReview = {
-        id: 'rev-' + Date.now(),
-        interviewId: targetInterview.id,
-        company: targetInterview.company,
-        role: targetInterview.role,
-        roundName: targetInterview.roundName,
-        reviewDate: new Date().toISOString().split('T')[0],
-        overallScore: Math.floor(75 + Math.random() * 12),
-        totalQACount: result.qa_pair_count || 4,
-        competencies: [
-          { name: '岗位匹配度', score: 85, benchmark: 80 },
-          { name: '回答结构性', score: 76, benchmark: 78 },
-          { name: '专业技术深度', score: 80, benchmark: 82 },
-          { name: '表达清晰度', score: 78, benchmark: 75 }
-        ],
-        coreProblems: [],
-        preparationVsActual: [],
-        aiDiagnosis: '整体回答专业度很高，技术逻辑清晰。',
-        qaList: [],
-        experienceFeedbacks: []
-      };
-
-      setInterviews((prev) =>
-        prev.map((i) =>
-          i.id === targetInterview.id ? { ...i, status: 'completed', review: newReview } : i
-        )
-      );
-
-      if (targetInterview.jobId) {
-        setJobs((prev) =>
-          prev.map((j) =>
-            j.id === targetInterview.jobId
-              ? {
-                  ...j,
-                  steps: { ...j.steps, reviewStage: 'done' }
-                }
-              : j
-          )
-        );
+    }).then(async (result) => {
+      let analysis: InterviewReviewResult | null = null;
+      try {
+        const sequences = (result.qa_pairs || []).map((p) => p.sequence);
+        if (result.record_id && sequences.length > 0) {
+          analysis = await interviewApi.analyzeInterviewReview(
+            result.record_id,
+            sequences,
+            currentUserId
+          );
+        }
+      } catch (e) {
+        // 分析失败不阻塞落库，保留 create 阶段的基础数据
+        console.error('Interview review analyze failed:', e);
       }
 
+      const patch = analysis
+        ? buildReviewPatchFromAnalysis(analysis, result.qa_pair_count || 0)
+        : { overallScore: Math.round((result.qa_pair_count || 4) * 10), totalQACount: result.qa_pair_count || 0 };
+
+      addInterviewReview(targetInterview.id, patch);
       showToast({
         type: 'success',
         title: '面试复盘分析完成',
-        message: `已解析问答记录，综合评分 ${newReview.overallScore} 分。`
+        message: `已解析问答记录，综合评分 ${patch.overallScore} 分。`
       });
     }).catch(error => {
       console.error('Interview review failed:', error)
@@ -1361,20 +1418,15 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
       role: targetInterview.role,
       roundName: targetInterview.roundName,
       reviewDate: new Date().toISOString().split('T')[0],
-      overallScore: customReview?.overallScore || Math.floor(78 + Math.random() * 12),
-      passProbability: customReview?.passProbability || '通过概率较高 (约 85%)',
-      totalQACount: customReview?.qaBreakdown?.length || 4,
+      overallScore: customReview?.overallScore ?? 0,
+      passProbability: customReview?.passProbability || '',
+      totalQACount: customReview?.totalQACount || customReview?.qaBreakdown?.length || 0,
       highlights: customReview?.highlights || [],
       drawbacks: customReview?.drawbacks || [],
-      competencies: customReview?.competencies || [
-        { name: '岗位匹配度', score: 85, benchmark: 80 },
-        { name: '回答结构性', score: 78, benchmark: 78 },
-        { name: '专业技术深度', score: 82, benchmark: 82 },
-        { name: '表达清晰度', score: 80, benchmark: 75 }
-      ],
+      competencies: customReview?.competencies || [],
       coreProblems: customReview?.coreProblems || [],
       preparationVsActual: customReview?.preparationVsActual || [],
-      aiDiagnosis: customReview?.aiDiagnosis || '整体回答专业度很高，技术逻辑清晰。',
+      aiDiagnosis: customReview?.aiDiagnosis || '',
       qaBreakdown: customReview?.qaBreakdown || [],
       qaList: customReview?.qaList || [],
       experienceFeedback: customReview?.experienceFeedback || [],

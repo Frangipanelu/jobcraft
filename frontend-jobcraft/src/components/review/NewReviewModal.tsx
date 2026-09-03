@@ -22,7 +22,7 @@ export const NewReviewModal: React.FC<NewReviewModalProps> = ({
   onClose,
   defaultInterviewId
 }) => {
-  const { interviews, addInterviewReview, navigateTo, showToast } = useJobCraft();
+  const { interviews, createReviewFromTranscript, navigateTo, showToast } = useJobCraft();
 
   const [selectedInterviewId, setSelectedInterviewId] = useState<string>(
     defaultInterviewId || interviews[0]?.id || 'int-byte-1'
@@ -43,59 +43,27 @@ export const NewReviewModal: React.FC<NewReviewModalProps> = ({
 
   const handleStartReview = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!transcriptContent.trim()) return;
+    const transcript = transcriptContent.trim();
+    if (!transcript) return;
 
     setIsProcessing(true);
-    setTimeout(() => {
-      setIsProcessing(false);
-      addInterviewReview(selectedInterviewId, {
-        overallScore: 88,
-        passProbability: '通过概率较高 (约 85%)',
-        highlights: [
-          '准确说出了 LLM-as-a-Judge 的多模型交叉裁判机制与 Kappa 一致性度量，专业度打动面试官',
-          '对幻觉率下降 34.2% 和评测周期由 2 周缩减至 4 小时的指标脱口而出，量化证据极具说服力'
-        ],
-        drawbacks: [
-          '在回答延迟优化时略显犹豫，没有主动展开缓存策略与 TTFT 首字延迟的权衡细节'
-        ],
-        qaBreakdown: [
-          {
-            id: 'qa-rev-1',
-            question: '如何解决大模型幻觉率统计不准的问题？',
-            interviewerIntent: '考察大模型质量评测工程方法论与指标体系构建严谨度',
-            candidatePerformance: '优秀 (92分)',
-            analysis: '逻辑极其严密，清晰阐述了裁判模型选择、一致性校验与人工双盲仲裁全流程。',
-            recommendedStrategy: '可进一步补充如何利用该评测集自动化回归测试的落地场景。'
-          },
-          {
-            id: 'qa-rev-2',
-            question: '当两个裁判模型打分相反时以谁为准？',
-            interviewerIntent: '考察极端 Badcase 兜底与评测指标鲁棒性',
-            candidatePerformance: '良好 (85分)',
-            analysis: '回答了人工分流机制，若能补充对提示词敏感度测试则更佳。',
-            recommendedStrategy: '补充冷启动阶段的人工校验比例与自动化阈值调优过程。'
-          }
-        ],
-        skillGapsIdentified: ['高并发端到端延迟优化 SLA 细节拆解'],
-        experienceFeedback: [
-          {
-            experienceId: 'exp-1',
-            feedbackText: '在本次面试中得到了面试官的高度认可，建议将「Kappa 一致性校验」作为亮点写入经历卡片'
-          }
-        ]
-      });
+    // 调用真实后端创建复盘 + AI 分析，使用返回的真实数据生成复盘（无伪造评分）
+    createReviewFromTranscript({
+      interviewId: selectedInterviewId,
+      transcript
+    });
 
-      onClose();
-      navigateTo('interview_review_detail', {
-        jobId: currentInterview?.jobId,
-        interviewId: selectedInterviewId
-      });
-      showToast({
-        type: 'success',
-        title: '智能复盘报告已生成',
-        message: '已提取考题得失与能力反哺资产。'
-      });
-    }, 1000);
+    onClose();
+    navigateTo('interview_review_detail', {
+      jobId: currentInterview?.jobId,
+      interviewId: selectedInterviewId
+    });
+    setIsProcessing(false);
+    showToast({
+      type: 'success',
+      title: '智能复盘报告已生成',
+      message: '已提取考题得失，AI 分析完成后将展示真实复盘。'
+    });
   };
 
   return (
