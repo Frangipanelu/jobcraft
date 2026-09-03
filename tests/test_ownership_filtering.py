@@ -152,12 +152,24 @@ def _patch_ensure_helper(monkeypatch, module_path, holder):
 def test_by_id_dao_appends_user_id_filter(
     monkeypatch, module_path, func_name, args, kwargs, expect_sql
 ):
-    """get_*/delete_* 在传入 user_id 时，SQL 必须包含 user_id 过滤条件。"""
+    """get_*/delete_* 在传入 user_id 时，SQL 必须包含 user_id 过离条件。"""
     from app.tools import db_tools
 
     cursor = _FakeCursor(rowcount=1, row=None)
     holder = [cursor]
     monkeypatch.setattr("mysql.connector.connect", _capture(holder))
+    monkeypatch.setattr(
+        "app.tools.db_config.get_db_config",
+        lambda overrides=None: {
+            "host": "localhost",
+            "port": 3306,
+            "user": "test",
+            "password": "test",
+            "database": "test_db",
+            "charset": "utf8mb4",
+            "autocommit": True,
+        },
+    )
 
     func = getattr(db_tools, func_name)
     with patch(f"{module_path}.connect", _capture(holder)):
@@ -172,12 +184,26 @@ def test_by_id_dao_appends_user_id_filter(
     assert matched, f"未找到带 user_id 过滤的 SQL: {[s for s, _ in cursor.executed]}"
 
 
+_FAKE_DB_CONFIG = {
+    "host": "localhost",
+    "port": 3306,
+    "user": "test",
+    "password": "test",
+    "database": "test_db",
+    "charset": "utf8mb4",
+    "autocommit": True,
+}
+
+
 def test_get_card_without_user_id_no_filter(monkeypatch):
     """未传 user_id 时保持原语义，不强制过滤（兼容非敏感读取）。"""
     from app.tools.db_experience import get_card
 
     cursor = _FakeCursor(row=None)
     holder = [cursor]
+    monkeypatch.setattr(
+        "app.tools.db_config.get_db_config", lambda overrides=None: _FAKE_DB_CONFIG
+    )
 
     def fake_connect(**kwargs):
         return _FakeConn(cursor)
@@ -196,6 +222,9 @@ def test_update_card_appends_user_id_filter(monkeypatch):
 
     cursor = _FakeCursor(rowcount=1)
     holder = [cursor]
+    monkeypatch.setattr(
+        "app.tools.db_config.get_db_config", lambda overrides=None: _FAKE_DB_CONFIG
+    )
 
     def fake_connect(**kwargs):
         return _FakeConn(cursor)
@@ -214,6 +243,9 @@ def test_update_submission_appends_user_id_filter(monkeypatch):
 
     cursor = _FakeCursor(rowcount=1)
     holder = [cursor]
+    monkeypatch.setattr(
+        "app.tools.db_config.get_db_config", lambda overrides=None: _FAKE_DB_CONFIG
+    )
 
     def fake_connect(**kwargs):
         return _FakeConn(cursor)
@@ -232,6 +264,9 @@ def test_get_interview_prep_by_job_appends_user_id_filter(monkeypatch):
 
     cursor = _FakeCursor(row=None)
     holder = [cursor]
+    monkeypatch.setattr(
+        "app.tools.db_config.get_db_config", lambda overrides=None: _FAKE_DB_CONFIG
+    )
 
     def fake_connect(**kwargs):
         return _FakeConn(cursor)
@@ -250,6 +285,9 @@ def test_delete_interview_record_appends_user_id_filter(monkeypatch):
 
     cursor = _FakeCursor(rowcount=1)
     holder = [cursor]
+    monkeypatch.setattr(
+        "app.tools.db_config.get_db_config", lambda overrides=None: _FAKE_DB_CONFIG
+    )
 
     def fake_connect(**kwargs):
         return _FakeConn(cursor)
