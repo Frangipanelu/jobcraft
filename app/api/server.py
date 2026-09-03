@@ -142,9 +142,10 @@ async def api_health_check():
     """
     try:
         from app.db import engine
+        from sqlalchemy import text
 
         with engine.connect() as conn:
-            conn.execute("SELECT 1")
+            conn.execute(text("SELECT 1"))
         db_status = "healthy"
     except Exception as e:
         logger.warning(f"数据库健康检查失败: {e}")

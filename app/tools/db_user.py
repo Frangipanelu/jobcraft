@@ -5,7 +5,7 @@ from typing import Any, Dict, List, Optional
 
 from mysql.connector import connect
 
-from app.tools.db_tools import _jc_config
+from app.tools.db_config import _jc_config
 
 logger = logging.getLogger("jobcraft.db.user")
 

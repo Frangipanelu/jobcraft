@@ -27,12 +27,15 @@ class InterviewReviewCreatePayload(BaseModel):
     raw_text: str
 
 
-class InterviewReviewQuestionTablePayload(BaseModel):
-    user_id: int = 1
+class MockChatPayload(BaseModel):
+    messages: List[dict]
+    company: str = ""
+    position: str = ""
+    round_type: str = "技术面"
+    experience_context: str = ""
 
 
 class InterviewReviewAnalyzePayload(BaseModel):
-    user_id: int = 1
     selected_sequences: List[int]
 
 
@@ -353,6 +356,52 @@ def jobcraft_interview_review_analyze(
     except Exception as e:
         logger.exception("面试复盘详细分析失败")
         raise HTTPException(status_code=500, detail=f"面试复盘详细分析失败: {e}")
+
+
+@router.post("/mock-chat")
+def jobcraft_mock_chat(
+    payload: MockChatPayload,
+    current_user: int = Depends(get_current_user),
+):
+    """模拟面试实时对话端点 - 替代前端直连 Gemini"""
+    from openai import OpenAI
+    import os
+
+    client = OpenAI(
+        api_key=os.getenv("OPENAI_API_KEY"),
+        base_url=os.getenv("OPENAI_BASE_URL"),
+    )
+
+    system_prompt = f"""你是一位专业的面试官，正在进行一场{payload.round_type}。
+公司：{payload.company or "某科技公司"}
+岗位：{payload.position or "技术岗位"}
+
+你的角色：
+- 专业、友善但有深度的面试官
+- 根据候选人的回答进行追问
+- 每次只问一个问题
+- 回答要简洁有力，控制在100字以内
+- 使用中文交流
+
+{f"候选人背景：{payload.experience_context}" if payload.experience_context else ""}
+
+请开始面试，先做自我介绍，然后提出第一个问题。"""
+
+    messages = [{"role": "system", "content": system_prompt}]
+    messages.extend(payload.messages)
+
+    try:
+        response = client.chat.completions.create(
+            model=os.getenv("LLM_model", "glm-4-flash"),
+            messages=messages,
+            max_tokens=500,
+            temperature=0.7,
+        )
+        reply = response.choices[0].message.content
+        return {"reply": reply, "role": "interviewer"}
+    except Exception as e:
+        logger.exception("模拟面试对话失败")
+        raise HTTPException(status_code=500, detail=f"模拟面试对话失败: {e}")
 
 
 @router.get("/{record_id}")
