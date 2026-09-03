@@ -154,9 +154,7 @@ def list_interview_preps(user_id: int) -> List[Dict[str, Any]]:
                 "extended_version": _parse_json(r["extended_version_json"]) or {},
                 "ability_matrix": _parse_json(r["ability_matrix_json"]) or [],
                 "html_content": r["html_content"] or "",
-                "submission_id": r["submission_id"]
-                if "submission_id" in r
-                else None,
+                "submission_id": r["submission_id"] if "submission_id" in r else None,
                 "company_research": _parse_json(r["company_research_json"])
                 if r.get("company_research_json")
                 else None,
