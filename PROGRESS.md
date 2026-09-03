@@ -365,8 +365,17 @@
 - [x] **前端：`JobCraftContext` 新增 `loadInterviews()`** ——拉 `listInterviewPreps` → `prepRecordToInterview` 映射为 `Interview[]`（填充 `prepSource` 真实数据 + best-effort 填 `preparation`：维度题→highFreqQuestions、companyResearch 扁平化、elevator_pitch）；集成进 `loadUserProfileAndData` 的并行加载，刷新不清空内存中未持久化的本地面试
 - [x] **前端：`Interview` 类型新增可选 `prepSource?: InterviewPrepRecord`**——承载后端完整真实结构，供下一步 UI 板块重组消费
 - [x] **验证**：`npm run lint`（tsc --noEmit）通过；`npm run build` 成功（1701 modules，仅既有 CSS @import 顺序 + chunk 大小 warning）；后端 `uv run ruff check .` 通过；`uv run pytest tests/ -q` 325 passed、11 skipped；`uv run python -c from app.api.server import app` 正常（新路由已注册）
-- [ ] **遗留（下一步）**：`createInterview()` 仍建内存硬编码对象（含假 highFreqQuestions/companyResearch），未打通 `POST /interview-prep` 真实 LLM 生成与持久化；这需要把 createInterview 改 async + 传 card_ids + 真实生成流程，与"UI 板块重组 + 新增完整逐字稿报告"作为下一步一起做
-  - `commit_id: a5aa31e`（已推 `origin/main`）
+- `commit_id: a5aa31e`（已推 `origin/main`）
+
+> **第二轮（真实生成 + 持久化）** —— `createInterview` 接后端真实 LLM 生成，删除硬编码假数据
+>
+> - [x] `createInterview` 改为 **async**（返回 `Promise<string>`）：解析该岗位的 `job_analysis_id`（无则抛错"请先到岗位分析页生成"→ 失败兜底）；调 `POST /interview-prep`（`round_type` 经 `roundTypeToCn` 映射、`card_ids: []` 由后端 `get_selected_card_ids_by_job` 自动回退）；返回结果经 `buildInterviewFromPrep` 映射为 `Interview` 并落本地 state；保留更新 job 状态、nextActions、成功 toast
+> - [x] **删除** 硬编码假 `highFreqQuestions`（原 q-new-1/q-new-2）、假 `companyResearch`、假 `recommendedExperiences`
+> - [x] 抽取共享映射 `buildInterviewFromPrep`（`prepRecordToInterview` 与创建共用），`roundTypeToCn` 前端 roundType→中文轮次
+> - [x] **3 个调用方改造为 await + 失败兜底**：`NewInterviewModal.tsx`、`CreateInterview.tsx`、`NewInterviewPrep.tsx` 的生成完结分支改为 async，成功才 `navigateTo`；失败 `setIsGenerating(false)` + `showToast(error)` 留在表单可重试
+> - [x] 验证：`npm run lint` 通过；`npm run build` 成功（504.38 kB，仅既有 chunk 大小 warning）
+> - [x] **遗留（下一步）**：UI 板块重组（合并 JD/简历、新增完整版逐字稿报告）——`prepSource` 已承载后端完整结构可供消费
+>   - `commit_id: a1558a7`（已推 `origin/main`）
 
 ---
 
