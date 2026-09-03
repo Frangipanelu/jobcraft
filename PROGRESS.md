@@ -365,7 +365,8 @@
 - [x] **前端：`JobCraftContext` 新增 `loadInterviews()`** ——拉 `listInterviewPreps` → `prepRecordToInterview` 映射为 `Interview[]`（填充 `prepSource` 真实数据 + best-effort 填 `preparation`：维度题→highFreqQuestions、companyResearch 扁平化、elevator_pitch）；集成进 `loadUserProfileAndData` 的并行加载，刷新不清空内存中未持久化的本地面试
 - [x] **前端：`Interview` 类型新增可选 `prepSource?: InterviewPrepRecord`**——承载后端完整真实结构，供下一步 UI 板块重组消费
 - [x] **验证**：`npm run lint`（tsc --noEmit）通过；`npm run build` 成功（1701 modules，仅既有 CSS @import 顺序 + chunk 大小 warning）；后端 `uv run ruff check .` 通过；`uv run pytest tests/ -q` 325 passed、11 skipped；`uv run python -c from app.api.server import app` 正常（新路由已注册）
-- [x] **遗留（下一步）**：`createInterview()` 仍建内存硬编码对象（含假 highFreqQuestions/companyResearch），未打通 `POST /interview-prep` 真实 LLM 生成与持久化；这需要把 createInterview 改 async + 传 card_ids + 真实生成流程，与"UI 板块重组 + 新增完整逐字稿报告"作为下一步一起做
+- [ ] **遗留（下一步）**：`createInterview()` 仍建内存硬编码对象（含假 highFreqQuestions/companyResearch），未打通 `POST /interview-prep` 真实 LLM 生成与持久化；这需要把 createInterview 改 async + 传 card_ids + 真实生成流程，与"UI 板块重组 + 新增完整逐字稿报告"作为下一步一起做
+  - `commit_id: a5aa31e`（已推 `origin/main`）
 
 ---
 
