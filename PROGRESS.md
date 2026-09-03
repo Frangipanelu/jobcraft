@@ -377,6 +377,20 @@
 > - [x] **遗留（下一步）**：UI 板块重组（合并 JD/简历、新增完整版逐字稿报告）——`prepSource` 已承载后端完整结构可供消费
 >   - `commit_id: a1558a7`（已推 `origin/main`）
 
+> **第三轮（UI 板块重组，接真实数据）** —— 面试准备工作台从"全硬编码 mock"改为"消费真实 prepSource"
+>
+> - [x] **工作台板块精简为 5 个**：公司调研 / 本场判断 / 维度题准备 / 面试逐字稿 / 模拟面试
+> - [x] **公司调研**：渲染真实 `company_research`(basic/business/funding/team/industry/news)；保留原视觉语言
+> - [x] **本场判断**：渲染真实 `round_type`/`duration` + 考察方向(维度题→方向拆解)
+> - [x] **维度题准备**：渲染真实 `dimension_questions`(question/type/answer_points→STAR 建议)，左列表右编辑器草稿
+> - [x] **面试逐字稿（新增）**：渲染 `elevator_pitch`(电梯式演讲) + `full_version`(完整版报告)，附使用建议
+> - [x] **模拟面试**：保留
+> - [x] 删除 Workbench 里硬编码的 `companyData`/`initialQuestions`
+> - [x] `createInterview` 同步携带 synthesized `prepSource`，使新建的面试也有真实完整数据（此前仅加载项有）
+> - [x] 验证：`npm run lint` 通过；`npm run build` 成功（504.33 kB）
+> - [x] **说明**：原计划"合并 JD/简历"板块暂未单列（需额外接 JD 文本与简历 markdown 数据源），当前工作台聚焦 4 大真实数据板块 + 模拟面试；如需可后续补充 JD/简历板块
+>   - `commit_id: efaca61`（已推 `origin/main`）
+
 ---
 
 **更新规则**：每次会话结束时，AI 必须根据本次实际完成的工作，移动或新增上述列表中的条目，并简要描述进展。

@@ -390,7 +390,7 @@ TASK-CLEANUP-WIP-001                                 (随时可做，无依赖)
 | 12 | TASK-REAL-DATA-004 JD 报告去 FALLBACK | P0 | TYPE | 产品可信 | ✅ 完成 `8870c26` |
 | 8 | TASK-REAL-DATA-002 MockInterview 去 Mock | P0 | INTERVIEW | 产品可信 | ⏳ 待办 |
 | 9 | TASK-REAL-DATA-003 复盘/向导去 Mock | P0 | INTERVIEW | 产品可信 | ⏳ 待办 |
-| 10 | TASK-INTERVIEW-001 面试持久化 | P0 | TYPE | 数据不丢失 | 🔄 近完成（列表/详情 + createInterview 真实生成已通，仅剩 UI 板块重组）|
+| 10 | TASK-INTERVIEW-001 面试持久化 | P0 | TYPE | 数据不丢失 | ✅ 完成（列表/详情 + createInterview 真实生成 + 工作台 UI 板块重组）|
 | 11 | TASK-CLEANUP-WIP-001 清理 WIP | P1 | — | 仓库整洁 | ⏳ 待办 |
 
 > 安全基线（Phase 0）4 个 task 全部完成（commit `6a0f121`→`8878459`→`09aa805`→`b681f2c`）。
