@@ -265,31 +265,41 @@ export const NewInterviewModal: React.FC<Props> = ({ isOpen, jobId, mode, onClos
       }, 600);
       return () => clearTimeout(timer);
     } else {
-      // All done, create interview and close
-      const timer = setTimeout(() => {
-        const newId = createInterview({
-          jobId: selectedJobId || undefined,
-          company: currentJob?.company || '待填写公司',
-          role: currentJob?.role || '待填写岗位',
-          roundNumber,
-          roundName,
-          roundType,
-          time: interviewTime,
-          format: interviewFormat,
-          interviewer,
-          supplementNotes
-        });
-        localStorage.removeItem(DRAFT_KEY);
-        showToast({
-          type: 'success',
-          title: '面试准备已创建',
-          message: 'AI 正在为你生成个性化准备方案...'
-        });
-        onClose();
-        navigateTo('interview_prep_workspace', {
-          jobId: selectedJobId || undefined,
-          interviewId: newId
-        });
+      // All done, create interview (real backend generation) and close
+      const timer = setTimeout(async () => {
+        try {
+          const newId = await createInterview({
+            jobId: selectedJobId || undefined,
+            company: currentJob?.company || '待填写公司',
+            role: currentJob?.role || '待填写岗位',
+            roundNumber,
+            roundName,
+            roundType,
+            time: interviewTime,
+            format: interviewFormat,
+            interviewer,
+            supplementNotes
+          });
+          localStorage.removeItem(DRAFT_KEY);
+          showToast({
+            type: 'success',
+            title: '面试准备已创建',
+            message: 'AI 已生成个性化准备方案'
+          });
+          onClose();
+          navigateTo('interview_prep_workspace', {
+            jobId: selectedJobId || undefined,
+            interviewId: newId
+          });
+        } catch (err) {
+          setIsGenerating(false);
+          setCurrentAiStep(-1);
+          showToast({
+            type: 'error',
+            title: '生成面试准备失败',
+            message: (err as Error).message || '请稍后重试'
+          });
+        }
       }, 500);
       return () => clearTimeout(timer);
     }

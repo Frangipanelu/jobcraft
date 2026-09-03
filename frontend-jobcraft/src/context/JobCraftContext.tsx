@@ -21,7 +21,7 @@ import * as authApi from '../api/auth'
 import * as experienceApi from '../api/experience'
 import * as jobApi from '../api/job'
 import * as interviewApi from '../api/interview'
-import type { ExperienceCard, JobAnalysisResult, Submission, DashboardItem } from '../api/types'
+import type { ExperienceCard, JobAnalysisResult, Submission, DashboardItem, InterviewPrepResult, InterviewPrepRecord as ApiInterviewPrepRecord } from '../api/types'
 
 export interface ToastMessage {
   id: string;
@@ -125,7 +125,7 @@ interface JobCraftContextType {
     format: Interview['format'];
     interviewer?: string;
     supplementNotes?: string;
-  }) => string;
+  }) => Promise<string>;
   updateQuestionAnswer: (interviewId: string, questionId: string, answer: Partial<PreparedAnswer>, isPrepared?: boolean) => void;
   addCustomQuestion: (interviewId: string, questionText: string, focusText: string) => void;
 
@@ -290,11 +290,43 @@ function mapRoundType(t: string): Interview['roundType'] {
 }
 
 function prepRecordToInterview(rec: InterviewPrepRecord): Interview {
-  const roundName = rec.round_type ? `面试准备 · ${rec.round_type}` : '面试准备'
+  return buildInterviewFromPrep(
+    {
+      round_type: rec.round_type,
+      dimension_questions: rec.dimension_questions || [],
+      company_research: rec.company_research,
+      created_at: rec.created_at
+    },
+    {
+      id: `prep-${rec.id}`,
+      jobId: rec.job_analysis_id ? String(rec.job_analysis_id) : undefined,
+      company: rec.company || '',
+      role: rec.position || '',
+      prepSource: rec
+    }
+  )
+}
+
+function buildInterviewFromPrep(
+  prep: {
+    round_type: string
+    dimension_questions: {
+      dimension: string
+      question: string
+      answer_points: string[]
+      card_ids: number[]
+    }[]
+    company_research?: Record<string, unknown> | null
+    created_at?: string | null
+  },
+  meta: { id: string; jobId?: string; company: string; role: string; prepSource?: InterviewPrepRecord }
+): Interview {
+  const roundName = prep.round_type ? `面试准备 · ${prep.round_type}` : '面试准备'
+  const cr = (prep.company_research || {}) as Record<string, any>
   const highFreqQuestions: InterviewPreparation['highFreqQuestions'] = (
-    rec.dimension_questions || []
+    prep.dimension_questions || []
   ).map((dq, idx) => ({
-    id: `q-${rec.id}-${idx}`,
+    id: `${meta.id}-q-${idx}`,
     question: dq.question,
     probabilityStars: 4,
     evaluationFocus: dq.dimension || '',
@@ -309,36 +341,36 @@ function prepRecordToInterview(rec: InterviewPrepRecord): Interview {
     }
   }))
   return {
-    id: `prep-${rec.id}`,
-    jobId: rec.job_analysis_id ? String(rec.job_analysis_id) : undefined,
-    company: rec.company || '',
-    role: rec.position || '',
+    id: meta.id,
+    jobId: meta.jobId,
+    company: meta.company,
+    role: meta.role,
     roundNumber: 1,
     roundName: roundName,
-    roundType: mapRoundType(rec.round_type),
-    time: rec.created_at ? rec.created_at.split('T')[0] + ' ' + (rec.created_at.split('T')[1]?.slice(0, 5) || '') : '',
+    roundType: mapRoundType(prep.round_type),
+    time: prep.created_at ? prep.created_at.split('T')[0] + ' ' + (prep.created_at.split('T')[1]?.slice(0, 5) || '') : '',
     format: 'video',
     readinessPercent: 40,
     status: 'preparing',
     preparation: {
       readinessPercent: 40,
       companyResearch: {
-        background: (rec.company_research as any)?.basic?.description || `${rec.company}核心业务线`,
-        coreBusiness: (rec.company_research as any)?.business?.main_business || '',
-        keyProducts: (rec.company_research as any)?.business?.product_names || [],
-        relevantBusiness: (rec.company_research as any)?.basic?.industry || '',
-        recentNews: (rec.company_research as any)?.news?.slice(0, 3).map((n: any) => n.title) || [],
-        aiHiringIntent: (rec.company_research as any)?.ai_hiring || ''
+        background: cr?.basic?.description || `${meta.company}核心业务线`,
+        coreBusiness: cr?.business?.main_business || '',
+        keyProducts: cr?.business?.product_names || [],
+        relevantBusiness: cr?.basic?.industry || '',
+        recentNews: (cr?.news || []).slice(0, 3).map((n: any) => n?.title).filter(Boolean) || [],
+        aiHiringIntent: cr?.ai_hiring || ''
       },
       aiStrategy: {
-        roundTypeDesc: rec.round_type ? `${rec.round_type}面试准备` : '面试准备',
-        keyFocusAreas: (rec.dimension_questions || []).map((dq) => ({
+        roundTypeDesc: prep.round_type ? `${prep.round_type}面试准备` : '面试准备',
+        keyFocusAreas: (prep.dimension_questions || []).map((dq) => ({
           name: dq.dimension,
           importance: '★★★★★',
           desc: dq.question
         }))
       },
-      recommendedExperiences: (rec.dimension_questions || [])
+      recommendedExperiences: (prep.dimension_questions || [])
         .filter((dq) => dq.card_ids && dq.card_ids.length > 0)
         .map((dq) => ({
           experienceId: String(dq.card_ids[0]),
@@ -347,7 +379,18 @@ function prepRecordToInterview(rec: InterviewPrepRecord): Interview {
         })),
       highFreqQuestions
     },
-    prepSource: rec
+    prepSource: meta.prepSource
+  }
+}
+
+function roundTypeToCn(roundType: Interview['roundType']): string {
+  switch (roundType) {
+    case 'tech': return '技术面'
+    case 'product': return '产品面'
+    case 'business': return '业务面'
+    case 'hr': return 'HR面'
+    case 'comprehensive': return '综合面'
+    default: return '技术面'
   }
 }
 
@@ -1038,7 +1081,7 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
   };
 
   // Interview Creation
-  const createInterview = (data: {
+  const createInterview = async (data: {
     jobId?: string;
     company: string;
     role: string;
@@ -1049,76 +1092,45 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
     format: Interview['format'];
     interviewer?: string;
     supplementNotes?: string;
-  }) => {
-    const newId = 'int-' + Date.now();
+  }): Promise<string> => {
+    // 解析岗位分析 id（job_analysis_id），这是后端真实生成的前提
+    let jobAnalysisId: number | null = null;
+    if (data.jobId) {
+      const job = jobs.find((j) => j.id === data.jobId);
+      if (job?.jdAnalysisId) {
+        const parsed = Number(job.jdAnalysisId);
+        if (!Number.isNaN(parsed)) jobAnalysisId = parsed;
+      }
+    }
+    if (!jobAnalysisId) {
+      throw new Error('该岗位尚未完成 AI 岗位分析，请先到「岗位分析」页生成分析之后再准备面试。');
+    }
+
+    // 调用后端真实生成（LLM 耗时较长，由调用方展示加载态与失败兜底）
+    const result: InterviewPrepResult = await interviewApi.generateInterviewPrep(jobAnalysisId, {
+      round_type: roundTypeToCn(data.roundType),
+      card_ids: []
+    });
+
+    const newId = 'prep-' + Date.now();
+    const baseInterview = buildInterviewFromPrep(
+      {
+        round_type: result.round_type,
+        dimension_questions: result.dimension_questions || [],
+        company_research: result.company_research,
+        created_at: result.created_at
+      },
+      { id: newId, jobId: data.jobId, company: data.company, role: data.role }
+    );
     const newInterview: Interview = {
-      id: newId,
-      jobId: data.jobId,
-      company: data.company,
-      role: data.role,
+      ...baseInterview,
       roundNumber: data.roundNumber,
-      roundName: data.roundName,
+      roundName: data.roundName || baseInterview.roundName,
       roundType: data.roundType,
-      time: data.time,
+      time: data.time || baseInterview.time,
       format: data.format,
       interviewer: data.interviewer || '面试官',
-      supplementNotes: data.supplementNotes,
-      readinessPercent: 40,
-      status: 'preparing',
-      preparation: {
-        readinessPercent: 40,
-        companyResearch: {
-          background: `${data.company}核心业务线，关注技术落地与业务增长。`,
-          coreBusiness: '大模型与产品业务深度融合。',
-          keyProducts: ['核心产品线', '创新 AI 实验室'],
-          relevantBusiness: `${data.role}所属业务团队。`,
-          recentNews: [`${data.company}持续发力 AI 场景创新与技术基建`],
-          aiHiringIntent: `【AI推测】招聘${data.role}，重点考察候选人在${data.roundType === 'tech' ? '算法原理与系统架构' : '业务判断与从0到1推进'}上的真实贡献。`
-        },
-        aiStrategy: {
-          roundTypeDesc: `本场属于${data.roundName}，重点考核实战方法论与应对复杂业务场景的能力。`,
-          keyFocusAreas: [
-            { name: '专业业务理解', importance: '★★★★★', desc: '考察对实际业务痛点与技术选型的权衡' },
-            { name: '项目真实性与量化证据', importance: '★★★★★', desc: '考察过往战绩的量化数据与关键决策' }
-          ]
-        },
-        recommendedExperiences: [
-          { experienceId: 'exp-1', recommendScore: 95, proves: ['核心业务能力', '从0到1推进', '数据分析'] },
-          { experienceId: 'exp-2', recommendScore: 90, proves: ['技术架构', '协同落地'] }
-        ],
-        highFreqQuestions: [
-          {
-            id: 'q-new-1',
-            question: `请介绍一下你在过去负责的最具挑战性的 AI 项目，遇到哪些阻碍，如何克服？`,
-            probabilityStars: 5,
-            evaluationFocus: '项目真实性 / 解决问题能力 / 面对逆境的韧性',
-            recommendedExperienceId: 'exp-1',
-            isPrepared: false,
-            preparedAnswer: {
-              mode: 'logic',
-              logicFlow: ['业务背景', '核心技术阻碍', '解决方案设计', '最终量化结果'],
-              keywords: ['方案选型', '数据驱动', '跨部门协同', '量化成果'],
-              aiReference: '以 AI 搜索质量评测项目为例，重点讲从每天 200 条人工评测瓶颈，到设计自动化裁判管线提升至 5 万条吞吐的突破历程……',
-              inScript: false
-            }
-          },
-          {
-            id: 'q-new-2',
-            question: `对于我们公司目前的业务方向，如果你加入，你觉得第一季度最重要的着力点是什么？`,
-            probabilityStars: 4,
-            evaluationFocus: '业务理解 / 主动思考 / 落地规划',
-            recommendedExperienceId: 'exp-2',
-            isPrepared: false,
-            preparedAnswer: {
-              mode: 'logic',
-              logicFlow: ['梳理现状指标', '抓核心 Bad Case', '建立敏捷迭代闭环'],
-              keywords: ['业务画像', '快速对齐', '快速见效点 Quick Wins'],
-              aiReference: '第一月聚焦业务熟悉与核心指标对齐；第二月建立自动化监控与评测基准；第三月推动首个优化方案上线并产出正向增量……',
-              inScript: false
-            }
-          }
-        ]
-      }
+      supplementNotes: data.supplementNotes
     };
 
     setInterviews((prev) => [newInterview, ...prev]);

@@ -168,28 +168,38 @@ export const NewInterviewPrep: React.FC<Props> = ({ jobId, mode = 'standalone' }
       }, 600);
       return () => clearTimeout(timer);
     } else {
-      const timer = setTimeout(() => {
-        const newId = createInterview({
-          jobId: selectedJobId || undefined,
-          company: currentJob?.company || '待填写公司',
-          role: currentJob?.role || '待填写岗位',
-          roundNumber,
-          roundName,
-          roundType,
-          time: interviewTime,
-          format: interviewFormat,
-          interviewer,
-          supplementNotes
-        });
-        showToast({
-          type: 'success',
-          title: '面试准备已创建',
-          message: 'AI 正在为你生成个性化准备方案...'
-        });
-        navigateTo('interview_prep_workspace', {
-          jobId: selectedJobId || undefined,
-          interviewId: newId
-        });
+      const timer = setTimeout(async () => {
+        try {
+          const newId = await createInterview({
+            jobId: selectedJobId || undefined,
+            company: currentJob?.company || '待填写公司',
+            role: currentJob?.role || '待填写岗位',
+            roundNumber,
+            roundName,
+            roundType,
+            time: interviewTime,
+            format: interviewFormat,
+            interviewer,
+            supplementNotes
+          });
+          showToast({
+            type: 'success',
+            title: '面试准备已创建',
+            message: 'AI 已生成个性化准备方案'
+          });
+          navigateTo('interview_prep_workspace', {
+            jobId: selectedJobId || undefined,
+            interviewId: newId
+          });
+        } catch (err) {
+          setIsGenerating(false);
+          setCurrentAiStep(-1);
+          showToast({
+            type: 'error',
+            title: '生成面试准备失败',
+            message: (err as Error).message || '请稍后重试'
+          });
+        }
       }, 500);
       return () => clearTimeout(timer);
     }

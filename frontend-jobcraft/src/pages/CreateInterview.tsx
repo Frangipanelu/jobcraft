@@ -240,28 +240,38 @@ export const CreateInterview: React.FC = () => {
       }, 650);
       return () => clearTimeout(timer);
     } else {
-      const timer = setTimeout(() => {
+      const timer = setTimeout(async () => {
         const fullTime = `${interviewDate} ${interviewTimeHour}`;
-        const newIntId = createInterview({
-          jobId: selectedJobId || undefined,
-          company: selectedJob?.company || '目标企业',
-          role: selectedJob?.role || '目标岗位',
-          roundNumber,
-          roundName,
-          roundType,
-          time: fullTime,
-          format: interviewFormat,
-          interviewer,
-          supplementNotes
-        });
+        try {
+          const newIntId = await createInterview({
+            jobId: selectedJobId || undefined,
+            company: selectedJob?.company || '目标企业',
+            role: selectedJob?.role || '目标岗位',
+            roundNumber,
+            roundName,
+            roundType,
+            time: fullTime,
+            format: interviewFormat,
+            interviewer,
+            supplementNotes
+          });
 
-        clearInterviewDraft();
-        showToast({
-          type: 'success',
-          title: '面试准备方案已生成',
-          message: `已为「${selectedJob?.company || '目标企业'} ${roundName}」生成攻防策略与高频题库。`
-        });
-        navigateTo('interview_prep_workspace', { interviewId: newIntId });
+          clearInterviewDraft();
+          showToast({
+            type: 'success',
+            title: '面试准备方案已生成',
+            message: `已为「${selectedJob?.company || '目标企业'} ${roundName}」生成攻防策略与高频题库。`
+          });
+          navigateTo('interview_prep_workspace', { interviewId: newIntId });
+        } catch (err) {
+          setIsGenerating(false);
+          setCurrentAiStep(0);
+          showToast({
+            type: 'error',
+            title: '生成面试准备失败',
+            message: (err as Error).message || '请稍后重试'
+          });
+        }
       }, 500);
       return () => clearTimeout(timer);
     }
