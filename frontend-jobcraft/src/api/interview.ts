@@ -192,3 +192,21 @@ export async function analyzeInterviewReview(
     }
   )
 }
+
+export interface MockChatReply {
+  reply: string;
+  role: 'interviewer';
+}
+
+export async function mockChat(payload: {
+  messages: { role: string; content: string }[];
+  company?: string;
+  position?: string;
+  round_type?: string;
+  experience_context?: string;
+}): Promise<MockChatReply> {
+  return request<MockChatReply>('/api/jobcraft/interview-review/mock-chat', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
