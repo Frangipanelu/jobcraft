@@ -5,6 +5,6 @@ JobCraft 异步任务模块
 支持长时间运行的任务（简历生成、报告导出等）。
 """
 
-from .worker import TaskManager, TaskStatus, get_task_manager
+from .worker import TaskManager, TaskStatus, get_task_manager, run_worker
 
-__all__ = ["TaskManager", "TaskStatus", "get_task_manager"]
+__all__ = ["TaskManager", "TaskStatus", "get_task_manager", "run_worker"]

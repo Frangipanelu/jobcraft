@@ -5,6 +5,7 @@ JobCraft 任务管理器
 """
 
 import json
+import logging
 import os
 import time
 import uuid
@@ -12,6 +13,8 @@ from enum import Enum
 from typing import Any, Callable, Dict, Optional
 
 from redis import Redis
+
+logger = logging.getLogger("jobcraft.tasks.worker")
 
 
 class TaskStatus(str, Enum):
@@ -267,3 +270,84 @@ def get_task_manager() -> TaskManager:
     if _task_manager is None:
         _task_manager = TaskManager()
     return _task_manager
+
+
+def _dispatch_one(task_manager: TaskManager, payload: Dict[str, Any]) -> None:
+    """
+    消费单条队列消息：找到对应的 handler 并执行。
+
+    :param task_manager: 任务管理器实例
+    :param payload: 队列消息 `{task_id, task_type, params}`
+    """
+    from .handlers import get_task_handler
+
+    task_id = payload.get("task_id")
+    task_type = payload.get("task_type")
+    params = payload.get("params", {})
+
+    if not task_type:
+        logger.error("队列消息缺少 task_type，跳过: %s", payload)
+        return
+
+    handler = get_task_handler(task_type)
+    if not handler:
+        logger.error("无法识别的任务类型 %s，标记失败", task_type)
+        if task_id:
+            task_manager.update_task_status(
+                task_id, TaskStatus.FAILED, error=f"unsupported task_type: {task_type}"
+            )
+        return
+
+    # 参数中补入 task_id / task_type，供 handler 更新状态
+    run_params = dict(params)
+    run_params.setdefault("task_id", task_id)
+    run_params.setdefault("user_id", params.get("user_id", 1))
+    logger.info("消费任务: %s (%s)", task_id, task_type)
+    handler(run_params)
+
+
+def run_worker(sleep_interval: float = 2.0, max_idle: int = -1) -> None:
+    """
+    Redis 异步任务消费循环（阻塞式 worker daemon）。
+
+    从 `jobcraft:queue` 弹出消息并分发到对应 handler 执行。
+
+    :param sleep_interval: 队列为空时的等待间隔（秒）
+    :param max_idle: 连续空转多少次后退出（-1 表示永不退出）
+    """
+    manager = get_task_manager()
+    idle_rounds = 0
+    logger.info("任务 worker 启动，监听队列 %s", manager._queue_key)
+    while max_idle < 0 or idle_rounds < max_idle:
+        try:
+            item = manager.redis.blpop(manager._queue_key, timeout=sleep_interval)
+        except RuntimeError as e:
+            logger.error("Redis 不可用，停止消费: %s", e)
+            return
+        except Exception as e:  # noqa: BLE001 - worker daemon 需持续运行
+            logger.exception("消费队列异常: %s", e)
+            idle_rounds += 1
+            continue
+
+        if item is None:
+            idle_rounds += 1
+            continue
+
+        idle_rounds = 0
+        _, raw = item
+        try:
+            payload = json.loads(raw)
+        except json.JSONDecodeError:
+            logger.error("队列消息不是合法 JSON，丢弃: %s", raw[:200])
+            continue
+
+        try:
+            _dispatch_one(manager, payload)
+        except Exception as e:  # noqa: BLE001 - 单任务失败不应终止 worker
+            logger.exception("任务执行失败: %s", e)
+    logger.info("任务 worker 退出")
+
+
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
+    run_worker()

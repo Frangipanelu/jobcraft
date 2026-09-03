@@ -75,12 +75,20 @@ def execute_interview_prep(params: Dict[str, Any]) -> Dict[str, Any]:
     :param params: 任务参数
     :return: 生成结果
     """
-    from app.workflows.interview_flow import run_interview_workflow
+    from app.workflows.interview_prep_flow import run_interview_prep_workflow
 
     task_id = params.get("task_id")
     user_id = params.get("user_id", 1)
+    job_analysis_id = params.get("job_analysis_id")
     round_type = params.get("round_type", "技术面")
     card_ids = params.get("card_ids", [])
+    submission_id = params.get("submission_id")
+    company_research = params.get("company_research")
+    resume_markdown = params.get("resume_markdown")
+    previous_review_summary = params.get("previous_review_summary")
+
+    if not job_analysis_id:
+        raise ValueError("job_analysis_id 缺失，无法生成面试准备")
 
     logger.info(f"开始执行面试准备任务: {task_id}")
 
@@ -88,10 +96,15 @@ def execute_interview_prep(params: Dict[str, Any]) -> Dict[str, Any]:
         manager = get_task_manager()
         manager.update_task_status(task_id, TaskStatus.RUNNING)
 
-        result = run_interview_workflow(
-            user_id=user_id,
+        result = run_interview_prep_workflow(
+            job_analysis_id=job_analysis_id,
             round_type=round_type,
             card_ids=card_ids,
+            user_id=user_id,
+            submission_id=submission_id,
+            company_research=company_research,
+            resume_markdown=resume_markdown,
+            previous_review_summary=previous_review_summary,
         )
 
         manager.update_task_status(task_id, TaskStatus.COMPLETED, result=result)

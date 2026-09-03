@@ -202,6 +202,8 @@ async def submit_task(
 
     except HTTPException:
         raise
+    except RuntimeError as e:
+        raise HTTPException(status_code=503, detail=f"任务服务暂不可用（Redis 未就绪）: {e}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"提交任务失败: {e}")
 
@@ -227,6 +229,8 @@ async def get_task_status(task_id: str, current_user: int = Depends(get_current_
 
     except HTTPException:
         raise
+    except RuntimeError as e:
+        raise HTTPException(status_code=503, detail=f"任务服务暂不可用（Redis 未就绪）: {e}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"查询任务失败: {e}")
 
@@ -252,6 +256,8 @@ async def cancel_task(task_id: str, current_user: int = Depends(get_current_user
 
     except HTTPException:
         raise
+    except RuntimeError as e:
+        raise HTTPException(status_code=503, detail=f"任务服务暂不可用（Redis 未就绪）: {e}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"取消任务失败: {e}")
 
@@ -291,6 +297,8 @@ async def list_tasks(
 
     except HTTPException:
         raise
+    except RuntimeError as e:
+        raise HTTPException(status_code=503, detail=f"任务服务暂不可用（Redis 未就绪）: {e}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"列出任务失败: {e}")
 
