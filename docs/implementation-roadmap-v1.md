@@ -384,13 +384,13 @@ TASK-CLEANUP-WIP-001                                 (随时可做，无依赖)
 | 2 | TASK-OWN-001 所有权过滤 | P0 | AUTH | 安全 | ✅ 完成 `09aa805` |
 | 3 | TASK-INJ-001 注入收敛 | P0 | — | 安全 | ✅ 完成 `b681f2c` |
 | 4 | TASK-AUTH-002 移除默认凭据 | P0 | AUTH | 安全 | ✅ 完成 `8878459` |
-| 5 | TASK-TYPE-001 any 收紧 + 文档 | P0 | — | 契约清晰 | ⏳ 待办 |
-| 6 | TASK-FETCH-001 fetch 审计 | P0 | TYPE | 安全合规 | ⏳ 待办（仅文档） |
+| 5 | TASK-TYPE-001 any 收紧 + 文档 | P0 | — | 契约清晰 | ✅ 完成 `4e0d14e` |
+| 6 | TASK-FETCH-001 fetch 审计 | P0 | TYPE | 安全合规 | ✅ 完成 `4e0d14e`（随 TYPE 合并提交） |
 | 7 | TASK-REAL-DATA-001 Workbench 真实数据 | P0 | TYPE | 产品可信 | ✅ 完成 `3c03cde` |
 | 12 | TASK-REAL-DATA-004 JD 报告去 FALLBACK | P0 | TYPE | 产品可信 | ✅ 完成 `8870c26` |
 | 8 | TASK-REAL-DATA-002 MockInterview 去 Mock | P0 | INTERVIEW | 产品可信 | ⏳ 待办 |
 | 9 | TASK-REAL-DATA-003 复盘/向导去 Mock | P0 | INTERVIEW | 产品可信 | ⏳ 待办 |
-| 10 | TASK-INTERVIEW-001 面试持久化 | P0 | TYPE | 数据不丢失 | ⏳ 待办 |
+| 10 | TASK-INTERVIEW-001 面试持久化 | P0 | TYPE | 数据不丢失 | 🔄 部分完成（后端列表端点 + 前端 loadInterviews）|
 | 11 | TASK-CLEANUP-WIP-001 清理 WIP | P1 | — | 仓库整洁 | ⏳ 待办 |
 
 > 安全基线（Phase 0）4 个 task 全部完成（commit `6a0f121`→`8878459`→`09aa805`→`b681f2c`）。

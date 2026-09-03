@@ -345,6 +345,7 @@ class InterviewPrepResult(BaseModel):
     full_version: str = ""
     html_content: str = ""
     created_at: Optional[str] = None
+    company_research: Optional[Dict[str, Any]] = Field(default_factory=dict)
 
 
 # ============================================================

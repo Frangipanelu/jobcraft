@@ -153,4 +153,5 @@ def get_interview_prep(
         full_version=extended.get("full_version", ""),
         html_content=row.get("html_content", ""),
         created_at=row.get("created_at"),
+        company_research=row.get("company_research") or {},
     )

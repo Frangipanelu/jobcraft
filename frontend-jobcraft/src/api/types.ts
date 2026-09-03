@@ -270,6 +270,14 @@ export interface InterviewPrepResult {
   full_version: string
   html_content: string
   created_at: string | null
+  company_research?: Record<string, unknown> | null
+}
+
+export interface InterviewPrepRecord extends InterviewPrepResult {
+  id: number
+  company: string
+  position: string
+  submission_id: number | null
 }
 
 // ============================================================

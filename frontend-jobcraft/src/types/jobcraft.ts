@@ -337,6 +337,28 @@ export interface Interview {
   status: 'upcoming' | 'preparing' | 'completed';
   preparation: InterviewPreparation;
   review?: InterviewReview;
+  prepSource?: InterviewPrepRecord;
+}
+
+export interface InterviewPrepRecord {
+  id: number;
+  job_analysis_id: number;
+  company: string;
+  position: string;
+  round_type: string;
+  duration: string;
+  elevator_pitch: string;
+  dimension_questions: {
+    dimension: string;
+    question: string;
+    answer_points: string[];
+    card_ids: number[];
+  }[];
+  full_version: string;
+  html_content: string;
+  created_at: string | null;
+  company_research?: Record<string, unknown> | null;
+  submission_id?: number | null;
 }
 
 export interface Job {

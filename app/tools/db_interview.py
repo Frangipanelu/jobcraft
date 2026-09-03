@@ -6,7 +6,8 @@ from typing import Any, Dict, List, Optional
 
 from mysql.connector import connect
 
-from app.tools.db_tools import _jc_config, _parse_json
+from app.tools.db_config import _jc_config
+from app.tools.db_tools import _parse_json
 
 logger = logging.getLogger("jobcraft.db.interview")
 
@@ -108,8 +109,63 @@ def get_interview_prep_by_job(
         "ability_matrix": _parse_json(row["ability_matrix_json"]) or [],
         "html_content": row["html_content"] or "",
         "submission_id": row["submission_id"] if "submission_id" in row else None,
+        "company_research": _parse_json(row["company_research_json"])
+        if "company_research_json" in row and row["company_research_json"]
+        else None,
         "created_at": row["created_at"].isoformat() if row.get("created_at") else None,
     }
+
+
+def list_interview_preps(user_id: int) -> List[Dict[str, Any]]:
+    """列出用户所有面试准备稿（按时间倒序），并 JOIN job_analysis 带出公司/岗位。"""
+    _ensure_interview_preps_table()
+    config = _jc_config()
+    with connect(**config) as conn:
+        with conn.cursor(dictionary=True) as cur:
+            cur.execute(
+                """
+                SELECT p.id, p.job_analysis_id, p.user_id, p.round_type,
+                       p.duration, p.elevator_pitch,
+                       p.standard_version_json, p.extended_version_json,
+                       p.ability_matrix_json, p.html_content, p.submission_id,
+                       p.company_research_json, p.created_at,
+                       j.company, j.position
+                FROM interview_preps p
+                LEFT JOIN job_analysis j ON j.id = p.job_analysis_id
+                WHERE p.user_id=%s
+                ORDER BY p.created_at DESC
+                """,
+                (user_id,),
+            )
+            rows = cur.fetchall()
+    result = []
+    for r in rows:
+        result.append(
+            {
+                "id": r["id"],
+                "job_analysis_id": r["job_analysis_id"],
+                "user_id": r["user_id"],
+                "round_type": r["round_type"],
+                "duration": r["duration"],
+                "elevator_pitch": r["elevator_pitch"] or "",
+                "company": r.get("company") or "",
+                "position": r.get("position") or "",
+                "standard_version": _parse_json(r["standard_version_json"]) or {},
+                "extended_version": _parse_json(r["extended_version_json"]) or {},
+                "ability_matrix": _parse_json(r["ability_matrix_json"]) or [],
+                "html_content": r["html_content"] or "",
+                "submission_id": r["submission_id"]
+                if "submission_id" in r
+                else None,
+                "company_research": _parse_json(r["company_research_json"])
+                if r.get("company_research_json")
+                else None,
+                "created_at": r["created_at"].isoformat()
+                if r.get("created_at")
+                else None,
+            }
+        )
+    return result
 
 
 # ---------------- 面试复盘 ----------------

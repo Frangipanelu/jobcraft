@@ -355,4 +355,18 @@
 
 ---
 
+### v0.20 阶段 1 面试准备接真实数据（TASK-INTERVIEW-001，部分完成）（本轮）
+
+> **概念纠正**：与用户对齐后确认——面试准备应接后端 `interview_preps`（面试准备稿），**不是** `interview_records`（复盘 review）。用户业务逻辑为：公司调研 → JD 分析 → 简历分析 → 面试逐字稿（电梯式演讲 + 几维度题 + 问题），保留公司调研环节，问题准备 UI 保留。UI 板块重组（合并 JD/简历、新增完整逐字稿报告）放下一步。
+
+- [x] **后端：`get_interview_prep_by_job` 补出 `company_research`**——`db_interview.py` 从 `company_research_json` 列读出并返回（此前漏带）；`InterviewPrepResult` schema 新增 `company_research: Optional[Dict] = {}`（前向兼容）；`interview_pre.get_interview_prep` 透传
+- [x] **后端：新增列表端点 `GET /api/jobcraft/interview-prep`**——返回当前用户所有面试准备稿，LEFT JOIN `job_analysis` 带出 `company/position`，含 `elevator_pitch/dimension_questions/full_version/html_content/company_research/created_at`；`db_interview.list_interview_preps` + `db_tools` re-export
+- [x] **前端：`api/interview.ts` 新增 `listInterviewPreps()`**（调用 `/interview-prep` 列表）；`api/types.ts` 新增 `InterviewPrepRecord`（= InterviewPrepResult + id/company/position/submission_id）
+- [x] **前端：`JobCraftContext` 新增 `loadInterviews()`** ——拉 `listInterviewPreps` → `prepRecordToInterview` 映射为 `Interview[]`（填充 `prepSource` 真实数据 + best-effort 填 `preparation`：维度题→highFreqQuestions、companyResearch 扁平化、elevator_pitch）；集成进 `loadUserProfileAndData` 的并行加载，刷新不清空内存中未持久化的本地面试
+- [x] **前端：`Interview` 类型新增可选 `prepSource?: InterviewPrepRecord`**——承载后端完整真实结构，供下一步 UI 板块重组消费
+- [x] **验证**：`npm run lint`（tsc --noEmit）通过；`npm run build` 成功（1701 modules，仅既有 CSS @import 顺序 + chunk 大小 warning）；后端 `uv run ruff check .` 通过；`uv run pytest tests/ -q` 325 passed、11 skipped；`uv run python -c from app.api.server import app` 正常（新路由已注册）
+- [x] **遗留（下一步）**：`createInterview()` 仍建内存硬编码对象（含假 highFreqQuestions/companyResearch），未打通 `POST /interview-prep` 真实 LLM 生成与持久化；这需要把 createInterview 改 async + 传 card_ids + 真实生成流程，与"UI 板块重组 + 新增完整逐字稿报告"作为下一步一起做
+
+---
+
 **更新规则**：每次会话结束时，AI 必须根据本次实际完成的工作，移动或新增上述列表中的条目，并简要描述进展。

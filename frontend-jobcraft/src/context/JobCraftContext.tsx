@@ -14,7 +14,8 @@ import {
   PreparedAnswer,
   InterviewPreparation,
   HistoricalResume,
-  InterviewDraft
+  InterviewDraft,
+  InterviewPrepRecord
 } from '../types/jobcraft';
 import * as authApi from '../api/auth'
 import * as experienceApi from '../api/experience'
@@ -278,6 +279,78 @@ function submissionToJob(sub: DashboardItem): Job {
   }
 }
 
+function mapRoundType(t: string): Interview['roundType'] {
+  const r = (t || '').toLowerCase()
+  if (r.includes('技术') || r.includes('tech')) return 'tech'
+  if (r.includes('业务') || r.includes('product')) return 'product'
+  if (r.includes('hr')) return 'hr'
+  if (r.includes('总监') || r.includes('终') || r.includes('综合')) return 'comprehensive'
+  if (r.includes('业务')) return 'business'
+  return 'other'
+}
+
+function prepRecordToInterview(rec: InterviewPrepRecord): Interview {
+  const roundName = rec.round_type ? `面试准备 · ${rec.round_type}` : '面试准备'
+  const highFreqQuestions: InterviewPreparation['highFreqQuestions'] = (
+    rec.dimension_questions || []
+  ).map((dq, idx) => ({
+    id: `q-${rec.id}-${idx}`,
+    question: dq.question,
+    probabilityStars: 4,
+    evaluationFocus: dq.dimension || '',
+    recommendedExperienceId: (dq.card_ids && dq.card_ids[0]) ? String(dq.card_ids[0]) : '',
+    isPrepared: false,
+    preparedAnswer: {
+      mode: 'logic',
+      logicFlow: dq.answer_points || [],
+      keywords: dq.answer_points && dq.answer_points[0] ? [dq.answer_points[0]] : [],
+      aiReference: dq.answer_points?.join('\n') || '',
+      inScript: false
+    }
+  }))
+  return {
+    id: `prep-${rec.id}`,
+    jobId: rec.job_analysis_id ? String(rec.job_analysis_id) : undefined,
+    company: rec.company || '',
+    role: rec.position || '',
+    roundNumber: 1,
+    roundName: roundName,
+    roundType: mapRoundType(rec.round_type),
+    time: rec.created_at ? rec.created_at.split('T')[0] + ' ' + (rec.created_at.split('T')[1]?.slice(0, 5) || '') : '',
+    format: 'video',
+    readinessPercent: 40,
+    status: 'preparing',
+    preparation: {
+      readinessPercent: 40,
+      companyResearch: {
+        background: (rec.company_research as any)?.basic?.description || `${rec.company}核心业务线`,
+        coreBusiness: (rec.company_research as any)?.business?.main_business || '',
+        keyProducts: (rec.company_research as any)?.business?.product_names || [],
+        relevantBusiness: (rec.company_research as any)?.basic?.industry || '',
+        recentNews: (rec.company_research as any)?.news?.slice(0, 3).map((n: any) => n.title) || [],
+        aiHiringIntent: (rec.company_research as any)?.ai_hiring || ''
+      },
+      aiStrategy: {
+        roundTypeDesc: rec.round_type ? `${rec.round_type}面试准备` : '面试准备',
+        keyFocusAreas: (rec.dimension_questions || []).map((dq) => ({
+          name: dq.dimension,
+          importance: '★★★★★',
+          desc: dq.question
+        }))
+      },
+      recommendedExperiences: (rec.dimension_questions || [])
+        .filter((dq) => dq.card_ids && dq.card_ids.length > 0)
+        .map((dq) => ({
+          experienceId: String(dq.card_ids[0]),
+          recommendScore: 90,
+          proves: dq.answer_points ? dq.answer_points.slice(0, 2) : []
+        })),
+      highFreqQuestions
+    },
+    prepSource: rec
+  }
+}
+
 export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [currentTab, setCurrentTab] = useState<NavigationTab>('workbench');
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
@@ -340,7 +413,8 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
     // 并行加载数据
     await Promise.all([
       loadDashboard(userId),
-      loadExperiences(userId)
+      loadExperiences(userId),
+      loadInterviews(userId)
     ])
   }
 
@@ -424,6 +498,20 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
       setExperiences(cards.map(cardToExperience))
     } catch (error) {
       console.error('Load experiences failed:', error)
+    }
+  }
+
+  const loadInterviews = async (userId: number) => {
+    try {
+      const data = await interviewApi.listInterviewPreps(userId)
+      const mapped = (data.records || []).map(prepRecordToInterview)
+      setInterviews((prev) => {
+        // 保留内存中尚未持久化的面试，避免刷新时覆盖本地操作
+        const existing = prev.filter((i) => !i.id.startsWith('prep-'))
+        return [...mapped, ...existing]
+      })
+    } catch (error) {
+      console.error('Load interviews failed:', error)
     }
   }
 

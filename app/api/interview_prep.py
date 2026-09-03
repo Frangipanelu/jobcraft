@@ -136,3 +136,44 @@ def jobcraft_job_get_interview_prep(
     except Exception as e:
         logger.exception("获取面试稿失败")
         raise HTTPException(status_code=500, detail=f"获取面试稿失败: {e}")
+
+
+@router.get("/api/jobcraft/interview-prep")
+def jobcraft_interview_prep_list(
+    current_user: int = Depends(get_current_user),
+):
+    """列出当前用户所有面试准备稿（含公司/岗位/逐字稿/维度题/公司调研）。"""
+    from app.schemas.jobcraft import InterviewPrepResult
+
+    try:
+        rows = db_tools.list_interview_preps(current_user)
+        result = []
+        for r in rows:
+            extended = r.get("extended_version") or {}
+            ability_matrix = r.get("ability_matrix") or []
+            try:
+                result.append(
+                    InterviewPrepResult(
+                        job_analysis_id=r["job_analysis_id"],
+                        round_type=r.get("round_type", "技术面"),
+                        duration=r.get("duration", "10-15 分钟"),
+                        elevator_pitch=r.get("elevator_pitch", ""),
+                        dimension_questions=ability_matrix,
+                        full_version=extended.get("full_version", ""),
+                        html_content=r.get("html_content", ""),
+                        created_at=r.get("created_at"),
+                        company_research=r.get("company_research") or {},
+                    ).model_dump()
+                    | {
+                        "id": r["id"],
+                        "company": r.get("company", ""),
+                        "position": r.get("position", ""),
+                        "submission_id": r.get("submission_id"),
+                    }
+                )
+            except Exception:
+                logger.exception("解析面试准备稿记录失败，跳过 id=%s", r.get("id"))
+        return {"records": result}
+    except Exception as e:
+        logger.exception("列出面试准备稿失败")
+        raise HTTPException(status_code=500, detail=f"列出面试准备稿失败: {e}")

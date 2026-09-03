@@ -5,6 +5,7 @@
 import { request, requestFormData } from './client'
 import type {
   InterviewPrepResult,
+  InterviewPrepRecord,
   InterviewReviewRecord,
   InterviewReviewDetailRecord,
   InterviewReviewCreateResult,
@@ -45,6 +46,13 @@ export async function getJobSelectedCards(
   jobId: number
 ): Promise<{ card_ids: number[] }> {
   return request<{ card_ids: number[] }>(`/api/jobcraft/job/${jobId}/selected-cards`)
+}
+
+export async function listInterviewPreps(
+  userId?: number
+): Promise<{ records: InterviewPrepRecord[] }> {
+  const qs = userId !== undefined ? `?user_id=${userId}` : ''
+  return request<{ records: InterviewPrepRecord[] }>(`/api/jobcraft/interview-prep${qs}`)
 }
 
 // ============================================================
