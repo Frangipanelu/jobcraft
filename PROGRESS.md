@@ -391,6 +391,16 @@
 > - [x] **说明**：原计划"合并 JD/简历"板块暂未单列（需额外接 JD 文本与简历 markdown 数据源），当前工作台聚焦 4 大真实数据板块 + 模拟面试；如需可后续补充 JD/简历板块
 >   - `commit_id: efaca61`（已推 `origin/main`）
 
+> **TASK-REAL-DATA-002 模拟面试去 Mock** —— 由真实后端 mock-chat 驱动
+>
+> - [x] `api/interview.ts` 新增 `mockChat(payload)` 包装 `POST /interview-review/mock-chat`（返回 `{reply, role:"interviewer"}`）
+> - [x] `MockInterviewModal` 改为**多轮真实对话**：打开即向 AI 面试官发起开场（后端 system prompt 自动开场），用户发送回答后带完整历史 POST mock-chat，展示真实 LLM 面试官回复，循环
+> - [x] **移除**：`mockQuestions` 硬编码题目、`Math.floor(78+Math.random()*12)` 假评分、`setTimeout` 假录音（含"快速填入参考回答"）
+> - [x] **完成时**：调用 `createInterviewReview` 把整场对话落库为复盘，`showToast` + 导航到复盘中心
+> - [x] 验证：`npm run lint` 通过；`npm run build` 成功（502.07 kB）
+> - [x] 说明：因 mock-chat 端点只返回 `reply`（无逐题四维评分），改为整体完成后生成真实复盘，而非保留逐题假分数卡
+>   - `commit_id: 59ab3f0`（已推 `origin/main`）
+
 ---
 
 **更新规则**：每次会话结束时，AI 必须根据本次实际完成的工作，移动或新增上述列表中的条目，并简要描述进展。
