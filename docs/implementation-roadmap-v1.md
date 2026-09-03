@@ -252,14 +252,15 @@ TASK-CLEANUP-WIP-001                                 (随时可做，无依赖)
 
 - **Goal**：归档/删除与 roadmap 无关的未提交 WIP 文件，避免干扰后续提交。
 - **Why**：`git status --short` 显示 18+ 个未提交修改文件、7 个已删除 docs、12 个 untracked 文件，其中多数与当前 roadmap 无关。
-- **Scope**：
-  - `frontend-jobcraft-backup/`（整个旧前端备份）→ 归档或删除；
-  - `docker/`（Dockerfile×2、dump SQL×5、nginx.conf）→ 独立 commit 或 `.gitignore`；
-  - 7 个已删除 docs（`ACCEPTANCE_CRITERIA.md` 等）→ 确认无用后提交删除；
-  - `app/tools/db_config.py`（未跟踪，INJ-001 不再引用）→ 确认无用后删除；
-  - `.pre-commit-config.yaml`/`.python-version`/`.vscode/settings.json` → 确认是否为有意变更后 commit。
-- **Non-goals**：不修改业务逻辑；`app/api/interview_review.py` 的 mock-chat endpoint 保留在 WIP（归属 TASK-REAL-DATA-002）。
-- **Expected Commit**：`chore: clean up untracked WIP artifacts`（或拆为多个独立 commit）
+- **Current State（2026-09-03 校准）**：工作区已干净（working tree clean）。
+- **Completed**：
+  - 7 个旧 docs（`ACCEPTANCE_CRITERIA`/`EXECUTION_PLAN`/`EXECUTION_SUMMARY`/`PROJECT_MINDMAP`/`PROJECT_REVIEW`/`REFACTORING_COMPLETE`/`REFACTORING_PLAN`）内容已在 `docs/archive/`，`git rm` 记录归档 → `794047b`；
+  - **真实 WIP 保留并提交（非删除）**：后端 `mock-chat` 端点、`server.py` `text()` 修复、`db_*` 配置集中到 `db_config.py` → `4b64ca3`；docker 部署（compose/Dockerfile×2/nginx）与前端 `.env.example`/`.gitignore` → `f69f25c`；
+  - `frontend-jobcraft-backup/`（191MB，含 node_modules）、`docker/dump*.sql`/`full*.sql`（~7MB）、`frontend-jobcraft/PROMPT.md`+`metadata.json` → 已从磁盘删除；
+  - 11 个仅行尾噪音文件（`app/__init__.py` 等）→ `git restore`，无内容变更；
+  - `app/tools/db_config.py` → **保留**（`db_*` 现依赖其 `_jc_config`，非死代码）。
+- **Non-goals**：不修改业务逻辑。
+- **Expected Commit**：`chore: clean up untracked WIP artifacts` → 已拆分完成（`794047b`/`4b64ca3`/`f69f25c`）
 
 ---
 
@@ -386,7 +387,7 @@ TASK-CLEANUP-WIP-001                                 (随时可做，无依赖)
 | 8 | TASK-REAL-DATA-002 MockInterview 去 Mock | P0 | INTERVIEW | 产品可信 | ✅ 完成 `59ab3f0` |
 | 9 | TASK-REAL-DATA-003 复盘/向导去 Mock | P0 | INTERVIEW | 产品可信 | ✅ 完成 `5eb2810` |
 | 10 | TASK-INTERVIEW-001 面试持久化 | P0 | TYPE | 数据不丢失 | ✅ 完成（列表/详情 + createInterview 真实生成 + 工作台 UI 板块重组）|
-| 11 | TASK-CLEANUP-WIP-001 清理 WIP | P1 | — | 仓库整洁 | ⏳ 待办 |
+| 11 | TASK-CLEANUP-WIP-001 清理 WIP | P1 | — | 仓库整洁 | ✅ 完成 `794047b`/`4b64ca3`/`f69f25c` |
 
 > 安全基线（Phase 0）4 个 task 全部完成（commit `6a0f121`→`8878459`→`09aa805`→`b681f2c`）。
 > Phase 1 核心发现（2026-09-02 校准）：两层类型系统是有意设计（非漂移），真正问题是 api 层 7 处 any + 接口未接线（interviews/task system）。

@@ -411,6 +411,17 @@
 > - [x] 验证：`npm run lint` 通过；`npm run build` 成功
 >   - `commit_id: 5eb2810`（已推 `origin/main`）
 
+> **TASK-CLEANUP-WIP-001 清理未提交 WIP**
+>
+> - [x] 审计工作区 4 类变更，用户确认后处理
+> - [x] 归档 7 个旧 docs（内容在 `docs/archive/`，`git rm` 记录）→ `794047b`
+> - [x] 提交真实后端 WIP（mock-chat 端点、server.py text()、db_* 配置集中到 db_config）→ `4b64ca3`
+> - [x] 提交 docker 部署（compose/Dockerfile×2/nginx）+ 前端 `.env.example`/`.gitignore` → `f69f25c`
+> - [x] 删磁盘：`frontend-jobcraft-backup/`（191MB）、`docker/*.sql`（~7MB）、`PROMPT.md`+`metadata.json`
+> - [x] restore 11 个仅行尾噪音文件（无内容变更）
+> - [x] 验证：`uv run pytest tests/ -q` 通过（325 passed, 11 skipped）；`ruff check` 通过；working tree clean
+>   - `commit_id`：`794047b` / `4b64ca3` / `f69f25c`
+
 ---
 
 **更新规则**：每次会话结束时，AI 必须根据本次实际完成的工作，移动或新增上述列表中的条目，并简要描述进展。
