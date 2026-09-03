@@ -35,6 +35,9 @@ jobs:
         run: uv run pytest tests/ -v --tb=short
         env:
           JWT_SECRET_KEY: ci-test-secret-key-not-for-production
+          MYSQL_USER: test
+          MYSQL_PASSWORD: test
+          MYSQL_DATABASE: jobcraft
 
   security-scan:
     runs-on: ubuntu-latest
