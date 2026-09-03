@@ -719,7 +719,7 @@ class TestSubmissionCreate:
         )
         monkeypatch.setattr(
             "app.api.submission.db_tools.get_submission",
-            lambda *a: {"id": 1, "position": "P", "status": "已投递"},
+            lambda *a: {"id": 1, "position": "P", "status": "APPLIED"},
         )
         resp = client.post(
             "/api/jobcraft/submission",
@@ -727,7 +727,7 @@ class TestSubmissionCreate:
         )
         assert resp.status_code == 200
         assert resp.json()["id"] == 1
-        assert resp.json()["status"] == "已投递"
+        assert resp.json()["status"] == "APPLIED"
 
 
 class TestSubmissionGet:
@@ -757,7 +757,10 @@ class TestSubmissionUpdate:
         monkeypatch.setattr(
             "app.api.submission.db_tools.update_submission", lambda *a: False
         )
-        resp = client.patch("/api/jobcraft/submission/999", json={"status": "面试中"})
+        monkeypatch.setattr(
+            "app.api.submission.db_tools.get_submission", lambda *a: None
+        )
+        resp = client.patch("/api/jobcraft/submission/999", json={"status": "INVITED"})
         assert resp.status_code == 404
 
     def test_update_normal(self, monkeypatch):
@@ -766,11 +769,27 @@ class TestSubmissionUpdate:
         )
         monkeypatch.setattr(
             "app.api.submission.db_tools.get_submission",
-            lambda *a: {"id": 1, "status": "面试中"},
+            lambda *a: {"id": 1, "status": "APPLIED"},
         )
-        resp = client.patch("/api/jobcraft/submission/1", json={"status": "面试中"})
+        resp = client.patch("/api/jobcraft/submission/1", json={"status": "INVITED"})
         assert resp.status_code == 200
-        assert resp.json()["status"] == "面试中"
+        assert resp.json()["status"] == "APPLIED"
+
+    def test_update_invalid_status_returns_400(self, monkeypatch):
+        resp = client.patch("/api/jobcraft/submission/1", json={"status": "面试中"})
+        assert resp.status_code == 400
+
+    def test_update_illegal_transition_returns_400(self, monkeypatch):
+        monkeypatch.setattr(
+            "app.api.submission.db_tools.update_submission", lambda *a: True
+        )
+        monkeypatch.setattr(
+            "app.api.submission.db_tools.get_submission",
+            lambda *a: {"id": 1, "status": "APPLIED"},
+        )
+        resp = client.patch("/api/jobcraft/submission/1", json={"status": "OFFER"})
+        assert resp.status_code == 400
+        assert "非法状态流转" in resp.json()["msg"]
 
 
 class TestSubmissionDelete:

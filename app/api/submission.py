@@ -8,6 +8,7 @@ from pydantic import BaseModel
 
 from app.api.context import set_session_context, reset_session_context
 from app.auth.dependencies import get_current_user
+from app.schemas.submission_status import is_valid_transition, normalize_status, status_to_cn
 from app.tools import db_tools
 from app.tools.upload_file_read_tool import read_file_content
 
@@ -23,7 +24,7 @@ class CreateSubmissionPayload(BaseModel):
     jd_text: str = ""
     resume_markdown: Optional[str] = None
     is_manual: bool = False
-    status: str = "已投递"
+    status: str = "APPLIED"
 
 
 class UpdateSubmissionPayload(BaseModel):
@@ -51,8 +52,15 @@ def jobcraft_submission_create(
     try:
         data = payload.model_dump()
         data["user_id"] = current_user
+        if normalize_status(data.get("status")) is None:
+            raise HTTPException(
+                status_code=400,
+                detail=f"无效的投递状态: {data.get('status')}",
+            )
         sid = db_tools.insert_submission(data)
         return db_tools.get_submission(sid, current_user)
+    except HTTPException:
+        raise
     except Exception as e:
         logger.exception("创建投递失败")
         raise HTTPException(status_code=500, detail=f"创建投递失败: {e}")
@@ -76,6 +84,21 @@ def jobcraft_submission_update(
 ):
     updates = {k: v for k, v in payload.model_dump().items() if v is not None}
     try:
+        if "status" in updates:
+            if normalize_status(updates["status"]) is None:
+                raise HTTPException(
+                    status_code=400, detail=f"无效的投递状态: {updates['status']}"
+                )
+            current = db_tools.get_submission(submission_id, current_user)
+            if current and current.get("status") != normalize_status(updates["status"]).value:
+                if not is_valid_transition(current.get("status"), updates["status"]):
+                    raise HTTPException(
+                        status_code=400,
+                        detail=(
+                            f"非法状态流转: {status_to_cn(current.get('status'))} "
+                            f"→ {status_to_cn(updates['status'])}"
+                        ),
+                    )
         ok = db_tools.update_submission(submission_id, updates, current_user)
         if not ok:
             raise HTTPException(status_code=404, detail="投递记录不存在或无变化")
@@ -201,7 +224,7 @@ async def jobcraft_submission_manual(
                 "jd_text": jd_text,
                 "resume_markdown": resume_text,
                 "is_manual": 1,
-                "status": "已投递",
+                "status": "APPLIED",
             }
         )
         return db_tools.get_submission(sid, current_user)

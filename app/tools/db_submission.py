@@ -6,10 +6,19 @@ from typing import Any, Dict, List, Optional
 
 from mysql.connector import connect
 
+from app.schemas.submission_status import normalize_status
 from app.tools.db_config import _jc_config
 from app.tools.db_tools import _parse_json
 
 logger = logging.getLogger("jobcraft.db.submission")
+
+
+def _normalize_or_raw(value: Any) -> Any:
+    """把状态归一化为枚举码；无法识别时返回原值。"""
+    normalized = normalize_status(value)
+    if normalized is None or normalized == value:
+        return value
+    return normalized.value
 
 
 def _ensure_resume_submission_table() -> None:
@@ -29,7 +38,7 @@ def _ensure_resume_submission_table() -> None:
                     resume_markdown  LONGTEXT,
                     resume_file_path VARCHAR(500),
                     card_version_ids JSON,
-                    status           VARCHAR(32) DEFAULT '已投递',
+                    status           VARCHAR(32) DEFAULT 'APPLIED',
                     notes            TEXT,
                     is_manual        TINYINT(1) DEFAULT 0,
                     created_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -77,6 +86,9 @@ def insert_submission(data: Dict[str, Any]) -> int:
     _ensure_resume_submission_table()
     _ensure_interview_submission_columns()
     config = _jc_config()
+    status = normalize_status(data.get("status", "APPLIED"))
+    if status is None:
+        status = normalize_status("APPLIED")
     with connect(**config) as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -95,7 +107,7 @@ def insert_submission(data: Dict[str, Any]) -> int:
                     data.get("resume_markdown"),
                     data.get("resume_file_path"),
                     json.dumps(data.get("card_version_ids") or [], ensure_ascii=False),
-                    data.get("status", "已投递"),
+                    status.value,
                     data.get("notes"),
                     data.get("is_manual", 0),
                 ),
@@ -129,7 +141,7 @@ def get_submission(
         "resume_markdown": row["resume_markdown"] or "",
         "resume_file_path": row["resume_file_path"],
         "card_version_ids": _parse_json(row["card_version_ids"]) or [],
-        "status": row["status"],
+        "status": _normalize_or_raw(row["status"]),
         "notes": row["notes"] or "",
         "is_manual": bool(row.get("is_manual")),
         "created_at": row["created_at"].isoformat() if row.get("created_at") else None,
@@ -155,7 +167,7 @@ def list_submissions(user_id: int = 1, limit: int = 50) -> List[Dict[str, Any]]:
                 "id": r["id"],
                 "position": r["position"],
                 "company": r["company"] or "",
-                "status": r["status"],
+                "status": _normalize_or_raw(r["status"]),
                 "job_analysis_id": r["job_analysis_id"],
                 "created_at": r["created_at"].isoformat()
                 if r.get("created_at")
@@ -185,8 +197,13 @@ def update_submission(
     values: List[Any] = []
     for k, col in field_map.items():
         if k in updates and updates[k] is not None:
-            sets.append(f"{col}=%s")
-            values.append(updates[k])
+            if k == "status":
+                normalized = normalize_status(updates[k])
+                sets.append(f"{col}=%s")
+                values.append(normalized.value if normalized else updates[k])
+            else:
+                sets.append(f"{col}=%s")
+                values.append(updates[k])
     if "card_version_ids" in updates:
         sets.append("card_version_ids=%s")
         values.append(json.dumps(updates["card_version_ids"], ensure_ascii=False))
