@@ -172,7 +172,7 @@ def test_by_id_dao_appends_user_id_filter(
     )
 
     func = getattr(db_tools, func_name)
-    with patch(f"{module_path}.connect", _capture(holder)):
+    with patch("app.tools.db_conn.connect", _capture(holder)):
         _patch_ensure_helper(monkeypatch, module_path, holder)
         func(*args, **kwargs)
 
@@ -209,7 +209,7 @@ def test_get_card_without_user_id_no_filter(monkeypatch):
         return _FakeConn(cursor)
 
     _patch_ensure_helper(monkeypatch, "app.tools.db_experience", holder)
-    with patch("app.tools.db_experience.connect", fake_connect):
+    with patch("app.tools.db_conn.connect", fake_connect):
         get_card(100)
 
     assert cursor.last_sql is not None
@@ -230,7 +230,7 @@ def test_update_card_appends_user_id_filter(monkeypatch):
         return _FakeConn(cursor)
 
     _patch_ensure_helper(monkeypatch, "app.tools.db_experience", holder)
-    with patch("app.tools.db_experience.connect", fake_connect):
+    with patch("app.tools.db_conn.connect", fake_connect):
         update_card(100, {"is_active": False}, user_id=7)
 
     assert "AND user_id=%s" in cursor.last_sql
@@ -251,7 +251,7 @@ def test_update_submission_appends_user_id_filter(monkeypatch):
         return _FakeConn(cursor)
 
     _patch_ensure_helper(monkeypatch, "app.tools.db_submission", holder)
-    with patch("app.tools.db_submission.connect", fake_connect):
+    with patch("app.tools.db_conn.connect", fake_connect):
         update_submission(100, {"status": "x"}, user_id=7)
 
     assert "AND user_id=%s" in cursor.last_sql
@@ -272,7 +272,7 @@ def test_get_interview_prep_by_job_appends_user_id_filter(monkeypatch):
         return _FakeConn(cursor)
 
     _patch_ensure_helper(monkeypatch, "app.tools.db_interview", holder)
-    with patch("app.tools.db_interview.connect", fake_connect):
+    with patch("app.tools.db_conn.connect", fake_connect):
         get_interview_prep_by_job(100, 7)
 
     assert "AND user_id=%s" in cursor.last_sql
@@ -293,7 +293,7 @@ def test_delete_interview_record_appends_user_id_filter(monkeypatch):
         return _FakeConn(cursor)
 
     _patch_ensure_helper(monkeypatch, "app.tools.db_interview", holder)
-    with patch("app.tools.db_interview.connect", fake_connect):
+    with patch("app.tools.db_conn.connect", fake_connect):
         delete_interview_record(100, 7)
 
     matched = [

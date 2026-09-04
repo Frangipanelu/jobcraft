@@ -1,34 +1,29 @@
 """用户 CRUD 模块"""
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
-from mysql.connector import connect
-
-from app.tools.db_config import _jc_config
+from app.tools.db_conn import execute, execute_lastrowid, query_one
 
 logger = logging.getLogger("jobcraft.db.user")
 
 
 def _ensure_users_table() -> None:
     """确保 users 表存在"""
-    config = _jc_config()
-    with connect(**config) as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                CREATE TABLE IF NOT EXISTS users (
-                    id INT AUTO_INCREMENT PRIMARY KEY,
-                    username VARCHAR(100) UNIQUE NOT NULL,
-                    password_hash VARCHAR(255) NOT NULL,
-                    email VARCHAR(200),
-                    is_active TINYINT(1) DEFAULT 1,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-                    KEY idx_username (username)
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-                """
-            )
+    execute(
+        """
+        CREATE TABLE IF NOT EXISTS users (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            username VARCHAR(100) UNIQUE NOT NULL,
+            password_hash VARCHAR(255) NOT NULL,
+            email VARCHAR(200),
+            is_active TINYINT(1) DEFAULT 1,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            KEY idx_username (username)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        """
+    )
 
 
 def create_user(username: str, password_hash: str, email: Optional[str] = None) -> int:
@@ -41,17 +36,26 @@ def create_user(username: str, password_hash: str, email: Optional[str] = None) 
     :return: 新用户 ID
     """
     _ensure_users_table()
-    config = _jc_config()
-    with connect(**config) as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                INSERT INTO users (username, password_hash, email)
-                VALUES (%s, %s, %s)
-                """,
-                (username, password_hash, email),
-            )
-            return cur.lastrowid
+    return execute_lastrowid(
+        """
+        INSERT INTO users (username, password_hash, email)
+        VALUES (%s, %s, %s)
+        """,
+        (username, password_hash, email),
+    )
+
+
+def _row_to_user(row: Dict[str, Any]) -> Dict[str, Any]:
+    """把数据库原始行转换成 API 友好用户结构"""
+    return {
+        "id": row["id"],
+        "username": row["username"],
+        "password_hash": row["password_hash"],
+        "email": row.get("email"),
+        "is_active": bool(row.get("is_active", 1)),
+        "created_at": row["created_at"].isoformat() if row.get("created_at") else None,
+        "updated_at": row["updated_at"].isoformat() if row.get("updated_at") else None,
+    }
 
 
 def get_user(user_id: int) -> Optional[Dict[str, Any]]:
@@ -62,22 +66,8 @@ def get_user(user_id: int) -> Optional[Dict[str, Any]]:
     :return: 用户信息字典或 None
     """
     _ensure_users_table()
-    config = _jc_config()
-    with connect(**config) as conn:
-        with conn.cursor(dictionary=True) as cur:
-            cur.execute("SELECT * FROM users WHERE id=%s", (user_id,))
-            row = cur.fetchone()
-    if not row:
-        return None
-    return {
-        "id": row["id"],
-        "username": row["username"],
-        "password_hash": row["password_hash"],
-        "email": row.get("email"),
-        "is_active": bool(row.get("is_active", 1)),
-        "created_at": row["created_at"].isoformat() if row.get("created_at") else None,
-        "updated_at": row["updated_at"].isoformat() if row.get("updated_at") else None,
-    }
+    row = query_one("SELECT * FROM users WHERE id=%s", (user_id,))
+    return _row_to_user(row) if row else None
 
 
 def get_user_by_username(username: str) -> Optional[Dict[str, Any]]:
@@ -88,22 +78,8 @@ def get_user_by_username(username: str) -> Optional[Dict[str, Any]]:
     :return: 用户信息字典或 None
     """
     _ensure_users_table()
-    config = _jc_config()
-    with connect(**config) as conn:
-        with conn.cursor(dictionary=True) as cur:
-            cur.execute("SELECT * FROM users WHERE username=%s", (username,))
-            row = cur.fetchone()
-    if not row:
-        return None
-    return {
-        "id": row["id"],
-        "username": row["username"],
-        "password_hash": row["password_hash"],
-        "email": row.get("email"),
-        "is_active": bool(row.get("is_active", 1)),
-        "created_at": row["created_at"].isoformat() if row.get("created_at") else None,
-        "updated_at": row["updated_at"].isoformat() if row.get("updated_at") else None,
-    }
+    row = query_one("SELECT * FROM users WHERE username=%s", (username,))
+    return _row_to_user(row) if row else None
 
 
 def get_user_by_email(email: str) -> Optional[Dict[str, Any]]:
@@ -114,22 +90,8 @@ def get_user_by_email(email: str) -> Optional[Dict[str, Any]]:
     :return: 用户信息字典或 None
     """
     _ensure_users_table()
-    config = _jc_config()
-    with connect(**config) as conn:
-        with conn.cursor(dictionary=True) as cur:
-            cur.execute("SELECT * FROM users WHERE email=%s", (email,))
-            row = cur.fetchone()
-    if not row:
-        return None
-    return {
-        "id": row["id"],
-        "username": row["username"],
-        "password_hash": row["password_hash"],
-        "email": row.get("email"),
-        "is_active": bool(row.get("is_active", 1)),
-        "created_at": row["created_at"].isoformat() if row.get("created_at") else None,
-        "updated_at": row["updated_at"].isoformat() if row.get("updated_at") else None,
-    }
+    row = query_one("SELECT * FROM users WHERE email=%s", (email,))
+    return _row_to_user(row) if row else None
 
 
 def update_user(user_id: int, updates: Dict[str, Any]) -> bool:
@@ -145,8 +107,8 @@ def update_user(user_id: int, updates: Dict[str, Any]) -> bool:
         "email": "email",
         "is_active": "is_active",
     }
-    sets: List[str] = []
-    values: List[Any] = []
+    sets: list[str] = []
+    values: list[Any] = []
     for k, col in field_map.items():
         if k in updates and updates[k] is not None:
             sets.append(f"{col}=%s")
@@ -157,11 +119,10 @@ def update_user(user_id: int, updates: Dict[str, Any]) -> bool:
     if not sets:
         return False
     values.append(user_id)
-    config = _jc_config()
-    with connect(**config) as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                "UPDATE users SET " + ", ".join(sets) + " WHERE id=%s",
-                tuple(values),
-            )
-            return cur.rowcount > 0
+    return (
+        execute(
+            "UPDATE users SET " + ", ".join(sets) + " WHERE id=%s",
+            tuple(values),
+        )
+        > 0
+    )

@@ -4,10 +4,15 @@ import json
 import logging
 from typing import Any, Dict, List, Optional
 
-from mysql.connector import connect
-
 from app.schemas.submission_status import normalize_status
-from app.tools.db_config import _jc_config
+from app.tools.db_conn import (
+    connection,
+    execute,
+    execute_lastrowid,
+    query_all,
+    query_one,
+    query_scalar,
+)
 from app.tools.db_tools import _parse_json
 
 logger = logging.getLogger("jobcraft.db.submission")
@@ -23,8 +28,7 @@ def _normalize_or_raw(value: Any) -> Any:
 
 def _ensure_resume_submission_table() -> None:
     """确保 resume_submission 表存在"""
-    config = _jc_config()
-    with connect(**config) as conn:
+    with connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 """
@@ -52,8 +56,7 @@ def _ensure_resume_submission_table() -> None:
 
 def _ensure_interview_submission_columns() -> None:
     """为 interview_preps 和 interview_records 表加 submission_id 字段"""
-    config = _jc_config()
-    with connect(**config) as conn:
+    with connection() as conn:
         with conn.cursor() as cur:
             cur.execute("SHOW COLUMNS FROM interview_preps")
             existing = {c[0] for c in cur.fetchall()}
@@ -85,50 +88,42 @@ def _ensure_interview_submission_columns() -> None:
 def insert_submission(data: Dict[str, Any]) -> int:
     _ensure_resume_submission_table()
     _ensure_interview_submission_columns()
-    config = _jc_config()
     status = normalize_status(data.get("status", "APPLIED"))
     if status is None:
         status = normalize_status("APPLIED")
-    with connect(**config) as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                INSERT INTO resume_submission
-                    (user_id, job_analysis_id, position, company, jd_text,
-                     resume_markdown, resume_file_path, card_version_ids, status, notes, is_manual)
-                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
-                """,
-                (
-                    data.get("user_id", 1),
-                    data.get("job_analysis_id"),
-                    data["position"],
-                    data.get("company", ""),
-                    data.get("jd_text", ""),
-                    data.get("resume_markdown"),
-                    data.get("resume_file_path"),
-                    json.dumps(data.get("card_version_ids") or [], ensure_ascii=False),
-                    status.value,
-                    data.get("notes"),
-                    data.get("is_manual", 0),
-                ),
-            )
-            return cur.lastrowid
+    return execute_lastrowid(
+        """
+        INSERT INTO resume_submission
+            (user_id, job_analysis_id, position, company, jd_text,
+             resume_markdown, resume_file_path, card_version_ids, status, notes, is_manual)
+        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+        """,
+        (
+            data.get("user_id", 1),
+            data.get("job_analysis_id"),
+            data["position"],
+            data.get("company", ""),
+            data.get("jd_text", ""),
+            data.get("resume_markdown"),
+            data.get("resume_file_path"),
+            json.dumps(data.get("card_version_ids") or [], ensure_ascii=False),
+            status.value,
+            data.get("notes"),
+            data.get("is_manual", 0),
+        ),
+    )
 
 
 def get_submission(
     submission_id: int, user_id: Optional[int] = None
 ) -> Optional[Dict[str, Any]]:
     _ensure_resume_submission_table()
-    config = _jc_config()
     sql = "SELECT * FROM resume_submission WHERE id=%s"
     params: List[Any] = [submission_id]
     if user_id is not None:
         sql += " AND user_id=%s"
         params.append(user_id)
-    with connect(**config) as conn:
-        with conn.cursor(dictionary=True) as cur:
-            cur.execute(sql, tuple(params))
-            row = cur.fetchone()
+    row = query_one(sql, tuple(params))
     if not row:
         return None
     return {
@@ -151,15 +146,11 @@ def get_submission(
 
 def list_submissions(user_id: int = 1, limit: int = 50) -> List[Dict[str, Any]]:
     _ensure_resume_submission_table()
-    config = _jc_config()
-    with connect(**config) as conn:
-        with conn.cursor(dictionary=True) as cur:
-            cur.execute(
-                "SELECT id, position, company, status, job_analysis_id, created_at, updated_at "
-                "FROM resume_submission WHERE user_id=%s ORDER BY updated_at DESC LIMIT %s",
-                (user_id, limit),
-            )
-            rows = cur.fetchall()
+    rows = query_all(
+        "SELECT id, position, company, status, job_analysis_id, created_at, updated_at "
+        "FROM resume_submission WHERE user_id=%s ORDER BY updated_at DESC LIMIT %s",
+        (user_id, limit),
+    )
     result = []
     for r in rows:
         result.append(
@@ -213,43 +204,31 @@ def update_submission(
     if not sets:
         return False
     values.append(submission_id)
-    config = _jc_config()
     sql = "UPDATE resume_submission SET " + ", ".join(sets) + " WHERE id=%s"
     if user_id is not None:
         sql += " AND user_id=%s"
         values.append(user_id)
-    with connect(**config) as conn:
-        with conn.cursor() as cur:
-            cur.execute(sql, tuple(values))
-            return cur.rowcount > 0
+    return execute(sql, tuple(values)) > 0
 
 
 def delete_submission(submission_id: int, user_id: Optional[int] = None) -> bool:
     _ensure_resume_submission_table()
-    config = _jc_config()
     sql = "DELETE FROM resume_submission WHERE id=%s"
     params: List[Any] = [submission_id]
     if user_id is not None:
         sql += " AND user_id=%s"
         params.append(user_id)
-    with connect(**config) as conn:
-        with conn.cursor() as cur:
-            cur.execute(sql, tuple(params))
-            return cur.rowcount > 0
+    return execute(sql, tuple(params)) > 0
 
 
 def get_submission_prep_count(submission_id: int) -> int:
     from app.tools.db_interview import _ensure_interview_preps_table
 
     _ensure_interview_preps_table()
-    config = _jc_config()
-    with connect(**config) as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                "SELECT COUNT(*) FROM interview_preps WHERE submission_id=%s",
-                (submission_id,),
-            )
-            return cur.fetchone()[0]
+    return query_scalar(
+        "SELECT COUNT(*) FROM interview_preps WHERE submission_id=%s",
+        (submission_id,),
+    )
 
 
 def list_interview_records_by_submission(
@@ -259,22 +238,19 @@ def list_interview_records_by_submission(
     from app.tools.db_interview import _ensure_interview_records_table
 
     _ensure_interview_records_table()
-    config = _jc_config()
-    sql = (
-        "SELECT * FROM interview_records WHERE submission_id=%s "
-        "ORDER BY created_at DESC LIMIT %s"
-    )
-    params: List[Any] = [submission_id, limit]
     if user_id is not None:
         sql = (
             "SELECT * FROM interview_records WHERE submission_id=%s AND user_id=%s "
             "ORDER BY created_at DESC LIMIT %s"
         )
-        params = [submission_id, user_id, limit]
-    with connect(**config) as conn:
-        with conn.cursor(dictionary=True) as cur:
-            cur.execute(sql, tuple(params))
-            rows = cur.fetchall()
+        params: List[Any] = [submission_id, user_id, limit]
+    else:
+        sql = (
+            "SELECT * FROM interview_records WHERE submission_id=%s "
+            "ORDER BY created_at DESC LIMIT %s"
+        )
+        params = [submission_id, limit]
+    rows = query_all(sql, tuple(params))
     result = []
     for row in rows:
         result.append(
@@ -297,14 +273,10 @@ def get_submission_review_count(submission_id: int) -> int:
     from app.tools.db_interview import _ensure_interview_records_table
 
     _ensure_interview_records_table()
-    config = _jc_config()
-    with connect(**config) as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                "SELECT COUNT(*) FROM interview_records WHERE submission_id=%s",
-                (submission_id,),
-            )
-            return cur.fetchone()[0]
+    return query_scalar(
+        "SELECT COUNT(*) FROM interview_records WHERE submission_id=%s",
+        (submission_id,),
+    )
 
 
 def get_dashboard(user_id: int = 1) -> List[Dict[str, Any]]:

@@ -605,11 +605,7 @@ class TestDbJob:
         mock_cursor.fetchall.return_value = []
         mock_conn = _make_mock_conn(mock_cursor)
 
-        with (
-            patch("app.tools.db_job._jc_config", return_value={"database": "jc"}),
-            patch("app.tools.db_job.connect", return_value=mock_conn),
-            patch("app.tools.db_tools.connect", return_value=mock_conn),
-        ):
+        with patch("app.tools.db_conn.connect", return_value=mock_conn):
             result = get_job_analysis(999)
             assert result is None
 
@@ -632,11 +628,7 @@ class TestDbJob:
         mock_cursor.fetchall.return_value = []
         mock_conn = _make_mock_conn(mock_cursor)
 
-        with (
-            patch("app.tools.db_job._jc_config", return_value={"database": "jc"}),
-            patch("app.tools.db_job.connect", return_value=mock_conn),
-            patch("app.tools.db_tools.connect", return_value=mock_conn),
-        ):
+        with patch("app.tools.db_conn.connect", return_value=mock_conn):
             result = get_job_analysis(1)
             assert result is not None
             assert result["company"] == "TestCo"
@@ -651,10 +643,7 @@ class TestDbJob:
         mock_cursor.rowcount = 0
         mock_conn = _make_mock_conn(mock_cursor)
 
-        with (
-            patch("app.tools.db_job._jc_config", return_value={"database": "jc"}),
-            patch("app.tools.db_job.connect", return_value=mock_conn),
-        ):
+        with patch("app.tools.db_conn.connect", return_value=mock_conn):
             assert delete_job_analysis(999) is False
 
 
@@ -672,13 +661,7 @@ class TestDbSubmission:
         mock_cursor.fetchall.return_value = []
         mock_conn = _make_mock_conn(mock_cursor)
 
-        with (
-            patch(
-                "app.tools.db_submission._jc_config", return_value={"database": "jc"}
-            ),
-            patch("app.tools.db_submission.connect", return_value=mock_conn),
-            patch("app.tools.db_tools.connect", return_value=mock_conn),
-        ):
+        with patch("app.tools.db_conn.connect", return_value=mock_conn):
             result = get_submission(999)
             assert result is None
 
@@ -705,13 +688,7 @@ class TestDbSubmission:
         mock_cursor.fetchall.return_value = []
         mock_conn = _make_mock_conn(mock_cursor)
 
-        with (
-            patch(
-                "app.tools.db_submission._jc_config", return_value={"database": "jc"}
-            ),
-            patch("app.tools.db_submission.connect", return_value=mock_conn),
-            patch("app.tools.db_tools.connect", return_value=mock_conn),
-        ):
+        with patch("app.tools.db_conn.connect", return_value=mock_conn):
             result = get_submission(1)
             assert result is not None
             assert result["position"] == "Backend Eng"
@@ -724,12 +701,7 @@ class TestDbSubmission:
         mock_cursor = MagicMock()
         mock_conn = _make_mock_conn(mock_cursor)
 
-        with (
-            patch(
-                "app.tools.db_submission._jc_config", return_value={"database": "jc"}
-            ),
-            patch("app.tools.db_submission.connect", return_value=mock_conn),
-        ):
+        with patch("app.tools.db_conn.connect", return_value=mock_conn):
             result = update_submission(1, {})
             assert result is False
 
@@ -748,11 +720,7 @@ class TestDbInterview:
         mock_cursor.fetchall.return_value = []
         mock_conn = _make_mock_conn(mock_cursor)
 
-        with (
-            patch("app.tools.db_interview._jc_config", return_value={"database": "jc"}),
-            patch("app.tools.db_interview.connect", return_value=mock_conn),
-            patch("app.tools.db_tools.connect", return_value=mock_conn),
-        ):
+        with patch("app.tools.db_conn.connect", return_value=mock_conn):
             result = get_interview_prep_by_job(999)
             assert result is None
 
@@ -777,11 +745,7 @@ class TestDbInterview:
         mock_cursor.fetchall.return_value = []
         mock_conn = _make_mock_conn(mock_cursor)
 
-        with (
-            patch("app.tools.db_interview._jc_config", return_value={"database": "jc"}),
-            patch("app.tools.db_interview.connect", return_value=mock_conn),
-            patch("app.tools.db_tools.connect", return_value=mock_conn),
-        ):
+        with patch("app.tools.db_conn.connect", return_value=mock_conn):
             result = get_interview_prep_by_job(10)
             assert result is not None
             assert result["round_type"] == "tech"
@@ -796,11 +760,7 @@ class TestDbInterview:
         mock_cursor.fetchall.return_value = []
         mock_conn = _make_mock_conn(mock_cursor)
 
-        with (
-            patch("app.tools.db_interview._jc_config", return_value={"database": "jc"}),
-            patch("app.tools.db_interview.connect", return_value=mock_conn),
-            patch("app.tools.db_tools.connect", return_value=mock_conn),
-        ):
+        with patch("app.tools.db_conn.connect", return_value=mock_conn):
             result = get_interview_record(999)
             assert result is None
 
@@ -812,10 +772,6 @@ class TestDbInterview:
         mock_cursor.fetchone.return_value = None
         mock_conn = _make_mock_conn(mock_cursor)
 
-        with (
-            patch("app.tools.db_interview._jc_config", return_value={"database": "jc"}),
-            patch("app.tools.db_interview.connect", return_value=mock_conn),
-            patch("app.tools.db_tools.connect", return_value=mock_conn),
-        ):
+        with patch("app.tools.db_conn.connect", return_value=mock_conn):
             result = list_interview_records()
             assert result == []

@@ -1,7 +1,7 @@
 """AI 调用元数据审计持久化（TASK-AI-002）。
 
 在 `llm_json.invoke_structured` 结构化 LLM chokepoint 处记录每次调用的
-status/model/input_hash/schema_name/prompt_hash 到 `ai_tasks`，并把结构化
+status/model/input_hash/prompt_hash/schema_name 到 `ai_tasks`，并把结构化
 输出写入 `ai_outputs`。
 
 设计约束：
@@ -16,9 +16,7 @@ import hashlib
 import logging
 from typing import Any, Dict, Optional
 
-from mysql.connector import connect
-
-from app.tools.db_tools import _jc_config
+from app.tools.db_conn import connection, execute_lastrowid
 
 logger = logging.getLogger("jobcraft.tools.db_ai")
 
@@ -52,26 +50,23 @@ def create_ai_task(
     :return: 新行 id；记录失败返回 None
     """
     try:
-        with connect(**_jc_config()) as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    """
-                    INSERT INTO ai_tasks
-                        (feature, model, schema_name, prompt_version,
-                         input_hash, prompt_hash, status, started_at)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
-                    """,
-                    (
-                        feature,
-                        model,
-                        schema_name,
-                        prompt_version,
-                        input_hash,
-                        prompt_hash,
-                        _STATUS_RUNNING,
-                    ),
-                )
-                return cur.lastrowid
+        return execute_lastrowid(
+            """
+            INSERT INTO ai_tasks
+                (feature, model, schema_name, prompt_version,
+                 input_hash, prompt_hash, status, started_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
+            """,
+            (
+                feature,
+                model,
+                schema_name,
+                prompt_version,
+                input_hash,
+                prompt_hash,
+                _STATUS_RUNNING,
+            ),
+        )
     except Exception:
         logger.exception("create_ai_task 审计写入失败，忽略")
         return None
@@ -110,7 +105,7 @@ def complete_ai_task(
     if task_id is None:
         return
     try:
-        with connect(**_jc_config()) as conn:
+        with connection() as conn:
             with conn.cursor() as cur:
                 if status == _STATUS_SUCCESS and output_json is not None:
                     cur.execute(

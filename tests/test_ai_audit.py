@@ -56,7 +56,7 @@ def test_create_ai_task_non_blocking_when_db_down(monkeypatch):
     def _boom(*a, **k):
         raise RuntimeError("connection refused")
 
-    monkeypatch.setattr(db_ai, "connect", _boom)
+    monkeypatch.setattr("app.tools.db_conn.connect", _boom)
     assert (
         db_ai.create_ai_task(
             feature="f",
@@ -77,7 +77,7 @@ def test_complete_ai_task_noop_when_task_id_none(monkeypatch):
         calls["connect"] += 1
         raise RuntimeError("should not connect")
 
-    monkeypatch.setattr(db_ai, "connect", _counter)
+    monkeypatch.setattr("app.tools.db_conn.connect", _counter)
     db_ai.complete_ai_task(task_id=None, status="success", latency_ms=1)
     assert calls["connect"] == 0
 
@@ -86,7 +86,7 @@ def test_complete_ai_task_non_blocking_when_db_down(monkeypatch):
     def _boom(*a, **k):
         raise RuntimeError("connection refused")
 
-    monkeypatch.setattr(db_ai, "connect", _boom)
+    monkeypatch.setattr("app.tools.db_conn.connect", _boom)
     db_ai.complete_ai_task(task_id=1, status="success", latency_ms=1)
 
 

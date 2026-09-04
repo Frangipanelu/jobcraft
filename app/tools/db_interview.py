@@ -4,9 +4,13 @@ import json
 import logging
 from typing import Any, Dict, List, Optional
 
-from mysql.connector import connect
-
-from app.tools.db_config import _jc_config
+from app.tools.db_conn import (
+    connection,
+    execute,
+    execute_lastrowid,
+    query_all,
+    query_one,
+)
 from app.tools.db_tools import _parse_json
 
 logger = logging.getLogger("jobcraft.db.interview")
@@ -14,8 +18,7 @@ logger = logging.getLogger("jobcraft.db.interview")
 
 def _ensure_interview_preps_table() -> None:
     """确保 interview_preps 表存在"""
-    config = _jc_config()
-    with connect(**config) as conn:
+    with connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 """
@@ -43,11 +46,8 @@ def insert_interview_prep(data: Dict[str, Any]) -> int:
 
     _ensure_interview_preps_table()
     _ensure_interview_submission_columns()
-    config = _jc_config()
-    with connect(**config) as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                """
+    return execute_lastrowid(
+        """
 INSERT INTO interview_preps
     (job_analysis_id, user_id, round_type, duration,
      elevator_pitch, standard_version_json, extended_version_json,
@@ -55,23 +55,22 @@ INSERT INTO interview_preps
      company_research_json)
 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
 """,
-                (
-                    data["job_analysis_id"],
-                    data.get("user_id", 1),
-                    data["round_type"],
-                    data["duration"],
-                    data.get("elevator_pitch", ""),
-                    json.dumps(data.get("standard_version") or {}, ensure_ascii=False),
-                    json.dumps(data.get("extended_version") or {}, ensure_ascii=False),
-                    json.dumps(data.get("ability_matrix") or [], ensure_ascii=False),
-                    data.get("html_content", ""),
-                    data.get("submission_id"),
-                    json.dumps(data.get("company_research") or {}, ensure_ascii=False)
-                    if data.get("company_research")
-                    else None,
-                ),
-            )
-            return cur.lastrowid
+        (
+            data["job_analysis_id"],
+            data.get("user_id", 1),
+            data["round_type"],
+            data["duration"],
+            data.get("elevator_pitch", ""),
+            json.dumps(data.get("standard_version") or {}, ensure_ascii=False),
+            json.dumps(data.get("extended_version") or {}, ensure_ascii=False),
+            json.dumps(data.get("ability_matrix") or [], ensure_ascii=False),
+            data.get("html_content", ""),
+            data.get("submission_id"),
+            json.dumps(data.get("company_research") or {}, ensure_ascii=False)
+            if data.get("company_research")
+            else None,
+        ),
+    )
 
 
 def get_interview_prep_by_job(
@@ -79,22 +78,19 @@ def get_interview_prep_by_job(
 ) -> Optional[Dict[str, Any]]:
     """按 job_analysis_id 获取最新面试准备稿（可选按 user_id 过滤所有权）"""
     _ensure_interview_preps_table()
-    config = _jc_config()
-    sql = (
-        "SELECT * FROM interview_preps WHERE job_analysis_id=%s "
-        "ORDER BY created_at DESC LIMIT 1"
-    )
-    params: List[Any] = [job_id]
     if user_id is not None:
         sql = (
             "SELECT * FROM interview_preps WHERE job_analysis_id=%s AND user_id=%s "
             "ORDER BY created_at DESC LIMIT 1"
         )
-        params.append(user_id)
-    with connect(**config) as conn:
-        with conn.cursor(dictionary=True) as cur:
-            cur.execute(sql, tuple(params))
-            row = cur.fetchone()
+        params: List[Any] = [job_id, user_id]
+    else:
+        sql = (
+            "SELECT * FROM interview_preps WHERE job_analysis_id=%s "
+            "ORDER BY created_at DESC LIMIT 1"
+        )
+        params = [job_id]
+    row = query_one(sql, tuple(params))
     if not row:
         return None
     return {
@@ -119,25 +115,21 @@ def get_interview_prep_by_job(
 def list_interview_preps(user_id: int) -> List[Dict[str, Any]]:
     """列出用户所有面试准备稿（按时间倒序），并 JOIN job_analysis 带出公司/岗位。"""
     _ensure_interview_preps_table()
-    config = _jc_config()
-    with connect(**config) as conn:
-        with conn.cursor(dictionary=True) as cur:
-            cur.execute(
-                """
-                SELECT p.id, p.job_analysis_id, p.user_id, p.round_type,
-                       p.duration, p.elevator_pitch,
-                       p.standard_version_json, p.extended_version_json,
-                       p.ability_matrix_json, p.html_content, p.submission_id,
-                       p.company_research_json, p.created_at,
-                       j.company, j.position
-                FROM interview_preps p
-                LEFT JOIN job_analysis j ON j.id = p.job_analysis_id
-                WHERE p.user_id=%s
-                ORDER BY p.created_at DESC
-                """,
-                (user_id,),
-            )
-            rows = cur.fetchall()
+    rows = query_all(
+        """
+        SELECT p.id, p.job_analysis_id, p.user_id, p.round_type,
+               p.duration, p.elevator_pitch,
+               p.standard_version_json, p.extended_version_json,
+               p.ability_matrix_json, p.html_content, p.submission_id,
+               p.company_research_json, p.created_at,
+               j.company, j.position
+        FROM interview_preps p
+        LEFT JOIN job_analysis j ON j.id = p.job_analysis_id
+        WHERE p.user_id=%s
+        ORDER BY p.created_at DESC
+        """,
+        (user_id,),
+    )
     result = []
     for r in rows:
         result.append(
@@ -171,8 +163,7 @@ def list_interview_preps(user_id: int) -> List[Dict[str, Any]]:
 
 def _ensure_interview_records_table() -> None:
     """确保 interview_records 表存在"""
-    config = _jc_config()
-    with connect(**config) as conn:
+    with connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 """
@@ -197,8 +188,7 @@ def _ensure_interview_records_table() -> None:
 
 def _ensure_interview_qa_pairs_table() -> None:
     """确保 interview_qa_pairs 表存在"""
-    config = _jc_config()
-    with connect(**config) as conn:
+    with connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 """
@@ -236,65 +226,55 @@ def insert_interview_record(data: Dict[str, Any]) -> int:
 
     _ensure_interview_records_table()
     _ensure_interview_submission_columns()
-    config = _jc_config()
-    with connect(**config) as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                INSERT INTO interview_records
-                    (user_id, title, company, position, round_type, job_analysis_id,
-                     raw_text, parsed_dialogue_json, analysis_json, status,
-                     submission_id, round_label)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                """,
-                (
-                    data.get("user_id", 1),
-                    data.get("title", ""),
-                    data.get("company", ""),
-                    data.get("position", ""),
-                    data.get("round_type", ""),
-                    data.get("job_analysis_id"),
-                    data.get("raw_text", ""),
-                    json.dumps(data.get("parsed_dialogue") or [], ensure_ascii=False),
-                    json.dumps(data.get("analysis") or {}, ensure_ascii=False),
-                    data.get("status", "pending"),
-                    data.get("submission_id"),
-                    data.get("round_label", ""),
-                ),
-            )
-            return cur.lastrowid
+    return execute_lastrowid(
+        """
+        INSERT INTO interview_records
+            (user_id, title, company, position, round_type, job_analysis_id,
+             raw_text, parsed_dialogue_json, analysis_json, status,
+             submission_id, round_label)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """,
+        (
+            data.get("user_id", 1),
+            data.get("title", ""),
+            data.get("company", ""),
+            data.get("position", ""),
+            data.get("round_type", ""),
+            data.get("job_analysis_id"),
+            data.get("raw_text", ""),
+            json.dumps(data.get("parsed_dialogue") or [], ensure_ascii=False),
+            json.dumps(data.get("analysis") or {}, ensure_ascii=False),
+            data.get("status", "pending"),
+            data.get("submission_id"),
+            data.get("round_label", ""),
+        ),
+    )
 
 
 def update_interview_record_analysis(record_id: int, analysis: Dict[str, Any]) -> None:
     """更新面试记录的分析结果"""
     _ensure_interview_records_table()
-    config = _jc_config()
-    with connect(**config) as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                UPDATE interview_records
-                SET analysis_json=%s, status=%s
-                WHERE id=%s
-                """,
-                (
-                    json.dumps(analysis, ensure_ascii=False),
-                    "done",
-                    record_id,
-                ),
-            )
+    execute(
+        """
+        UPDATE interview_records
+        SET analysis_json=%s, status=%s
+        WHERE id=%s
+        """,
+        (
+            json.dumps(analysis, ensure_ascii=False),
+            "done",
+            record_id,
+        ),
+    )
 
 
 def update_interview_record_status(record_id: int, status: str) -> None:
     """更新面试记录状态（如 parsed / question_table / done）"""
     _ensure_interview_records_table()
-    config = _jc_config()
-    with connect(**config) as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                "UPDATE interview_records SET status=%s WHERE id=%s",
-                (status, record_id),
-            )
+    execute(
+        "UPDATE interview_records SET status=%s WHERE id=%s",
+        (status, record_id),
+    )
 
 
 def get_interview_record(
@@ -302,16 +282,12 @@ def get_interview_record(
 ) -> Optional[Dict[str, Any]]:
     """获取单条面试记录（可选按 user_id 过滤所有权）"""
     _ensure_interview_records_table()
-    config = _jc_config()
     sql = "SELECT * FROM interview_records WHERE id=%s"
     params: List[Any] = [record_id]
     if user_id is not None:
         sql += " AND user_id=%s"
         params.append(user_id)
-    with connect(**config) as conn:
-        with conn.cursor(dictionary=True) as cur:
-            cur.execute(sql, tuple(params))
-            row = cur.fetchone()
+    row = query_one(sql, tuple(params))
     if not row:
         return None
     return {
@@ -333,14 +309,10 @@ def get_interview_record(
 def list_interview_records(user_id: int = 1, limit: int = 100) -> List[Dict[str, Any]]:
     """列出用户的面试记录，按时间倒序"""
     _ensure_interview_records_table()
-    config = _jc_config()
-    with connect(**config) as conn:
-        with conn.cursor(dictionary=True) as cur:
-            cur.execute(
-                "SELECT * FROM interview_records WHERE user_id=%s ORDER BY created_at DESC LIMIT %s",
-                (user_id, limit),
-            )
-            rows = cur.fetchall()
+    rows = query_all(
+        "SELECT * FROM interview_records WHERE user_id=%s ORDER BY created_at DESC LIMIT %s",
+        (user_id, limit),
+    )
     result = []
     for row in rows:
         result.append(
@@ -364,73 +336,57 @@ def list_interview_records(user_id: int = 1, limit: int = 100) -> List[Dict[str,
 def insert_interview_qa_pair(data: Dict[str, Any]) -> int:
     """插入面试 QA 对，返回主键"""
     _ensure_interview_qa_pairs_table()
-    config = _jc_config()
-    with connect(**config) as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                INSERT INTO interview_qa_pairs
-                    (record_id, user_id, sequence, speaker, start_time, content,
-                     is_question, question_text, dimension, level, intent,
-                     expected_answer, my_answer, feedback_json, suggestions_json,
-                     score, related_card_id, related_card_title)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                """,
-                (
-                    data["record_id"],
-                    data.get("user_id", 1),
-                    data.get("sequence", 0),
-                    data.get("speaker", ""),
-                    data.get("start_time", ""),
-                    data.get("content", ""),
-                    1 if data.get("is_question") else 0,
-                    data.get("question_text", ""),
-                    data.get("dimension", ""),
-                    data.get("level", ""),
-                    data.get("intent", ""),
-                    data.get("expected_answer", ""),
-                    data.get("my_answer", ""),
-                    json.dumps(data.get("feedback") or [], ensure_ascii=False),
-                    json.dumps(data.get("suggestions") or [], ensure_ascii=False),
-                    data.get("score", 0),
-                    data.get("related_card_id"),
-                    data.get("related_card_title", ""),
-                ),
-            )
-            return cur.lastrowid
+    return execute_lastrowid(
+        """
+        INSERT INTO interview_qa_pairs
+            (record_id, user_id, sequence, speaker, start_time, content,
+             is_question, question_text, dimension, level, intent,
+             expected_answer, my_answer, feedback_json, suggestions_json,
+             score, related_card_id, related_card_title)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """,
+        (
+            data["record_id"],
+            data.get("user_id", 1),
+            data.get("sequence", 0),
+            data.get("speaker", ""),
+            data.get("start_time", ""),
+            data.get("content", ""),
+            1 if data.get("is_question") else 0,
+            data.get("question_text", ""),
+            data.get("dimension", ""),
+            data.get("level", ""),
+            data.get("intent", ""),
+            data.get("expected_answer", ""),
+            data.get("my_answer", ""),
+            json.dumps(data.get("feedback") or [], ensure_ascii=False),
+            json.dumps(data.get("suggestions") or [], ensure_ascii=False),
+            data.get("score", 0),
+            data.get("related_card_id"),
+            data.get("related_card_title", ""),
+        ),
+    )
 
 
 def delete_interview_qa_pair(qa_pair_id: int) -> None:
     """按主键删除单个 QA 对"""
     _ensure_interview_qa_pairs_table()
-    config = _jc_config()
-    with connect(**config) as conn:
-        with conn.cursor() as cur:
-            cur.execute("DELETE FROM interview_qa_pairs WHERE id=%s", (qa_pair_id,))
+    execute("DELETE FROM interview_qa_pairs WHERE id=%s", (qa_pair_id,))
 
 
 def delete_interview_qa_pairs_by_record(record_id: int) -> None:
     """按面试记录 ID 删除其下所有 QA 对"""
     _ensure_interview_qa_pairs_table()
-    config = _jc_config()
-    with connect(**config) as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                "DELETE FROM interview_qa_pairs WHERE record_id=%s", (record_id,)
-            )
+    execute("DELETE FROM interview_qa_pairs WHERE record_id=%s", (record_id,))
 
 
 def list_interview_qa_pairs(record_id: int) -> List[Dict[str, Any]]:
     """列出某条面试记录下的所有 QA 对"""
     _ensure_interview_qa_pairs_table()
-    config = _jc_config()
-    with connect(**config) as conn:
-        with conn.cursor(dictionary=True) as cur:
-            cur.execute(
-                "SELECT * FROM interview_qa_pairs WHERE record_id=%s ORDER BY sequence ASC",
-                (record_id,),
-            )
-            rows = cur.fetchall()
+    rows = query_all(
+        "SELECT * FROM interview_qa_pairs WHERE record_id=%s ORDER BY sequence ASC",
+        (record_id,),
+    )
     return [
         {
             "id": row["id"],
@@ -460,8 +416,7 @@ def delete_interview_record(record_id: int, user_id: Optional[int] = None) -> No
     """删除面试记录及其 QA 对（可选按 user_id 过滤所有权，越权时无操作）"""
     _ensure_interview_records_table()
     _ensure_interview_qa_pairs_table()
-    config = _jc_config()
-    with connect(**config) as conn:
+    with connection() as conn:
         with conn.cursor() as cur:
             sql = "DELETE FROM interview_records WHERE id=%s"
             params: List[Any] = [record_id]

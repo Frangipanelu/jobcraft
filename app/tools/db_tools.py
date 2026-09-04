@@ -10,7 +10,15 @@ import os
 from typing import Any, Dict, Optional
 
 from dotenv import load_dotenv
-from mysql.connector import connect  # noqa: F401  # 供复用方与测试 import
+
+from app.tools.db_conn import (  # noqa: F401  # 供复用方与测试 import
+    connect,
+    execute,
+    execute_lastrowid,
+    query_all,
+    query_one,
+    query_scalar,
+)
 
 # override=True: 强制用 .env 覆盖系统环境里的同名变量, 避免旧 key 干扰
 load_dotenv(override=True)
