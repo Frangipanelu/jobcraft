@@ -168,6 +168,37 @@ def _invoke_with_plain_json(
     return schema.model_validate_json(json_str), response
 
 
+def _record_llm_observability(
+    feature: str,
+    status: str,
+    duration_s: float,
+    usage: Optional[Dict[str, Optional[int]]] = None,
+) -> None:
+    """记录 LLM 调用的 Prometheus 观测指标（尽力而为，失败不影响业务）。"""
+    try:
+        from app.monitoring.metrics import (
+            llm_call_duration_seconds,
+            llm_calls_total,
+            llm_tokens_total,
+        )
+
+        llm_calls_total.labels(agent_name=feature, status=status).inc()
+        llm_call_duration_seconds.labels(agent_name=feature).observe(duration_s)
+        if usage:
+            for key, label in (
+                ("prompt_tokens", "prompt"),
+                ("completion_tokens", "completion"),
+                ("total_tokens", "total"),
+            ):
+                value = usage.get(key)
+                if value is not None:
+                    llm_tokens_total.labels(agent_name=feature, token_type=label).inc(
+                        value
+                    )
+    except Exception:
+        logger.debug("LLM 观测指标写入失败，忽略", exc_info=True)
+
+
 def invoke_structured(
     model,
     schema: Type[BaseModel],
@@ -239,12 +270,16 @@ def invoke_structured(
         _finish("success", output_json=_result.model_dump(), from_cache=1)
         return _result
 
+    _llm_start = time.perf_counter()
     try:
         _result, _response = _invoke_with_bind_tools(
             model, schema, prompt, temperature, max_tokens
         )
     except Exception as e:
         if not fallback:
+            _record_llm_observability(
+                feature, "error", time.perf_counter() - _llm_start
+            )
             _finish("error", error=str(e))
             raise
         try:
@@ -253,11 +288,17 @@ def invoke_structured(
             )
         except Exception as e2:
             label = f"[{debug_label}] " if debug_label else ""
+            _record_llm_observability(
+                feature, "error", time.perf_counter() - _llm_start
+            )
             _finish("error", error=f"{e}; 兜底也失败: {e2}")
             raise RuntimeError(f"{label}结构化调用失败: {e}; 兜底也失败: {e2}")
 
     ai_cache.cache_set(_cache_key, _result.model_dump())
     _usage = _extract_usage(_response)
+    _record_llm_observability(
+        feature, "success", time.perf_counter() - _llm_start, _usage
+    )
     _finish(
         "success",
         output_json=_result.model_dump(),

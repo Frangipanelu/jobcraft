@@ -7,6 +7,7 @@ JobCraft 监控模块
 from .metrics import (
     llm_calls_total,
     llm_call_duration_seconds,
+    llm_tokens_total,
     db_query_duration_seconds,
     api_requests_total,
     setup_monitoring,
@@ -15,6 +16,7 @@ from .metrics import (
 __all__ = [
     "llm_calls_total",
     "llm_call_duration_seconds",
+    "llm_tokens_total",
     "db_query_duration_seconds",
     "api_requests_total",
     "setup_monitoring",

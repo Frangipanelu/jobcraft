@@ -45,6 +45,35 @@ app.include_router(interview_review_router)
 
 setup_monitoring(app)
 
+
+@app.middleware("http")
+async def _record_api_metrics(request: Request, call_next):
+    """记录自定义 API Prometheus 指标（尽力而为，失败不影响业务）。"""
+    import time
+
+    _start = time.perf_counter()
+    response = await call_next(request)
+    try:
+        from app.monitoring.metrics import (
+            api_request_duration_seconds,
+            api_requests_total,
+        )
+
+        route = getattr(request.scope.get("route", None), "path", None)
+        endpoint = route or request.url.path
+        method = request.method
+        status = str(response.status_code)
+        api_requests_total.labels(
+            method=method, endpoint=endpoint, status_code=status
+        ).inc()
+        api_request_duration_seconds.labels(method=method, endpoint=endpoint).observe(
+            time.perf_counter() - _start
+        )
+    except Exception:
+        logger.debug("API 观测指标写入失败，忽略", exc_info=True)
+    return response
+
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
@@ -203,7 +232,9 @@ async def submit_task(
     except HTTPException:
         raise
     except RuntimeError as e:
-        raise HTTPException(status_code=503, detail=f"任务服务暂不可用（Redis 未就绪）: {e}")
+        raise HTTPException(
+            status_code=503, detail=f"任务服务暂不可用（Redis 未就绪）: {e}"
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"提交任务失败: {e}")
 
@@ -230,7 +261,9 @@ async def get_task_status(task_id: str, current_user: int = Depends(get_current_
     except HTTPException:
         raise
     except RuntimeError as e:
-        raise HTTPException(status_code=503, detail=f"任务服务暂不可用（Redis 未就绪）: {e}")
+        raise HTTPException(
+            status_code=503, detail=f"任务服务暂不可用（Redis 未就绪）: {e}"
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"查询任务失败: {e}")
 
@@ -257,7 +290,9 @@ async def cancel_task(task_id: str, current_user: int = Depends(get_current_user
     except HTTPException:
         raise
     except RuntimeError as e:
-        raise HTTPException(status_code=503, detail=f"任务服务暂不可用（Redis 未就绪）: {e}")
+        raise HTTPException(
+            status_code=503, detail=f"任务服务暂不可用（Redis 未就绪）: {e}"
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"取消任务失败: {e}")
 
@@ -298,7 +333,9 @@ async def list_tasks(
     except HTTPException:
         raise
     except RuntimeError as e:
-        raise HTTPException(status_code=503, detail=f"任务服务暂不可用（Redis 未就绪）: {e}")
+        raise HTTPException(
+            status_code=503, detail=f"任务服务暂不可用（Redis 未就绪）: {e}"
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"列出任务失败: {e}")
 
