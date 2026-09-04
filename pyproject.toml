@@ -41,9 +41,15 @@ dev = [
 [tool.uv]
 package = false
 
+[project.scripts]
+jc-migrate = "migrations.runner:main"
+
 [tool.ruff.lint]
 select = ["E", "F", "W"]
 ignore = ["S104", "S105", "S110", "S112", "S608", "E501"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["S101", "S105", "W291", "W293"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
