@@ -444,6 +444,15 @@
 > - [x] 验证：`uv run pytest tests/ -q` 340 passed、11 skipped；`ruff check` 绿；`npm run build` + `tsc --noEmit` 通过
 >   - commit：后端 `d3254a8`、前端 `1a16001`（已本地，待推送）
 
+> **TASK-RESUME-001 Resume 编辑接真实数据**
+>
+> - [x] 新增 `markdownToResume` 解析器 + `resumeToMarkdown` 反序列化器（`src/utils/resumeParser.ts`），与后端 `generate_resume_markdown` 格式互为逆运算；round-trip 验证 item/bullet 分组与内容一致
+> - [x] `loadDashboard` 对每个 `has_resume` 投递站 `getSubmission()` 解析 `resume_markdown` → 填充 `resumes`（key=submission id）；`submissionToJob.resumeId` 对齐为 `String(sub.id)`
+> - [x] Context 新增 `activeResumeId`/`setActiveResumeId`；6 个编辑动作（apply/reject/applyAll suggestion、update/add/delete bullet）由硬编码 `'res-byte-1'` 改为读写 `activeResumeId`；新增 `saveResume(id)` = `resumeToMarkdown` → `PATCH /submission/{id}`（复用现有字段，无后端改动）
+> - [x] `ResumeEditorView` 按 `resumeId ?? job.resumeId ?? 首个简历` 解析当前简历并 `setActiveResumeId`；「保存草稿」接入 `saveResume`；修正中文标识符 `allBullets紧`→`allBullets`、`isEditing迁移`→`isEditing`；无简历时友好空态
+> - [x] `JobWorkspaceView` 不再写死 `'res-byte-1'`
+> - [x] 验证：round-trip 脚本确认解析↔序列化一致；`tsc --noEmit` + `npm run build` 通过；后端 `uv run pytest tests/ -q` 340 passed/11 skipped 回归通过
+
 ---
 
 **更新规则**：每次会话结束时，AI 必须根据本次实际完成的工作，移动或新增上述列表中的条目，并简要描述进展。

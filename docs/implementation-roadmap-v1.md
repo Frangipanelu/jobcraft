@@ -277,6 +277,14 @@ TASK-CLEANUP-WIP-001                                 (随时可做，无依赖)
 - **Dependencies**：TASK-TYPE-001。
 - **Non-goals**：不新增独立 resume 表（P2 DB 阶段）。
 - **Expected Commit**：`fix(frontend): wire resume editor to real submission resume`
+- **Status**：✅ 完成（前端为主，不改后端）
+  - 新增 `markdownToResume` 解析器（`src/utils/resumeParser.ts`）：镜像 `generate_resume_markdown` 格式，`# 姓名`/联系方式行/键值行 → personalInfo/jobTitle/company/updatedAt；`## 核心能力` → summary；`## 工作经历` 内 `### A·B·C` 卡片条目 → item，`### 成就标题`+`**标签**：` STAR 行 → bullet。确定性规则、容忍怪异输入。
+  - 新增 `resumeToMarkdown` 反序列化器：将编辑后的 `ResumeVersion` 序列化回 markdown（每个 bullet 用 `###` 子标题 + 原文行还原，与解析器互为逆运算，round-trip 验证 item/bullet 分组与内容一致），复用于持久化。
+  - `loadDashboard` 对每个 `has_resume` 投递站 `getSubmission()` 解析 `resume_markdown` → 填充 `resumes`（key=submission id）；`submissionToJob.resumeId` 对齐为 `String(sub.id)`。
+  - Context 新增 `activeResumeId`/`setActiveResumeId`；6 个编辑动作（apply/reject/applyAll suggestion、update/add/delete bullet）由硬编码 `'res-byte-1'` 改为读写 `activeResumeId`；新增 `saveResume(id)` = `resumeToMarkdown` → `PATCH /submission/{id}`（复用现有字段，无后端改动）。
+  - `ResumeEditorView` 按 `resumeId ?? job.resumeId ?? 首个简历` 解析当前简历并 `setActiveResumeId`；「保存草稿」接入 `saveResume`；修正中文标识符 `allBullets紧`→`allBullets`、`isEditing迁移`→`isEditing`；无简历时友好空态。
+  - `JobWorkspaceView` 不再写死 `'res-byte-1'`。
+  - 验证：round-trip 脚本确认解析↔序列化一致；`tsc --noEmit` + `npm run build` 通过；后端 `uv run pytest tests/ -q` 340 passed/11 skipped 回归通过。
 
 ### TASK-STATUS-001 引入 Submission 状态机
 
