@@ -384,6 +384,12 @@ TASK-CLEANUP-WIP-001                                 (随时可做，无依赖)
 - **Why**：Baseline R9。所有 prompt 内联硬编码。
 - **Scope**：建立 `prompts/`（experience/jd/resume/interview/review）；每个 prompt 带 `_v{N}`。
 - **Expected Commit**：`refactor(ai): externalize and version prompts`
+- **Status（2026-09-04）**：✅ 完成 `77a28f8`。实际盘点出 **17 个内联 LLM prompt**（非 roadmap 预估的 15）+ 1 个 llm_json 回退格式后缀 = 18 个，全部外部化：
+  - `app/core/prompts.py`：`load_prompt(subdir, name, version=1, **kwargs)` + `PROMPTS_DIR`（指向项目根 `prompts/`，经 `Path(__file__).parents[2]` 解析，任意 cwd 可用）；`{{name}}` 占位符自定义替换，字面单花括号无需转义（与用户确认的策略，规避 `str.format()` 的 `{{var}}=字面量` 语义坑）
+  - `prompts/` 三域：`experience/`（extract_structured、parse_resume_entries、recommend_tags）、`jd/`（jd_ats_analysis、ats_recommend、score_match、gap_polish、suggestions）、`interview/`（question_router、tech_analyzer、soft_analyzer、gate_check、question_table_intent、interview_prep_script、company_research、mock_interview_chat）+ `core/`（json_fallback_suffix）
+  - 14 处调用点重构：10 个 agent + `interview_review`/`interview_pre` 纯函数（**保留原签名**，兼容 `test_tools_extra_unit`/`test_workflows_unit`）+ `app/api/interview_review` mock chat + `llm_json` 回退后缀；`_build_ats_prompt`/`_build_company_prompt`/`_build_question_table_prompt`/`_build_interview_prompt` 均改为内部调用 loader
+  - 保留 rubric 常量（tech/soft 各自的 `RUBRIC_TEXT`、interview_review 的 `RUBRIC_TEXT`+`LEVEL_SCORE_MAP`）作为 `{{rubric_text}}`/`{{level_score_map}}` 实参传入（三者语义不同，不强合并）；`llm_json` 的 schema hint 为程序化生成，非自然语言 prompt，未外部化
+  - 单测 `tests/test_prompts.py` 4 用例（注册表≈模板占位符一致性、无未闭合双花括号、loader 渲染、字面花括号保留）；验证 `pytest tests/ -q` 350 passed/11 skipped、`ruff` 绿
 
 ### TASK-AI-002 AI Task 持久化
 

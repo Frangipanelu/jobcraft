@@ -472,6 +472,10 @@
 > - [x] MIG-001 `f78d826`：文档化 SQL 迁移目录（非 Alembic——栈为 raw mysql-connector）。`migrations/runner.py` + `schema_migrations` 版本表 + checksum + 幂等逐条执行；`V0001__baseline.sql` 固化 10 表完整 schema；pyproject 增 `jc-migrate` + pytest `pythonpath=["."]`；单测 5 用例（345 passed/11 skipped）。**未对真实库端到端应用**（环境 MySQL :3308 未运行），应用时 `python -m migrations.runner migrate`
 > - [x] FK-001 `20641a4`：`V0002__foreign_keys.sql`，先清孤儿数据再 ADD CONSTRAINT：`submission→job_analysis`(SET NULL)、`interview_preps→job_analysis`(CASCADE)、`interview_preps→submission`(SET NULL)、`qa_pairs→record`(CASCADE)、`card_versions→card`(CASCADE)，全 `ON UPDATE CASCADE`、只加不改；单测追加约束覆盖校验（346 passed/11 skipped），`ruff` 绿
 
+> **阶段 4 AI 工程化（TASK-AI-001）**
+>
+> - [x] AI-001 `77a28f8`：18 个内联 LLM prompt 全部外部化 + 版本化到 `prompts/<域>/<名>_v1.txt`（experience 3 / jd 5 / interview 8 + core 1，另盘点为 18 个含 llm_json 回退后缀）。`app/core/prompts.py` loader 用 `{{name}}` 自定义替换（字面 `{ }` 免转义，规避 str.format 的 `{{var}}`=字面量坑）；14 处调用点重构且保留 `_build_*_prompt` 纯函数签名（兼容既有单测）；rubric 常量作占位符实参传入。新增 `tests/test_prompts.py` 4 用例（占位符一致性/无未闭合花括号/渲染/字面保留）；`pytest tests/ -q` 350 passed/11 skipped、`ruff` 绿。
+
 ---
 
 **更新规则**：每次会话结束时，AI 必须根据本次实际完成的工作，移动或新增上述列表中的条目，并简要描述进展。
