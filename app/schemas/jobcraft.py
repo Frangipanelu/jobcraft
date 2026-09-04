@@ -337,6 +337,7 @@ class DimensionQuestion(BaseModel):
 class InterviewPrepResult(BaseModel):
     """面试准备稿结果"""
 
+    id: Optional[int] = Field(None, description="后端落库后的真实 record id（生成时填充）")
     job_analysis_id: int
     round_type: str = "技术面"
     duration: str = "10-15 分钟"

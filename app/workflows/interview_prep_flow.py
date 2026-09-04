@@ -84,7 +84,7 @@ def _generate_prep(state: Dict[str, Any]) -> Dict[str, Any]:
 
     # 落库
     ability_matrix = [q.model_dump() for q in result.dimension_questions]
-    db_tools.insert_interview_prep(
+    record_id = db_tools.insert_interview_prep(
         {
             "job_analysis_id": job_analysis_id,
             "user_id": user_id,
@@ -99,6 +99,7 @@ def _generate_prep(state: Dict[str, Any]) -> Dict[str, Any]:
             "company_research": state.get("company_research"),
         }
     )
+    result.id = record_id
     return {"result": result.model_dump()}
 
 
