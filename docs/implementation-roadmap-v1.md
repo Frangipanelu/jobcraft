@@ -442,15 +442,23 @@ TASK-CLEANUP-WIP-001                                 (随时可做，无依赖)
 
 ### TASK-DEPS-001 依赖清理
 
-- **Goal**：移除未用依赖（`passlib[bcrypt]`、`aiofiles`、`requests`、dev `playwright`；前端 `express`、`@google/genai`、vite 移出 prod）。
+- **Goal**：移除未用依赖（后端 `aiofiles`、dev `playwright`、`passlib[bcrypt]`；前端 `express`、`@google/genai`；vite 移出 prod）。
 - **Why**：Baseline §依赖扫描。
 - **Note**：遵循红线（先写入 pyproject/package.json 确认必要性再动）；避免误删。
-- **Expected Commit**：`chore(deps): remove unused dependencies`
+- **Status（2026-09-04）**：✅ 完成 `f04764f`。
+  - 后端 `pyproject.toml`：删 `aiofiles`（零引用）；删 dev `playwright`（零引用）；`passlib[bcrypt]` → **显式 `bcrypt>=4.0.0`**（`app/auth/__init__.py` 直接 `import bcrypt`，删去 passlib 后需直声明避免包消失）；`requests` **从 runtime 移入 dev group**（核实非未用——`tests/` 的 conftest/e2e 在用，只是放错位置）。
+  - 前端 `package.json`：删 dependencies `@google/genai`、`express`（src 零引用；`server.js` 从未生成）；`vite` 从 dependencies 移除（build 工具不应进 prod，devDependencies 保留）；连带删 devDeps `@types/express`。
+  - 验证 `uv lock`/`uv sync` 移除 4 个包（aiofiles/passlib/playwright/pyee），bcrypt 5.0.0 直声明可用；`pytest tests/ -q` 367 passed/11 skipped、`ruff` 绿；前端 `npm install` 移除 120 包、`npm run build` + `npm run lint`(tsc) 通过。
 
 ### TASK-CLEAN-001 死代码清理
 
-- **Goal**：移除/归档 `app/db/config.py`（未用 SQLAlchemy）、`schemas/common.py` 的 `PaginatedResponse`/`ApiResponse`、`get_optional_user`、`test_qa_pairs.py` 误收集脚本。
+- **Goal**：移除/归档 `app/db/config.py`、`schemas/common.py`、`get_optional_user`、`test_qa_pairs.py` 误收集脚本。
 - **Expected Commit**：`refactor: remove dead code`
+- **Status（2026-09-04）**：✅ 完成 `564019c`。
+  - **盘点澄清（roadmap 原描述有误）**：`app/db/config.py` **并非未用 SQLAlchemy**——`server.py` 的 `/api/jobcraft/health` 用 `from app.db import engine` + `SELECT 1` 做 DB 连通性检查，且 `sqlalchemy` **未声明**在 pyproject（传递依赖）。已按用户批准：重写健康检查为原生 `_jc_config()` + `mysql.connector.connect`（与全库其余 DB 一致），随后**删除整个 `app/db/`**（含 `config.py` + `__init__.py`），同时消除对未声明传递 `sqlalchemy` 的依赖。
+  - 整文件删除 `app/schemas/common.py`（`PaginationParams`/`PaginatedResponse`/`ApiResponse`/`ErrorResponse` 全库零引用；roadmap 原只说删其中两个，实测整文件均可删）。
+  - 删除 `app/auth/dependencies.py:47 get_optional_user`（零引用）、`tests/test_qa_pairs.py`（非 pytest 测试——顶层副作用脚本读 `tests/long_user_sample.txt` + `print`；真测试为 `test_qa_pairs_unit.py`）。
+  - 验证：删除后无残留引用（grep app/tests/migrations）；`pytest tests/ -q` 367 passed/11 skipped、`ruff` 绿（被删脚本本收集 0 用例，计数不变）。
 
 ---
 

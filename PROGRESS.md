@@ -479,6 +479,11 @@
 > - [x] AI-003 `0aa89d0`：通用 AI Cache + Usage。用户确认：Redis 热缓存（复用 REDIS_URL，零新增依赖）/ 复用 ai_tasks token 列 / 命中即返回。cache key=`ai:{feature}:{model}:{input_hash}`（input_hash 已含 prompt+schema → 版本变更天然失效）。`app/tools/ai_cache.py`（懒 Redis + 短超时快速失败 + `_DISABLED` 哨兵，尽力而为非阻塞，TTL 配 `JC_AI_CACHE_TTL`）；`invoke_structured` 先查缓存命中即返回（审计标记 from_cache=1）→ 未命中跑 LLM + 写缓存 + 从 `usage_metadata`/`response_metadata` 提取 token 用量；内层函数改返 `(result, response)`。迁移 `V0004__ai_cache.sql` 加 `from_cache` 可空列（只加不改）。单测新增 5 用例；`pytest tests/ -q` 363 passed/11 skipped、`ruff` 绿。V0004 未对真实库应用。
 > - [x] OBS-001 `cfcf970`：激活 Prometheus 指标。用户决策：DB query 指标后续做（留重构候选），本任务接 **LLM + API**。LLM：`invoke_structured` 增 `_record_llm_observability`（calls_total/duration_seconds/tokens_total，缓存命中不记）；**修 bug**：`llm_tokens_total` 未从 `app.monitoring.__init__` 导出导致 `from app.monitoring import ...` 整体 ImportError 被吞→所有 LLM 指标不记录，改直连 `metrics` 模块并补齐导出。API：`server.py` 加 `@app.middleware("http")` 记 requests_total + duration（endpoint 用路由模板 path）。单测 `tests/test_observability.py` 4 用例（含 /health 集成测试读 registry）；`pytest tests/ -q` 367 passed/11 skipped、`ruff` 绿。
 
+> **阶段 5 工程治理（TASK-CLEAN-001 + TASK-DEPS-001）**
+>
+> - [x] CLEAN-001 `564019c`：死代码清理。**盘点澄清**：`app/db/config.py` 非无引用——`/api/jobcraft/health` 用其 engine + `SELECT 1`，且 `sqlalchemy` 未声明（传递依赖）。按用户批准，先重写健康检查为原生 `_jc_config()`+`mysql.connector.connect` 再**删除整个 `app/db/`**（消除未声明传递依赖）；整文件删 `app/schemas/common.py`（4 类全零引用）；删 `get_optional_user`（零引用）、`tests/test_qa_pairs.py`（误收集副作用脚本，真测试为 `test_qa_pairs_unit.py`）。删前 grep 确认无残留引用；`pytest` 367 passed/11 skipped、`ruff` 绿。
+> - [x] DEPS-001 `f04764f`：依赖清理。后端：删 `aiofiles`、dev `playwright`（均零引用）；`passlib[bcrypt]` → 显式 `bcrypt>=4.0.0`（auth 直接 import bcrypt，防包消失）；`requests` 从 runtime 移 dev（核实 tests 在用，非未用是放错位）。前端：删 `@google/genai`、`express`、devDeps `@types/express`（均零引用）；`vite` 从 dependencies 移出（build 工具，dev 保留）。`uv lock`/`uv sync` 移除 4 包（aiofiles/passlib/playwright/pyee）+ bcrypt 5.0.0 直声明可用；`pytest` 367 passed/11 skipped、`ruff` 绿；前端 `npm install` 移除 120 包 + `npm run build`/`tsc --noEmit` 通过。均未对真实库端到端应用。
+
 ---
 
 **更新规则**：每次会话结束时，AI 必须根据本次实际完成的工作，移动或新增上述列表中的条目，并简要描述进展。
