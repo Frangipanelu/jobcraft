@@ -486,6 +486,17 @@ TASK-CLEANUP-WIP-001                                 (随时可做，无依赖)
   - 设计要点：#5 个封装函数（query_one/query_all/query_scalar/execute/execute_lastrowid）改用 `_tracked_connection`（inc 连接 + 计时 + observe + dec）；`connection()` 保持返回原始连接（兼容单测 `c is conn`），仅维护连接 Gauge，且 `inc()` 放在 `connect()` 成功后（连接失败不泄漏 Gauge）。多语句 `connection()` 内部各 `cur.execute` 逐句耗时不观测（文档声明，v1 范围）。
   - 单测 `tests/test_db_conn_unit.py` 新增 4 用例（`_sql_meta` 派生、helper 观测 duration、helper/connection 的 Gauge inc/dec，沿用 test_observability 的 fake metric 模式）；`pytest tests/ -q` 380 passed/11 skipped（较 367 +13，其中 9 为 REF-DB-001）、`ruff` 绿。
 
+### TASK-REF-SPLIT-001 大文件拆分（interview_review 对话解析层）
+
+- **Goal**：按 AGENTS.md「单文件超过 300 行必须考虑拆分」资质，拆分 >700 行后端大文件。当前后端唯一 >700 出线者为 `app/tools/interview_review.py`（885 行，两块职责粘连：对话解析层 + 面试复盘业务层）。
+- **Why**：`interview_review.py` 为全库热点（8 个路由 + 3 个 workflow/agent + 多项测试均引用），解析层与业务层职责边界清晰、可独立测试。
+- **Expected Commit**：`refactor: extract dialogue parsing layer from interview_review into interview_dialogue`
+- **Status（2026-09-04）**：✅ 完成 `69b155a`。
+  - 新建 `app/tools/interview_dialogue.py`（525 行，纯函数、零 LLM/DB）：全部解析正则/常量 + `_detect_role`→`_parse_dialogue`→`_build_qa_pairs`/`_is_interviewer_question`。`interview_review.py` 精简为业务层（210 行）：`create_interview_record`/`preview_question_intents`/`_build_question_table_prompt`/`_get_job_context`/`_format_cards_for_prompt`/`_find_my_answer`/`_truncate_text` + 维度 rubric 常量 + `_QuestionIntentItem`/`_QuestionTableOut` schema。
+  - **契约保持**：`interview_review` re-export `_parse_dialogue`/`_build_qa_pairs`（`# noqa: F401` 防 ruff 误删），故 workflows、agents、api、tests 全部既有 import / patch 目标零改动。
+  - 验证：`pytest tests/ -q` 380 passed/11 skipped（与拆分前完全一致，纯移动零行为变化）、`ruff` 绿、运行时逐模块 import 冒烟通过（`api/interview_review`、两 workflow、两 agent）。
+  - **教训**：本轮 ruff `--fix` 的 F401 会删除「仅 re-export 未在本模块使用」的名字——re-export 必须显式加 `# noqa: F401`，否则破坏对外契约。
+
 ---
 
 # 9. 优先实施清单
@@ -506,6 +517,7 @@ TASK-CLEANUP-WIP-001                                 (随时可做，无依赖)
 | 11 | TASK-CLEANUP-WIP-001 清理 WIP | P1 | — | 仓库整洁 | ✅ 完成 `794047b`/`4b64ca3`/`f69f25c` |
 | 13 | TASK-REF-DB-001 DB 访问集中封装 | P2 | — | 可维护性/指标前置 | ✅ 完成 `1df3ecc` |
 | 14 | TASK-REF-DB-002 DB query 指标接线 | P2 | REF-DB-001 | 可观测性 | ✅ 完成 `f1ba745` |
+| 15 | TASK-REF-SPLIT-001 大文件拆分 | P2 | — | 可维护性 | ✅ 完成 `69b155a` |
 
 > 安全基线（Phase 0）4 个 task 全部完成（commit `6a0f121`→`8878459`→`09aa805`→`b681f2c`）。
 > Phase 1 核心发现（2026-09-02 校准）：两层类型系统是有意设计（非漂移），真正问题是 api 层 7 处 any + 接口未接线（interviews/task system）。
