@@ -475,6 +475,7 @@
 > **阶段 4 AI 工程化（TASK-AI-001）**
 >
 > - [x] AI-001 `77a28f8`：18 个内联 LLM prompt 全部外部化 + 版本化到 `prompts/<域>/<名>_v1.txt`（experience 3 / jd 5 / interview 8 + core 1，另盘点为 18 个含 llm_json 回退后缀）。`app/core/prompts.py` loader 用 `{{name}}` 自定义替换（字面 `{ }` 免转义，规避 str.format 的 `{{var}}`=字面量坑）；14 处调用点重构且保留 `_build_*_prompt` 纯函数签名（兼容既有单测）；rubric 常量作占位符实参传入。新增 `tests/test_prompts.py` 4 用例（占位符一致性/无未闭合花括号/渲染/字面保留）；`pytest tests/ -q` 350 passed/11 skipped、`ruff` 绿。
+> - [x] AI-002 `8909def`：AI 调用元数据审计。盘点校准：结构化调用约 20 处全走 `llm_json.invoke_structured` 唯一 chokepoint（roadmap「4 处」过时），2 处非结构化（gate_agent bind_tools、mock 面试 OpenAI SDK）按用户决策首版排除。迁移 `V0003__ai_audit.sql`（ai_tasks + ai_outputs，token 列可空预留 AI-003）；`app/tools/db_ai.py` 局部封装（create/finish，**尽力而为非阻塞**）；`invoke_structured` 内挂钩子记录 status/model/input_hash/prompt_hash/schema_name + 结构化输出 + 耗时，外部行为完全不变。单测 `tests/test_ai_audit.py` 8 用例；`pytest tests/ -q` 358 passed/11 skipped、`ruff` 绿。V0003 未对真实库应用。
 
 ---
 

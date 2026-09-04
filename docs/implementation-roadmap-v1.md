@@ -397,6 +397,13 @@ TASK-CLEANUP-WIP-001                                 (随时可做，无依赖)
 - **Why**：Baseline R9 + Domain 目标。当前仅 4 处散落 LLM 调用点。
 - **Scope**：引入 AI Task 层包裹 Workflow 调用；记录 status/model/input_hash/schema_version。
 - **Expected Commit**：`feat(ai): persist AI task metadata`
+- **Status（2026-09-04）**：✅ 完成 `8909def`。
+  - **盘点校准**：roadmap「仅 4 处散落 LLM 调用点」过时——实际结构化调用约 **20 处**，**全部走 `llm_json.invoke_structured` 唯一 chokepoint**；另有 2 处非结构化（`gate_agent` 的 `bind_tools` 直接调、mock 面试的 OpenAI SDK `chat.completions`）。与用户确认首版**只接结构化 chokepoint**，2 处非结构化排除并记录在文档。现有 `app/tasks/`（TASK-TASK-SYS-001）是作业编排，与 AI 元数据审计**无重叠**。
+  - 迁移 `V0003__ai_audit.sql`：`ai_tasks`（id/feature/model/schema_name/prompt_version/input_hash/prompt_hash/status/error/latency_ms/时间戳，token 用量列可空预留 AI-003）+ `ai_outputs`（task_id FK→ai_tasks ON DELETE CASCADE/schema_name/schema_version/output_json）。
+  - `app/tools/db_ai.py`：局部封装（raw connector + `_jc_config`，与 db_* 模式一致）；`sha256_hex` / `create_ai_task`（返回 task_id，失败返 None）/ `complete_ai_task`（可选写 ai_outputs + 更新 ai_tasks）。**尽力而为非阻塞**：审计失败绝不抛出、绝不阻断业务 LLM 调用。
+  - `llm_json.invoke_structured` 内挂钩子：记录开始（feature/schema_name/model/prompt_hash/input_hash）→ 计时 → 成功后写结构化输出 + status=success；失败（含兜底失败）写 status=error + 错误；外部行为与返回完全不变（仍抛原 RuntimeError 消息）。prompt sha256 哈希（用户确认）。
+  - 单测 `tests/test_ai_audit.py` 8 用例（sha256、DB-down 非阻塞、success/error 审计路径、审计自身故障不阻断业务、V0003 表声明）；验证 `pytest tests/ -q` 358 passed/11 skipped、`ruff` 绿。
+  - 说明：V0003 **未对真实库端到端应用**（环境 MySQL 未运行），应用时 `python -m migrations.runner migrate`。
 
 ### TASK-AI-003 AI Cache + Usage
 
