@@ -460,6 +460,13 @@
 > - [x] 前端 `api/types.ts` `InterviewPrepResult` 加 `id?: number`；`createInterview` 用 `result.id` 生成 `newId`（`prep-{id}`）并填充 `prepSource.id`，ID 格式与加载路径一致，消除重复
 > - [x] 验证：`tsc --noEmit` + `npm run build` 通过；后端 `uv run pytest tests/ -q` 340 passed/11 skipped；`ruff check` 绿
 
+> **TASK-TASK-SYS-001 接线前端任务系统**
+>
+> - [x] scope 校准：后端仅注册 3 种任务（`resume_generate`/实际为 JD 分析、`interview_prep`、`export_pdf`），无「复盘分析」任务类型；故按最小 scope 接 **面试准备**（有对应 `interview_prep` 任务类型 + Redis 消费循环），其余 AI 调用保持同步、不改 contract
+> - [x] 新增 `src/api/tasks.ts`：`submitTask`/`getTask`/`cancelTask`/`listTasks` + `pollTaskUntilDone`（1.5s 间隔 / 120s 超时，回传失败/取消/超时）；`api/types.ts` 补 `TaskStatusName`/`TaskInfo`/`SubmitTaskResult`（commit `081e2ae`）
+> - [x] `createInterview`：提交 `interview_prep` 任务 → 轮询 `completed` 读 `result`（`InterviewPrepResult` dict，含 `id`）继续 `buildInterviewFromPrep`；提交失败/Redis 不可用（503）降级为原同步 `generateInterviewPrep` POST，保证功能始终可用（commit `506cd16`）
+> - [x] 验证：`tsc --noEmit` + `npm run build` 通过；后端 `ruff check` 绿 + `pytest -q` 340 passed/11 skipped（后端未改动，仅回归）
+
 ---
 
 **更新规则**：每次会话结束时，AI 必须根据本次实际完成的工作，移动或新增上述列表中的条目，并简要描述进展。

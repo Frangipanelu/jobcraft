@@ -268,6 +268,10 @@ TASK-CLEANUP-WIP-001                                 (随时可做，无依赖)
 - **Files**：`src/api/tasks.ts`（新建）、`src/context/JobCraftContext.tsx`、`app/api/server.py`。
 - **Tests**：`cd frontend-jobcraft && npm run build && npm run lint`。
 - **Expected Commit**：`feat(frontend): wire task system for AI operation progress feedback`
+- **Status（2026-09-04）**：✅ 完成（scope 校准后分两个前端 commit + 文档）。**实际 scope 校准**：后端任务系统只注册 3 种任务（`resume_generate`/实际为 JD 分析、`interview_prep`、`export_pdf`），无「复盘分析」任务类型；「面试准备」原本已有可用的同步 POST。故本次按最小 scope 接线 **面试准备**（已有对应 `interview_prep` 任务类型 + Redis 消费循环），其余 AI 调用保持现状、不改同步 contract。
+  - 新增 `src/api/tasks.ts`：`submitTask`/`getTask`/`cancelTask`/`listTasks` + `pollTaskUntilDone`（默认 1.5s 间隔 / 120s 超时，回传失败/取消/超时）；`api/types.ts` 补 `TaskStatusName`/`TaskInfo`/`SubmitTaskResult`（commit `081e2ae`）
+  - `createInterview`：首选提交 `interview_prep` 任务 → 轮询至 `completed` 读 `result`（即 `InterviewPrepResult` dict，含 `id`）继续原 `buildInterviewFromPrep` 逻辑；提交失败/Redis 不可用（503）时**降级为原同步 `generateInterviewPrep` POST**，保证功能始终可用（commit `506cd16`）
+  - 验证：`tsc --noEmit` + `npm run build` 通过；后端 `ruff check` 绿 + `pytest -q` 340 passed/11 skipped（后端未改动，仅回归）
 
 ### TASK-CLEANUP-WIP-001 清理未提交 WIP
 
