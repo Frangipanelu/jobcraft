@@ -202,6 +202,11 @@ TASK-CLEANUP-WIP-001                                 (随时可做，无依赖)
 - **Files**：`src/components/interview/MockInterviewModal.tsx`、`src/api/interview.ts`。
 - **Tests**：`cd frontend-jobcraft && npm run build && npm run lint`。
 - **Expected Commit**：`feat(frontend): real mock interview via backend mock-chat endpoint`
+- **Status（2026-09-04）**：✅ 已完成（commit `59ab3f0`）。实际代码已全部满足 scope，无遗留 mock：
+  - `api/interview.ts` 已有 `mockChat()`（`/interview-review/mock-chat` POST）
+  - `MockInterviewModal` 已是真实多轮对话：打开→`mockChat([])` 开场、`handleSend`→`mockChat(messages)` 循环、`handleComplete`→`createInterviewReview` 生成真实复盘
+  - 无 `Math.random` 假评分、无 `setTimeout` 假延迟、无 hardcoded `mockQuestions`、无假录音
+  - 验证：`tsc --noEmit` 通过（本会话复核）
 
 ### TASK-REAL-DATA-003 复盘/新增向导/面试准备去 Mock 评分
 
