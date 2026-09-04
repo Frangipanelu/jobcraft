@@ -467,6 +467,11 @@
 > - [x] `createInterview`：提交 `interview_prep` 任务 → 轮询 `completed` 读 `result`（`InterviewPrepResult` dict，含 `id`）继续 `buildInterviewFromPrep`；提交失败/Redis 不可用（503）降级为原同步 `generateInterviewPrep` POST，保证功能始终可用（commit `506cd16`）
 > - [x] 验证：`tsc --noEmit` + `npm run build` 通过；后端 `ruff check` 绿 + `pytest -q` 340 passed/11 skipped（后端未改动，仅回归）
 
+> **阶段 3 数据库演进（TASK-DB-MIG-001 + TASK-DB-FK-001）**
+>
+> - [x] MIG-001 `f78d826`：文档化 SQL 迁移目录（非 Alembic——栈为 raw mysql-connector）。`migrations/runner.py` + `schema_migrations` 版本表 + checksum + 幂等逐条执行；`V0001__baseline.sql` 固化 10 表完整 schema；pyproject 增 `jc-migrate` + pytest `pythonpath=["."]`；单测 5 用例（345 passed/11 skipped）。**未对真实库端到端应用**（环境 MySQL :3308 未运行），应用时 `python -m migrations.runner migrate`
+> - [x] FK-001 `20641a4`：`V0002__foreign_keys.sql`，先清孤儿数据再 ADD CONSTRAINT：`submission→job_analysis`(SET NULL)、`interview_preps→job_analysis`(CASCADE)、`interview_preps→submission`(SET NULL)、`qa_pairs→record`(CASCADE)、`card_versions→card`(CASCADE)，全 `ON UPDATE CASCADE`、只加不改；单测追加约束覆盖校验（346 passed/11 skipped），`ruff` 绿
+
 ---
 
 **更新规则**：每次会话结束时，AI 必须根据本次实际完成的工作，移动或新增上述列表中的条目，并简要描述进展。

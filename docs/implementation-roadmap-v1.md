@@ -352,6 +352,12 @@ TASK-CLEANUP-WIP-001                                 (随时可做，无依赖)
 - **Current State**：`db_*.py` 各 `_ensure_*` 函数 + 多份 dump 快照。
 - **Scope**：建立 `migrations/`（或 alembic）；把现有 DDL 固化为 baseline；新变更走迁移。
 - **Expected Commit**：`chore(db): introduce migration framework baseline`
+- **Status（2026-09-04）**：✅ 完成 `f78d826`。采用 **文档化 SQL 迁移目录**（非 Alembic——业务层是 raw `mysql-connector` 而非 SQLAlchemy ORM，Alembic 会引第三方依赖且与栈脱节，规避「禁止擅自引入第三方库」红线）：
+  - `migrations/runner.py`：`python -m migrations.runner status|migrate [N]`，`schema_migrations` 版本表 + checksum，幂等事务式逐条执行（`;--SPLIT--` 分隔）；与业务层一致走 `app.tools.db_config.get_db_config`
+  - `migrations/versions/V0001__baseline.sql`：固化当前完整 schema（10 表，含 `users` + 各 `_ensure_*` 运行时增量），全 `CREATE TABLE IF NOT EXISTS`，可安全 bootstrap 新旧库
+  - `pyproject.toml` 增 `jc-migrate` script + `[tool.pytest.ini_options].pythonpath=["."]`（否则 `migrations` 在 bare `uv run pytest` 下不可导入）
+  - 单测 `tests/test_migrations_runner_unit.py` 5 用例（发现/排序/幂等/limit/checksum）；验证 `pytest tests/ -q` 345 passed/11 skipped、`ruff` 绿
+  - 说明：当前环境 MySQL（:3308）未运行，迁移**未对真实库端到端应用**；交付框架 + baseline，应用时执行 `jc-migrate`/`python -m migrations.runner migrate`
 
 ### TASK-DB-FK-001 关键表补外键与索引
 
@@ -360,6 +366,11 @@ TASK-CLEANUP-WIP-001                                 (随时可做，无依赖)
 - **Note**：遵循 AGENTS.md 前向兼容（只加不改）；FK 前先清理孤儿数据（见 `docs/domain-model-v2.md` §49）。
 - **Dependencies**：TASK-DB-MIG-001。
 - **Expected Commit**：`chore(db): add foreign keys to core relationships`
+- **Status（2026-09-04）**：✅ 完成 `20641a4`。`migrations/versions/V0002__foreign_keys.sql`：
+  - 先清理孤儿数据（父表不存在的引用行 DELETE/置空），再 `ADD CONSTRAINT`，否则 FK 创建失败
+  - `resume_submission.job_analysis_id→job_analysis(id)` **SET NULL**；`interview_preps.job_analysis_id→job_analysis(id)` **CASCADE**；`interview_preps.submission_id→resume_submission(id)` **SET NULL**（可空）；`interview_qa_pairs.record_id→interview_records(id)` **CASCADE**；`card_versions.card_id→experience_card(id)` **CASCADE**
+  - 全部 `ON UPDATE CASCADE`，只加约束不改列，满足前向兼容
+  - 单测追加 `test_fk_migration_declares_expected_constraints` 校验 V0002 覆盖 5 个约束 + 孤儿清理段；`pytest tests/ -q` 346 passed/11 skipped、`ruff` 绿
 
 ---
 
