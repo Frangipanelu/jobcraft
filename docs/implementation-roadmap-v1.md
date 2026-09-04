@@ -433,6 +433,12 @@ TASK-CLEANUP-WIP-001                                 (随时可做，无依赖)
 - **Why**：Baseline R12。所有自定义指标从不记录。
 - **Scope**：在 LLM 调用点、DB query、端点挂指标。
 - **Expected Commit**：`feat(observability): wire up prometheus metrics`
+- **Status（2026-09-04）**：✅ 完成 `cfcf970`。
+  - **用户决策**：DB query 指标**后续做**（需在 7 个 `db_*.py` 几十处 `cursor.execute` 埋点，高风险大改动），留给「DB 访问集中封装」重构候选；本任务接线 **LLM + API** 两处有干净 chokepoint 的指标。
+  - **LLM 指标**：`llm_json.invoke_structured`（唯一 chokepoint）新增 `_record_llm_observability`——`llm_calls_total{agent,status}`、`llm_call_duration_seconds{agent}`、`llm_tokens_total{agent,prompt|completion|total}`；命中缓存不记（非 LLM 调用）。**修复潜在 bug**：`llm_tokens_total` 原本未从 `app.monitoring.__init__` 导出，`from app.monitoring import ...` 全量导入会因缺名整体 ImportError → 被 try/except 吞掉导致**所有** LLM 指标都不记录；改为 `from app.monitoring.metrics import ...` 并补齐 `__init__` 导出。
+  - **API 指标**：`server.py` 新增 `@app.middleware("http")` 记录 `api_requests_total{method,endpoint,status_code}` + `api_request_duration_seconds{method,endpoint}`（endpoint 用路由模板 path 而非含参数的原始 path）。
+  - DB 相关指标（`db_query_duration_seconds`/`db_connections_active`）保持已定义但未接线，归档为后续重构候选。
+  - 单测 `tests/test_observability.py` 4 用例（LLM success/error/token 记录、观测失败不阻断业务、API 中间件对 `/health` 集成测试读 registry）；验证 `pytest tests/ -q` 367 passed/11 skipped、`ruff` 绿。
 
 ### TASK-DEPS-001 依赖清理
 
