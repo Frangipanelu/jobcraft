@@ -427,3 +427,32 @@ export interface BackfillResult {
     created_ids: number[]
   }[]
 }
+
+// ============================================================
+// 异步任务系统（/api/jobcraft/tasks/*）
+// ============================================================
+
+export type TaskStatusName =
+  | 'pending'
+  | 'running'
+  | 'completed'
+  | 'failed'
+  | 'cancelled'
+
+export interface TaskInfo {
+  task_id: string
+  task_type: string
+  status: TaskStatusName
+  params: Record<string, unknown>
+  result?: Record<string, unknown> | null
+  error?: string | null
+  created_at?: number
+  started_at?: number | null
+  completed_at?: number | null
+}
+
+export interface SubmitTaskResult {
+  task_id: string
+  task_type: string
+  status: TaskStatusName
+}
