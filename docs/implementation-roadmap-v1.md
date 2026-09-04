@@ -236,6 +236,10 @@ TASK-CLEANUP-WIP-001                                 (随时可做，无依赖)
 - **Files**：`src/context/JobCraftContext.tsx`、`src/api/interview.ts`、`src/components/interview/InterviewPrepCenterView.tsx`。
 - **Tests**：`cd frontend-jobcraft && npm run build && npm run lint`。
 - **Expected Commit**：`feat(frontend): load interviews from backend, remove in-memory-only state`
+- **Status（2026-09-04）**：✅ 完成。实际 scope 校准：`loadInterviews`/`buildInterviewFromPrep`/前端 `companyResearch` 等已接后端真实数据（roadmap 原「全部 hardcoded」描述过时）。真正缺口是**后端生成落库后未把 `id` 返回前端**，导致前端 `createInterview` 用假 ID `-Date.now()`，刷新后与 `loadInterviews` 加载的真实 `prep-{id}` 重复。
+  - 后端 `InterviewPrepResult` schema 加 `id: Optional[int]`；`_generate_prep` 捕获 `insert_interview_prep()` 返回的 `record_id` 写入 `result.id`
+  - 前端 `api/types.ts` `InterviewPrepResult` 加 `id?: number`；`createInterview` 用 `result.id` 生成 `newId`（`prep-{id}`）并填充 `prepSource.id`，与加载路径 ID 格式一致，消除重复
+  - 验证：`tsc --noEmit` + `npm run build` 通过；后端 `uv run pytest tests/ -q` 340 passed/11 skipped；`ruff check` 绿
 
 ### TASK-TASK-SYS-001 接线前端任务系统
 
