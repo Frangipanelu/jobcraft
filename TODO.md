@@ -15,7 +15,7 @@
 - [x] 验证：前端 build + tsc 通过；后端 ruff + pytest 315 passed/6 skipped（提交快照同样通过）
 - [x] commit 1：`8599e80` feat(auth): enforce JWT on business endpoints and harden registration
 - [x] commit 2：`6a0f121` feat(frontend): add login and register flow; remove default-login
-- [ ] 待用户确认后 push 至 GitHub（含基线/路线图文档）
+- [x] 已 push 至 GitHub（`6a0f121`；含基线/路线图文档）
 
 ## 开始时间: 2026-09-02
 ## 完成时间: 2026-09-02
