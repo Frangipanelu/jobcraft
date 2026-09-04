@@ -3,6 +3,8 @@
 不依赖真实 MySQL，通过替换 mysql.connector.connect 为内存假 cursor 验证逻辑。
 """
 
+import os
+
 import pytest
 
 import migrations.runner as runner
@@ -141,3 +143,23 @@ def test_checksum_changed_flagged_in_status(fake_conn, tmp_path, monkeypatch):
     # 修改文件内容 -> checksum 变化
     (d / "V0001__a.sql").write_text("A-modified", encoding="utf-8")
     runner.status()  # 不应抛错
+
+
+def test_fk_migration_declares_expected_constraints():
+    """V0002 外键迁移应覆盖 roadmap 列出的四类高价值关系。"""
+    fk_file = os.path.join(runner.MIGRATIONS_DIR, "V0002__foreign_keys.sql")
+    assert os.path.exists(fk_file)
+    with open(fk_file, encoding="utf-8") as fh:
+        sql = fh.read()
+    for expected in [
+        "ADD CONSTRAINT fk_submission_job_analysis",
+        "ADD CONSTRAINT fk_preps_job_analysis",
+        "ADD CONSTRAINT fk_preps_submission",
+        "ADD CONSTRAINT fk_qa_record",
+        "ADD CONSTRAINT fk_card_versions_card",
+    ]:
+        assert expected in sql, f"缺失外键约束声明: {expected}"
+    # 每个 ADD CONSTRAINT 之前都应先清理对应孤儿数据，避免 FK 创建失败
+    assert "DELETE FROM resume_submission" in sql
+    assert "DELETE FROM card_versions" in sql
+
