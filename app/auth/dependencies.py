@@ -42,25 +42,3 @@ async def get_current_user(
         )
 
     return user_id
-
-
-async def get_optional_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
-) -> int:
-    """
-    获取可选的当前用户
-
-    如果提供了有效的 Token，返回用户 ID；否则返回默认用户 ID 1。
-
-    :return: 用户 ID
-    """
-    if credentials is None:
-        return 1  # 默认用户
-
-    token = credentials.credentials
-    user_id = get_user_id_from_token(token)
-
-    if user_id is None:
-        return 1  # Token 无效时返回默认用户
-
-    return user_id

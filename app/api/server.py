@@ -170,11 +170,12 @@ async def api_health_check():
     包含数据库连接检查。
     """
     try:
-        from app.db import engine
-        from sqlalchemy import text
+        from app.tools.db_config import _jc_config
+        from mysql.connector import connect
 
-        with engine.connect() as conn:
-            conn.execute(text("SELECT 1"))
+        with connect(**_jc_config()) as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT 1")
         db_status = "healthy"
     except Exception as e:
         logger.warning(f"数据库健康检查失败: {e}")
