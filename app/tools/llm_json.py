@@ -7,12 +7,16 @@ LLM 结构化输出工具
 """
 
 import json
+import logging
 import re
+import time
 from typing import Any, Dict, Optional, Type, get_args, get_origin
 
 from pydantic import BaseModel
 
 from app.core.prompts import load_prompt
+
+logger = logging.getLogger("jobcraft.tools.llm_json")
 
 
 def _extract_json(text: str) -> Optional[str]:
@@ -182,15 +186,58 @@ def invoke_structured(
     :param fallback: 是否允许手动 JSON 兜底
     :return: schema 实例
     """
+    from app.tools import db_ai
+
+    schema_name = getattr(schema, "__name__", str(schema))
+    sm_name = getattr(model, "model_name", None) or getattr(
+        model, "model", None
+    ) or type(model).__name__
+    feature = debug_label or schema_name
+
+    # 审计：记录开始（尽力而为，失败不影响业务调用）
+    _task_id: Optional[int] = None
     try:
-        return _invoke_with_bind_tools(model, schema, prompt, temperature, max_tokens)
+        _task_id = db_ai.create_ai_task(
+            feature=feature,
+            model=str(sm_name),
+            schema_name=schema_name,
+            prompt_hash=db_ai.sha256_hex(prompt),
+            input_hash=db_ai.sha256_hex(f"{prompt}|{schema_name}"),
+        )
+    except Exception:
+        _task_id = None
+
+    _start = time.perf_counter()
+
+    def _finish(status: str, error: Optional[str] = None, **extra: Any) -> None:
+        _latency = int((time.perf_counter() - _start) * 1000)
+        try:
+            db_ai.complete_ai_task(
+                task_id=_task_id,
+                status=status,
+                latency_ms=_latency,
+                schema_name=schema_name,
+                error=error,
+                **extra,
+            )
+        except Exception:
+            logger.exception("AI 审计收尾写入失败，忽略")
+
+    try:
+        _result = _invoke_with_bind_tools(
+            model, schema, prompt, temperature, max_tokens
+        )
     except Exception as e:
         if not fallback:
+            _finish("error", error=str(e))
             raise
         try:
-            return _invoke_with_plain_json(
+            _result = _invoke_with_plain_json(
                 model, schema, prompt, temperature, max_tokens
             )
         except Exception as e2:
             label = f"[{debug_label}] " if debug_label else ""
+            _finish("error", error=f"{e}; 兜底也失败: {e2}")
             raise RuntimeError(f"{label}结构化调用失败: {e}; 兜底也失败: {e2}")
+    _finish("success", output_json=_result.model_dump())
+    return _result
