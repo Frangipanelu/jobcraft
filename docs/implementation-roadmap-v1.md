@@ -170,6 +170,14 @@ TASK-CLEANUP-WIP-001                                 (随时可做，无依赖)
 - **Files**：`src/components/workbench/WorkbenchView.tsx`、`src/context/JobCraftContext.tsx`。
 - **Tests**：`cd frontend-jobcraft && npm run build && npm run lint`。
 - **Expected Commit**：`feat(frontend): drive workbench from real dashboard data`
+- **Status（2026-09-04）**：✅ 已完成（commit `3c03cde`，与 Expected Commit 完全一致）。实际代码已全部满足 scope，无遗留 hardcode：
+  - 计数（已投递/面试中/待处理/已完成/本周新增/activeCount）全部由 `jobs.filter(status)` 派生（WorkbenchView.tsx:31-53），无 `12/3/5/2`
+  - `getJobSteps()` 用真实 `job.steps`（:65-85）；`getStatusBadge`/`getNextStepText`/company/role 均读 `job` 字段（:87-104）
+  - 匹配度：`job.matchScore > 0 ? ...% : '—'`，mapper 无数据时显示 `—` 不造假数（:288）
+  - 「下一步行动/最近活动」由真实 jobs 派生（:106-146），无「字节跳动/腾讯」硬编码
+  - 空态：正在推进/下一步/最近活动均有引导文案（:268-281、385-389、431-435）
+  - AI 建议 data-driven，不虚构计数（:148-153）
+  - `Job` 类型已含 `steps`/`matchScore`/`applyDate`/`lastUpdated`/`currentStage`（jobcraft.ts:372-377）
 
 ### TASK-REAL-DATA-004 JD 报告详情页去 FALLBACK_DATA
 
