@@ -262,6 +262,7 @@ export interface DimensionQuestion {
 }
 
 export interface InterviewPrepResult {
+  id?: number
   job_analysis_id: number
   round_type: string
   duration: string

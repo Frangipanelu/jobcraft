@@ -1267,7 +1267,7 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
       card_ids: []
     });
 
-    const newId = 'prep-' + Date.now();
+    const newId = result.id ? `prep-${result.id}` : 'prep-' + Date.now();
     const baseInterview = buildInterviewFromPrep(
       {
         round_type: result.round_type,
@@ -1281,7 +1281,7 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
         company: data.company,
         role: data.role,
         prepSource: {
-          id: -Date.now(),
+          id: result.id || -Date.now(),
           job_analysis_id: jobAnalysisId,
           company: data.company,
           position: data.role,
