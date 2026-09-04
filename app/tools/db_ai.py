@@ -7,8 +7,8 @@ status/model/input_hash/schema_name/prompt_hash 到 `ai_tasks`，并把结构化
 设计约束：
 - **尽力而为 / 非阻塞**：审计失败（DB 不可用、表缺失、写入异常）绝不抛出，也绝不影响
   业务 LLM 调用。所有异常在此被捕获并记录日志。
-- **前向兼容**：token 用量列（prompt_tokens/completion_tokens/total_tokens）为可空，
-  本任务不写，预留给 AI-003 usage 记录。
+- **前向兼容**：token 用量列（prompt_tokens/completion_tokens/total_tokens）与 from_cache
+  列均为可空；AI-003 起由本模块写入 token 用量与缓存命中标记。
 - 表结构由迁移 `migrations/versions/V0003__ai_audit.sql` 建立，本模块不做 DDL。
 """
 
@@ -86,6 +86,10 @@ def complete_ai_task(
     error: Optional[str] = None,
     output_json: Optional[Dict[str, Any]] = None,
     schema_version: str = "",
+    prompt_tokens: Optional[int] = None,
+    completion_tokens: Optional[int] = None,
+    total_tokens: Optional[int] = None,
+    from_cache: Optional[int] = None,
 ) -> None:
     """收尾一次 AI 调用：可选写 ai_outputs，并更新 ai_tasks 状态。
 
@@ -98,6 +102,10 @@ def complete_ai_task(
     :param error: 失败原因文本（status=error 时）
     :param output_json: 结构化输出 dict（status=success 时）
     :param schema_version: schema 版本，可空
+    :param prompt_tokens: 输入 token 数（AI-003 usage），可空
+    :param completion_tokens: 输出 token 数（AI-003 usage），可空
+    :param total_tokens: 总 token 数（AI-003 usage），可空
+    :param from_cache: 1=结果来自 AI 热缓存，0/NULL=实际调用 LLM，可空
     """
     if task_id is None:
         return
@@ -117,10 +125,21 @@ def complete_ai_task(
                     """
                     UPDATE ai_tasks
                        SET status = %s, error = %s, latency_ms = %s,
+                           prompt_tokens = %s, completion_tokens = %s,
+                           total_tokens = %s, from_cache = %s,
                            finished_at = NOW()
                      WHERE id = %s
                     """,
-                    (status, error, latency_ms, task_id),
+                    (
+                        status,
+                        error,
+                        latency_ms,
+                        prompt_tokens,
+                        completion_tokens,
+                        total_tokens,
+                        from_cache,
+                        task_id,
+                    ),
                 )
     except Exception:
         logger.exception("complete_ai_task 审计写入失败，忽略")

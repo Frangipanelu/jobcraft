@@ -70,8 +70,8 @@ def _invoke_with_bind_tools(
     prompt: str,
     temperature: Optional[float] = None,
     max_tokens: Optional[int] = None,
-) -> BaseModel:
-    """使用 LangChain bind_tools 调用结构化输出"""
+) -> Any:
+    """使用 LangChain bind_tools 调用结构化输出，返回 (schema 实例, 原始 response)"""
     llm = model.bind_tools([schema], tool_choice=True)
     bind_kwargs = {}
     if temperature is not None:
@@ -86,14 +86,14 @@ def _invoke_with_bind_tools(
     tool_calls = getattr(response, "tool_calls", None)
     if tool_calls:
         args = tool_calls[0].get("args", {})
-        return schema.model_validate(args)
+        return schema.model_validate(args), response
 
     # 兼容部分模型把结果放 content
     content = getattr(response, "content", None)
     if content:
         json_str = _extract_json(content)
         if json_str:
-            return schema.model_validate_json(json_str)
+            return schema.model_validate_json(json_str), response
 
     raise ValueError("模型未返回 tool_call 或 JSON")
 
@@ -144,12 +144,16 @@ def _invoke_with_plain_json(
     prompt: str,
     temperature: Optional[float] = None,
     max_tokens: Optional[int] = None,
-) -> BaseModel:
-    """手动 JSON 解析兜底（使用紧凑 schema 提示，避免 token 超限）"""
-    final_prompt = prompt + "\n\n" + load_prompt(
-        "core",
-        "json_fallback_suffix",
-        schema_hint=_compact_schema_hint(schema),
+) -> Any:
+    """手动 JSON 解析兜底（使用紧凑 schema 提示），返回 (schema 实例, 原始 response)"""
+    final_prompt = (
+        prompt
+        + "\n\n"
+        + load_prompt(
+            "core",
+            "json_fallback_suffix",
+            schema_hint=_compact_schema_hint(schema),
+        )
     )
     kwargs = {}
     if temperature is not None:
@@ -161,7 +165,7 @@ def _invoke_with_plain_json(
     json_str = _extract_json(content)
     if not json_str:
         raise ValueError(f"无法从模型输出中提取 JSON: {content[:500]}")
-    return schema.model_validate_json(json_str)
+    return schema.model_validate_json(json_str), response
 
 
 def invoke_structured(
@@ -186,13 +190,17 @@ def invoke_structured(
     :param fallback: 是否允许手动 JSON 兜底
     :return: schema 实例
     """
+    from app.tools import ai_cache
     from app.tools import db_ai
 
     schema_name = getattr(schema, "__name__", str(schema))
-    sm_name = getattr(model, "model_name", None) or getattr(
-        model, "model", None
-    ) or type(model).__name__
+    sm_name = (
+        getattr(model, "model_name", None)
+        or getattr(model, "model", None)
+        or type(model).__name__
+    )
     feature = debug_label or schema_name
+    input_hash = db_ai.sha256_hex(f"{prompt}|{schema_name}")
 
     # 审计：记录开始（尽力而为，失败不影响业务调用）
     _task_id: Optional[int] = None
@@ -202,7 +210,7 @@ def invoke_structured(
             model=str(sm_name),
             schema_name=schema_name,
             prompt_hash=db_ai.sha256_hex(prompt),
-            input_hash=db_ai.sha256_hex(f"{prompt}|{schema_name}"),
+            input_hash=input_hash,
         )
     except Exception:
         _task_id = None
@@ -223,8 +231,16 @@ def invoke_structured(
         except Exception:
             logger.exception("AI 审计收尾写入失败，忽略")
 
+    # AI 缓存：先查热缓存（尽力而为，未命中/不可用则走 LLM）
+    _cache_key = ai_cache.build_cache_key(feature, str(sm_name), input_hash)
+    _cached = ai_cache.cache_get(_cache_key)
+    if _cached is not None:
+        _result = schema.model_validate(_cached)
+        _finish("success", output_json=_result.model_dump(), from_cache=1)
+        return _result
+
     try:
-        _result = _invoke_with_bind_tools(
+        _result, _response = _invoke_with_bind_tools(
             model, schema, prompt, temperature, max_tokens
         )
     except Exception as e:
@@ -232,12 +248,54 @@ def invoke_structured(
             _finish("error", error=str(e))
             raise
         try:
-            _result = _invoke_with_plain_json(
+            _result, _response = _invoke_with_plain_json(
                 model, schema, prompt, temperature, max_tokens
             )
         except Exception as e2:
             label = f"[{debug_label}] " if debug_label else ""
             _finish("error", error=f"{e}; 兜底也失败: {e2}")
             raise RuntimeError(f"{label}结构化调用失败: {e}; 兜底也失败: {e2}")
-    _finish("success", output_json=_result.model_dump())
+
+    ai_cache.cache_set(_cache_key, _result.model_dump())
+    _usage = _extract_usage(_response)
+    _finish(
+        "success",
+        output_json=_result.model_dump(),
+        prompt_tokens=_usage.get("prompt_tokens"),
+        completion_tokens=_usage.get("completion_tokens"),
+        total_tokens=_usage.get("total_tokens"),
+    )
     return _result
+
+
+def _extract_usage(response: Any) -> Dict[str, Optional[int]]:
+    """从 LLM 原始 response 提取 token 用量（尽力而为，提取不到返回空 dict）。
+
+    兼容 LangChain `usage_metadata`（AIMessage）与 `response_metadata` 两种形态。
+    """
+    usage: Dict[str, Optional[int]] = {}
+    um = getattr(response, "usage_metadata", None)
+    if isinstance(um, dict):
+        usage["prompt_tokens"] = um.get("input_tokens") or um.get("prompt_tokens")
+        usage["completion_tokens"] = um.get("output_tokens") or um.get(
+            "completion_tokens"
+        )
+        if um.get("total_tokens") is not None:
+            usage["total_tokens"] = um.get("total_tokens")
+        elif um.get("input_tokens") is not None and um.get("output_tokens") is not None:
+            usage["total_tokens"] = (um.get("input_tokens") or 0) + (
+                um.get("output_tokens") or 0
+            )
+    rm = getattr(response, "response_metadata", None)
+    if isinstance(rm, dict):
+        token_usage = rm.get("token_usage")
+        if isinstance(token_usage, dict):
+            usage.setdefault("prompt_tokens", token_usage.get("prompt_tokens"))
+            usage.setdefault("completion_tokens", token_usage.get("completion_tokens"))
+            usage.setdefault("total_tokens", token_usage.get("total_tokens"))
+        usage_map = rm.get("usage")
+        if isinstance(usage_map, dict):
+            usage.setdefault("prompt_tokens", usage_map.get("prompt_tokens"))
+            usage.setdefault("completion_tokens", usage_map.get("completion_tokens"))
+            usage.setdefault("total_tokens", usage_map.get("total_tokens"))
+    return {k: v for k, v in usage.items() if v is not None}
