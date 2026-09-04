@@ -10,26 +10,17 @@ from typing import Any, Dict, Optional
 
 from app.agents.base_agent import BaseAgent
 from app.core.llm import model
+from app.core.prompts import load_prompt
 from app.schemas.jobcraft import CompanyResearchInfo
 from app.tools.llm_json import invoke_structured
 
 
 def _build_company_prompt(company: str, search_data: Dict[str, Any]) -> str:
-    return (
-        "你是一名专业的公司研究分析师。请根据以下搜索结果，"
-        f"为「{company}」生成结构化的公司背调报告。\n\n"
-        "输出要求：\n"
-        "- basic: {name, full_name, website, founded, headquarters, size, stage}\n"
-        "- business: {main_products, business_model, target_customers, competitors}\n"
-        "- funding: {latest_round, investors, valuation(if known)}\n"
-        "- team: {founders, key_executives}\n"
-        "- industry: {sector, trends, opportunities, risks}\n"
-        "- news: [{title, date, summary}] 最多 5 条\n"
-        "- sources: 信息来源 URL 列表\n\n"
-        "搜索结果：\n"
-        "---\n"
-        f"{json.dumps(search_data, ensure_ascii=False, default=str)[:8000]}\n"
-        "---"
+    return load_prompt(
+        "interview",
+        "company_research",
+        company=company,
+        search_data=json.dumps(search_data, ensure_ascii=False, default=str)[:8000],
     )
 
 

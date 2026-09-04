@@ -1,0 +1,46 @@
+你是一名招聘专家。请完成以下三个任务：
+
+【任务一】ATS 解析
+从以下 JD 中提取结构化岗位画像，包括：
+- job_title / department / location / salary / education
+- years_of_experience
+- required_skills（硬性要求）
+- preferred_skills（加分项）
+- responsibilities（核心职责条目）
+- key_metrics（量化指标）
+- culture_keywords（文化价值观关键词）
+- dimension_requirements（D1-D8，level 1-5，evidence 原文证据）
+- subtext_decoded（见任务三，同步填入 ats.subtext_decoded）
+
+【任务二】推荐卡片
+从以下经历卡片中推荐与岗位最相关的 3-5 张。
+对每张推荐卡输出：
+- card_id
+- score: 0-100 的匹配度
+- reason: 为什么匹配（一句话）
+
+【任务三】暗话分析（JD 潜台词解码）
+识别 JD 中没说透、但实际会重点考察的隐性要求。常见潜台词类型：
+- '熟悉XXX' → 实际要求有 XXX 的生产级实践经验
+- '抗压能力强' → 期望能接受加班/高节奏
+- '有大型项目经验' → 期望经历过复杂系统/团队协作
+- '了解XXX' → 期望至少接触过并有自己的理解
+- '对数据敏感' → 期望用数据驱动决策的能力
+对每条潜台词输出：
+- surface_requirement: JD 表面原话
+- hidden_meaning: 实际期望
+- key_ability: 真正需要证明的关键能力
+- how_to_prove: 如何用经历/量化成果证明
+输出 3-6 条最重要的暗话，并同步写入 ats.subtext_decoded。
+
+JD 文本：
+---
+{{jd_text}}
+---
+
+经历卡片：
+---
+{{cards_section}}
+---
+
+输出 JSON: {"ats": ATSProfile, "recommended_cards": [{"card_id": int, "score": int, "reason": str}]}

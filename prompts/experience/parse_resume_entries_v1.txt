@@ -1,0 +1,32 @@
+你是一名简历解析专家。请从以下简历文本中提取所有 **工作经历 / 实习经历 / 项目经历**。
+
+规则：
+1. 只提取工作经历、实习经历、项目经历三个部分
+2. 跳过：个人信息（姓名/电话/邮箱/地址）、教育背景、专业技能、自我评价、个人作品链接
+3. 每段经历输出一条 entry
+4. 如果某段经历包含多条 bullet 项，每个 bullet 拆成一个 achievement
+5. summary 写一句总概括，格式：'参与/负责了xx项目/xx流程，实现/达成xx目标，带来xx%提升'
+6. company/role/period 从原文提取，原文没有则填空字符串
+7. 每条 achievement 的 title 写 bullet 的核心动作，situation/action/result 尽量提取量化结果
+8. card_type 判断该段经历的类型：正式全职工作写 'work'，实习写 'intern'，学校里/业余的独立项目或竞赛项目写 'project'（工作期间做的小项目仍算 work）
+
+输出 JSON: {
+  "entries": [
+    {
+      "company": "公司名",
+      "role": "职位",
+      "period": "2020.03 - 2022.06",
+      "title": "经历标题",
+      "summary": "一句话总概括",
+      "card_type": "work | intern | project",
+      "achievements": [
+        { "title": "...", "situation": "...", "action": {"main": "...", "difficulty": "", "resolution": ""}, "result": "..." },
+      ]
+    }
+  ]
+}
+
+简历文本：
+---
+{{resume_text}}
+---

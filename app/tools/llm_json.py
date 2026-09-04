@@ -12,6 +12,8 @@ from typing import Any, Dict, Optional, Type, get_args, get_origin
 
 from pydantic import BaseModel
 
+from app.core.prompts import load_prompt
+
 
 def _extract_json(text: str) -> Optional[str]:
     """从文本中提取 JSON 对象/数组（兼容 Qwen3 / DeepSeek 等模型的 <think> 标签）"""
@@ -140,10 +142,10 @@ def _invoke_with_plain_json(
     max_tokens: Optional[int] = None,
 ) -> BaseModel:
     """手动 JSON 解析兜底（使用紧凑 schema 提示，避免 token 超限）"""
-    final_prompt = (
-        f"{prompt}\n\n"
-        "请严格按以下 JSON 格式输出，不要添加任何额外说明：\n"
-        f"{_compact_schema_hint(schema)}"
+    final_prompt = prompt + "\n\n" + load_prompt(
+        "core",
+        "json_fallback_suffix",
+        schema_hint=_compact_schema_hint(schema),
     )
     kwargs = {}
     if temperature is not None:

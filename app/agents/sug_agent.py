@@ -8,6 +8,7 @@ from typing import Any, Dict
 
 from app.agents.base_agent import BaseAgent
 from app.core.llm import model
+from app.core.prompts import load_prompt
 from app.schemas.jobcraft import JDRequirements, SuggestionsResult
 from app.tools.llm_json import invoke_structured
 
@@ -38,11 +39,11 @@ class SugAgent(BaseAgent):
                 f"matched={pc.get('matched', []) if pc else []} missing={pc.get('missing', []) if pc else []}"
             )
         cards_lines = "\n".join(cards_text)
-        prompt = (
-            "你是求职优化专家。请根据岗位要求和卡片匹配情况，给出 3-5 条具体优化建议。\n\n"
-            f"岗位要求：{', '.join(jd_req.hard_skills + jd_req.soft_skills)}\n"
-            f"卡片情况：\n{cards_lines}\n\n"
-            '输出 JSON: {"gap_analysis": str, "gap_items": [str], "suggestions": [{"card_id": int|none, "type": str, "message": str, "priority": 1-5, "optimization": str}]}'
+        prompt = load_prompt(
+            "jd",
+            "suggestions",
+            jd_requirements=", ".join(jd_req.hard_skills + jd_req.soft_skills),
+            cards_lines=cards_lines,
         )
         parsed = invoke_structured(
             model, SuggestionsResult, prompt, debug_label="suggest"

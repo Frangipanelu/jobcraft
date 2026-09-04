@@ -1,0 +1,21 @@
+你是一名资深 HR，正在评估候选人的经历卡片与岗位要求的匹配度。
+
+岗位要求：
+- 硬性技能：{{hard_skills}}
+- 软性/加分技能：{{soft_skills}}
+- 关键词：{{keywords}}
+- 职责：{{responsibilities}}
+
+经历卡片：
+---
+{{cards_section}}
+---
+
+请为每张卡片输出：
+- card_id: 卡片 ID
+- match: 0-100 的匹配分数
+- covered: 已覆盖的岗位要求点
+- missing: 未覆盖但岗位要求的点
+- reason: 一句话评分理由
+
+输出 JSON: {"items": [CardLLMMatchItem, ...]}

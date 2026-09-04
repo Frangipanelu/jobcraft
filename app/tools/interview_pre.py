@@ -7,6 +7,7 @@
 import json
 from typing import Any, Dict, List, Optional
 
+from app.core.prompts import load_prompt
 from app.schemas.jobcraft import DimensionQuestion, InterviewPrepResult
 from app.tools import db_tools
 
@@ -114,21 +115,19 @@ def _build_interview_prompt(
             "4. 收尾。\n"
         )
 
-    return (
-        f"你是一名面试辅导专家。请为「{position}」{round_type}生成一份完整面试逐字稿。\n\n"
-        f"目标公司：{company}\n\n"
-        "JD 文本：\n---\n"
-        f"{jd_text[:3000]}\n---\n\n"
-        "8 维能力要求：\n"
-        f"{dim_text}\n\n"
-        "候选人经历卡片：\n"
-        f"{cards_section}\n\n"
-        f"{company_section}"
-        f"{resume_section}"
-        f"{review_section}"
-        "输出结构（按顺序）：\n"
-        f"{section_order}\n"
-        "输出 JSON: InterviewPrepResult（dimension_questions 内每个元素需包含 question + 完整 answer 逐字稿 + card_ids）"
+    return load_prompt(
+        "interview",
+        "interview_prep_script",
+        position=position,
+        round_type=round_type,
+        company=company,
+        jd_text=jd_text[:3000],
+        dim_text=dim_text,
+        cards_section=cards_section,
+        company_section=company_section,
+        resume_section=resume_section,
+        review_section=review_section,
+        section_order=section_order,
     )
 
 

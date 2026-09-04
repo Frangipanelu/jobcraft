@@ -9,8 +9,9 @@ from typing import Any, Dict, List, Optional, Union
 from pydantic import BaseModel, Field
 
 from app.agents.base_agent import BaseAgent
-from app.tools.llm_json import invoke_structured as llm_call
 from app.core.llm import model
+from app.core.prompts import load_prompt
+from app.tools.llm_json import invoke_structured as llm_call
 
 
 class _SoftQuestionAnalysis(BaseModel):
@@ -59,23 +60,16 @@ class SoftAnalyzer(BaseAgent):
 
         cards_text = state.get("cards_text", "无")
 
-        return (
-            f"你正在复盘一场{state.get('round_type', '')}面试，"
-            f"岗位:{state.get('position', '')}，公司:{state.get('company', '')}\n"
-            "你负责分析其中的行为/业务类问题。请为每个问题生成完整分析。\n\n"
-            "===== 评分标准 =====\n"
-            f"{RUBRIC_TEXT}\n"
-            "L5=90-100 L4=80-89 L3=60-79 L2=40-59 L1=0-39\n\n"
-            f"{jd_section}"
-            "===== 经历卡 =====\n"
-            f"{cards_text}\n\n"
-            "===== 需要分析的行为/业务类 QA 对 =====\n"
-            f"{qa_text}\n\n"
-            "输出要求：\n"
-            "1. analyses 数组长度必须等于上面问题数量，按 sequence 顺序\n"
-            "2. expected_answer 须给出完整结构化回答: 核心观点 + 要点 + 结合经历卡案例\n"
-            "3. score 根据回答完整度、结构化程度和岗位匹配度评分\n"
-            "4. related_card_id 从经历卡中选最相关的1张，无则 null"
+        return load_prompt(
+            "interview",
+            "soft_analyzer",
+            round_type=state.get("round_type", ""),
+            position=state.get("position", ""),
+            company=state.get("company", ""),
+            rubric_text=RUBRIC_TEXT,
+            jd_section=jd_section,
+            cards_text=cards_text,
+            qa_text=qa_text,
         )
 
     def run(self, state: Dict[str, Any]) -> Dict[str, Any]:

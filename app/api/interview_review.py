@@ -9,6 +9,7 @@ from pydantic import BaseModel
 
 from app.api.context import set_session_context, reset_session_context
 from app.auth.dependencies import get_current_user
+from app.core.prompts import load_prompt
 from app.tools import db_tools
 from app.tools.upload_file_read_tool import read_file_content
 
@@ -372,20 +373,18 @@ def jobcraft_mock_chat(
         base_url=os.getenv("OPENAI_BASE_URL"),
     )
 
-    system_prompt = f"""你是一位专业的面试官，正在进行一场{payload.round_type}。
-公司：{payload.company or "某科技公司"}
-岗位：{payload.position or "技术岗位"}
-
-你的角色：
-- 专业、友善但有深度的面试官
-- 根据候选人的回答进行追问
-- 每次只问一个问题
-- 回答要简洁有力，控制在100字以内
-- 使用中文交流
-
-{f"候选人背景：{payload.experience_context}" if payload.experience_context else ""}
-
-请开始面试，先做自我介绍，然后提出第一个问题。"""
+    system_prompt = load_prompt(
+        "interview",
+        "mock_interview_chat",
+        round_type=payload.round_type,
+        company=payload.company or "某科技公司",
+        position=payload.position or "技术岗位",
+        candidate_background=(
+            f"候选人背景：{payload.experience_context}"
+            if payload.experience_context
+            else ""
+        ),
+    )
 
     messages = [{"role": "system", "content": system_prompt}]
     messages.extend(payload.messages)

@@ -11,6 +11,7 @@ from typing import Any, Dict, List
 from pydantic import BaseModel, Field
 
 from app.agents.base_agent import BaseAgent
+from app.core.prompts import load_prompt
 
 
 class _QuestionCategory(BaseModel):
@@ -20,14 +21,6 @@ class _QuestionCategory(BaseModel):
 
 class _RouterOut(BaseModel):
     classified: List[_QuestionCategory] = Field(..., description="分类结果")
-
-
-SYSTEM_PROMPT = """你是一个面试问题分类器。
-判断每个问题属于哪个类别：
-- tech: 技术深度、系统设计、算法、代码实现、技术选型、性能优化、架构设计
-- soft: 行为经历、沟通协作、业务理解、项目管理、职业规划、团队管理
-
-只输出分类结果，不分析问题内容。"""
 
 
 class RouterAgent(BaseAgent):
@@ -41,12 +34,12 @@ class RouterAgent(BaseAgent):
         questions_text = "\n".join(
             f"Q{qa['sequence']}: {qa['question_text']}" for qa in qa_pairs
         )
-        return (
-            f"{SYSTEM_PROMPT}\n\n"
-            f"岗位: {state.get('position', '')}  公司: {state.get('company', '')}\n\n"
-            "===== 问题列表 =====\n"
-            f"{questions_text}\n\n"
-            "输出 classified 数组，每个元素包含 sequence 和 category。"
+        return load_prompt(
+            "interview",
+            "question_router",
+            position=state.get("position", ""),
+            company=state.get("company", ""),
+            questions_text=questions_text,
         )
 
     def _transform_result(

@@ -1,0 +1,17 @@
+你是一名专业的招聘 ATS 解析助手。请从以下 JD 中提取关键信息，并输出结构化的岗位画像。
+
+8 维能力矩阵说明（为每个维度输出 level 1-5 与证据）：
+{{dims}}
+
+JD 文本：
+---
+{{jd_text}}
+---
+
+要求：
+1. required_skills 只放岗位硬性要求的技能；
+2. preferred_skills 放加分项；
+3. responsibilities 按条目列出核心职责；
+4. key_metrics 列出 JD 中提到的量化指标或 KPI；
+5. culture_keywords 提取公司文化/价值观关键词；
+6. dimension_requirements 必须包含 D1-D8，level 1-5，evidence 引用原文关键词。

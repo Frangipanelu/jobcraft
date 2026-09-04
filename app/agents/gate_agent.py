@@ -9,6 +9,7 @@ from typing import Any, Dict, List
 from pydantic import BaseModel, Field
 
 from app.agents.base_agent import BaseAgent
+from app.core.prompts import load_prompt
 
 
 class _GateIssue(BaseModel):
@@ -22,14 +23,6 @@ class _GateIssue(BaseModel):
 class _GateOut(BaseModel):
     issues: List[_GateIssue] = Field(default_factory=list, description="发现的问题")
     overall_quality: str = Field(..., description="整体质量: high|medium|low")
-
-
-SYSTEM_PROMPT = """你是一个质量审核官。检查以下分析结果是否存在：
-1. 矛盾：不同问题对同一维度的评分明显冲突
-2. 幻觉：分析了经历卡中不存在的细节
-3. 遗漏：明显相关的问题缺失分析
-
-只输出质检结果，不修改分析内容。"""
 
 
 class GateAgent(BaseAgent):
@@ -50,12 +43,12 @@ class GateAgent(BaseAgent):
             )
         results_text = "\n".join(results) if results else "无分析结果"
 
-        return (
-            f"{SYSTEM_PROMPT}\n\n"
-            f"岗位: {state.get('position', '')}  公司: {state.get('company', '')}\n\n"
-            "===== 分析结果摘要 =====\n"
-            f"{results_text}\n\n"
-            "请检查是否存在问题，输出质检结果。"
+        return load_prompt(
+            "interview",
+            "gate_check",
+            position=state.get("position", ""),
+            company=state.get("company", ""),
+            results_text=results_text,
         )
 
     def run(self, state: Dict[str, Any]) -> Dict[str, Any]:

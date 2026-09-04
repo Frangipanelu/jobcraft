@@ -10,6 +10,7 @@ from pydantic import BaseModel
 
 from app.agents.base_agent import BaseAgent
 from app.core.llm import model
+from app.core.prompts import load_prompt
 from app.schemas.jobcraft import CardLLMMatchItem, JDRequirements
 from app.tools.llm_json import invoke_structured
 
@@ -45,24 +46,14 @@ class ScoreMatchAgent(BaseAgent):
                 f"tags={','.join(c.get('tags') or [])}\ncontent={_card_text_blob(c)[:600]}"
             )
         cards_section = "\n---\n".join(cards_text)
-        prompt = (
-            "你是一名资深 HR，正在评估候选人的经历卡片与岗位要求的匹配度。\n\n"
-            "岗位要求：\n"
-            f"- 硬性技能：{', '.join(jd_req.hard_skills)}\n"
-            f"- 软性/加分技能：{', '.join(jd_req.soft_skills)}\n"
-            f"- 关键词：{', '.join(jd_req.keywords)}\n"
-            f"- 职责：{', '.join(jd_req.responsibilities)}\n\n"
-            "经历卡片：\n"
-            "---\n"
-            f"{cards_section}\n"
-            "---\n\n"
-            "请为每张卡片输出：\n"
-            "- card_id: 卡片 ID\n"
-            "- match: 0-100 的匹配分数\n"
-            "- covered: 已覆盖的岗位要求点\n"
-            "- missing: 未覆盖但岗位要求的点\n"
-            "- reason: 一句话评分理由\n\n"
-            '输出 JSON: {"items": [CardLLMMatchItem, ...]}'
+        prompt = load_prompt(
+            "jd",
+            "score_match",
+            hard_skills=", ".join(jd_req.hard_skills),
+            soft_skills=", ".join(jd_req.soft_skills),
+            keywords=", ".join(jd_req.keywords),
+            responsibilities=", ".join(jd_req.responsibilities),
+            cards_section=cards_section,
         )
 
         parsed = invoke_structured(model, _Items, prompt, debug_label="llm_score_match")

@@ -14,6 +14,7 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
+from app.core.prompts import load_prompt
 from app.tools import db_tools
 
 
@@ -768,22 +769,16 @@ def _build_question_table_prompt(
         for qa in qa_pairs[:MAX_QUESTION_TABLE_QA_PAIRS]
     )
     jd_section = f"JD:{_truncate_text(jd_text, 400)}\n\n" if jd_text else ""
-    return (
-        f"你正在梳理一场{round_type}面试的问题清单，岗位:{position}，公司:{company}。\n"
-        "下面是系统按时间顺序识别出的所有面试官问题（已过滤闲聊、过渡、确认）。\n"
-        "请为每个问题输出 intent（一句话考察意图）、dimension（维度如 D1 技术深度）、level（难度 L1-L5）。\n\n"
-        f"{jd_section}"
-        "===== 维度参考 =====\n"
-        f"{RUBRIC_TEXT}\n"
-        f"{LEVEL_SCORE_MAP}\n\n"
-        "===== 问题列表 =====\n"
-        f"{questions_text}\n\n"
-        "输出要求（严格遵循）：\n"
-        "1. questions 数组长度必须等于上面问题数量，按 Q1,Q2,Q3...顺序为每个问题输出一条，严禁遗漏、合并、跳跃；\n"
-        "2. 每条必须包含 sequence，且与 Q 编号完全一致；\n"
-        "3. dimension 格式为‘D1 技术深度’；\n"
-        "4. intent 用 1 句话说明面试官的真实考察点和想听到的核心信息；\n"
-        "5. level 根据问题难度给出 L1-L5。"
+    return load_prompt(
+        "interview",
+        "question_table_intent",
+        round_type=round_type,
+        position=position,
+        company=company,
+        jd_section=jd_section,
+        rubric_text=RUBRIC_TEXT,
+        level_score_map=LEVEL_SCORE_MAP,
+        questions_text=questions_text,
     )
 
 

@@ -8,6 +8,7 @@ from typing import Any, Dict
 
 from app.agents.base_agent import BaseAgent
 from app.core.llm import model
+from app.core.prompts import load_prompt
 from app.schemas.jobcraft import ATSProfile
 from app.tools.llm_json import invoke_structured
 
@@ -26,22 +27,8 @@ DIMENSION_DESCRIPTIONS = {
 
 def _build_ats_prompt(jd_text: str) -> str:
     dims = "\n".join([f"{k}: {v}" for k, v in DIMENSION_DESCRIPTIONS.items()])
-    return (
-        "你是一名专业的招聘 ATS 解析助手。请从以下 JD 中提取关键信息，"
-        "并输出结构化的岗位画像。\n\n"
-        "8 维能力矩阵说明（为每个维度输出 level 1-5 与证据）：\n"
-        f"{dims}\n\n"
-        "JD 文本：\n"
-        "---\n"
-        f"{jd_text[:6000]}\n"
-        "---\n\n"
-        "要求：\n"
-        "1. required_skills 只放岗位硬性要求的技能；\n"
-        "2. preferred_skills 放加分项；\n"
-        "3. responsibilities 按条目列出核心职责；\n"
-        "4. key_metrics 列出 JD 中提到的量化指标或 KPI；\n"
-        "5. culture_keywords 提取公司文化/价值观关键词；\n"
-        "6. dimension_requirements 必须包含 D1-D8，level 1-5，evidence 引用原文关键词。"
+    return load_prompt(
+        "jd", "jd_ats_analysis", dims=dims, jd_text=jd_text[:6000]
     )
 
 
