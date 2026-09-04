@@ -460,6 +460,28 @@ TASK-CLEANUP-WIP-001                                 (随时可做，无依赖)
   - 删除 `app/auth/dependencies.py:47 get_optional_user`（零引用）、`tests/test_qa_pairs.py`（非 pytest 测试——顶层副作用脚本读 `tests/long_user_sample.txt` + `print`；真测试为 `test_qa_pairs_unit.py`）。
   - 验证：删除后无残留引用（grep app/tests/migrations）；`pytest tests/ -q` 367 passed/11 skipped、`ruff` 绿（被删脚本本收集 0 用例，计数不变）。
 
+### 重构候选（阶段 5 完成后推进）
+
+> 用户确认推进「DB 访问集中封装」→「DB query 指标」重构候选（方案 B：封装 + execute/query helper）。
+
+### TASK-REF-DB-001 DB 访问集中封装
+
+- **Goal**：7 个 `db_*.py` 模块的 raw `mysql.connector` 样板塌缩为统一 wrapper，消灭重复的 `_jc_config()` + `with connect(**config)` 样板。
+- **Why**：为 TASK-REF-DB-002（DB query 指标）提供唯一 chokepoint；消除跨模块 `_jc_config`/`connect` 语义漂移。
+- **Expected Commit**：`refactor: centralize DB access via db_conn wrapper`
+- **Status（2026-09-04）**：✅ 完成 `1df3ecc`。
+  - 新建 `app/tools/db_conn.py`：`_jc_config()`（经 `db_config.get_db_config`）、`connect()`（无参默认 `_jc_config()`，否则透传）、`connection()` contextmanager（多语句/级联删除场景，异常安全 close）、`query_one`/`query_all`（dict cursor）、`query_scalar`（tuple 首列）、`execute`（rowcount）、`execute_lastrowid`。
+  - 6 个 db 模块（db_user/db_job/db_submission/db_interview/db_experience/db_ai）重写为 helper：单语句→`execute`/`execute_lastrowid`/`query_one`/`query_all`/`query_scalar`；多语句共享连接（`delete_*` 级联删除、`_ensure_*` 的 SHOW COLUMNS+条件 ALTER）→ `connection()`。`db_tools` 改为从 `db_conn` re-export `connect`/helper（保持向后兼容、永保测试 patch 目标）。
+  - **测试迁移**：patch 目标从各模块命名空间 `connect` → `app.tools.db_conn.connect`（`test_ownership_filtering.py`、`test_tools_extra_unit.py`、`test_ai_audit.py`）；新增 `tests/test_db_conn_unit.py` 9 用例（内存 fake 验证返回形态与 cursor 调用）。
+  - 验证 `pytest tests/ -q` 376 passed/11 skipped（较 367 +9）、`ruff` 绿。
+  - **教训**：PowerShell `Set-Content -Raw` 会破坏 UTF-8 中文，曾损坏 `test_ownership_filtering.py`（U+FFFD）与缩进——一律改用 `edit` 工具保证编码；`edit` 的 oldString 缩进必须与实际文件一致，否则 fuzzy match 会引入错误缩进。
+
+### TASK-REF-DB-002 DB query 与连接指标接线
+
+- **Goal**：在 `db_conn` chokepoint 接线 `db_query_duration_seconds`（每次 execute/query 观测耗时与状态）、`db_connections_active`（`connection()`/`connect()` 生命周期 inc/dec）。
+- **Why**：TASK-OBS-001 归档的 DB 指标（`app/monitoring/metrics.py` 已定义未接线）；重构封装后具备低成本 chokepoint。
+- **Status（2026-09-04）**：⬜ 待开始（依赖 TASK-REF-DB-001 chokepoint）。
+
 ---
 
 # 9. 优先实施清单
@@ -478,6 +500,8 @@ TASK-CLEANUP-WIP-001                                 (随时可做，无依赖)
 | 9 | TASK-REAL-DATA-003 复盘/向导去 Mock | P0 | INTERVIEW | 产品可信 | ✅ 完成 `5eb2810` |
 | 10 | TASK-INTERVIEW-001 面试持久化 | P0 | TYPE | 数据不丢失 | ✅ 完成（列表/详情 + createInterview 真实生成 + 工作台 UI 板块重组）|
 | 11 | TASK-CLEANUP-WIP-001 清理 WIP | P1 | — | 仓库整洁 | ✅ 完成 `794047b`/`4b64ca3`/`f69f25c` |
+| 13 | TASK-REF-DB-001 DB 访问集中封装 | P2 | — | 可维护性/指标前置 | ✅ 完成 `1df3ecc` |
+| 14 | TASK-REF-DB-002 DB query 指标接线 | P2 | REF-DB-001 | 可观测性 | ⬜ 待开始 |
 
 > 安全基线（Phase 0）4 个 task 全部完成（commit `6a0f121`→`8878459`→`09aa805`→`b681f2c`）。
 > Phase 1 核心发现（2026-09-02 校准）：两层类型系统是有意设计（非漂移），真正问题是 api 层 7 处 any + 接口未接线（interviews/task system）。

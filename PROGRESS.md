@@ -484,6 +484,11 @@
 > - [x] CLEAN-001 `564019c`：死代码清理。**盘点澄清**：`app/db/config.py` 非无引用——`/api/jobcraft/health` 用其 engine + `SELECT 1`，且 `sqlalchemy` 未声明（传递依赖）。按用户批准，先重写健康检查为原生 `_jc_config()`+`mysql.connector.connect` 再**删除整个 `app/db/`**（消除未声明传递依赖）；整文件删 `app/schemas/common.py`（4 类全零引用）；删 `get_optional_user`（零引用）、`tests/test_qa_pairs.py`（误收集副作用脚本，真测试为 `test_qa_pairs_unit.py`）。删前 grep 确认无残留引用；`pytest` 367 passed/11 skipped、`ruff` 绿。
 > - [x] DEPS-001 `f04764f`：依赖清理。后端：删 `aiofiles`、dev `playwright`（均零引用）；`passlib[bcrypt]` → 显式 `bcrypt>=4.0.0`（auth 直接 import bcrypt，防包消失）；`requests` 从 runtime 移 dev（核实 tests 在用，非未用是放错位）。前端：删 `@google/genai`、`express`、devDeps `@types/express`（均零引用）；`vite` 从 dependencies 移出（build 工具，dev 保留）。`uv lock`/`uv sync` 移除 4 包（aiofiles/passlib/playwright/pyee）+ bcrypt 5.0.0 直声明可用；`pytest` 367 passed/11 skipped、`ruff` 绿；前端 `npm install` 移除 120 包 + `npm run build`/`tsc --noEmit` 通过。均未对真实库端到端应用。
 
+> **重构候选推进（TASK-REF-DB-001 + TASK-REF-DB-002）**
+>
+> - [x] REF-DB-001 `1df3ecc`：DB 访问集中封装（方案 B：封装 + execute/query helper，用户已确认）。新建 `app/tools/db_conn.py`（`_jc_config`/`connect`/`connection`/`query_one`/`query_all`/`query_scalar`/`execute`/`execute_lastrowid`，`import db_config` 避免循环依赖）；6 个 db 模块（db_user/db_job/db_submission/db_interview/db_experience/db_ai）重写为 helper——单语句→execute 族，多语句共享连接（`delete_*` 级联删除、`_ensure_*` 的 SHOW COLUMNS+条件 ALTER+回填）→`connection()`；`db_tools` 改从 db_conn re-export `connect`/helper（永保测试 patch 目标）。**测试迁移**：patch 目标 各模块命名空间 `connect`/`_jc_config` → `app.tools.db_conn.connect`（ownership 5+1 处、tools_extra 9 处、ai_audit 3 处）；新增 `tests/test_db_conn_unit.py` 9 用例。`pytest tests/ -q` 376 passed/11 skipped（+9）、`ruff` 绿。**坑**：PowerShell `Set-Content -Raw` 破坏 UTF-8（U+FFFD）损坏 test_ownership_filtering.py，且 `edit` oldString 缩进须与实际一致（曾误加 8 空格）——已 git checkout + 重做。
+> - [ ] REF-DB-002：DB query 与连接指标接线（`db_query_duration_seconds`/`db_connections_active` 在 db_conn chokepoint 观测，依赖 REF-DB-001）。待开始。
+
 ---
 
 **更新规则**：每次会话结束时，AI 必须根据本次实际完成的工作，移动或新增上述列表中的条目，并简要描述进展。
