@@ -192,6 +192,10 @@ TASK-CLEANUP-WIP-001                                 (随时可做，无依赖)
 - **Files**：`src/components/jd/JDReportDetailView.tsx`、`src/context/JobCraftContext.tsx`。
 - **Tests**：`cd frontend-jobcraft && npm run build && npm run lint`。
 - **Expected Commit**：`feat(frontend): remove fallback mock data from JD report detail`
+- **Status（2026-09-04）**：✅ 已完成（commit `8870c26`，与 Expected Commit 完全一致）。`FALLBACK_DATA` 常量已删除，`src` 内无残留。各区块均接 `currentAnalysis` 真实数据 + 空态占位：
+  - 核心职责 → `coreRequirements`；能力匹配 → `skillGaps`；ATS → `atsKeywords`（hardSkills/softSkills/expKeywords）；推荐经历 → `recommendedExperiences`；隐含要求 → `subtextAnalysis`；评分/结论 → `matchScore`/`whyMatch`/`verdictSummary`/`keyRisks`/`resumeAdvice`
+  - 无数据区块显示「待分析/带动引导文案」占位，不渲染伪造报告；无分析时整页空态引导去「JD 分析」（JDReportDetailView.tsx:159-180）
+  - 验证：`tsc --noEmit` 通过（本会话复核）
 
 ### TASK-REAL-DATA-002 MockInterview 去 Mock（后端 endpoint 已就绪，前端未接线）
 
