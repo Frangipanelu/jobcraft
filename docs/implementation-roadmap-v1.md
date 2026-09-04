@@ -412,6 +412,14 @@ TASK-CLEANUP-WIP-001                                 (随时可做，无依赖)
 - **Scope**：抽象 cache key + Redis 热缓存（可先回退到 DB/内存）；输出 `ai_usage` 记录。
 - **Dependencies**：TASK-AI-001（cache key 需 prompt_version/schema_version）。
 - **Expected Commit**：`feat(ai): add AI cache and usage tracking`
+- **Status（2026-09-04）**：✅ 完成 `0aa89d0`。
+  - 用户确认设计：**Redis 热缓存**（复用 `REDIS_URL`，`redis` 库已在 tasks 用，零新增依赖）；**复用 `ai_tasks` token 列**记 usage（不新增 ai_usage 表）；**命中即返回**（跳过真实 LLM 调用，仍写 ai_tasks 审计行标记 from_cache=1）。
+  - cache key = `ai:{feature}:{model}:{input_hash}`，`input_hash=sha256(prompt|schema)` 已含 prompt/schema 内容 → prompt/schema 版本变更天然失效，满足 AI-001 依赖。
+  - 新增 `app/tools/ai_cache.py`：懒初始化 Redis（connect/socket 短超时快速失败 + `_DISABLED` 哨兵避免每次重试）、`build_cache_key`/`cache_get`/`cache_set`（TTL 可配 `JC_AI_CACHE_TTL` 默认 86400s）/`invalidate`；全部**尽力而为非阻塞**。
+  - `llm_json`：内层 `_invoke_with_bind_tools`/`_invoke_with_plain_json` 改为返回 `(result, response)` 以读取 `usage_metadata`/`response_metadata.token_usage|usage` 提取 token 用量；`invoke_structured` 内挂钩：先 `cache_get` 命中即返回（from_cache=1 审计）→ 未命中跑 LLM + `cache_set` + 传 token 用量到审计。外部行为不变。
+  - `db_ai.complete_ai_task` 增 token/from_cache 参数写 `ai_tasks` 列；迁移 `V0004__ai_cache.sql` 给 `ai_tasks` 加可空 `from_cache` 列（只加不改，前向兼容）。
+  - 说明：V0004 **未对真实库应用**（环境无 MySQL/Redis 运行），应用时 `python -m migrations.runner migrate`。
+  - 单测 `tests/test_ai_audit.py` 新增 5 用例（cache key、命中跳过 LLM、未命中写缓存+用量、response_metadata 形态、V0004 声明）；验证 `pytest tests/ -q` 363 passed/11 skipped、`ruff` 绿。
 
 ---
 
