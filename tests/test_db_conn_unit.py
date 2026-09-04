@@ -168,3 +168,109 @@ def test_connection_context_runs_and_closes():
             with c.cursor() as cur2:
                 cur2.execute("SELECT 1")
     assert cur.executed == [("SELECT 1", None)]
+
+
+# ============================================================
+# TASK-REF-DB-002 — DB 可观测指标接线
+# ============================================================
+
+
+class _FakeBound:
+    def __init__(self, store, labels):
+        self._store = store
+        self._labels = labels
+
+    def inc(self, *a):
+        self._store.append(("inc", self._labels, a))
+
+    def observe(self, *a):
+        self._store.append(("observe", self._labels, a))
+
+
+class _FakeHistogram:
+    def __init__(self, store):
+        self._store = store
+
+    def labels(self, **labels):
+        return _FakeBound(self._store, labels)
+
+
+class _FakeGauge:
+    def __init__(self, store):
+        self._store = store
+
+    def inc(self):
+        self._store.append("inc")
+
+    def dec(self):
+        self._store.append("dec")
+
+
+def test_sql_meta_derives_operation_and_table():
+    from app.tools.db_conn import _sql_meta
+
+    cases = [
+        ("SELECT * FROM experience_card WHERE id=%s", ("select", "experience_card")),
+        ("INSERT INTO submissions (a) VALUES (%s)", ("insert", "submissions")),
+        ("REPLACE INTO ai_cache (k) VALUES (%s)", ("insert", "ai_cache")),
+        ("UPDATE experience_card SET x=1 WHERE id=%s", ("update", "experience_card")),
+        ("DELETE FROM interview_records WHERE id=%s", ("delete", "interview_records")),
+        ("ALTER TABLE job_analysis ADD COLUMN x INT", ("ddl", "job_analysis")),
+        (
+            "CREATE TABLE IF NOT EXISTS ai_tasks (id INT)",
+            ("ddl", "ai_tasks"),
+        ),
+        ("SHOW COLUMNS FROM job_analysis", ("select", "job_analysis")),
+        ("SELECT COUNT(*) FROM t", ("select", "t")),
+        ("", ("other", "unknown")),
+    ]
+    for sql, expected in cases:
+        assert _sql_meta(sql) == expected, sql
+
+
+def test_query_helper_observes_duration_metric(monkeypatch):
+    from app.tools import db_conn
+
+    observations = []
+    monkeypatch.setattr(
+        db_conn, "db_query_duration_seconds", _FakeHistogram(observations)
+    )
+    monkeypatch.setattr(db_conn, "db_connections_active", _FakeGauge([]))
+
+    cur = _FakeCursor(row={"id": 1})
+    with _connect_patcher(_FakeConn(cur)):
+        db_conn.query_one("SELECT * FROM experience_card WHERE id=%s", (1,))
+
+    assert any(
+        entry
+        for entry in observations
+        if entry[1] == {"operation": "select", "table": "experience_card"}
+        and entry[0] == "observe"
+    )
+
+
+def test_helper_tracks_active_conn_inc_and_dec(monkeypatch):
+    from app.tools import db_conn
+
+    gauge_calls = []
+    monkeypatch.setattr(db_conn, "db_query_duration_seconds", _FakeHistogram([]))
+    monkeypatch.setattr(db_conn, "db_connections_active", _FakeGauge(gauge_calls))
+
+    cur = _FakeCursor(rows=[])
+    with _connect_patcher(_FakeConn(cur)):
+        db_conn.query_all("SELECT * FROM t")
+    assert gauge_calls == ["inc", "dec"]
+
+
+def test_connection_tracks_active_conn_inc_and_dec(monkeypatch):
+    from app.tools import db_conn
+
+    gauge_calls = []
+    monkeypatch.setattr(db_conn, "db_connections_active", _FakeGauge(gauge_calls))
+
+    cur = _FakeCursor()
+    with _connect_patcher(_FakeConn(cur)):
+        with db_conn.connection() as c:
+            with c.cursor() as cur2:
+                cur2.execute("SELECT 1")
+    assert gauge_calls == ["inc", "dec"]
