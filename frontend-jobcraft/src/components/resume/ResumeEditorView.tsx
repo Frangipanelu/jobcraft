@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useJobCraft } from '../../context/JobCraftContext';
 import {
   FileText,
@@ -31,30 +31,46 @@ interface ResumeEditorViewProps {
 }
 
 export const ResumeEditorView: React.FC<ResumeEditorViewProps> = ({
-  resumeId = 'res-byte-1',
-  jobId = 'job-1',
+  resumeId,
+  jobId,
   embedded = false
 }) => {
   const {
+    jobs,
     resumes,
     experiences,
+    activeResumeId,
+    setActiveResumeId,
     applyResumeAISuggestion,
     rejectResumeAISuggestion,
     applyAllResumeAISuggestions,
     updateResumeBulletText,
     addResumeBullet,
     deleteResumeBullet,
+    saveResume,
     navigateTo,
     showToast
   } = useJobCraft();
 
-  const resume = resumes[resumeId] || resumes['res-byte-1'];
+  // 解析当前编辑的简历 id：优先显式 resumeId，其次由 jobId 定位投递站简历，最后回退第一个真实简历
+  const boundResumeId = resumeId
+    ?? (jobId
+      ? jobs.find((j) => j.id === jobId)?.resumeId
+      : undefined)
+    ?? Object.keys(resumes)[0];
+
+  useEffect(() => {
+    if (boundResumeId) setActiveResumeId(boundResumeId);
+  }, [boundResumeId]);
+
+  const activeId = activeResumeId && resumes[activeResumeId] ? activeResumeId : boundResumeId;
+  const resume = activeId ? resumes[activeId] : null;
   const [editingBulletId, setEditingBulletId] = useState<string | null>(null);
   const [tempBulletText, setTempBulletText] = useState('');
-  const [selectedBulletForSource, setSelectedBulletForSource] = useState<string | null>('bullet-exp1-1');
+  const [selectedBulletForSource, setSelectedBulletForSource] = useState<string | null>(null);
 
   if (!resume) {
-    return <div className="p-8 text-center text-muted">未找到简历数据</div>;
+    return <div className="p-8 text-center text-muted">尚未生成简历，请先在对应投递中完成简历生成。</div>;
   }
 
   const handleStartEditBullet = (bulletId: string, currentText: string) => {
@@ -81,8 +97,8 @@ export const ResumeEditorView: React.FC<ResumeEditorViewProps> = ({
   };
 
   // Find linked experience for selected bullet
-  const allBullets紧 = (resume.sections || []).flatMap((s) => (s.items || []).flatMap((i) => i.bullets || []));
-  const activeBullet = allBullets紧.find((b) => b.id === selectedBulletForSource) || allBullets紧[0];
+  const allBullets = (resume.sections || []).flatMap((s) => (s.items || []).flatMap((i) => i.bullets || []));
+  const activeBullet = allBullets.find((b) => b.id === selectedBulletForSource) || allBullets[0];
   const linkedExp = activeBullet?.originalExperienceId
     ? experiences.find((e) => e.id === activeBullet.originalExperienceId)
     : experiences[0];
@@ -106,7 +122,7 @@ export const ResumeEditorView: React.FC<ResumeEditorViewProps> = ({
 
           <div className="flex items-center gap-2.5 shrink-0">
             <button
-              onClick={() => showToast({ type: 'success', title: '简历草稿已保存' })}
+              onClick={() => saveResume(activeId)}
               className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg border border-edge bg-white hover:bg-page text-ink text-xs font-semibold transition cursor-pointer"
             >
               <Save className="w-3.5 h-3.5" />
@@ -135,7 +151,7 @@ export const ResumeEditorView: React.FC<ResumeEditorViewProps> = ({
 
           <div className="flex items-center gap-2.5">
             <button
-              onClick={() => showToast({ type: 'success', title: '简历草稿已保存' })}
+              onClick={() => saveResume(activeId)}
               className="flex items-center gap-1 px-3 py-1 rounded-md border border-edge bg-white hover:bg-page text-ink text-xs font-semibold transition cursor-pointer"
             >
               <Save className="w-3.5 h-3.5" />
@@ -281,7 +297,7 @@ export const ResumeEditorView: React.FC<ResumeEditorViewProps> = ({
                     {/* Bullet points */}
                     <ul className="space-y-2 pt-1">
                       {item.bullets.map((bullet) => {
-                        const isEditing迁移 = editingBulletId === bullet.id;
+                        const isEditing = editingBulletId === bullet.id;
                         const isSelected = selectedBulletForSource === bullet.id;
 
                         return (
@@ -294,7 +310,7 @@ export const ResumeEditorView: React.FC<ResumeEditorViewProps> = ({
                                 : 'border-transparent hover:border-edge hover:bg-page'
                             }`}
                           >
-                            {isEditing迁移 ? (
+                            {isEditing ? (
                               <div className="space-y-2">
                                 <textarea
                                   value={tempBulletText}

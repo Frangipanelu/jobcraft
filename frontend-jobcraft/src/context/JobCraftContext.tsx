@@ -18,6 +18,7 @@ import {
   InterviewPrepRecord,
   InterviewQA
 } from '../types/jobcraft';
+import { markdownToResume, resumeToMarkdown } from '../utils/resumeParser';
 import * as authApi from '../api/auth'
 import * as experienceApi from '../api/experience'
 import * as jobApi from '../api/job'
@@ -185,12 +186,15 @@ interface JobCraftContextType {
   deleteJDAnalysis: (id: string) => void;
 
   // Resume actions
+  activeResumeId: string | null;
+  setActiveResumeId: (id: string | null) => void;
   applyResumeAISuggestion: (suggestionId: string) => void;
   rejectResumeAISuggestion: (suggestionId: string) => void;
   applyAllResumeAISuggestions: () => void;
   updateResumeBulletText: (sectionId: string, itemId: string, bulletId: string, newText: string) => void;
   addResumeBullet: (sectionId: string, itemId: string, text: string, experienceId?: string) => void;
   deleteResumeBullet: (sectionId: string, itemId: string, bulletId: string) => void;
+  saveResume: (id: string) => Promise<void>;
 
   // Interview actions
   createInterview: (data: {
@@ -354,7 +358,7 @@ function submissionToJob(sub: DashboardItem): Job {
       reviewStage: sub.review_count > 0 ? 'done' : 'pending'
     },
     jdAnalysisId: sub.job_analysis_id ? String(sub.job_analysis_id) : undefined,
-    resumeId: undefined,
+    resumeId: String(sub.id),
     interviewIds: []
   }
 }
@@ -495,6 +499,7 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
   const [experiences, setExperiences] = useState<Experience[]>([]);
   const [jdAnalyses, setJdAnalyses] = useState<JDAnalysis[]>([]);
   const [resumes, setResumes] = useState<Record<string, ResumeVersion>>({});
+  const [activeResumeId, setActiveResumeId] = useState<string | null>(null);
   const [interviews, setInterviews] = useState<Interview[]>([]);
   const [nextActions, setNextActions] = useState<NextActionItem[]>([]);
   const [activities, setActivities] = useState<ActivityLog[]>([]);
@@ -608,8 +613,33 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
   const loadDashboard = async (userId: number) => {
     try {
       const data = await jobApi.getDashboard(userId)
-      const dashboardJobs = (data.submissions || []).map(submissionToJob)
+      const submissions = data.submissions || []
+      const dashboardJobs = submissions.map(submissionToJob)
       setJobs(dashboardJobs)
+
+      // 同步填充简历编辑数据：为每个带简历的投递站解析 resume_markdown -> ResumeVersion
+      const resumeEntries = await Promise.all(
+        submissions.map(async (item) => {
+          if (!item.has_resume) return null
+          try {
+            const detail = await jobApi.getSubmission(item.id)
+            const resume = markdownToResume(detail.resume_markdown, {
+              position: detail.position,
+              company: detail.company,
+              id: String(item.id),
+            })
+            return resume ? ([String(item.id), resume] as const) : null
+          } catch (error) {
+            console.error('Load resume failed for submission', item.id, error)
+            return null
+          }
+        }),
+      )
+      const nextResumes: Record<string, ResumeVersion> = {}
+      for (const entry of resumeEntries) {
+        if (entry) nextResumes[entry[0]] = entry[1]
+      }
+      setResumes(nextResumes)
     } catch (error) {
       console.error('Load dashboard failed:', error)
     }
@@ -932,8 +962,13 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
 
   // Resume Actions
   const applyResumeAISuggestion = (suggestionId: string) => {
+    const rid = activeResumeId;
+    if (!rid) {
+      showToast({ type: 'warning', title: '暂无可编辑的简历', message: '请先创建或选择一份投递简历。' });
+      return;
+    }
     setResumes((prev) => {
-      const activeResume = prev['res-byte-1'];
+      const activeResume = prev[rid];
       if (!activeResume) return prev;
 
       const sug = activeResume.aiSuggestions.find((s) => s.id === suggestionId);
@@ -959,7 +994,7 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
 
       return {
         ...prev,
-        'res-byte-1': {
+        [rid]: {
           ...activeResume,
           aiSuggestions: updatedSuggestions,
           sections: updatedSections,
@@ -976,8 +1011,10 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
   };
 
   const rejectResumeAISuggestion = (suggestionId: string) => {
+    const rid = activeResumeId;
+    if (!rid) return;
     setResumes((prev) => {
-      const activeResume = prev['res-byte-1'];
+      const activeResume = prev[rid];
       if (!activeResume) return prev;
 
       const updatedSuggestions = activeResume.aiSuggestions.map((s) =>
@@ -986,7 +1023,7 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
 
       return {
         ...prev,
-        'res-byte-1': {
+        [rid]: {
           ...activeResume,
           aiSuggestions: updatedSuggestions
         }
@@ -1000,8 +1037,10 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
   };
 
   const applyAllResumeAISuggestions = () => {
+    const rid = activeResumeId;
+    if (!rid) return;
     setResumes((prev) => {
-      const activeResume = prev['res-byte-1'];
+      const activeResume = prev[rid];
       if (!activeResume) return prev;
 
       let updatedSections = [...activeResume.sections];
@@ -1027,7 +1066,7 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
 
       return {
         ...prev,
-        'res-byte-1': {
+        [rid]: {
           ...activeResume,
           aiSuggestions: updatedSuggestions,
           sections: updatedSections,
@@ -1049,8 +1088,10 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
     bulletId: string,
     newText: string
   ) => {
+    const rid = activeResumeId;
+    if (!rid) return;
     setResumes((prev) => {
-      const activeResume = prev['res-byte-1'];
+      const activeResume = prev[rid];
       if (!activeResume) return prev;
 
       const updatedSections = activeResume.sections.map((sec) => {
@@ -1069,7 +1110,7 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
 
       return {
         ...prev,
-        'res-byte-1': {
+        [rid]: {
           ...activeResume,
           sections: updatedSections,
           updatedAt: '刚刚'
@@ -1084,8 +1125,10 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
     text: string,
     experienceId?: string
   ) => {
+    const rid = activeResumeId;
+    if (!rid) return;
     setResumes((prev) => {
-      const activeResume = prev['res-byte-1'];
+      const activeResume = prev[rid];
       if (!activeResume) return prev;
 
       const newBullet = {
@@ -1111,7 +1154,7 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
 
       return {
         ...prev,
-        'res-byte-1': {
+        [rid]: {
           ...activeResume,
           sections: updatedSections,
           updatedAt: '刚刚'
@@ -1126,8 +1169,10 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
   };
 
   const deleteResumeBullet = (sectionId: string, itemId: string, bulletId: string) => {
+    const rid = activeResumeId;
+    if (!rid) return;
     setResumes((prev) => {
-      const activeResume = prev['res-byte-1'];
+      const activeResume = prev[rid];
       if (!activeResume) return prev;
 
       const updatedSections = activeResume.sections.map((sec) => {
@@ -1146,7 +1191,7 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
 
       return {
         ...prev,
-        'res-byte-1': {
+        [rid]: {
           ...activeResume,
           sections: updatedSections,
           updatedAt: '刚刚'
@@ -1158,6 +1203,36 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
       type: 'info',
       title: '已删除该要点'
     });
+  };
+
+  const saveResume = async (id: string) => {
+    const resume = resumes[id];
+    if (!resume) return;
+    const markdown = resumeToMarkdown(resume);
+    try {
+      const submissionId = Number(id);
+      if (Number.isNaN(submissionId)) {
+        showToast({ type: 'warning', title: '该简历为本地示例', message: '暂不支持保存后端。' });
+        return;
+      }
+      await jobApi.updateSubmission(submissionId, { resume_markdown: markdown });
+      setResumes((prev) => ({
+        ...prev,
+        [id]: { ...prev[id]!, updatedAt: '刚刚' },
+      }));
+      showToast({
+        type: 'success',
+        title: '简历已保存',
+        message: '内容已同步到当前投递记录。'
+      });
+    } catch (error) {
+      console.error('Save resume failed:', error);
+      showToast({
+        type: 'error',
+        title: '保存失败',
+        message: (error as Error).message || '请稍后重试'
+      });
+    }
   };
 
   // Interview Creation
@@ -1800,6 +1875,8 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
         experiences,
         jdAnalyses,
         resumes,
+        activeResumeId,
+        setActiveResumeId,
         interviews,
         nextActions,
         activities,
@@ -1827,6 +1904,7 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
         updateResumeBulletText,
         addResumeBullet,
         deleteResumeBullet,
+        saveResume,
         createInterview,
         updateQuestionAnswer,
         addCustomQuestion,

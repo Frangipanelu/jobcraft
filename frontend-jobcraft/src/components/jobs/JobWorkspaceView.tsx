@@ -200,7 +200,7 @@ export const JobWorkspaceView: React.FC<JobWorkspaceViewProps> = ({
         {activeTab === 'resume' && (
           <div className="animate-in fade-in duration-200">
             <ResumeEditorView
-              resumeId={currentJob.resumeId || 'res-byte-1'}
+              resumeId={currentJob.resumeId}
               jobId={currentJob.id}
               embedded={true}
             />
