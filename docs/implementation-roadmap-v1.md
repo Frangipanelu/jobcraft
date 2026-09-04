@@ -480,7 +480,11 @@ TASK-CLEANUP-WIP-001                                 (随时可做，无依赖)
 
 - **Goal**：在 `db_conn` chokepoint 接线 `db_query_duration_seconds`（每次 execute/query 观测耗时与状态）、`db_connections_active`（`connection()`/`connect()` 生命周期 inc/dec）。
 - **Why**：TASK-OBS-001 归档的 DB 指标（`app/monitoring/metrics.py` 已定义未接线）；重构封装后具备低成本 chokepoint。
-- **Status（2026-09-04）**：⬜ 待开始（依赖 TASK-REF-DB-001 chokepoint）。
+- **Expected Commit**：`feat(observability): wire up DB query and connection metrics at db_conn chokepoint`
+- **Status（2026-09-04）**：✅ 完成 `f1ba745`。
+  - 在 `db_conn` chokepoint 接线两条指标：`db_query_duration_seconds{operation,table}`（经 `_tracked_connection` 观测 5 个封装函数每次查询耗时）与 `db_connections_active`（`connection()` 建立/释放）。operation/table 由 `_sql_meta()` 启发式推断（insert/update/delete/select/ddl/other，主表名或无则 unknown）。
+  - 设计要点：#5 个封装函数（query_one/query_all/query_scalar/execute/execute_lastrowid）改用 `_tracked_connection`（inc 连接 + 计时 + observe + dec）；`connection()` 保持返回原始连接（兼容单测 `c is conn`），仅维护连接 Gauge，且 `inc()` 放在 `connect()` 成功后（连接失败不泄漏 Gauge）。多语句 `connection()` 内部各 `cur.execute` 逐句耗时不观测（文档声明，v1 范围）。
+  - 单测 `tests/test_db_conn_unit.py` 新增 4 用例（`_sql_meta` 派生、helper 观测 duration、helper/connection 的 Gauge inc/dec，沿用 test_observability 的 fake metric 模式）；`pytest tests/ -q` 380 passed/11 skipped（较 367 +13，其中 9 为 REF-DB-001）、`ruff` 绿。
 
 ---
 
@@ -501,7 +505,7 @@ TASK-CLEANUP-WIP-001                                 (随时可做，无依赖)
 | 10 | TASK-INTERVIEW-001 面试持久化 | P0 | TYPE | 数据不丢失 | ✅ 完成（列表/详情 + createInterview 真实生成 + 工作台 UI 板块重组）|
 | 11 | TASK-CLEANUP-WIP-001 清理 WIP | P1 | — | 仓库整洁 | ✅ 完成 `794047b`/`4b64ca3`/`f69f25c` |
 | 13 | TASK-REF-DB-001 DB 访问集中封装 | P2 | — | 可维护性/指标前置 | ✅ 完成 `1df3ecc` |
-| 14 | TASK-REF-DB-002 DB query 指标接线 | P2 | REF-DB-001 | 可观测性 | ⬜ 待开始 |
+| 14 | TASK-REF-DB-002 DB query 指标接线 | P2 | REF-DB-001 | 可观测性 | ✅ 完成 `f1ba745` |
 
 > 安全基线（Phase 0）4 个 task 全部完成（commit `6a0f121`→`8878459`→`09aa805`→`b681f2c`）。
 > Phase 1 核心发现（2026-09-02 校准）：两层类型系统是有意设计（非漂移），真正问题是 api 层 7 处 any + 接口未接线（interviews/task system）。
