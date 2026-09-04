@@ -23,6 +23,7 @@ import * as authApi from '../api/auth'
 import * as experienceApi from '../api/experience'
 import * as jobApi from '../api/job'
 import * as interviewApi from '../api/interview'
+import * as tasksApi from '../api/tasks'
 import { SUBMISSION_STATUS_CN } from '../api/types'
 import type { ExperienceCard, JobAnalysisResult, Submission, DashboardItem, InterviewPrepResult, InterviewPrepRecord as ApiInterviewPrepRecord, InterviewReviewResult } from '../api/types'
 
@@ -1261,11 +1262,32 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
       throw new Error('该岗位尚未完成 AI 岗位分析，请先到「岗位分析」页生成分析之后再准备面试。');
     }
 
-    // 调用后端真实生成（LLM 耗时较长，由调用方展示加载态与失败兜底）
-    const result: InterviewPrepResult = await interviewApi.generateInterviewPrep(jobAnalysisId, {
+    // 首选：通过异步任务系统提交面试准备（长 LLM 调用），底层 Redis 不可用时降级为同步调用
+    const taskParams = {
+      user_id: currentUserId,
+      job_analysis_id: jobAnalysisId,
       round_type: roundTypeToCn(data.roundType),
       card_ids: []
-    });
+    };
+
+    let result: InterviewPrepResult;
+    try {
+      const submit = await tasksApi.submitTask({
+        task_type: 'interview_prep',
+        params: taskParams
+      });
+      const polled = await tasksApi.pollTaskUntilDone(submit.task_id, {
+        interval: 1500,
+        timeout: 180_000
+      });
+      result = polled.result as unknown as InterviewPrepResult;
+    } catch (err) {
+      // 任务服务不可用（Redis 未就绪 / 提交失败）时降级为原有同步 POST，保证功能可用
+      result = await interviewApi.generateInterviewPrep(jobAnalysisId, {
+        round_type: roundTypeToCn(data.roundType),
+        card_ids: []
+      });
+    }
 
     const newId = result.id ? `prep-${result.id}` : 'prep-' + Date.now();
     const baseInterview = buildInterviewFromPrep(
