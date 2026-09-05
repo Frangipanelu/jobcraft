@@ -1,7 +1,7 @@
 # JobCraft 本地开发环境
 #
 # 启动方式：
-#   开发模式（仅 MySQL）：docker compose -f docker/docker-compose.yaml up -d mysql
+#   开发模式（仅 MySQL + Redis）：docker compose -f docker/docker-compose.yaml up -d mysql redis
 #   生产模式（全部服务）：docker compose -f docker/docker-compose.yaml up -d --build
 
 name: jobcraft
@@ -37,6 +37,22 @@ services:
       retries: 10
       start_period: 30s
 
+  redis:
+    image: redis:7-alpine
+    container_name: jobcraft-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - jobcraft_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
   backend:
     build:
       context: ..
@@ -46,15 +62,37 @@ services:
     env_file: ../.env
     environment:
       MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      REDIS_URL: redis://redis:6379/0
       ALLOWED_ORIGINS: http://localhost,http://localhost:80,http://localhost:3000
     ports:
       - "8000:8000"
     depends_on:
       mysql:
         condition: service_healthy
+      redis:
+        condition: service_started
     volumes:
       - ../output:/app/output
       - ../updated:/app/updated
+
+  worker:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.backend
+    container_name: jobcraft-worker
+    restart: unless-stopped
+    env_file: ../.env
+    environment:
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      REDIS_URL: redis://redis:6379/0
+    command: ["uv", "run", "--no-sync", "python", "-m", "app.tasks.worker"]
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_started
 
   frontend:
     build:
@@ -69,3 +107,4 @@ services:
 
 volumes:
   jobcraft_mysql_data:
+  jobcraft_redis_data:

@@ -493,6 +493,14 @@
 >
 > - [x] REF-SPLIT-001 `69b155a`：大文件拆分——拆出 `interview_review.py` 的对话解析层。新建 `app/tools/interview_dialogue.py`（525 行，纯函数零 LLM/DB）：全部解析正则/常量 + `_detect_role`→`_parse_dialogue`→`_build_qa_pairs`/`_is_interviewer_question`；`interview_review.py` 精简为业务层（210 行）：`create_interview_record`/`preview_question_intents`/`_build_question_table_prompt`/`_get_job_context`/`_format_cards_for_prompt`/`_find_my_answer`/`_truncate_text` + 维度 rubric 常量 + `_QuestionIntentItem`/`_QuestionTableOut` schema。**契约保持**：`interview_review` re-export `_parse_dialogue`/`_build_qa_pairs`（`# noqa: F401` 防 ruff 误删），故 3 workflow/agent + api + 测试的既有 import 与 patch 目标零改动。验证：`pytest tests/ -q` 380 passed/11 skipped（与拆前一致，纯移动零行为变化）、`ruff` 绿、逐模块 import 冒烟通过。**坑**：ruff `--fix` 的 F401 会删除「仅 re-export」的名字，须显式 `# noqa: F401` 否则破坏对外契约。
 
+> **手动测试 Bug 修复（TASK-MANUAL-FIX-001）**
+>
+> - [x] FIX-PROFILE-001：个人资料持久化。新建 `app/api/profile.py`（`GET/PATCH /api/auth/profile`，`user_profiles` 表 upsert）；前端 `api/auth.ts` 加 `getProfile`/`updateProfile`；`JobCraftContext.tsx` 改 `loadUserProfileAndData` 并行调 auth+profile 两个 API，`updateUserProfile` 改为 async 并调 `authApi.updateProfile`；`UserProfileView.tsx` 加 `useEffect` 同步表单 + 城市输入框。DB：`user_profiles` 表已建（display_name/role/target_salary/years_of_exp/city/phone/email/summary/target_cities/target_companies/target_roles/avatar_url）。E2E 验证通过。
+> - [x] FIX-JOBCREATE-001：岗位创建持久化。`createJob` 改为 async，调 `jobApi.createSubmission` 持久化到 `resume_submission` 表，返回 ID 回填本地 state。Job 类型加 `backendId?: number` 字段。
+> - [x] FIX-DELETE-001：删除 JD 调后端。`deleteJDAnalysis` 改为 async，从 id 提取 submission_id 调 `jobApi.deleteSubmission`。`deleteSubmission` API 已存在于 `api/job.ts`，此前前端从未调用。
+> - [x] FIX-CITY-001：地址编辑。`UserProfileView.tsx` 移除硬编码默认值（'北京 / 远程'），改为从 user 状态读取（API 加载后自动填充），加城市输入框 + `useEffect` 同步。
+> - [x] FIX-AVATAR-001（此前已完成）：TopHeader 硬编码"菁"→用户首字母。
+
 ---
 
 **更新规则**：每次会话结束时，AI 必须根据本次实际完成的工作，移动或新增上述列表中的条目，并简要描述进展。
