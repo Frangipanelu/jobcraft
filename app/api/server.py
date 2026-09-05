@@ -18,6 +18,7 @@ from fastapi.responses import JSONResponse
 
 from app.api.experience import router as experience_router
 from app.api.job_analysis import router as job_analysis_router
+from app.api.profile import router as profile_router
 from app.api.submission import router as submission_router
 from app.api.interview_prep import router as interview_prep_router
 from app.api.interview_review import router as interview_review_router
@@ -37,6 +38,7 @@ project_root = current_dir.parent.parent
 app = FastAPI(title="JobCraft API", lifespan=lifespan)
 
 app.include_router(auth_router)
+app.include_router(profile_router)
 app.include_router(experience_router)
 app.include_router(job_analysis_router)
 app.include_router(submission_router)

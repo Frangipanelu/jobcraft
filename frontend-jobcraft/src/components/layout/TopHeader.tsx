@@ -219,7 +219,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
           className="flex items-center gap-2 p-1 rounded-full hover:ring-2 hover:ring-sage/30 transition select-none cursor-pointer focus:outline-none"
         >
           <div className="w-8 h-8 rounded-full bg-sage text-white flex items-center justify-center font-bold text-xs shadow-xs">
-            菁
+            {(user.name || '用户').charAt(0)}
           </div>
         </button>
 
@@ -229,10 +229,10 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
             {/* Top User Info */}
             <div className="px-4 py-3 border-b border-edge flex items-center gap-3">
               <div className="w-10 h-10 rounded-full bg-sage text-white flex items-center justify-center font-bold text-sm shadow-xs shrink-0">
-                菁
+                {(user.name || '用户').charAt(0)}
               </div>
               <div className="min-w-0 flex-1 text-left">
-                <div className="text-sm font-bold text-ink truncate">{user.name || '菁菁'}</div>
+                <div className="text-sm font-bold text-ink truncate">{user.name || '未设置姓名'}</div>
                 <div className="text-xs text-muted truncate">{user.role || 'AI 产品方向'}</div>
               </div>
             </div>

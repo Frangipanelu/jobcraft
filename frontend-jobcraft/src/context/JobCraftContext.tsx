@@ -524,16 +524,24 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
     setCurrentUserId(userId)
     setIsAuthenticated(true)
 
-    // 获取用户信息
+    // 获取用户信息（auth + profile 两个 API 并行）
     try {
-      const profile = await authApi.getCurrentUser()
+      const [authUser, profileData] = await Promise.all([
+        authApi.getCurrentUser(),
+        authApi.getProfile().catch(() => ({})),
+      ])
       setUser({
-        name: profile.display_name || profile.username,
-        avatarUrl: '',
-        role: profile.role || '求职者',
-        targetSalary: '',
-        yearsOfExp: 0,
-        city: ''
+        name: (profileData.display_name as string) || authUser.display_name || authUser.username,
+        avatarUrl: (profileData.avatar_url as string) || '',
+        role: (profileData.role as string) || '求职者',
+        targetSalary: (profileData.target_salary as string) || '',
+        yearsOfExp: (profileData.years_of_exp as number) || 0,
+        city: (profileData.city as string) || '',
+        email: (profileData.email as string) || authUser.email || '',
+        phone: (profileData.phone as string) || '',
+        summary: (profileData.summary as string) || '',
+        targetRoles: (profileData.target_roles as string[]) || [],
+        targetCompanies: (profileData.target_companies as string[]) || [],
       })
     } catch {
       // 用户信息获取失败，使用默认值
@@ -689,13 +697,38 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
     setInterviewDraft(null);
   };
 
-  const updateUserProfile = (updates: Partial<UserProfile>) => {
+  const updateUserProfile = async (updates: Partial<UserProfile>) => {
+    // 乐观更新 UI
     setUser((prev) => ({ ...prev, ...updates }));
-    showToast({
-      type: 'success',
-      title: '个人资料已更新',
-      message: '个人求职信息与偏好设置已成功保存。'
-    });
+    try {
+      // 映射前端字段名到后端字段名
+      const apiUpdates: Record<string, unknown> = {};
+      if (updates.name !== undefined) apiUpdates.display_name = updates.name;
+      if (updates.role !== undefined) apiUpdates.role = updates.role;
+      if (updates.targetSalary !== undefined) apiUpdates.target_salary = updates.targetSalary;
+      if (updates.yearsOfExp !== undefined) apiUpdates.years_of_exp = updates.yearsOfExp;
+      if (updates.city !== undefined) apiUpdates.city = updates.city;
+      if (updates.email !== undefined) apiUpdates.email = updates.email;
+      if (updates.phone !== undefined) apiUpdates.phone = updates.phone;
+      if (updates.summary !== undefined) apiUpdates.summary = updates.summary;
+      if (updates.targetRoles !== undefined) apiUpdates.target_roles = updates.targetRoles;
+      if (updates.targetCompanies !== undefined) apiUpdates.target_companies = updates.targetCompanies;
+      if (updates.targetCities !== undefined) apiUpdates.target_cities = updates.targetCities;
+      if (updates.avatarUrl !== undefined) apiUpdates.avatar_url = updates.avatarUrl;
+
+      await authApi.updateProfile(apiUpdates);
+      showToast({
+        type: 'success',
+        title: '个人资料已更新',
+        message: '个人求职信息与偏好设置已成功保存。'
+      });
+    } catch {
+      showToast({
+        type: 'error',
+        title: '保存失败',
+        message: '请检查网络后重试。'
+      });
+    }
   };
 
   const addHistoricalResume = (resumeData: Omit<HistoricalResume, 'id' | 'uploadDate'>) => {
@@ -778,7 +811,7 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
   };
 
   // Job CRUD
-  const createJob = (jobData: {
+  const createJob = async (jobData: {
     company: string;
     role: string;
     department?: string;
@@ -808,6 +841,18 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
       },
       interviewIds: []
     };
+
+    // 持久化到后端（fire-and-forget，失败不影响本地体验）
+    try {
+      const sub = await jobApi.createSubmission({
+        position: jobData.role,
+        company: jobData.company,
+      });
+      newJob.id = 'job-' + sub.id;
+      newJob.backendId = sub.id;
+    } catch {
+      // 后端不可用时仅保留本地状态
+    }
 
     setJobs((prev) => [newJob, ...prev]);
     showToast({
@@ -953,8 +998,14 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
     return newId;
   };
 
-  const deleteJDAnalysis = (id: string) => {
+  const deleteJDAnalysis = async (id: string) => {
+    // 从本地状态移除
     setJdAnalyses((prev) => prev.filter((a) => a.id !== id));
+    // 尝试删除后端 submission（id 格式为 "sub-{number}"）
+    const match = id.match(/^sub-(\d+)$/);
+    if (match) {
+      try { await jobApi.deleteSubmission(Number(match[1])); } catch { /* ignore */ }
+    }
     showToast({
       type: 'info',
       title: 'JD 分析已删除'

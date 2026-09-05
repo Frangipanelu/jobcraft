@@ -77,6 +77,23 @@ export async function getCurrentUser(): Promise<UserProfile> {
 }
 
 /**
+ * 获取用户详细资料（user_profiles 表）
+ */
+export async function getProfile(): Promise<Record<string, unknown>> {
+  return request<Record<string, unknown>>('/api/auth/profile')
+}
+
+/**
+ * 更新用户详细资料（部分更新）
+ */
+export async function updateProfile(updates: Record<string, unknown>): Promise<Record<string, unknown>> {
+  return request<Record<string, unknown>>('/api/auth/profile', {
+    method: 'PATCH',
+    body: JSON.stringify(updates),
+  })
+}
+
+/**
  * 登出
  */
 export function logout() {

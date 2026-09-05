@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useJobCraft } from '../../context/JobCraftContext';
 import {
   FileText,
@@ -45,15 +45,29 @@ export const UserProfileView: React.FC = () => {
 
   // Form states for profile
   const [profileForm, setProfileForm] = useState({
-    name: user.name || '菁菁',
-    role: user.role || 'AI 产品方向',
-    targetSalary: user.targetSalary || '45K–65K',
-    yearsOfExp: user.yearsOfExp || 5,
-    city: user.city || '北京 / 远程',
-    email: user.email || 'jing@email.com',
-    phone: user.phone || '138****6688',
-    summary: user.summary || '5年AI与搜索策略产品经验，主导过从0到1大模型评测体系、Prompt/Agent工作流平台与多模态RAG商业化落地。'
+    name: user.name || '',
+    role: user.role || '',
+    targetSalary: user.targetSalary || '',
+    yearsOfExp: user.yearsOfExp || 0,
+    city: user.city || '',
+    email: user.email || '',
+    phone: user.phone || '',
+    summary: user.summary || ''
   });
+
+  // 当 user 数据从 API 加载后同步表单
+  useEffect(() => {
+    setProfileForm({
+      name: user.name || '',
+      role: user.role || '',
+      targetSalary: user.targetSalary || '',
+      yearsOfExp: user.yearsOfExp || 0,
+      city: user.city || '',
+      email: user.email || '',
+      phone: user.phone || '',
+      summary: user.summary || ''
+    });
+  }, [user.name, user.role, user.targetSalary, user.yearsOfExp, user.city, user.email, user.phone, user.summary]);
 
   // Target preferences
   const [targetRoles, setTargetRoles] = useState<string[]>(user.targetRoles || ['AI 产品经理', '大模型策略产品专家', '搜索与推荐产品负责人']);
@@ -390,6 +404,17 @@ export const UserProfileView: React.FC = () => {
                 type="number"
                 value={profileForm.yearsOfExp}
                 onChange={(e) => setProfileForm({ ...profileForm, yearsOfExp: Number(e.target.value) })}
+                className="w-full px-3.5 py-2 text-xs rounded-lg border border-edge focus:border-sage focus:outline-none"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-ink mb-1.5">所在城市</label>
+              <input
+                type="text"
+                value={profileForm.city}
+                onChange={(e) => setProfileForm({ ...profileForm, city: e.target.value })}
+                placeholder="如：北京 / 上海 / 远程"
                 className="w-full px-3.5 py-2 text-xs rounded-lg border border-edge focus:border-sage focus:outline-none"
               />
             </div>

@@ -363,6 +363,7 @@ export interface InterviewPrepRecord {
 
 export interface Job {
   id: string;
+  backendId?: number;
   company: string;
   role: string;
   direction?: string;
