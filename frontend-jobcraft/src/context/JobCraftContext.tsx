@@ -687,46 +687,52 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
   const loadJdAnalyses = async (userId: number) => {
     try {
       const data = await jobApi.listJobAnalyses(userId)
-      const analyses = (data.analyses || []).map((a: Record<string, unknown>) => ({
-        id: String(a.id || a.job_analysis_id),
-        company: a.company || '',
-        role: a.position || a.role || '',
-        rawText: a.jd_text || '',
-        matchScore: a.match_score || 0,
-        recommendationStars: Math.round((a.match_score || 0) / 20),
-        verdictSummary: a.gap_analysis || '',
-        whyMatch: a.match_level || '',
-        keyRisks: '',
-        resumeAdvice: [],
-        coreRequirements: [
-          { category: '核心职责', items: a.responsibilities || [] },
-          { category: '任职资格', items: [...(a.hard_skills || []), ...(a.soft_skills || [])] }
-        ],
-        atsKeywords: {
-          hardSkills: a.hard_skills || [],
-          softSkills: a.soft_skills || [],
-          expKeywords: a.keywords || [],
-          coveragePercent: Math.round(a.match_score || 0)
-        },
-        subtextAnalysis: [],
-        skillGaps: (a.gap_items || []).map((item: string, idx: number) => ({
-          id: `gap-${idx}`,
-          capability: item,
-          userEvidence: '',
-          requirement: item,
-          gap: '待补充',
-          recommendation: ''
-        })),
-        recommendedExperiences: (a.per_card_scores || []).map((ps: Record<string, unknown>) => ({
-          experienceId: String(ps.card_id),
-          matchScore: ps.score || 0,
-          matchingJDReq: (ps.matched || []).join(', '),
-          reason: (ps.missing || []).join(', ')
-        })),
-        createdAt: a.created_at || '',
-        jobId: a.job_id ? String(a.job_id) : undefined
-      }))
-      setJdAnalyses(analyses)
+      const summaries = data.analyses || []
+      // 为每个分析获取完整数据
+      const fullAnalyses = await Promise.all(
+        summaries.map(async (s: Record<string, unknown>) => {
+          try {
+            const detail = await jobApi.getJobAnalysis(Number(s.id || s.job_analysis_id))
+            return {
+              id: String(detail.id || detail.job_analysis_id),
+              company: detail.company || '',
+              role: detail.position || '',
+              rawText: detail.jd_text || '',
+              matchScore: detail.match_score || 0,
+              recommendationStars: Math.round((detail.match_score || 0) / 20),
+              verdictSummary: Array.isArray(detail.gap_analysis) ? (detail.gap_analysis as string[]).join(' ') : (detail.gap_analysis || ''),
+              whyMatch: '',
+              keyRisks: '',
+              resumeAdvice: [],
+              coreRequirements: [
+                { category: '核心职责', items: (detail.jd_requirements as Record<string, unknown>)?.responsibilities as string[] || [] },
+                { category: '任职资格', items: [...((detail.jd_requirements as Record<string, unknown>)?.hard_skills as string[] || []), ...((detail.jd_requirements as Record<string, unknown>)?.soft_skills as string[] || [])] }
+              ],
+              atsKeywords: {
+                hardSkills: (detail.jd_requirements as Record<string, unknown>)?.hard_skills as string[] || [],
+                softSkills: (detail.jd_requirements as Record<string, unknown>)?.soft_skills as string[] || [],
+                expKeywords: (detail.jd_requirements as Record<string, unknown>)?.keywords as string[] || [],
+                coveragePercent: Math.round(detail.match_score || 0)
+              },
+              subtextAnalysis: [],
+              skillGaps: ((detail.jd_requirements as Record<string, unknown>)?.hard_skills as string[] || []).concat((detail.jd_requirements as Record<string, unknown>)?.soft_skills as string[] || []).map((skill: string, idx: number) => ({
+                id: `skill-${idx}`,
+                capability: skill,
+                userEvidence: '',
+                requirement: skill,
+                gap: '待补充',
+                recommendation: ''
+              })),
+              recommendedExperiences: [],
+              createdAt: detail.created_at || '',
+              jobId: undefined
+            }
+          } catch {
+            return null
+          }
+        })
+      )
+      setJdAnalyses(fullAnalyses.filter(Boolean) as JDAnalysis[])
     } catch (error) {
       console.error('Load JD analyses failed:', error)
     }

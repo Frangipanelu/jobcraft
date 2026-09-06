@@ -75,6 +75,12 @@ export async function listJobAnalyses(
   return request(`/api/jobcraft/job/analyses${qs}`)
 }
 
+export async function getJobAnalysis(
+  jobId: number
+): Promise<JobAnalysisResult> {
+  return request<JobAnalysisResult>(`/api/jobcraft/job/analyze/${jobId}`)
+}
+
 export async function step1AtsRecommend(payload: {
   position: string
   company: string
