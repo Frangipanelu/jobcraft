@@ -731,3 +731,56 @@ def jobcraft_experience_backfill(
     except Exception as e:
         logger.exception("卡片回填失败")
         raise HTTPException(status_code=500, detail=f"回填失败: {e}")
+
+
+class PolishPayload(BaseModel):
+    raw_text: str
+    role: Optional[str] = None
+    company: Optional[str] = None
+
+
+@router.post("/cards/{card_id}/polish")
+def jobcraft_experience_polish(
+    card_id: int,
+    payload: PolishPayload,
+    current_user: int = Depends(get_current_user),
+):
+    """AI 润色经历：优化措辞、强化量化指标、提升专业表述。"""
+    card = db_tools.get_card(card_id, current_user)
+    if not card:
+        raise HTTPException(status_code=404, detail="卡片不存在")
+
+    raw_text = payload.raw_text or card.get("raw_text", "")
+    if not raw_text or len(raw_text.strip()) < 10:
+        raise HTTPException(status_code=400, detail="经历内容过短，请补充后再试")
+
+    from app.core.llm import model
+
+    prompt = f"""你是一位资深简历优化专家。请对以下工作经历进行深度润色，要求：
+
+1. 保持原始事实不变，不编造数据
+2. 强化 STAR 结构（情境-任务-行动-结果）
+3. 量化成果（如百分比、金额、人数等尽可能保留或合理推算）
+4. 使用专业、有力的动词开头（如"主导"、"构建"、"推动"）
+5. 精简冗余描述，提升信息密度
+6. 保持中文输出
+
+公司：{payload.company or '未知'}
+岗位：{payload.role or '未知'}
+
+原始经历：
+{raw_text}
+
+请直接输出润色后的经历文本，不要添加任何解释或前缀："""
+
+    try:
+        resp = model.invoke(prompt)
+        polished = resp.content.strip()
+        if not polished:
+            raise HTTPException(status_code=500, detail="AI 返回内容为空")
+        return {"polished_text": polished, "original_text": raw_text}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("AI 润色失败")
+        raise HTTPException(status_code=500, detail=f"AI 润色失败: {e}")

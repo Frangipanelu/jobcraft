@@ -49,6 +49,13 @@ export async function confirmUpload(items: PreviewItem[], raw_text?: string): Pr
   })
 }
 
+export async function polishExperience(cardId: number, rawText: string, company?: string, role?: string): Promise<{ polished_text: string; original_text: string }> {
+  return request<{ polished_text: string; original_text: string }>(`/api/jobcraft/experience/cards/${cardId}/polish`, {
+    method: 'POST',
+    body: JSON.stringify({ raw_text: rawText, company, role }),
+  })
+}
+
 export async function analyzeJob(payload: {
   position: string
   company: string

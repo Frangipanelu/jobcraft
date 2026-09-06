@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useJobCraft } from '../../context/JobCraftContext';
 import { Experience, ExperienceCategory, ExperienceVersionRecord } from '../../types/jobcraft';
+import * as jobApi from '../../api/job';
 import {
   Layers,
   Plus,
@@ -105,28 +106,54 @@ export const ExperiencesView: React.FC<ExperiencesViewProps> = () => {
     }
   };
 
-  const handleAIRefine = (exp: Experience) => {
+  const handleAIRefine = async (exp: Experience) => {
     const curNum = parseFloat(exp.currentVersion.replace('V', '')) || 1.0;
     const nextVer = `V${(curNum + 0.1).toFixed(1)}`;
-    const enhancedAction = '结合工业级黄金评测基准与多模型交叉仲裁机制，建立了自动化回归测试与 Badcase 告警闭环。';
 
-    addExperienceVersion(
-      exp.id,
-      nextVer,
-      'AI 深度润色：强化量化指标与大模型系统落地专业表述',
-      {
-        background: exp.background,
-        responsibility: exp.responsibility,
-        actions: [enhancedAction, ...(exp.actions || [])],
-        results: exp.results || []
-      }
-    );
+    // 拼接原始文本用于 AI 润色
+    const originalText = [
+      exp.background,
+      exp.responsibility,
+      ...(exp.actions || []),
+      ...(exp.results || [])
+    ].filter(Boolean).join('\n');
 
-    showToast({
-      type: 'success',
-      title: `已升级至 ${nextVer} (AI 深度润色版)`,
-      message: '已强化 STAR 结构中的量化动作与工业级落地指标。'
-    });
+    try {
+      showToast({ type: 'info', title: 'AI 润色中...', message: '正在调用大模型优化经历表述' });
+      const result = await jobApi.polishExperience(
+        parseInt(exp.id.replace('exp-', '')),
+        originalText,
+        exp.company,
+        exp.role
+      );
+
+      // 将润色结果拆分为 actions
+      const polishedLines = result.polished_text
+        .split('\n')
+        .map(l => l.replace(/^[-·•]\s*/, '').trim())
+        .filter(l => l.length > 5);
+
+      addExperienceVersion(
+        exp.id,
+        nextVer,
+        'AI 深度润色：强化量化指标与专业表述',
+        {
+          background: exp.background,
+          responsibility: exp.responsibility,
+          actions: polishedLines.length > 0 ? polishedLines : exp.actions,
+          results: exp.results || []
+        }
+      );
+
+      showToast({
+        type: 'success',
+        title: `已升级至 ${nextVer} (AI 润色版)`,
+        message: '经历已通过大模型深度润色优化。'
+      });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'AI 润色失败';
+      showToast({ type: 'error', title: '润色失败', message: msg });
+    }
   };
 
   const handleRestoreVersion = (exp: Experience, versionRecord: ExperienceVersionRecord) => {
