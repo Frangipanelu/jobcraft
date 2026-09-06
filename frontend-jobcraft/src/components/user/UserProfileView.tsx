@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useJobCraft } from '../../context/JobCraftContext';
-import { uploadResume } from '../../api/job';
+import * as jobApi from '../../api/job';
 import * as authApi from '../../api/auth';
 import {
   FileText,
