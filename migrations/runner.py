@@ -127,7 +127,9 @@ def migrate(limit: Optional[int] = None) -> None:
                 )
                 conn.commit()
                 applied_count += 1
-    print(f"migrated {applied_count} migration(s); {len(migrations) - _applied_now()} pending")
+    print(
+        f"migrated {applied_count} migration(s); {len(migrations) - _applied_now()} pending"
+    )
 
 
 def _applied_now() -> int:

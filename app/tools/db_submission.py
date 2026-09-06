@@ -198,12 +198,8 @@ def get_submission_by_analysis(
         "status": row["status"],
         "notes": row["notes"] or "",
         "is_manual": row.get("is_manual", 0),
-        "created_at": row["created_at"].isoformat()
-        if row.get("created_at")
-        else None,
-        "updated_at": row["updated_at"].isoformat()
-        if row.get("updated_at")
-        else None,
+        "created_at": row["created_at"].isoformat() if row.get("created_at") else None,
+        "updated_at": row["updated_at"].isoformat() if row.get("updated_at") else None,
     }
 
 

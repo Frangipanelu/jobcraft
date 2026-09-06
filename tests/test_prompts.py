@@ -103,12 +103,8 @@ def test_every_registered_template_exists_and_fields_match():
     )
 
     for (subdir, name), fields in _REQUIRED_FIELDS.items():
-        text = (PROMPTS_DIR / subdir / f"{name}_v1.txt").read_text(
-            encoding="utf-8"
-        )
-        template_fields = {
-            m.group(1) for m in _PLACEHOLDER_RE.finditer(text)
-        }
+        text = (PROMPTS_DIR / subdir / f"{name}_v1.txt").read_text(encoding="utf-8")
+        template_fields = {m.group(1) for m in _PLACEHOLDER_RE.finditer(text)}
         assert template_fields == fields, (
             f"{subdir}/{name}: 模板占位符 {template_fields} != 注册占位符 {fields}"
         )

@@ -90,7 +90,9 @@ def test_baseline_file_is_valid_split(fake_conn):
     runner.migrate()
     # 至少执行了建版本表的语句 + 若干条 DDL + 1 条插入记录
     executed = fake_conn.cursor_obj.executed
-    inserts = [e for e in executed if e[0].strip().startswith("INSERT INTO schema_migrations")]
+    inserts = [
+        e for e in executed if e[0].strip().startswith("INSERT INTO schema_migrations")
+    ]
     assert len(inserts) == n
     # 没有剩余 pending
     runner.status()
@@ -162,4 +164,3 @@ def test_fk_migration_declares_expected_constraints():
     # 每个 ADD CONSTRAINT 之前都应先清理对应孤儿数据，避免 FK 创建失败
     assert "DELETE FROM resume_submission" in sql
     assert "DELETE FROM card_versions" in sql
-

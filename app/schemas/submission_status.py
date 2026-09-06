@@ -31,10 +31,18 @@ SUBMISSION_STATUS_CN: Dict[SubmissionStatus, str] = {
 
 # 合法流转（§4.2）：顺向推进 + 任意阶段可提前 CLOSED
 _ALLOWED_TRANSITIONS: Dict[SubmissionStatus, FrozenSet[SubmissionStatus]] = {
-    SubmissionStatus.APPLIED: frozenset({SubmissionStatus.INVITED, SubmissionStatus.CLOSED}),
-    SubmissionStatus.INVITED: frozenset({SubmissionStatus.ROUND_1, SubmissionStatus.CLOSED}),
-    SubmissionStatus.ROUND_1: frozenset({SubmissionStatus.ROUND_2, SubmissionStatus.CLOSED}),
-    SubmissionStatus.ROUND_2: frozenset({SubmissionStatus.OFFER, SubmissionStatus.CLOSED}),
+    SubmissionStatus.APPLIED: frozenset(
+        {SubmissionStatus.INVITED, SubmissionStatus.CLOSED}
+    ),
+    SubmissionStatus.INVITED: frozenset(
+        {SubmissionStatus.ROUND_1, SubmissionStatus.CLOSED}
+    ),
+    SubmissionStatus.ROUND_1: frozenset(
+        {SubmissionStatus.ROUND_2, SubmissionStatus.CLOSED}
+    ),
+    SubmissionStatus.ROUND_2: frozenset(
+        {SubmissionStatus.OFFER, SubmissionStatus.CLOSED}
+    ),
     SubmissionStatus.OFFER: frozenset(),
     SubmissionStatus.CLOSED: frozenset(),
 }

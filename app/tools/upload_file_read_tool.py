@@ -91,7 +91,9 @@ def read_file_content(
             # 读取表格（很多简历用表格排版）
             for table in doc.tables:
                 for row in table.rows:
-                    row_text = " | ".join(cell.text.strip() for cell in row.cells if cell.text.strip())
+                    row_text = " | ".join(
+                        cell.text.strip() for cell in row.cells if cell.text.strip()
+                    )
                     if row_text:
                         full_text.append(row_text)
             text = "\n".join(full_text).strip()

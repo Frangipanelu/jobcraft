@@ -8,7 +8,11 @@ from pydantic import BaseModel
 
 from app.api.context import set_session_context, reset_session_context
 from app.auth.dependencies import get_current_user
-from app.schemas.submission_status import is_valid_transition, normalize_status, status_to_cn
+from app.schemas.submission_status import (
+    is_valid_transition,
+    normalize_status,
+    status_to_cn,
+)
 from app.tools import db_tools
 from app.tools.upload_file_read_tool import read_file_content
 
@@ -90,7 +94,10 @@ def jobcraft_submission_update(
                     status_code=400, detail=f"无效的投递状态: {updates['status']}"
                 )
             current = db_tools.get_submission(submission_id, current_user)
-            if current and current.get("status") != normalize_status(updates["status"]).value:
+            if (
+                current
+                and current.get("status") != normalize_status(updates["status"]).value
+            ):
                 if not is_valid_transition(current.get("status"), updates["status"]):
                     raise HTTPException(
                         status_code=400,

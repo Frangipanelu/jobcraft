@@ -27,9 +27,7 @@ DIMENSION_DESCRIPTIONS = {
 
 def _build_ats_prompt(jd_text: str) -> str:
     dims = "\n".join([f"{k}: {v}" for k, v in DIMENSION_DESCRIPTIONS.items()])
-    return load_prompt(
-        "jd", "jd_ats_analysis", dims=dims, jd_text=jd_text[:6000]
-    )
+    return load_prompt("jd", "jd_ats_analysis", dims=dims, jd_text=jd_text[:6000])
 
 
 class JdAtsAgent(BaseAgent):

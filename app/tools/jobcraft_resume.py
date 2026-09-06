@@ -102,29 +102,37 @@ def generate_resume(
             insert_submission,
             update_submission,
         )
+
         sub = get_submission_by_analysis(job_analysis_id, user_id)
         if sub:
-            update_submission(sub["id"], {
-                "resume_markdown": md,
-                "resume_file_path": str(md_path),
-                "card_version_ids": selected_card_ids,
-                "status": "APPLIED",
-            })
+            update_submission(
+                sub["id"],
+                {
+                    "resume_markdown": md,
+                    "resume_file_path": str(md_path),
+                    "card_version_ids": selected_card_ids,
+                    "status": "APPLIED",
+                },
+            )
             submission_id = sub["id"]
         else:
-            submission_id = insert_submission({
-                "user_id": user_id,
-                "job_analysis_id": job_analysis_id,
-                "position": position,
-                "company": company,
-                "jd_text": analysis.get("jd_text", ""),
-                "resume_markdown": md,
-                "resume_file_path": str(md_path),
-                "card_version_ids": selected_card_ids,
-                "status": "APPLIED",
-            })
+            submission_id = insert_submission(
+                {
+                    "user_id": user_id,
+                    "job_analysis_id": job_analysis_id,
+                    "position": position,
+                    "company": company,
+                    "jd_text": analysis.get("jd_text", ""),
+                    "resume_markdown": md,
+                    "resume_file_path": str(md_path),
+                    "card_version_ids": selected_card_ids,
+                    "status": "APPLIED",
+                }
+            )
     except Exception:
-        logger.warning("保存 resume 到 submission 失败，job_analysis_id=%s", job_analysis_id)
+        logger.warning(
+            "保存 resume 到 submission 失败，job_analysis_id=%s", job_analysis_id
+        )
 
     return {
         "job_analysis_id": job_analysis_id,

@@ -39,9 +39,7 @@ def test_interview_prep_missing_job_analysis_id_raises(monkeypatch):
 def test_interview_prep_calls_real_workflow_with_params(monkeypatch):
     """execute_interview_prep 应将参数对齐传给 interview_prep_flow.run_interview_prep_workflow。"""
     fake_mgr = FakeTaskManager()
-    monkeypatch.setattr(
-        "app.tasks.handlers.get_task_manager", lambda: fake_mgr
-    )
+    monkeypatch.setattr("app.tasks.handlers.get_task_manager", lambda: fake_mgr)
 
     captured = {}
 
@@ -108,7 +106,11 @@ def test_dispatch_routes_to_known_handler(monkeypatch):
 
     _dispatch_one(
         fake_mgr,
-        {"task_id": "t-2", "task_type": "interview_prep", "params": {"job_analysis_id": 5}},
+        {
+            "task_id": "t-2",
+            "task_type": "interview_prep",
+            "params": {"job_analysis_id": 5},
+        },
     )
 
     assert called["task_id"] == "t-2"

@@ -11,9 +11,7 @@ def test_enum_values_are_english_codes():
     """枚举值应为英文码，不含中文。"""
     m = _mod()
     values = {s.value for s in m.SubmissionStatus}
-    assert values == {
-        "APPLIED", "INVITED", "ROUND_1", "ROUND_2", "OFFER", "CLOSED"
-    }
+    assert values == {"APPLIED", "INVITED", "ROUND_1", "ROUND_2", "OFFER", "CLOSED"}
 
 
 def test_cn_map_covers_all_statuses():

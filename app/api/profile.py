@@ -102,6 +102,7 @@ def update_profile(
     for k in json_fields:
         if k in updates:
             import json
+
             updates[k] = json.dumps(updates[k], ensure_ascii=False)
 
     # 更新 email 到 users 表（如果提供了）
@@ -127,9 +128,7 @@ def update_profile(
     else:
         set_clause = ", ".join(f"{k}=%s" for k in updates)
         vals = list(updates.values()) + [current_user]
-        db_conn.execute(
-            f"UPDATE user_profiles SET {set_clause} WHERE user_id=%s", vals
-        )
+        db_conn.execute(f"UPDATE user_profiles SET {set_clause} WHERE user_id=%s", vals)
 
     # 返回更新后的完整资料
     row = db_conn.query_one(
@@ -139,6 +138,7 @@ def update_profile(
 
 
 # ── 系统设置 ──────────────────────────────────────────────────
+
 
 @router.get("/settings")
 def get_settings(current_user: int = Depends(get_current_user)) -> Dict[str, Any]:
@@ -164,6 +164,7 @@ def get_settings(current_user: int = Depends(get_current_user)) -> Dict[str, Any
 
 # ── 数据导出 ──────────────────────────────────────────────────
 
+
 @router.get("/export")
 def export_all_data(current_user: int = Depends(get_current_user)) -> JSONResponse:
     """导出当前用户的全部数据（经历卡、投递、面试记录）"""
@@ -184,6 +185,7 @@ def export_all_data(current_user: int = Depends(get_current_user)) -> JSONRespon
     def _serialize(obj: Any) -> Any:
         from datetime import datetime, date
         from decimal import Decimal
+
         if isinstance(obj, (datetime, date)):
             return obj.isoformat()
         if isinstance(obj, Decimal):

@@ -85,7 +85,9 @@ def cache_set(
         import json
 
         raw = json.dumps(value, ensure_ascii=False, default=str)
-        client.set(key, raw, ex=ttl_seconds if ttl_seconds is not None else _DEFAULT_TTL)
+        client.set(
+            key, raw, ex=ttl_seconds if ttl_seconds is not None else _DEFAULT_TTL
+        )
     except Exception:
         logger.debug("AI 缓存写入失败，忽略", exc_info=True)
 

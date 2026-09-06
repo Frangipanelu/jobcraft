@@ -74,6 +74,7 @@ async def jobcraft_experience_upload_preview(
     # 尝试 AI 解析
     try:
         from app.workflows.extract_flow import run_parse_resume_entries_workflow
+
         entries = run_parse_resume_entries_workflow(resume_text.strip())
     except Exception:
         logger.warning("简历预览解析失败")
@@ -124,16 +125,21 @@ async def jobcraft_experience_upload_preview(
 
             raw_text = "\n".join(raw_text_parts)
 
-            preview_items.append({
-                "title": ent.get("title") or ent.get("role") or ent.get("company") or "未命名经历",
-                "company": ent.get("company", ""),
-                "role": ent.get("role", ""),
-                "period": ent.get("period", ""),
-                "card_type": ent.get("card_type", "work"),
-                "raw_text": raw_text,
-                "summary": ent.get("summary", ""),
-                "selected": True,  # 默认选中
-            })
+            preview_items.append(
+                {
+                    "title": ent.get("title")
+                    or ent.get("role")
+                    or ent.get("company")
+                    or "未命名经历",
+                    "company": ent.get("company", ""),
+                    "role": ent.get("role", ""),
+                    "period": ent.get("period", ""),
+                    "card_type": ent.get("card_type", "work"),
+                    "raw_text": raw_text,
+                    "summary": ent.get("summary", ""),
+                    "selected": True,  # 默认选中
+                }
+            )
         return {"mode": "structured", "items": preview_items, "raw_text": ""}
     else:
         return {"mode": "raw", "items": [], "raw_text": resume_text.strip()}
@@ -176,9 +182,12 @@ async def jobcraft_experience_upload_confirm(
                         run_extract_structured_workflow,
                         run_recommend_tags_workflow,
                     )
+
                     cache = run_extract_structured_workflow(raw_text.strip())
                     if cache:
-                        db_tools.update_card(card_id, {"ai_structured": cache}, current_user)
+                        db_tools.update_card(
+                            card_id, {"ai_structured": cache}, current_user
+                        )
                     tags = run_recommend_tags_workflow(raw_text.strip())
                     if tags:
                         db_tools.update_card(card_id, {"tags": tags}, current_user)
@@ -824,8 +833,8 @@ def jobcraft_experience_polish(
 5. 精简冗余描述，提升信息密度
 6. 保持中文输出
 
-公司：{payload.company or '未知'}
-岗位：{payload.role or '未知'}
+公司：{payload.company or "未知"}
+岗位：{payload.role or "未知"}
 
 原始经历：
 {raw_text}
