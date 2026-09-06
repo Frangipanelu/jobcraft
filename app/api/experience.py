@@ -29,6 +29,125 @@ def _get_updated_dir() -> Path:
     return updated_dir
 
 
+@router.post("/upload/preview")
+async def jobcraft_experience_upload_preview(
+    file: UploadFile = File(...),
+    current_user: int = Depends(get_current_user),
+):
+    """预览简历解析结果（不保存），返回解析出的经历条目供用户确认。"""
+    MAX_BYTES = 10 * 1024 * 1024
+    if file.size is not None and file.size > MAX_BYTES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"文件过大 ({file.size / 1024 / 1024:.1f}MB > 10MB)",
+        )
+
+    updated_dir = _get_updated_dir()
+    upload_id = uuid.uuid4().hex[:12]
+    target_dir = updated_dir / f"preview_{upload_id}"
+    target_dir.mkdir(parents=True, exist_ok=True)
+    saved_path = target_dir / file.filename
+    with saved_path.open("wb") as buf:
+        shutil.copyfileobj(file.file, buf)
+
+    SUPPORTED_EXTS = {".pdf", ".docx", ".md", ".txt"}
+    ext = saved_path.suffix.lower()
+    if ext not in SUPPORTED_EXTS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"暂不支持「{ext or '无后缀'}」格式, 请使用 PDF / DOCX / MD / TXT",
+        )
+
+    token = set_session_context(str(target_dir))
+    try:
+        resume_text = read_file_content.invoke(str(saved_path))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"文件读取失败: {e}")
+    finally:
+        reset_session_context(token)
+
+    if not resume_text or not resume_text.strip():
+        raise HTTPException(status_code=400, detail="文件内容为空")
+    if resume_text.startswith("错误"):
+        raise HTTPException(status_code=400, detail=resume_text)
+
+    # 尝试 AI 解析
+    try:
+        from app.workflows.extract_flow import run_parse_resume_entries_workflow
+        entries = run_parse_resume_entries_workflow(resume_text.strip())
+    except Exception:
+        logger.warning("简历预览解析失败")
+        entries = []
+
+    # 如果 AI 解析出条目，返回结构化预览；否则返回原始文本让用户手动分段
+    if entries:
+        preview_items = []
+        for ent in entries:
+            preview_items.append({
+                "title": ent.get("title") or ent.get("role") or ent.get("company") or "未命名经历",
+                "company": ent.get("company", ""),
+                "role": ent.get("role", ""),
+                "period": ent.get("period", ""),
+                "card_type": ent.get("card_type", "work"),
+                "raw_text": ent.get("raw_text", ""),
+                "summary": ent.get("summary", ""),
+                "selected": True,  # 默认选中
+            })
+        return {"mode": "structured", "items": preview_items, "raw_text": ""}
+    else:
+        return {"mode": "raw", "items": [], "raw_text": resume_text.strip()}
+
+
+class ConfirmUploadPayload(BaseModel):
+    items: List[Dict[str, Any]]
+    raw_text: Optional[str] = None
+
+
+@router.post("/upload/confirm")
+async def jobcraft_experience_upload_confirm(
+    payload: ConfirmUploadPayload,
+    current_user: int = Depends(get_current_user),
+):
+    """确认保存预览中选中的经历条目。"""
+    created_cards = []
+    try:
+        for item in payload.items:
+            if not item.get("selected", True):
+                continue
+            card_data = {
+                "user_id": current_user,
+                "title": item.get("title") or "未命名经历",
+                "raw_text": item.get("raw_text") or payload.raw_text or "",
+                "company": item.get("company", ""),
+                "role": item.get("role", ""),
+                "period": item.get("period", ""),
+                "card_type": item.get("card_type", "work"),
+                "source": "resume_upload",
+                "tags": [],
+            }
+            card_id = db_tools.insert_card(card_data)
+            card = db_tools.get_card(card_id, current_user)
+            if card:
+                created_cards.append(card)
+
+        # 如果没有结构化条目但有 raw_text，创建单卡
+        if not created_cards and payload.raw_text:
+            card_data = {
+                "user_id": current_user,
+                "title": "上传简历",
+                "raw_text": payload.raw_text,
+                "source": "resume_upload",
+            }
+            card_id = db_tools.insert_card(card_data)
+            card = db_tools.get_card(card_id, current_user)
+            if card:
+                created_cards.append(card)
+
+        return {"cards": created_cards}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"保存失败: {e}")
+
+
 @router.post("/upload")
 async def jobcraft_experience_upload(
     file: UploadFile = File(...),

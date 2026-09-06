@@ -37,10 +37,12 @@ export const UserProfileView: React.FC = () => {
     deleteHistoricalResume,
     setDefaultHistoricalResume,
     experiences,
+    loadExperiences,
     navigateTo,
     userProfileTab,
     setUserProfileTab,
-    showToast
+    showToast,
+    currentUserId
   } = useJobCraft();
 
   const [activeTab, setActiveTab] = useState<'resumes' | 'profile' | 'preferences' | 'settings'>(userProfileTab || 'resumes');
@@ -81,6 +83,13 @@ export const UserProfileView: React.FC = () => {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Preview modal state
+  const [showPreview, setShowPreview] = useState(false);
+  const [previewItems, setPreviewItems] = useState<jobApi.PreviewItem[]>([]);
+  const [previewRawText, setPreviewRawText] = useState('');
+  const [previewMode, setPreviewMode] = useState<'structured' | 'raw'>('structured');
+  const [isConfirming, setIsConfirming] = useState(false);
 
   // Settings state
   const [modelInfo, setModelInfo] = useState<{ model_name: string; provider: string; status: string } | null>(null);
@@ -158,30 +167,53 @@ export const UserProfileView: React.FC = () => {
     setUploadError('');
     setIsUploading(true);
     try {
-      const result = await uploadResume(file);
-      const count = result.cards?.length || 0;
-      if (count > 0) {
-        showToast({
-          type: 'success',
-          title: '简历解析成功',
-          message: `已从简历中提取 ${count} 段经历，自动存入经历资产库。`
-        });
+      const result = await jobApi.previewResume(file);
+      if (result.mode === 'structured' && result.items.length > 0) {
+        setPreviewItems(result.items);
+        setPreviewRawText('');
+        setPreviewMode('structured');
+        setShowPreview(true);
       } else {
-        showToast({
-          type: 'info',
-          title: '简历已上传',
-          message: '文件已保存，但未自动提取出结构化经历，请手动补充。'
-        });
+        // 无法解析，显示原始文本让用户手动分段
+        setPreviewItems([]);
+        setPreviewRawText(result.raw_text);
+        setPreviewMode('raw');
+        setShowPreview(true);
       }
-      // 刷新经历卡列表
-      loadExperiences(currentUserId);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : '上传失败，请检查文件格式后重试';
+      const msg = err instanceof Error ? err.message : '文件解析失败，请检查格式后重试';
       setUploadError(msg);
-      showToast({ type: 'error', title: '上传失败', message: msg });
     } finally {
       setIsUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const handleTogglePreviewItem = (index: number) => {
+    setPreviewItems(prev => prev.map((item, i) =>
+      i === index ? { ...item, selected: !item.selected } : item
+    ));
+  };
+
+  const handleConfirmUpload = async () => {
+    setIsConfirming(true);
+    try {
+      const result = await jobApi.confirmUpload(previewItems, previewRawText || undefined);
+      const count = result.cards?.length || 0;
+      showToast({
+        type: 'success',
+        title: '简历导入成功',
+        message: `已保存 ${count} 段经历到资产库。`
+      });
+      loadExperiences(currentUserId);
+      setShowPreview(false);
+      setPreviewItems([]);
+      setPreviewRawText('');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : '保存失败';
+      showToast({ type: 'error', title: '保存失败', message: msg });
+    } finally {
+      setIsConfirming(false);
     }
   };
 
@@ -633,6 +665,77 @@ export const UserProfileView: React.FC = () => {
             >
               导出全量数据包 (.JSON)
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Upload Preview Modal */}
+      {showPreview && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[80vh] flex flex-col mx-4">
+            <div className="px-6 py-4 border-b border-edge flex items-center justify-between">
+              <h3 className="text-sm font-bold text-ink">
+                {previewMode === 'structured' ? `解析到 ${previewItems.length} 段经历，请确认` : '未能自动分段，请手动选择内容'}
+              </h3>
+              <button onClick={() => setShowPreview(false)} className="text-muted hover:text-ink text-lg leading-none cursor-pointer">&times;</button>
+            </div>
+            <div className="flex-1 overflow-y-auto px-6 py-4 space-y-3">
+              {previewMode === 'structured' ? (
+                previewItems.map((item, idx) => (
+                  <label
+                    key={idx}
+                    className={`block p-4 rounded-xl border transition cursor-pointer ${
+                      item.selected ? 'border-sage bg-sage-soft/30' : 'border-edge bg-white hover:border-edge-deep'
+                    }`}
+                  >
+                    <div className="flex items-start gap-3">
+                      <input
+                        type="checkbox"
+                        checked={item.selected}
+                        onChange={() => handleTogglePreviewItem(idx)}
+                        className="mt-1 accent-sage"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-xs font-bold text-ink">{item.title}</span>
+                          {item.company && <span className="text-[11px] text-muted">@ {item.company}</span>}
+                          {item.role && <span className="text-[11px] text-muted">· {item.role}</span>}
+                        </div>
+                        {item.raw_text && (
+                          <p className="text-[11px] text-muted leading-relaxed line-clamp-3">{item.raw_text}</p>
+                        )}
+                      </div>
+                    </div>
+                  </label>
+                ))
+              ) : (
+                <div>
+                  <p className="text-xs text-muted mb-2">AI 未能自动分段，以下是简历原文，您可以复制到「经历资产库」手动创建：</p>
+                  <textarea
+                    readOnly
+                    value={previewRawText}
+                    className="w-full h-64 p-3 text-xs text-ink bg-page border border-edge rounded-xl resize-none focus:outline-none"
+                  />
+                </div>
+              )}
+            </div>
+            <div className="px-6 py-4 border-t border-edge flex items-center justify-end gap-3">
+              <button
+                onClick={() => setShowPreview(false)}
+                className="px-4 py-2 rounded-lg border border-edge text-xs font-semibold text-ink hover:bg-page transition cursor-pointer"
+              >
+                取消
+              </button>
+              {previewMode === 'structured' && (
+                <button
+                  onClick={handleConfirmUpload}
+                  disabled={isConfirming || previewItems.filter(i => i.selected).length === 0}
+                  className="px-4 py-2 rounded-lg bg-sage hover:bg-sage-dim disabled:opacity-50 text-white text-xs font-semibold shadow-xs transition cursor-pointer"
+                >
+                  {isConfirming ? '保存中...' : `确认保存 ${previewItems.filter(i => i.selected).length} 段经历`}
+                </button>
+              )}
+            </div>
           </div>
         </div>
       )}

@@ -25,6 +25,30 @@ export async function uploadResume(file: File): Promise<{ cards: ExperienceCard[
   return requestFormData<{ cards: ExperienceCard[] }>('/api/jobcraft/experience/upload', formData)
 }
 
+export interface PreviewItem {
+  title: string
+  company: string
+  role: string
+  period: string
+  card_type: string
+  raw_text: string
+  summary: string
+  selected: boolean
+}
+
+export async function previewResume(file: File): Promise<{ mode: string; items: PreviewItem[]; raw_text: string }> {
+  const formData = new FormData()
+  formData.append('file', file)
+  return requestFormData<{ mode: string; items: PreviewItem[]; raw_text: string }>('/api/jobcraft/experience/upload/preview', formData)
+}
+
+export async function confirmUpload(items: PreviewItem[], raw_text?: string): Promise<{ cards: ExperienceCard[] }> {
+  return request<{ cards: ExperienceCard[] }>('/api/jobcraft/experience/upload/confirm', {
+    method: 'POST',
+    body: JSON.stringify({ items, raw_text }),
+  })
+}
+
 export async function analyzeJob(payload: {
   position: string
   company: string

@@ -162,6 +162,8 @@ interface JobCraftContextType {
   login: (username: string, password: string) => Promise<void>;
   register: (username: string, password: string, email?: string) => Promise<void>;
   logout: () => void;
+  currentUserId: number;
+  loadExperiences: (userId: number) => Promise<void>;
 
   // Actions
   showToast: (toast: Omit<ToastMessage, 'id'>) => void;
@@ -1995,7 +1997,9 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
         isAuthenticated,
         login,
         register,
-        logout
+        logout,
+        currentUserId,
+        loadExperiences
       }}
     >
       {children}
