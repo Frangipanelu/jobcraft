@@ -5,6 +5,7 @@
 同时生成预设排版的 HTML 简历（用于前端预览 + 打印导出 PDF）。
 """
 
+import logging
 import re
 from datetime import datetime
 from pathlib import Path
@@ -16,6 +17,8 @@ from app.tools.jobcraft_resume_gen import (
     generate_resume_html,
     generate_resume_markdown,
 )
+
+logger = logging.getLogger(__name__)
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 OUTPUT_ROOT = PROJECT_ROOT / "output" / "job_resume"
