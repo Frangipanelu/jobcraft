@@ -81,9 +81,19 @@ def read_file_content(
         elif ext == ".docx":
             if docx is None:
                 return "错误：未安装 'python-docx' 库，无法读取 Word (.docx) 文件。请先 pip install python-docx, 或将简历转为 .md / .txt 后再上传。"
-            # python-docx 读取段落文本，适合课程中的普通 Word 附件
+            # python-docx 读取段落+表格文本
             doc = docx.Document(str(file_path))
-            full_text = [para.text for para in doc.paragraphs]
+            full_text = []
+            # 读取段落
+            for para in doc.paragraphs:
+                if para.text.strip():
+                    full_text.append(para.text)
+            # 读取表格（很多简历用表格排版）
+            for table in doc.tables:
+                for row in table.rows:
+                    row_text = " | ".join(cell.text.strip() for cell in row.cells if cell.text.strip())
+                    if row_text:
+                        full_text.append(row_text)
             text = "\n".join(full_text).strip()
             if len(text) < MIN_USEFUL_CHARS:
                 return f"错误：Word 文件 '{file_path.name}' 抽取后内容过少 (仅 {len(text)} 字符), 可能是图片型/扫描件 Word。请将简历内容复制到 .md / .txt 后再上传。"

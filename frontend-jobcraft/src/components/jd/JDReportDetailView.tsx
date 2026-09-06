@@ -66,20 +66,34 @@ export const JDReportDetailView: React.FC<JDReportDetailViewProps> = ({
 
   const [isReanalyzing, setIsReanalyzing] = useState(false);
 
-  // 加载中时显示 loading 状态
-  if (isLoading && !jdAnalyses.length) {
+  const currentAnalysis =
+    jdAnalyses.find((a) => a.id === analysisId) || jdAnalyses[0];
+
+  // 加载中或分析尚未完成时显示 loading 状态
+  if (isLoading || (!currentAnalysis && jdAnalyses.length === 0)) {
     return (
       <div className="min-h-full bg-white pb-24 flex items-center justify-center">
         <div className="text-center space-y-3">
           <div className="w-8 h-8 border-2 border-sage border-t-transparent rounded-full animate-spin mx-auto" />
-          <p className="text-xs text-muted">分析数据加载中...</p>
+          <p className="text-sm font-bold text-ink">正在生成 JD 分析报告...</p>
+          <p className="text-xs text-muted">大模型正在深度解析岗位要求与经历匹配，请稍候</p>
         </div>
       </div>
     );
   }
 
-  const currentAnalysis =
-    jdAnalyses.find((a) => a.id === analysisId) || jdAnalyses[0];
+  // 分析 ID 存在但找不到数据（可能刚创建，数据还在加载）
+  if (analysisId && !currentAnalysis) {
+    return (
+      <div className="min-h-full bg-white pb-24 flex items-center justify-center">
+        <div className="text-center space-y-3">
+          <div className="w-8 h-8 border-2 border-sage border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm font-bold text-ink">分析报告生成中...</p>
+          <p className="text-xs text-muted">AI 正在完成岗位深度解析，预计需要 10-30 秒</p>
+        </div>
+      </div>
+    );
+  }
 
   const a = currentAnalysis?.atsKeywords;
   const expById = new Map<string, Experience>(experiences.map((e) => [e.id, e]));

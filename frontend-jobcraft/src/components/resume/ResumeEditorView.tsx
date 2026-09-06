@@ -70,7 +70,27 @@ export const ResumeEditorView: React.FC<ResumeEditorViewProps> = ({
   const [selectedBulletForSource, setSelectedBulletForSource] = useState<string | null>(null);
 
   if (!resume) {
-    return <div className="p-8 text-center text-muted">尚未生成简历，请先在对应投递中完成简历生成。</div>;
+    return (
+      <div className="p-8 text-center space-y-4">
+        <div className="text-muted text-sm">尚未生成简历，请先完成简历生成。</div>
+        <p className="text-xs text-muted/70">在「JD 深度分析」页面点击「定制简历」按钮，AI 将根据您的经历卡和岗位要求自动生成匹配简历。</p>
+        {jobId ? (
+          <button
+            onClick={() => navigateTo('job_workspace', jobId)}
+            className="px-4 py-2 rounded-lg bg-sage hover:bg-sage-dim text-white text-xs font-semibold shadow-xs transition cursor-pointer"
+          >
+            返回岗位工作台
+          </button>
+        ) : (
+          <button
+            onClick={() => navigateTo('jd_analysis_center')}
+            className="px-4 py-2 rounded-lg bg-sage hover:bg-sage-dim text-white text-xs font-semibold shadow-xs transition cursor-pointer"
+          >
+            去分析岗位
+          </button>
+        )}
+      </div>
+    );
   }
 
   const handleStartEditBullet = (bulletId: string, currentText: string) => {
