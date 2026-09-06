@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useJobCraft } from '../../context/JobCraftContext';
 import type { Experience } from '../../types/jobcraft';
+import { saveResume } from '../../api/job';
 import {
   ArrowLeft,
   ArrowRight,
@@ -257,7 +258,7 @@ export const JDReportDetailView: React.FC<JDReportDetailViewProps> = ({
           const selectedIds = (currentAnalysis.recommendedExperiences || [])
             .map(r => parseInt(r.experienceId))
             .filter(id => !isNaN(id));
-          const result = await jobApi.saveResume({
+          const result = await saveResume({
             job_analysis_id: parseInt(currentAnalysis.id),
             selected_card_ids: selectedIds.length > 0 ? selectedIds : experiences.map(e => parseInt(e.id)).filter(id => !isNaN(id)),
           });
@@ -274,12 +275,6 @@ export const JDReportDetailView: React.FC<JDReportDetailViewProps> = ({
                 ...prev,
                 [String(result.submission_id)]: resumeVersion,
               }));
-            }
-            // 更新 job 的 resumeId
-            if (matchedJob) {
-              setJobs(prev => prev.map(j =>
-                j.id === matchedJob.id ? { ...j, steps: { ...j.steps, customResume: true } } : j
-              ));
             }
           }
         } catch (err) {

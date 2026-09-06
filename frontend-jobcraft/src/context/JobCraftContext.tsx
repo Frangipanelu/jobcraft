@@ -550,18 +550,19 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
         authApi.getCurrentUser(),
         authApi.getProfile().catch(() => ({})),
       ])
+      const pd = profileData as Record<string, unknown>
       setUser({
-        name: (profileData.display_name as string) || authUser.display_name || authUser.username,
-        avatarUrl: (profileData.avatar_url as string) || '',
-        role: (profileData.role as string) || '求职者',
-        targetSalary: (profileData.target_salary as string) || '',
-        yearsOfExp: (profileData.years_of_exp as number) || 0,
-        city: (profileData.city as string) || '',
-        email: (profileData.email as string) || authUser.email || '',
-        phone: (profileData.phone as string) || '',
-        summary: (profileData.summary as string) || '',
-        targetRoles: (profileData.target_roles as string[]) || [],
-        targetCompanies: (profileData.target_companies as string[]) || [],
+        name: (pd.display_name as string) || authUser.display_name || authUser.username,
+        avatarUrl: (pd.avatar_url as string) || '',
+        role: (pd.role as string) || '求职者',
+        targetSalary: (pd.target_salary as string) || '',
+        yearsOfExp: (pd.years_of_exp as number) || 0,
+        city: (pd.city as string) || '',
+        email: (pd.email as string) || authUser.email || '',
+        phone: (pd.phone as string) || '',
+        summary: (pd.summary as string) || '',
+        targetRoles: (pd.target_roles as string[]) || [],
+        targetCompanies: (pd.target_companies as string[]) || [],
       })
     } catch {
       // 用户信息获取失败，使用默认值
@@ -720,7 +721,7 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
               : (detail.gap_analysis as string) || '待分析'
 
             return {
-              id: String(detail.id || detail.job_analysis_id),
+              id: String(detail.job_analysis_id),
               company: detail.company || '',
               role: detail.position || '',
               rawText: detail.jd_text || '',

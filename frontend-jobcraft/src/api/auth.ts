@@ -16,6 +16,7 @@ export interface UserProfile {
   id: number
   username: string
   display_name: string | null
+  email: string | null
   role: string
   created_at: string
 }

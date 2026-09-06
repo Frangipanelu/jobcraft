@@ -346,6 +346,7 @@ export interface DashboardItem {
 // ============================================================
 
 export interface SaveResumeResult {
+  submission_id?: number
   file_path: string
   file_name: string
   size_bytes: number

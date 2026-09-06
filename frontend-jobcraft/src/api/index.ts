@@ -5,6 +5,6 @@
 export * from './client'
 export * from './types'
 export * from './auth'
-export * from './experience'
+export { uploadResume } from './experience'
 export * from './job'
 export * from './interview'
