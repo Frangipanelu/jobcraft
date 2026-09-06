@@ -171,6 +171,42 @@ def list_submissions(user_id: int = 1, limit: int = 50) -> List[Dict[str, Any]]:
     return result
 
 
+def get_submission_by_analysis(
+    job_analysis_id: int, user_id: Optional[int] = None
+) -> Optional[Dict[str, Any]]:
+    """根据 job_analysis_id 查找已存在的投递记录"""
+    _ensure_resume_submission_table()
+    sql = "SELECT * FROM resume_submission WHERE job_analysis_id=%s"
+    params: List[Any] = [job_analysis_id]
+    if user_id is not None:
+        sql += " AND user_id=%s"
+        params.append(user_id)
+    sql += " ORDER BY id DESC LIMIT 1"
+    row = query_one(sql, tuple(params))
+    if not row:
+        return None
+    return {
+        "id": row["id"],
+        "user_id": row["user_id"],
+        "job_analysis_id": row["job_analysis_id"],
+        "position": row["position"],
+        "company": row["company"],
+        "jd_text": row["jd_text"] or "",
+        "resume_markdown": row["resume_markdown"] or "",
+        "resume_file_path": row["resume_file_path"] or "",
+        "card_version_ids": json.loads(row["card_version_ids"] or "[]"),
+        "status": row["status"],
+        "notes": row["notes"] or "",
+        "is_manual": row.get("is_manual", 0),
+        "created_at": row["created_at"].isoformat()
+        if row.get("created_at")
+        else None,
+        "updated_at": row["updated_at"].isoformat()
+        if row.get("updated_at")
+        else None,
+    }
+
+
 def update_submission(
     submission_id: int, updates: Dict[str, Any], user_id: Optional[int] = None
 ) -> bool:
@@ -290,9 +326,6 @@ def get_dashboard(user_id: int = 1) -> List[Dict[str, Any]]:
         full = get_submission(s["id"])
         if not full:
             continue
-        # 只展示已有简历的投递（投递记录 = 简历已生成）
-        if not full.get("resume_markdown"):
-            continue
         sid = s["id"]
         ja_id = s.get("job_analysis_id")
         cv_count = 0
@@ -309,7 +342,7 @@ def get_dashboard(user_id: int = 1) -> List[Dict[str, Any]]:
                 "has_analysis": ja_id is not None,
                 "card_version_count": cv_count,
                 "card_count": card_count,
-                "has_resume": True,
+                "has_resume": bool(full.get("resume_markdown")),
                 "is_manual": full.get("is_manual", False),
                 "prep_count": get_submission_prep_count(sid),
                 "review_count": get_submission_review_count(sid),
