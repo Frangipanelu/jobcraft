@@ -243,10 +243,31 @@ export const JDReportDetailView: React.FC<JDReportDetailViewProps> = ({
     }
   };
 
-  const handleGoToResume = () => {
+  const handleGoToResume = async () => {
     if (onNavigateToResume) {
       onNavigateToResume();
     } else if (matchedJob) {
+      // 检查是否已有简历，没有则先生成
+      if (!matchedJob.steps.customResume && currentAnalysis) {
+        showToast({ type: 'info', title: '正在生成简历...', message: 'AI 正在根据经历卡和岗位要求生成匹配简历' });
+        try {
+          const selectedIds = (currentAnalysis.recommendedExperiences || [])
+            .map(r => parseInt(r.experienceId))
+            .filter(id => !isNaN(id));
+          const result = await jobApi.saveResume({
+            job_analysis_id: parseInt(currentAnalysis.id),
+            selected_card_ids: selectedIds.length > 0 ? selectedIds : experiences.map(e => parseInt(e.id)).filter(id => !isNaN(id)),
+          });
+          if (result.resume_markdown) {
+            // 更新 job 的 resumeId
+            setJobs(prev => prev.map(j =>
+              j.id === matchedJob.id ? { ...j, steps: { ...j.steps, customResume: true } } : j
+            ));
+          }
+        } catch (err) {
+          console.error('Resume generation failed:', err);
+        }
+      }
       setSelectedJobId(matchedJob.id);
       navigateTo('resume_editor', { jobId: matchedJob.id });
     } else {

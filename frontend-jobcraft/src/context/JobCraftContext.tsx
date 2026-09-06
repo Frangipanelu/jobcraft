@@ -164,6 +164,7 @@ interface JobCraftContextType {
   logout: () => void;
   currentUserId: number;
   loadExperiences: (userId: number) => Promise<void>;
+  loadJdAnalyses: (userId: number) => Promise<void>;
 
   // Actions
   showToast: (toast: Omit<ToastMessage, 'id'>) => void;
@@ -570,7 +571,8 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
     await Promise.all([
       loadDashboard(userId),
       loadExperiences(userId),
-      loadInterviews(userId)
+      loadInterviews(userId),
+      loadJdAnalyses(userId)
     ])
   }
 
@@ -679,6 +681,54 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
       setExperiences(cards.map(cardToExperience))
     } catch (error) {
       console.error('Load experiences failed:', error)
+    }
+  }
+
+  const loadJdAnalyses = async (userId: number) => {
+    try {
+      const data = await jobApi.listJobAnalyses(userId)
+      const analyses = (data.analyses || []).map((a: Record<string, unknown>) => ({
+        id: String(a.id || a.job_analysis_id),
+        company: a.company || '',
+        role: a.position || a.role || '',
+        rawText: a.jd_text || '',
+        matchScore: a.match_score || 0,
+        recommendationStars: Math.round((a.match_score || 0) / 20),
+        verdictSummary: a.gap_analysis || '',
+        whyMatch: a.match_level || '',
+        keyRisks: '',
+        resumeAdvice: [],
+        coreRequirements: [
+          { category: '核心职责', items: a.responsibilities || [] },
+          { category: '任职资格', items: [...(a.hard_skills || []), ...(a.soft_skills || [])] }
+        ],
+        atsKeywords: {
+          hardSkills: a.hard_skills || [],
+          softSkills: a.soft_skills || [],
+          expKeywords: a.keywords || [],
+          coveragePercent: Math.round(a.match_score || 0)
+        },
+        subtextAnalysis: [],
+        skillGaps: (a.gap_items || []).map((item: string, idx: number) => ({
+          id: `gap-${idx}`,
+          capability: item,
+          userEvidence: '',
+          requirement: item,
+          gap: '待补充',
+          recommendation: ''
+        })),
+        recommendedExperiences: (a.per_card_scores || []).map((ps: Record<string, unknown>) => ({
+          experienceId: String(ps.card_id),
+          matchScore: ps.score || 0,
+          matchingJDReq: (ps.matched || []).join(', '),
+          reason: (ps.missing || []).join(', ')
+        })),
+        createdAt: a.created_at || '',
+        jobId: a.job_id ? String(a.job_id) : undefined
+      }))
+      setJdAnalyses(analyses)
+    } catch (error) {
+      console.error('Load JD analyses failed:', error)
     }
   }
 
@@ -2016,7 +2066,8 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
         register,
         logout,
         currentUserId,
-        loadExperiences
+        loadExperiences,
+        loadJdAnalyses
       }}
     >
       {children}
