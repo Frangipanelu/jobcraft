@@ -83,6 +83,8 @@ export const UserProfileView: React.FC = () => {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [lastUploadedFileName, setLastUploadedFileName] = useState('');
+  const [lastUploadedFileSize, setLastUploadedFileSize] = useState(0);
 
   // Preview modal state
   const [showPreview, setShowPreview] = useState(false);
@@ -165,6 +167,8 @@ export const UserProfileView: React.FC = () => {
     const file = e.target.files?.[0];
     if (!file) return;
     setUploadError('');
+    setLastUploadedFileName(file.name);
+    setLastUploadedFileSize(file.size);
     setIsUploading(true);
     try {
       const result = await jobApi.previewResume(file);
@@ -200,6 +204,17 @@ export const UserProfileView: React.FC = () => {
     try {
       const result = await jobApi.confirmUpload(previewItems, previewRawText || undefined);
       const count = result.cards?.length || 0;
+
+      // 同步更新历史简历列表
+      addHistoricalResume({
+        name: lastUploadedFileName || '上传简历',
+        fileSize: `${(lastUploadedFileSize / 1024 / 1024).toFixed(1)} MB`,
+        isDefault: historicalResumes.length === 0,
+        parsedExperiencesCount: count,
+        format: lastUploadedFileName?.endsWith('.pdf') ? 'pdf' : 'docx',
+        tags: count > 0 ? ['已解析', 'AI 结构化'] : ['已上传']
+      });
+
       showToast({
         type: 'success',
         title: '简历导入成功',

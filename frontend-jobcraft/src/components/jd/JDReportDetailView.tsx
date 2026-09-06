@@ -55,6 +55,7 @@ export const JDReportDetailView: React.FC<JDReportDetailViewProps> = ({
     jdAnalyses,
     jobs,
     experiences,
+    isLoading,
     setSelectedJobId,
     setSelectedJDId,
     jdAnalysisReturnTarget,
@@ -64,6 +65,18 @@ export const JDReportDetailView: React.FC<JDReportDetailViewProps> = ({
   } = useJobCraft();
 
   const [isReanalyzing, setIsReanalyzing] = useState(false);
+
+  // 加载中时显示 loading 状态
+  if (isLoading && !jdAnalyses.length) {
+    return (
+      <div className="min-h-full bg-white pb-24 flex items-center justify-center">
+        <div className="text-center space-y-3">
+          <div className="w-8 h-8 border-2 border-sage border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-xs text-muted">分析数据加载中...</p>
+        </div>
+      </div>
+    );
+  }
 
   const currentAnalysis =
     jdAnalyses.find((a) => a.id === analysisId) || jdAnalyses[0];
@@ -83,8 +96,8 @@ export const JDReportDetailView: React.FC<JDReportDetailViewProps> = ({
     ability: g.capability,
     requirement: g.requirement || '',
     evidence: g.userEvidence || '',
-    score: 0,
-    level: '待分析' as const
+    score: g.gap === '已匹配' ? 100 : 0,
+    level: g.gap === '已匹配' ? '高度匹配' as const : '待补充' as const
   }));
 
   const atsGrouped = {

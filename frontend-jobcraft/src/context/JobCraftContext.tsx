@@ -311,14 +311,31 @@ function analysisToJD(result: JobAnalysisResult, jobId?: string): JDAnalysis {
       coveragePercent: Math.round(result.match_score || 0)
     },
     subtextAnalysis: [],
-    skillGaps: result.gap_items?.map((item, idx) => ({
-      id: `gap-${idx}`,
-      capability: item,
-      userEvidence: '',
-      requirement: '',
-      gap: '待分析',
-      recommendation: ''
-    })) || [],
+    skillGaps: (() => {
+      // 从 jd_requirements 获取所有技能要求
+      const allSkills = [
+        ...(result.jd_requirements?.hard_skills || []),
+        ...(result.jd_requirements?.soft_skills || []),
+        ...(result.jd_requirements?.keywords || [])
+      ];
+      // 从 per_card_scores 获取已匹配的技能
+      const matchedSkills = new Set<string>();
+      (result.per_card_scores || []).forEach(ps => {
+        (ps.matched || []).forEach(s => matchedSkills.add(s));
+      });
+      // 构建能力匹配列表
+      return allSkills.map((skill, idx) => {
+        const isMatched = matchedSkills.has(skill);
+        return {
+          id: `skill-${idx}`,
+          capability: skill,
+          userEvidence: isMatched ? '经历卡已覆盖' : '',
+          requirement: skill,
+          gap: isMatched ? '已匹配' : '待补充',
+          recommendation: isMatched ? '' : '建议补充相关经历或调整表述'
+        };
+      });
+    })(),
     recommendedExperiences: result.per_card_scores?.map(ps => ({
       experienceId: String(ps.card_id),
       matchScore: ps.score,
