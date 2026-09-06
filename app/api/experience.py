@@ -83,21 +83,46 @@ async def jobcraft_experience_upload_preview(
     if entries:
         preview_items = []
         for ent in entries:
-            # 从 achievements 构建 raw_text
+            # 从 achievements 构建可读的 raw_text
             achievements = ent.get("achievements", [])
             bullets = []
             for a in achievements:
                 if isinstance(a, dict):
-                    bullets.append(a.get("text", "") or a.get("description", "") or str(a))
-                else:
-                    bullets.append(str(a))
-            raw_text_parts = [
-                ent.get("summary", ""),
-                ent.get("role", ""),
-                ent.get("company", ""),
-                ent.get("period", ""),
-            ] + [b for b in bullets if b]
-            raw_text = "\n".join(p for p in raw_text_parts if p)
+                    # 提取可读文本，避免输出 JSON
+                    parts = []
+                    if a.get("title"):
+                        parts.append(f"【{a['title']}】")
+                    if a.get("situation"):
+                        parts.append(f"背景：{a['situation']}")
+                    if isinstance(a.get("action"), dict) and a["action"].get("main"):
+                        parts.append(f"行动：{a['action']['main']}")
+                    elif a.get("action"):
+                        parts.append(f"行动：{a['action']}")
+                    if a.get("result"):
+                        parts.append(f"结果：{a['result']}")
+                    if parts:
+                        bullets.append(" ".join(parts))
+                    elif a.get("text"):
+                        bullets.append(a["text"])
+                    elif a.get("description"):
+                        bullets.append(a["description"])
+                elif isinstance(a, str) and a.strip():
+                    bullets.append(a.strip())
+
+            raw_text_parts = []
+            if ent.get("summary"):
+                raw_text_parts.append(ent["summary"])
+            if ent.get("company"):
+                raw_text_parts.append(f"公司：{ent['company']}")
+            if ent.get("role"):
+                raw_text_parts.append(f"岗位：{ent['role']}")
+            if ent.get("period"):
+                raw_text_parts.append(f"时间：{ent['period']}")
+            if bullets:
+                raw_text_parts.append("工作内容：")
+                raw_text_parts.extend(f"- {b}" for b in bullets)
+
+            raw_text = "\n".join(raw_text_parts)
 
             preview_items.append({
                 "title": ent.get("title") or ent.get("role") or ent.get("company") or "未命名经历",
@@ -130,10 +155,11 @@ async def jobcraft_experience_upload_confirm(
         for item in payload.items:
             if not item.get("selected", True):
                 continue
+            raw_text = item.get("raw_text") or payload.raw_text or ""
             card_data = {
                 "user_id": current_user,
                 "title": item.get("title") or "未命名经历",
-                "raw_text": item.get("raw_text") or payload.raw_text or "",
+                "raw_text": raw_text,
                 "company": item.get("company", ""),
                 "role": item.get("role", ""),
                 "period": item.get("period", ""),
@@ -142,6 +168,23 @@ async def jobcraft_experience_upload_confirm(
                 "tags": [],
             }
             card_id = db_tools.insert_card(card_data)
+
+            # AI 结构化抽取
+            if raw_text and len(raw_text.strip()) >= 20:
+                try:
+                    from app.workflows.extract_flow import (
+                        run_extract_structured_workflow,
+                        run_recommend_tags_workflow,
+                    )
+                    cache = run_extract_structured_workflow(raw_text.strip())
+                    if cache:
+                        db_tools.update_card(card_id, {"ai_structured": cache}, current_user)
+                    tags = run_recommend_tags_workflow(raw_text.strip())
+                    if tags:
+                        db_tools.update_card(card_id, {"tags": tags}, current_user)
+                except Exception:
+                    logger.warning("AI 结构化抽取失败，卡片 id=%s", card_id)
+
             card = db_tools.get_card(card_id, current_user)
             if card:
                 created_cards.append(card)
