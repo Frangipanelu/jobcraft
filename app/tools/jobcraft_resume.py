@@ -92,6 +92,7 @@ def generate_resume(
         db_tools.upsert_job_mapping(job_analysis_id, c["id"])
 
     # 保存到 resume_submission（确保 Dashboard 刷新后仍可见）
+    submission_id = None
     try:
         from app.tools.db_submission import (
             get_submission_by_analysis,
@@ -106,8 +107,9 @@ def generate_resume(
                 "card_version_ids": selected_card_ids,
                 "status": "APPLIED",
             })
+            submission_id = sub["id"]
         else:
-            insert_submission({
+            submission_id = insert_submission({
                 "user_id": user_id,
                 "job_analysis_id": job_analysis_id,
                 "position": position,
@@ -123,6 +125,7 @@ def generate_resume(
 
     return {
         "job_analysis_id": job_analysis_id,
+        "submission_id": submission_id,
         "resume_path": str(md_path),
         "resume_markdown": md,
         "resume_html": html,

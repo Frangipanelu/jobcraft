@@ -55,9 +55,11 @@ export const JDReportDetailView: React.FC<JDReportDetailViewProps> = ({
     jdAnalyses,
     jobs,
     experiences,
+    resumes,
     isLoading,
     setSelectedJobId,
     setSelectedJDId,
+    setResumes,
     jdAnalysisReturnTarget,
     setJdAnalysisReturnTarget,
     navigateTo,
@@ -169,7 +171,7 @@ export const JDReportDetailView: React.FC<JDReportDetailViewProps> = ({
       risk: currentAnalysis?.keyRisks || '待分析',
       suggestions: currentAnalysis?.resumeAdvice || []
     },
-    goal: '待分析',
+    goal: currentAnalysis?.goal || '待分析',
     responsibilities,
     competencyMatch,
     atsGrouped,
@@ -246,9 +248,10 @@ export const JDReportDetailView: React.FC<JDReportDetailViewProps> = ({
   const handleGoToResume = async () => {
     if (onNavigateToResume) {
       onNavigateToResume();
-    } else if (matchedJob) {
+    } else if (currentAnalysis) {
       // 检查是否已有简历，没有则先生成
-      if (!matchedJob.steps.customResume && currentAnalysis) {
+      const hasResume = matchedJob?.steps.customResume;
+      if (!hasResume) {
         showToast({ type: 'info', title: '正在生成简历...', message: 'AI 正在根据经历卡和岗位要求生成匹配简历' });
         try {
           const selectedIds = (currentAnalysis.recommendedExperiences || [])
@@ -258,18 +261,38 @@ export const JDReportDetailView: React.FC<JDReportDetailViewProps> = ({
             job_analysis_id: parseInt(currentAnalysis.id),
             selected_card_ids: selectedIds.length > 0 ? selectedIds : experiences.map(e => parseInt(e.id)).filter(id => !isNaN(id)),
           });
-          if (result.resume_markdown) {
+          if (result.resume_markdown && result.submission_id) {
+            // 将生成的简历添加到 resumes 状态
+            const { markdownToResume } = await import('../../utils/resumeParser');
+            const resumeVersion = markdownToResume(result.resume_markdown, {
+              position: currentAnalysis.role,
+              company: currentAnalysis.company,
+              id: String(result.submission_id),
+            });
+            if (resumeVersion) {
+              setResumes(prev => ({
+                ...prev,
+                [String(result.submission_id)]: resumeVersion,
+              }));
+            }
             // 更新 job 的 resumeId
-            setJobs(prev => prev.map(j =>
-              j.id === matchedJob.id ? { ...j, steps: { ...j.steps, customResume: true } } : j
-            ));
+            if (matchedJob) {
+              setJobs(prev => prev.map(j =>
+                j.id === matchedJob.id ? { ...j, steps: { ...j.steps, customResume: true } } : j
+              ));
+            }
           }
         } catch (err) {
           console.error('Resume generation failed:', err);
+          showToast({ type: 'error', title: '生成简历失败', message: '请稍后重试' });
+          return;
         }
       }
-      setSelectedJobId(matchedJob.id);
-      navigateTo('resume_editor', { jobId: matchedJob.id });
+      const targetJobId = matchedJob?.id || currentAnalysis.jobId;
+      if (targetJobId) {
+        setSelectedJobId(targetJobId);
+      }
+      navigateTo('resume_editor', { jobId: targetJobId });
     } else {
       navigateTo('resume_editor');
     }

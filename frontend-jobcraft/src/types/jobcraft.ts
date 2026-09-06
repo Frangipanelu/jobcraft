@@ -115,6 +115,7 @@ export interface JDAnalysis {
     gap: string;
     recommendation: string;
   }[];
+  goal?: string;
   recommendedExperiences: {
     experienceId: string;
     matchScore: number;

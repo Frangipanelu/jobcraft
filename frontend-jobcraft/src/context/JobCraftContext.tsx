@@ -693,6 +693,32 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
         summaries.map(async (s: Record<string, unknown>) => {
           try {
             const detail = await jobApi.getJobAnalysis(Number(s.id || s.job_analysis_id))
+            const jdReq = (detail.jd_requirements || {}) as Record<string, unknown>
+            const hardSkills = (jdReq.hard_skills as string[]) || []
+            const softSkills = (jdReq.soft_skills as string[]) || []
+            const responsibilities = (jdReq.responsibilities as string[]) || []
+            const dimReqs = (detail.dimension_requirements || []) as Array<{ dimension: string; level: number; evidence: string }>
+
+            // 从 dimension_requirements 构建能力匹配数据
+            const allSkills = [...hardSkills, ...softSkills]
+            const skillGaps = allSkills.map((skill: string, idx: number) => {
+              // 尝试从 dimension_requirements 匹配证据
+              const matchedDim = dimReqs.find(d => d.evidence && d.evidence.includes(skill))
+              return {
+                id: `skill-${idx}`,
+                capability: skill,
+                userEvidence: matchedDim?.evidence || '',
+                requirement: skill,
+                gap: matchedDim && matchedDim.level >= 3 ? '已匹配' : '待补充',
+                recommendation: ''
+              }
+            })
+
+            // 从 dimension_requirements 构建岗位目标
+            const goalText = dimReqs.length > 0
+              ? dimReqs.map(d => d.evidence).filter(Boolean).join('；')
+              : (detail.gap_analysis as string) || '待分析'
+
             return {
               id: String(detail.id || detail.job_analysis_id),
               company: detail.company || '',
@@ -705,24 +731,18 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
               keyRisks: '',
               resumeAdvice: [],
               coreRequirements: [
-                { category: '核心职责', items: (detail.jd_requirements as Record<string, unknown>)?.responsibilities as string[] || [] },
-                { category: '任职资格', items: [...((detail.jd_requirements as Record<string, unknown>)?.hard_skills as string[] || []), ...((detail.jd_requirements as Record<string, unknown>)?.soft_skills as string[] || [])] }
+                { category: '核心职责', items: responsibilities },
+                { category: '任职资格', items: allSkills }
               ],
               atsKeywords: {
-                hardSkills: (detail.jd_requirements as Record<string, unknown>)?.hard_skills as string[] || [],
-                softSkills: (detail.jd_requirements as Record<string, unknown>)?.soft_skills as string[] || [],
-                expKeywords: (detail.jd_requirements as Record<string, unknown>)?.keywords as string[] || [],
+                hardSkills,
+                softSkills,
+                expKeywords: (jdReq.keywords as string[]) || [],
                 coveragePercent: Math.round(detail.match_score || 0)
               },
               subtextAnalysis: [],
-              skillGaps: ((detail.jd_requirements as Record<string, unknown>)?.hard_skills as string[] || []).concat((detail.jd_requirements as Record<string, unknown>)?.soft_skills as string[] || []).map((skill: string, idx: number) => ({
-                id: `skill-${idx}`,
-                capability: skill,
-                userEvidence: '',
-                requirement: skill,
-                gap: '待补充',
-                recommendation: ''
-              })),
+              skillGaps,
+              goal: goalText,
               recommendedExperiences: [],
               createdAt: detail.created_at || '',
               jobId: undefined
