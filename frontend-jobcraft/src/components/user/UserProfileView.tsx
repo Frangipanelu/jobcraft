@@ -92,6 +92,7 @@ export const UserProfileView: React.FC = () => {
   const [previewRawText, setPreviewRawText] = useState('');
   const [previewMode, setPreviewMode] = useState<'structured' | 'raw'>('structured');
   const [isConfirming, setIsConfirming] = useState(false);
+  const [expandedPreviewIdx, setExpandedPreviewIdx] = useState<number | null>(null);
 
   // Settings state
   const [modelInfo, setModelInfo] = useState<{ model_name: string; provider: string; status: string } | null>(null);
@@ -697,9 +698,9 @@ export const UserProfileView: React.FC = () => {
             <div className="flex-1 overflow-y-auto px-6 py-4 space-y-3">
               {previewMode === 'structured' ? (
                 previewItems.map((item, idx) => (
-                  <label
+                  <div
                     key={idx}
-                    className={`block p-4 rounded-xl border transition cursor-pointer ${
+                    className={`block p-4 rounded-xl border transition ${
                       item.selected ? 'border-sage bg-sage-soft/30' : 'border-edge bg-white hover:border-edge-deep'
                     }`}
                   >
@@ -711,17 +712,34 @@ export const UserProfileView: React.FC = () => {
                         className="mt-1 accent-sage"
                       />
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1">
+                        <div
+                          className="flex items-center gap-2 mb-1 cursor-pointer"
+                          onClick={() => setExpandedPreviewIdx(expandedPreviewIdx === idx ? null : idx)}
+                        >
                           <span className="text-xs font-bold text-ink">{item.title}</span>
                           {item.company && <span className="text-[11px] text-muted">@ {item.company}</span>}
                           {item.role && <span className="text-[11px] text-muted">· {item.role}</span>}
+                          <span className="text-[10px] text-muted ml-auto">{expandedPreviewIdx === idx ? '收起' : '展开'}</span>
                         </div>
-                        {item.raw_text && (
-                          <p className="text-[11px] text-muted leading-relaxed line-clamp-3">{item.raw_text}</p>
+                        {expandedPreviewIdx === idx ? (
+                          <div className="mt-2 p-3 bg-page rounded-lg">
+                            {item.summary && <p className="text-[11px] text-ink mb-2"><span className="font-bold">概要：</span>{item.summary}</p>}
+                            {item.period && <p className="text-[11px] text-muted mb-1"><span className="font-bold">时间：</span>{item.period}</p>}
+                            {item.raw_text && (
+                              <div className="mt-2">
+                                <p className="text-[11px] font-bold text-ink mb-1">详细内容：</p>
+                                <p className="text-[11px] text-muted leading-relaxed whitespace-pre-wrap">{item.raw_text}</p>
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          item.raw_text && (
+                            <p className="text-[11px] text-muted leading-relaxed line-clamp-2">{item.raw_text}</p>
+                          )
                         )}
                       </div>
                     </div>
-                  </label>
+                  </div>
                 ))
               ) : (
                 <div>

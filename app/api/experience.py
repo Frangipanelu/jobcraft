@@ -83,13 +83,29 @@ async def jobcraft_experience_upload_preview(
     if entries:
         preview_items = []
         for ent in entries:
+            # 从 achievements 构建 raw_text
+            achievements = ent.get("achievements", [])
+            bullets = []
+            for a in achievements:
+                if isinstance(a, dict):
+                    bullets.append(a.get("text", "") or a.get("description", "") or str(a))
+                else:
+                    bullets.append(str(a))
+            raw_text_parts = [
+                ent.get("summary", ""),
+                ent.get("role", ""),
+                ent.get("company", ""),
+                ent.get("period", ""),
+            ] + [b for b in bullets if b]
+            raw_text = "\n".join(p for p in raw_text_parts if p)
+
             preview_items.append({
                 "title": ent.get("title") or ent.get("role") or ent.get("company") or "未命名经历",
                 "company": ent.get("company", ""),
                 "role": ent.get("role", ""),
                 "period": ent.get("period", ""),
                 "card_type": ent.get("card_type", "work"),
-                "raw_text": ent.get("raw_text", ""),
+                "raw_text": raw_text,
                 "summary": ent.get("summary", ""),
                 "selected": True,  # 默认选中
             })
