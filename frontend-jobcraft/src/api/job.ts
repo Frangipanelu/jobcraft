@@ -19,6 +19,12 @@ import type {
 // 岗位分析
 // ============================================================
 
+export async function uploadResume(file: File): Promise<{ cards: ExperienceCard[] }> {
+  const formData = new FormData()
+  formData.append('file', file)
+  return requestFormData<{ cards: ExperienceCard[] }>('/api/jobcraft/experience/upload', formData)
+}
+
 export async function analyzeJob(payload: {
   position: string
   company: string

@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useJobCraft } from '../../context/JobCraftContext';
+import { uploadResume } from '../../api/job';
 import {
   FileText,
   User,
@@ -75,9 +76,10 @@ export const UserProfileView: React.FC = () => {
   const [targetCompanies, setTargetCompanies] = useState<string[]>(user.targetCompanies || ['字节跳动', '腾讯', '阿里巴巴', '头部AI创企']);
   const [newCompanyInput, setNewCompanyInput] = useState('');
 
-  // Upload modal state
+  // Upload state
   const [isUploading, setIsUploading] = useState(false);
-  const [uploadFileName, setUploadFileName] = useState('');
+  const [uploadError, setUploadError] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleSaveProfile = (e: React.FormEvent) => {
     e.preventDefault();
@@ -112,21 +114,37 @@ export const UserProfileView: React.FC = () => {
     updateUserProfile({ targetCompanies: updated });
   };
 
-  const handleSimulateUpload = () => {
-    if (!uploadFileName.trim()) return;
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadError('');
     setIsUploading(true);
-    setTimeout(() => {
-      addHistoricalResume({
-        name: uploadFileName.endsWith('.pdf') ? uploadFileName : uploadFileName + '.pdf',
-        fileSize: '1.2 MB',
-        isDefault: historicalResumes.length === 0,
-        parsedExperiencesCount: 4,
-        format: 'pdf',
-        tags: ['新导入', '已完成STAR结构化']
-      });
+    try {
+      const result = await uploadResume(file);
+      const count = result.cards?.length || 0;
+      if (count > 0) {
+        showToast({
+          type: 'success',
+          title: '简历解析成功',
+          message: `已从简历中提取 ${count} 段经历，自动存入经历资产库。`
+        });
+      } else {
+        showToast({
+          type: 'info',
+          title: '简历已上传',
+          message: '文件已保存，但未自动提取出结构化经历，请手动补充。'
+        });
+      }
+      // 刷新经历卡列表
+      loadExperiences(currentUserId);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : '上传失败，请检查文件格式后重试';
+      setUploadError(msg);
+      showToast({ type: 'error', title: '上传失败', message: msg });
+    } finally {
       setIsUploading(false);
-      setUploadFileName('');
-    }, 800);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
   };
 
   return (
@@ -243,20 +261,23 @@ export const UserProfileView: React.FC = () => {
 
             <div className="flex items-center gap-2 w-full md:w-auto">
               <input
-                type="text"
-                placeholder="简历名称 (如: 2026_AI产品_V4.pdf)"
-                value={uploadFileName}
-                onChange={(e) => setUploadFileName(e.target.value)}
-                className="px-3 py-2 text-xs rounded-lg border border-edge bg-white text-ink focus:border-sage focus:outline-none w-full md:w-60"
+                ref={fileInputRef}
+                type="file"
+                accept=".pdf,.docx,.doc,.md,.txt"
+                onChange={handleFileUpload}
+                className="hidden"
+                id="resume-upload-input"
               />
-              <button
-                onClick={handleSimulateUpload}
-                disabled={isUploading || !uploadFileName.trim()}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-sage hover:bg-sage-dim disabled:opacity-50 text-white text-xs font-semibold shadow-xs transition shrink-0 cursor-pointer"
+              <label
+                htmlFor="resume-upload-input"
+                className={`flex items-center gap-1.5 px-4 py-2 rounded-lg bg-sage hover:bg-sage-dim disabled:opacity-50 text-white text-xs font-semibold shadow-xs transition shrink-0 cursor-pointer ${isUploading ? 'opacity-60 pointer-events-none' : ''}`}
               >
                 <Upload className="w-3.5 h-3.5" />
-                <span>{isUploading ? '解析中...' : '上传并解析'}</span>
-              </button>
+                <span>{isUploading ? '解析中...' : '选择文件上传'}</span>
+              </label>
+              {uploadError && (
+                <span className="text-xs text-red-500 ml-2">{uploadError}</span>
+              )}
             </div>
           </div>
 
