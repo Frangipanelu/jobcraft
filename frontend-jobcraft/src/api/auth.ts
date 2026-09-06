@@ -94,6 +94,18 @@ export async function updateProfile(updates: Record<string, unknown>): Promise<R
 }
 
 /**
+ * 获取系统设置（模型信息等）
+ */
+export async function getSettings(): Promise<{
+  model_id: string;
+  model_name: string;
+  provider: string;
+  status: string;
+}> {
+  return request('/api/auth/settings')
+}
+
+/**
  * 登出
  */
 export function logout() {

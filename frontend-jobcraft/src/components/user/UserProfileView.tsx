@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useJobCraft } from '../../context/JobCraftContext';
 import { uploadResume } from '../../api/job';
+import * as authApi from '../../api/auth';
 import {
   FileText,
   User,
@@ -81,6 +82,43 @@ export const UserProfileView: React.FC = () => {
   const [uploadError, setUploadError] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Settings state
+  const [modelInfo, setModelInfo] = useState<{ model_name: string; provider: string; status: string } | null>(null);
+
+  useEffect(() => {
+    authApi.getSettings().then(setModelInfo).catch(() => {});
+  }, []);
+
+  const handleExportData = async () => {
+    try {
+      const token = localStorage.getItem('jobcraft_token');
+      const res = await fetch('/api/auth/export', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error('导出失败');
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `jobcraft_export_${currentUserId}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      showToast({
+        type: 'success',
+        title: '导出成功',
+        message: '全量数据包已下载。'
+      });
+    } catch {
+      showToast({
+        type: 'error',
+        title: '导出失败',
+        message: '请稍后重试。'
+      });
+    }
+  };
+
   const handleSaveProfile = (e: React.FormEvent) => {
     e.preventDefault();
     updateUserProfile(profileForm);
@@ -153,7 +191,7 @@ export const UserProfileView: React.FC = () => {
       <div className="bg-white rounded-2xl border border-edge p-6 md:p-8 shadow-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
         <div className="flex items-center gap-5">
           <div className="w-16 h-16 rounded-full bg-sage text-white flex items-center justify-center font-bold text-2xl shadow-sm ring-4 ring-sage-soft">
-            菁
+            {(user.name || '用').charAt(0)}
           </div>
           <div className="space-y-1">
             <div className="flex items-center gap-3">
@@ -574,26 +612,24 @@ export const UserProfileView: React.FC = () => {
             <div className="p-4 rounded-xl bg-page border border-edge flex items-center justify-between">
               <div>
                 <div className="text-xs font-bold text-ink">当前推理模型</div>
-                <div className="text-[11px] text-muted mt-0.5">Gemini 2.5 Pro (深度长上下文与岗位经历反哺匹配)</div>
+                <div className="text-[11px] text-muted mt-0.5">
+                  {modelInfo ? `${modelInfo.model_name}（${modelInfo.provider}）` : '加载中...'}
+                </div>
               </div>
-              <span className="px-2.5 py-1 rounded bg-sage-soft text-sage text-xs font-bold">运行正常</span>
+              <span className="px-2.5 py-1 rounded bg-sage-soft text-sage text-xs font-bold">
+                {modelInfo?.status === 'running' ? '运行正常' : '加载中'}
+              </span>
             </div>
           </div>
 
           <div className="space-y-4 pt-4 border-t border-edge">
             <h3 className="text-sm font-bold text-ink">数据资产备份与导出</h3>
             <p className="text-xs text-muted">
-              您可以随时将经历资产库、岗位研判记录与模拟面试题库完整打包导出为 Markdown 或 JSON 格式。
+              您可以随时将经历资产库、岗位研判记录与模拟面试题库完整打包导出为 JSON 格式。
             </p>
             <button
-              onClick={() =>
-                showToast({
-                  type: 'success',
-                  title: '导出成功',
-                  message: '已成功打包 JobCraft 全量职业资产数据包。'
-                })
-              }
-              className="px-4 py-2 rounded-lg border border-edge hover:bg-page text-xs font-semibold text-ink transition"
+              onClick={handleExportData}
+              className="px-4 py-2 rounded-lg border border-edge hover:bg-page text-xs font-semibold text-ink transition cursor-pointer"
             >
               导出全量数据包 (.JSON)
             </button>
