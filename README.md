@@ -7,7 +7,7 @@
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Backend](https://img.shields.io/badge/backend-FastAPI-green.svg)
 ![Frontend](https://img.shields.io/badge/frontend-React%2018-blue.svg)
-![AI](https://img.shields.io/badge/AI-GLM--4--Flash-orange.svg)
+![AI](https://img.shields.io/badge/AI-OpenAI%20Compatible-orange.svg)
 ![Docker](https://img.shields.io/badge/deploy-Docker%20Compose-2496ED.svg)
 
 </div>
@@ -44,7 +44,7 @@
 
 ## 🚀 在线体验
 
-本项目为**自托管应用**，AI 能力依赖你的智谱 API Key，因此不提供公共 Demo 服务器。
+本项目为**自托管应用**，AI 能力依赖你自己的 LLM API Key，因此不提供公共 Demo 服务器。
 
 👇 两种方式快速体验：
 
@@ -57,7 +57,7 @@ cd jobcraft
 
 # 2. 配置环境变量
 cp .env.example .env
-#   编辑 .env，填入 OPENAI_API_KEY（智谱 API Key，可在 https://open.bigmodel.cn 获取）
+#   编辑 .env，填入你的 OpenAI 兼容接口 API Key（支持 OpenAI / 通义 / DeepSeek / GLM 等任意兼容服务）
 
 # 3. 一键启动全部服务（mysql / redis / backend / frontend / worker）
 cd docker
@@ -92,7 +92,7 @@ npm run dev
 | 后端 | Python 3.12 · FastAPI · LangGraph · SQLAlchemy |
 | 前端 | React 18 · TypeScript · Vite · Ant Design |
 | 数据库 | MySQL 8.4 · Redis 7 |
-| AI | 智谱 GLM-4-Flash（OpenAI 兼容接口） |
+| AI | 任意 OpenAI 兼容接口（OpenAI / GLM / DeepSeek / 通义等） |
 | 异步任务 | Celery Worker（Redis 队列） |
 | 部署 | Docker Compose · Nginx |
 
@@ -147,9 +147,9 @@ flowchart LR
 
 | 变量 | 说明 | 默认值 |
 |------|------|--------|
-| `OPENAI_API_KEY` | 智谱 API Key（必需） | - |
-| `OPENAI_BASE_URL` | OpenAI 兼容端点 | `https://open.bigmodel.cn/api/paas/v4/` |
-| `LLM_model` | 模型名称 | `glm-4-flash` |
+| `OPENAI_API_KEY` | LLM API Key（必需，任意 OpenAI 兼容服务商） | - |
+| `OPENAI_BASE_URL` | OpenAI 兼容端点，可替换为任意服务商 | 参考 `.env.example` |
+| `LLM_model` | 模型名称（根据服务商配置） | - |
 | `JWT_SECRET_KEY` | JWT 签名密钥（生产必改） | - |
 | `MYSQL_*` | MySQL 连接配置 | 见下方 |
 | `TAVILY_API_KEY` | Tavily 搜索（面试公司调研） | 可选 |
