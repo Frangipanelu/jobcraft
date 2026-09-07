@@ -182,18 +182,6 @@ flowchart LR
 
 ## 🛠️ 开发规范
 
-### 代码质量检查
-
-```bash
-# 后端
-uv run ruff check --fix .
-uv run ruff format .
-uv run pytest tests/ -q
-
-# 前端
-cd frontend-jobcraft && npm run build
-```
-
 ### Commit 规范
 
 ```
