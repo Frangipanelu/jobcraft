@@ -21,13 +21,12 @@
 
 | 求职仪表盘 | 经历卡管理 | JD 深度分析 |
 |:---:|:---:|:---:|
-| `![仪表盘](screenshots/dashboard.png)` | `![经历卡](screenshots/experiences.png)` | `![JD分析](screenshots/jd-analysis.png)` |
+| ![仪表盘](screenshots/dashboard.png) | ![经历卡](screenshots/experiences.png) | ![JD分析](screenshots/jd-analysis.png) |
 
 | 定制简历 | 面试准备 | 面试复盘 |
 |:---:|:---:|:---:|
-| `![定制简历](screenshots/resume.png)` | `![面试准备](screenshots/interview-prep.png)` | `![面试复盘](screenshots/interview-review.png)` |
+| ![定制简历](screenshots/resume.png) | ![面试准备](screenshots/interview-prep.png) | ![面试复盘](screenshots/interview-review.png) |
 
-> 💡 **生成截图的小技巧**：启动项目后访问 `http://localhost`，用浏览器 DevTools 的设备模拟器（1280px 宽）截图，保存到 `screenshots/` 目录。
 
 ---
 
