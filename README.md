@@ -16,9 +16,6 @@
 
 ## 📸 界面预览
 
-> 在 `screenshots/` 目录放置截图后，替换下方图片引用即可。
-> 推荐尺寸：**1280×720**，PNG 格式。
-
 | 求职仪表盘 | 经历卡管理 | JD 深度分析 |
 |:---:|:---:|:---:|
 | ![仪表盘](screenshots/dashboard.png) | ![经历卡](screenshots/experiences.png) | ![JD分析](screenshots/jd-analysis.png) |
