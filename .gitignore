@@ -75,3 +75,11 @@ AI_WORKFLOW.md
 ANALYSIS_SUMMARY.md
 FRONTEND_BACKEND_MAPPING.md
 docs/
+
+# opencode config
+.opencode/
+
+# Debug scripts and test samples
+tests/debug/
+tests/user_sample_*.txt
+tests/long_user_sample.txt
