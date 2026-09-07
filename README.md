@@ -16,13 +16,39 @@
 
 ## 📸 界面预览
 
-| 求职仪表盘 | 经历卡管理 | JD 深度分析 |
-|:---:|:---:|:---:|
-| ![仪表盘](screenshots/dashboard.png) | ![经历卡](screenshots/experiences.png) | ![JD分析](screenshots/jd-analysis.png) |
+**求职仪表盘**
 
-| 定制简历 | 面试准备 | 面试复盘 |
-|:---:|:---:|:---:|
-| ![定制简历](screenshots/resume.png) | ![面试准备](screenshots/interview-prep.png) | ![面试复盘](screenshots/interview-review.png) |
+![仪表盘](screenshots/dashboard.png)
+
+---
+
+**经历卡管理**
+
+![经历卡](screenshots/experiences.png)
+
+---
+
+**JD 深度分析**
+
+![JD分析](screenshots/jd-analysis.png)
+
+---
+
+**定制简历**
+
+![定制简历](screenshots/resume.png)
+
+---
+
+**面试准备**
+
+![面试准备](screenshots/interview-prep.png)
+
+---
+
+**面试复盘**
+
+![面试复盘](screenshots/interview-review.png)
 
 
 ---
