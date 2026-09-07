@@ -10,6 +10,7 @@
 frontend-jobcraft/node_modules/
 frontend-jobcraft/dist/
 frontend-jobcraft/.vite/
+frontend-jobcraft/coverage/
 .pnpm-store/
 .npm-cache
 
@@ -23,6 +24,12 @@ __pycache__/
 *.py[cod]
 *$py.class
 *.pyc
+*.egg-info/
+.eggs/
+
+# Python test/lint cache
+.pytest_cache/
+.ruff_cache/
 
 # runtime artifacts
 /output/
@@ -53,3 +60,18 @@ yarn-error.log
 # System Files
 .DS_Store
 Thumbs.db
+
+# Docker runtime
+docker/mysql/data/
+
+# Internal documentation (process docs, not for open source)
+AGENTS.md
+PRODUCT.md
+ARCHITECTURE.md
+PROGRESS.md
+PROGRESS_TEMPLATE.md
+TODO.md
+AI_WORKFLOW.md
+ANALYSIS_SUMMARY.md
+FRONTEND_BACKEND_MAPPING.md
+docs/
