@@ -208,10 +208,19 @@ chore:   杂项
 
 ## 🤝 贡献
 
-欢迎提交 Issue 与 Pull Request。开发前请阅读：
+欢迎提交 Issue 与 Pull Request。
 
-- [`docs/engineering-development-workflow-v1.md`](docs/engineering-development-workflow-v1.md) — 工程开发流程
-- [`.github/workflows/`](.github/workflows/) — CI 配置（后端 ruff + pytest / 前端 tsc + build）
+开发前请先运行代码质量检查：
+
+```bash
+# 后端
+uv run ruff check --fix .
+uv run ruff format .
+uv run pytest tests/ -q
+
+# 前端
+cd frontend-jobcraft && npm run build
+```
 
 ---
 
