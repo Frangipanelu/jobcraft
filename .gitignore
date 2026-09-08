@@ -79,6 +79,9 @@ docs/
 # opencode config
 .opencode/
 
+# eval-generated predictions (re-creatable, report is the record)
+evaluation/predictions/
+
 # Debug scripts and test samples
 tests/debug/
 tests/user_sample_*.txt
