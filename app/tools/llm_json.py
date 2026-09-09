@@ -18,6 +18,24 @@ from app.core.prompts import load_prompt
 
 logger = logging.getLogger("jobcraft.tools.llm_json")
 
+# 可选的 LLM 调用观测器（如评估基准采集 token/延迟/成本）。
+# 注册式回调，默认无 observer，不改变任何现有语义。
+_USAGE_OBSERVERS: list[Any] = []
+
+
+def register_usage_observer(observer: Any) -> None:
+    """注册一个 LLM 调用观测器（评估/基准监控用）。
+
+    observer 收到一个 dict，字段：
+    - feature: debug_label 或 schema 名
+    - duration_s: LLM 调用墙钟耗时
+    - prompt_tokens / completion_tokens / total_tokens: token 用量（提取不到为 None）
+    - from_cache: 是否命中热缓存（命中时 tokens 为 None）
+    :param observer: 可调用对象，接收 dict
+    """
+    if observer not in _USAGE_OBSERVERS:
+        _USAGE_OBSERVERS.append(observer)
+
 
 def _extract_json(text: str) -> Optional[str]:
     """从文本中提取 JSON 对象/数组（兼容 Qwen3 / DeepSeek 等模型的 <think> 标签）"""
@@ -268,6 +286,14 @@ def invoke_structured(
     if _cached is not None:
         _result = schema.model_validate(_cached)
         _finish("success", output_json=_result.model_dump(), from_cache=1)
+        _emit_usage_observers(
+            feature=feature,
+            duration_s=0.0,
+            prompt_tokens=None,
+            completion_tokens=None,
+            total_tokens=None,
+            from_cache=1,
+        )
         return _result
 
     _llm_start = time.perf_counter()
@@ -296,9 +322,16 @@ def invoke_structured(
 
     ai_cache.cache_set(_cache_key, _result.model_dump())
     _usage = _extract_usage(_response)
-    _record_llm_observability(
-        feature, "success", time.perf_counter() - _llm_start, _usage
+    _llm_duration = time.perf_counter() - _llm_start
+    _emit_usage_observers(
+        feature=feature,
+        duration_s=_llm_duration,
+        prompt_tokens=_usage.get("prompt_tokens"),
+        completion_tokens=_usage.get("completion_tokens"),
+        total_tokens=_usage.get("total_tokens"),
+        from_cache=0,
     )
+    _record_llm_observability(feature, "success", _llm_duration, _usage)
     _finish(
         "success",
         output_json=_result.model_dump(),
@@ -307,6 +340,32 @@ def invoke_structured(
         total_tokens=_usage.get("total_tokens"),
     )
     return _result
+
+
+def _emit_usage_observers(
+    *,
+    feature: str,
+    duration_s: float,
+    prompt_tokens: Optional[int],
+    completion_tokens: Optional[int],
+    total_tokens: Optional[int],
+    from_cache: int,
+) -> None:
+    """把一次 LLM 调用信息广播给已注册的观测器（尽力而为，失败不影响调用）。"""
+    for observer in _USAGE_OBSERVERS:
+        try:
+            observer(
+                {
+                    "feature": feature,
+                    "duration_s": duration_s,
+                    "prompt_tokens": prompt_tokens,
+                    "completion_tokens": completion_tokens,
+                    "total_tokens": total_tokens,
+                    "from_cache": from_cache,
+                }
+            )
+        except Exception:
+            logger.debug("LLM usage observer 执行失败，忽略", exc_info=True)
 
 
 def _extract_usage(response: Any) -> Dict[str, Optional[int]]:

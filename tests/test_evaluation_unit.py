@@ -279,3 +279,90 @@ def test_dataset_loadable_and_schema_valid():
         for exp_id, label in case["gold"]["relevance"].items():
             assert label in ("high", "medium", "low", "irrelevant")
             assert 0 <= case["gold"]["score"][exp_id] <= 100
+
+
+# ---------- v0.2 Chinese benchmark ----------
+
+
+def test_chinese_dataset_schema_and_mix():
+    from evaluation.run_chinese_eval import DATASET_DIFFICULTY_MIX
+    from evaluation.datasets import DEFAULT_DATASET
+
+    chinese_path = DEFAULT_DATASET.parent / "chinese_cases.jsonl"
+    assert chinese_path.exists()
+    cases = load_gold(chinese_path)
+    assert len(cases) == 10
+    counts: dict[str, int] = {}
+    for case in cases:
+        assert case["case_id"].startswith("cn_")
+        assert case.get("difficulty") in DATASET_DIFFICULTY_MIX
+        assert set(case["gold"]["relevance"]) == set(case["gold"]["score"])
+        assert set(case["gold"]["relevance"]) == {e["id"] for e in case["experiences"]}
+        assert len(case["gold"]["ranking"]) == len(case["experiences"])
+        counts[case["difficulty"]] = counts.get(case["difficulty"], 0) + 1
+    assert counts == DATASET_DIFFICULTY_MIX
+
+
+def test_estimate_cost_zero_when_no_tokens():
+    from evaluation.run_chinese_eval import estimate_cost
+
+    assert estimate_cost(0, 0) == 0.0
+
+
+def test_estimate_cost_scales_with_tokens():
+    from evaluation.run_chinese_eval import estimate_cost
+
+    # 1M input @ $0.06 + 1M output @ $0.40 = $0.46
+    assert estimate_cost(1_000_000, 1_000_000, 0.06, 0.40) == 0.46
+
+
+def test_usage_collector_counts_non_cached_only():
+    from evaluation.run_chinese_eval import UsageCollector
+
+    c = UsageCollector()
+    c(
+        {
+            "feature": "llm_score_match",
+            "duration_s": 1.5,
+            "from_cache": 0,
+            "prompt_tokens": 1000,
+            "completion_tokens": 150,
+            "total_tokens": 1150,
+        }
+    )
+    c(
+        {
+            "feature": "llm_score_match",
+            "duration_s": 0.0,
+            "from_cache": 1,
+            "prompt_tokens": None,
+            "completion_tokens": None,
+            "total_tokens": None,
+        }
+    )
+    snap = c.snapshot()
+    assert snap["llm_calls"] == 1
+    assert snap["llm_calls_cached"] == 1
+    assert snap["total_tokens"] == 1150
+    assert snap["estimated_cost_usd"] > 0
+
+
+def test_produce_hybrid_deterministic():
+    from evaluation.datasets import DEFAULT_DATASET
+    from evaluation.run_chinese_eval import produce_hybrid
+
+    gold = load_gold(DEFAULT_DATASET)
+    llm_preds_static = [
+        {
+            "case_id": c["case_id"],
+            "predictions": [
+                {"experience_id": e["id"], "label": "high", "score": 85.0}
+                for e in c["experiences"]
+            ],
+        }
+        for c in gold
+    ]
+    a1 = produce_hybrid(gold, llm_preds_static, "hybrid_a")
+    a2 = produce_hybrid(gold, llm_preds_static, "hybrid_a")
+    assert a1 == a2
+    assert len(a1) == len(gold)

@@ -1,8 +1,29 @@
-# Experience Matching Evaluation v0.1
+# Experience Matching Evaluation
 
-This evaluation pilot measures how reliably JobCraft matches candidate experience cards to job requirements.
+Evaluates how reliably JobCraft matches candidate experience cards to job requirements.
 
-## Goal
+## v0.2 — Chinese real-world benchmark（2026-09）
+
+在 10 条中文真实风格 case（direct×3 / semantic×2 / partial×2 / negative×2 / transfer×1）上，
+对比 Keyword baseline / LLM / Hybrid A（0.4 加权）/ Hybrid C（max），并补齐 **Latency / LLM Calls / Estimated Cost** 工程维度。
+
+运行：
+
+```bash
+python -m evaluation.run_chinese_eval \
+  --gold evaluation/datasets/chinese_cases.jsonl
+```
+
+产出第二份报告：[`reports/chinese_matching_report.md`](reports/chinese_matching_report.md)。
+
+v0.2 结论：
+
+- **LLM ≡ Hybrid C（max）**：中文数据上复现 v0.1，max 融合与纯 LLM 质量持平（Accuracy 0.90 / MAE 12.9）。
+- **Hybrid A（0.4 加权）仍是负贡献**（MAE 21.1），local 权重继续拖低 LLM 分。
+- **LLM / A / C 的 LLM Calls 与成本完全相同**——语义信号都来自那一次 LLM 调用，max 不是"省钱"方案，而是**安全融合**（保住 LLM 分，另留零成本本地兜底）。
+- 成本量级：11 个 LLM 调用（10 case）token 成本约 $0.0011（Flash 单价），成本不是瓶颈，打分校准才是。
+
+## v0.1 pilot
 
 Compare three matching strategies:
 
@@ -51,12 +72,15 @@ The dataset contains synthetic portfolio-style examples for methodology validati
 evaluation/
 ├── README.md
 ├── datasets/
-│   └── matching_cases.jsonl
+│   ├── matching_cases.jsonl         # v0.1 英文合成数据集
+│   └── chinese_cases.jsonl          # v0.2 中文真实风格数据集
 ├── strategies.py
 ├── generate.py
 ├── run_matching_eval.py
+├── run_chinese_eval.py              # v0.2 runner（含 latency/calls/cost 采集）
 └── reports/
-    └── matching_report.md
+    ├── matching_report.md           # v0.1 + 权重消融
+    └── chinese_matching_report.md   # v0.2 中文回测
 ```
 
 - `strategies.py` — 三种策略的预测生成器，复用现有生产代码（`_local_score` / `ScoreMatchAgent`）。
