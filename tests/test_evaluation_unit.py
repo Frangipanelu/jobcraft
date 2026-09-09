@@ -11,6 +11,13 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from evaluation.datasets import load_cases
+from evaluation.fusion import (
+    FUSION_MODES,
+    fused_score,
+    generate_fused,
+    local_scores_for_case,
+    max_score,
+)
 from evaluation.generate import generate, load_gold
 from evaluation.run_matching_eval import evaluate, macro_f1, ndcg_at_k
 from evaluation.strategies import (
@@ -206,6 +213,57 @@ def test_evaluate_wrong_all():
     assert result["accuracy"] == 0.0
     assert result["precision_relevant"] == 0.0
     assert result["recall_relevant"] == 0.0
+
+
+# ---------- fusion ----------
+
+
+def test_fused_score_weighted():
+    assert fused_score(40.0, 60.0, 0.4, 0.6) == 52.0
+    assert fused_score(40.0, 60.0, 0.2, 0.8) == 56.0
+
+
+def test_fused_score_weights_sum_to_one():
+    for mode, local_w, llm_w in FUSION_MODES.values():
+        if mode == "max":
+            continue
+        assert round(local_w + llm_w, 2) == 1.0
+
+
+def test_max_score_takes_larger():
+    assert max_score(30.0, 70.0) == 70.0
+    assert max_score(90.0, 70.0) == 90.0
+
+
+def test_local_scores_for_case_deterministic():
+    local_a = local_scores_for_case(_CASE)
+    local_b = local_scores_for_case(_CASE)
+    assert local_a == local_b
+    assert "e1" in local_a and "e2" in local_a
+    assert 0.0 <= local_a["e1"] <= 100.0
+
+
+def test_generate_fused_modes():
+    llm_pred = {
+        "case_id": "test_001",
+        "predictions": [
+            {"experience_id": "e1", "label": "high", "score": 50.0},
+            {"experience_id": "e2", "label": "irrelevant", "score": 20.0},
+        ],
+    }
+    for mode in FUSION_MODES:
+        preds = generate_fused(llm_pred, _CASE, mode)
+        assert len(preds) == 2
+        for p in preds:
+            assert {"experience_id", "label", "score"} == set(p)
+            assert 0.0 <= p["score"] <= 100.0
+
+
+def test_generate_fused_invalid_mode():
+    import pytest
+
+    with pytest.raises(ValueError):
+        generate_fused({}, _CASE, "unknown")
 
 
 # ---------- dataset ----------

@@ -68,14 +68,18 @@ evaluation/
 The evaluator is deliberately separated from the model invocation. It consumes a prediction file so that different strategies/models can be compared under the same gold labels.
 
 ```bash
-# 1. 生成预测：keyword / llm / hybrid / all
+# 1. 生成预测：keyword / llm / hybrid（每类独立跑）或 all
 python -m evaluation.generate --strategy all
 
-# 2. 评估预测（对每种策略）
+# 2. Hybrid 权重实验：在同一份 LLM 预测上做确定性离线融合（不消耗新 LLM）
+python -m evaluation.fuse --llm-pred evaluation/predictions/predictions_llm.jsonl
+# 产出 predictions_hybrid_a.jsonl (0.4/0.6) / hybrid_b.jsonl (0.2/0.8) / hybrid_c.jsonl (max)
+
+# 3. 评估预测（对每种策略）
 python evaluation/run_matching_eval.py \
   --gold evaluation/datasets/matching_cases.jsonl \
-  --pred evaluation/predictions/predictions_hybrid.jsonl \
-  --strategy hybrid
+  --pred evaluation/predictions/predictions_hybrid_a.jsonl \
+  --strategy hybrid_a
 ```
 
 Prediction format:
@@ -85,6 +89,18 @@ Prediction format:
 ```
 
 One JSON object per line. The `label` is derived from `score` with thresholds aligned to `_match_level` (`>=80` high, `>=60` medium, `>=40` low).
+
+### Hybrid fusion weights
+
+`evaluation/fusion.py` provides pure fusion functions used by `evaluation/fuse.py`:
+
+| Variant | Weight | Usage |
+|---|---|---|
+| hybrid_a | `0.4 * local + 0.6 * llm` | 现状产品权重 |
+| hybrid_b | `0.2 * local + 0.8 * llm` | LLM-heavy 实验 |
+| hybrid_c | `max(local, llm)` | Local 只抬升不拉低 |
+
+Because `fuse.py` derives all variants from one shared LLM prediction file, the comparison isolates the fusion weight from LLM nondeterminism.
 
 ## Metrics
 
@@ -101,17 +117,20 @@ The pilot reports:
 
 For binary precision/recall, `high` and `medium` are treated as **relevant**. `low` and `irrelevant` are treated as **not relevant**.
 
-## Results (v0.1, glm-4-flash)
+## Results (v0.1, glm-4-flash, shared LLM scores)
 
-| Metric | Keyword | LLM | Hybrid |
-|---|---:|---:|---:|
-| Accuracy | 0.4667 | **0.9333** | 0.5667 |
-| Macro F1 | 0.1566 | **0.8007** | 0.2716 |
-| Recall (relevant) | 0.1111 | **0.8889** | 0.2778 |
-| Score MAE ↓ | 42.8367 | **9.2667** | 25.6300 |
-| NDCG@3 ↑ | 0.9740 | **0.9767** | 0.9585 |
+| Metric | Keyword | LLM | Hybrid A (0.4/0.6) | Hybrid B (0.2/0.8) | Hybrid C (max) |
+|---|---:|---:|---:|---:|---:|
+| Accuracy | 0.4667 | **0.9333** | 0.5667 | 0.7333 | **0.9333** |
+| Macro F1 | 0.1566 | 0.6340 | 0.2471 | 0.3519 | 0.6340 |
+| Recall (relevant) | 0.1111 | 0.9444 | 0.2778 | 0.5556 | 0.9444 |
+| Score MAE ↓ | 42.8367 | 11.7000 | 20.3433 | 14.6833 | **11.6900** |
+| NDCG@3 ↑ | 0.9740 | 0.9535 | 0.9612 | 0.9612 | **0.9740** |
 
-Key findings: Keyword is precise but misses semantic rewrites (Recall 0.11). LLM leads on all metrics. Hybrid is dragged down by the 0.4 Keyword weight. NDCG@3 is high for all strategies — ordering is already good, calibration is the bottleneck.
+Key findings:
+- **Local signal did not add value to semantic matching on this dataset.** Case-by-instance, pure LLM was closest to the gold score in 24/30 instances; weighted fusion (A, and to a lesser degree B) drags LLM scores below thresholds.
+- **`max(Local, LLM)` (C) matches pure LLM structurally** — it can never lower an LLM score, so local only participates when it is genuinely higher.
+- Recommendation: switch production fusion from `0.4*local + 0.6*llm` to `max(local, llm)`, then re-validate on Chinese real JD data (dataset is synthetic English).
 
 Full per-case failure analysis: [`reports/matching_report.md`](reports/matching_report.md).
 
