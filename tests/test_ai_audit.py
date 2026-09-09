@@ -121,6 +121,8 @@ def test_invoke_structured_audits_success(monkeypatch):
 
 def test_invoke_structured_audits_error(monkeypatch):
     """失败且兜底也失败：complete(error)，并抛 RuntimeError。"""
+    from app.tools import ai_cache
+
     calls = {"complete": {}}
 
     def _boom(*a, **k):
@@ -129,6 +131,9 @@ def test_invoke_structured_audits_error(monkeypatch):
     def fake_complete(**k):
         calls["complete"] = k
 
+    monkeypatch.setattr(
+        ai_cache, "_get_redis", lambda: None
+    )  # 模拟 Redis 不可用，避免命中缓存
     monkeypatch.setattr(llm_json, "_invoke_with_bind_tools", _boom)
     monkeypatch.setattr(llm_json, "_invoke_with_plain_json", _boom)
     monkeypatch.setattr(db_ai, "complete_ai_task", fake_complete)
@@ -141,6 +146,7 @@ def test_invoke_structured_audits_error(monkeypatch):
 
 def test_invoke_structured_audit_never_blocks(monkeypatch):
     """审计写入本身抛错时，业务调用仍应正常返回。"""
+    from app.tools import ai_cache
 
     def _inner(*a, **k):
         return _SampleOut(title="ok", score=1), _FakeResponse()
@@ -148,6 +154,9 @@ def test_invoke_structured_audit_never_blocks(monkeypatch):
     def _boom(*a, **k):
         raise RuntimeError("audit db down")
 
+    monkeypatch.setattr(
+        ai_cache, "_get_redis", lambda: None
+    )  # 模拟 Redis 不可用，避免命中缓存
     monkeypatch.setattr(llm_json, "_invoke_with_bind_tools", _inner)
     monkeypatch.setattr(db_ai, "create_ai_task", _boom)
 

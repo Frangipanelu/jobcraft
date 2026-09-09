@@ -8,7 +8,7 @@
 --   company_research / resume_submission / interview_preps /
 --   interview_records / interview_qa_pairs / card_versions
 --
--- 语句分隔：多条语句间用 `;--SPLIT--` 分隔，runner 会逐条执行。
+-- 语句分隔：多条语句间用 SPLIT 标记（分号加短横线 SPLIT 短横线）分隔，runner 会逐条执行。
 
 -- 1. 用户表（db_user._ensure_users_table）
 CREATE TABLE IF NOT EXISTS users (

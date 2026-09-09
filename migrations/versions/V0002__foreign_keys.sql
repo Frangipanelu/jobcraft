@@ -11,7 +11,7 @@
 --   interview_qa_pairs.record_id        → interview_records.id   ON DELETE CASCADE
 --   card_versions.card_id               → experience_card.id     ON DELETE CASCADE
 --
--- 语句分隔：多条语句间用 `;--SPLIT--`。
+-- 语句分隔：多条语句间用 SPLIT 标记（分号加短横线 SPLIT 短横线）。
 
 -- 0. 清理孤儿数据（父表已不存在的引用行）
 DELETE FROM resume_submission

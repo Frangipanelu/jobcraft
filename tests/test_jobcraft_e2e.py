@@ -306,13 +306,21 @@ def test_analyze_job_without_cards(sample_jd: str, server_ok):
         "jd_text": sample_jd,
         "card_ids": [],
     }
-    resp = requests.post(api_url("/api/jobcraft/job/analyze"), json=payload, timeout=30)
+    resp = requests.post(
+        api_url("/api/jobcraft/job/analyze"),
+        json=payload,
+        headers=_get_auth_headers(),
+        timeout=30,
+    )
     assert resp.status_code == 400
 
 
 def test_interview_prep_without_job(server_ok):
     payload = {"user_id": USER_ID, "round_type": "技术面", "card_ids": []}
     resp = requests.post(
-        api_url("/api/jobcraft/job/999999/interview-prep"), json=payload, timeout=30
+        api_url("/api/jobcraft/job/999999/interview-prep"),
+        json=payload,
+        headers=_get_auth_headers(),
+        timeout=30,
     )
     assert resp.status_code in (400, 404)
