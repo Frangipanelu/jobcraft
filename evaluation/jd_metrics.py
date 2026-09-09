@@ -20,7 +20,9 @@ JD Extraction Evaluation — 纯函数评测模块（无 LLM 依赖，可直接�
 from __future__ import annotations
 
 import re
-from typing import Any, Dict, Iterable, Sequence, Tuple
+from dataclasses import dataclass
+from enum import Enum
+from typing import Any, Dict, Iterable, Optional, Sequence, Tuple
 
 # D1-D8 维度编码，供 dimension accuracy 统计
 DIMENSIONS = [f"D{i}" for i in range(1, 9)]
@@ -285,3 +287,341 @@ def aggregate_cases(case_results: Iterable[Dict[str, Any]]) -> Dict[str, Any]:
         summary[field] = (sum(hits), len(hits))
     summary["cases"] = len(case_results)
     return summary
+
+
+# ============================================================
+# Error Taxonomy (v0.4)
+# ============================================================
+
+
+class ErrorType(Enum):
+    """JD Extraction 错误类型枚举。"""
+
+    MISSING = "E1"  # gold 有，pred 没有
+    HALLUCINATED = "E2"  # pred 有，gold 没有
+    MISCLASSIFIED = "E3"  # 字段间误分类 (required↔preferred, skill↔responsibility)
+    GRANULARITY = "E4"  # 粒度不匹配 (一个 gold 拆成多个 pred，或反之)
+    SEMANTIC = "E5"  # 语义理解错误
+    DIMENSION = "E6"  # D1-D8 level 判断错误
+    HIDDEN = "E7"  # 潜台词未识别
+    NORMALIZATION = "E8"  # 同义词 / 缩写 / 格式问题
+
+
+@dataclass
+class ErrorRecord:
+    """单条错误记录。"""
+
+    error_type: ErrorType
+    field: str  # 字段名 (required_skills / dimension_D1 / subtext_decoded / ...)
+    pred_item: Optional[str] = None
+    gold_item: Optional[str] = None
+    detail: str = ""
+
+
+def match_lists_detail(
+    pred: Sequence[str], gold: Sequence[str], *, threshold: float = 0.6
+) -> Tuple[list[str], list[str]]:
+    """贪心配对，返回 (unmatched_pred, unmatched_gold)。"""
+    used_gold = [False] * len(gold)
+    unmatched_pred: list[str] = []
+    for p in pred:
+        found = False
+        for i, g in enumerate(gold):
+            if not used_gold[i] and items_match(p, g, threshold=threshold):
+                used_gold[i] = True
+                found = True
+                break
+        if not found:
+            unmatched_pred.append(p)
+    unmatched_gold = [g for i, g in enumerate(gold) if not used_gold[i]]
+    return unmatched_pred, unmatched_gold
+
+
+def _is_cross_field_match(
+    item: str, current_attr: str, full_case: Dict[str, Any]
+) -> bool:
+    """检查 item 是否匹配其他字段中的 gold 项。"""
+    for _, attr in LIST_FIELDS:
+        if attr == current_attr:
+            continue
+        other_items = [str(x) for x in (full_case.get(attr) or [])]
+        if any(items_match(item, o) for o in other_items):
+            return True
+    return False
+
+
+def _is_normalization_variant(
+    item: str, other_items: Sequence[str], *, threshold: float = 0.4
+) -> bool:
+    """检查 item 是否是 other_items 中某项的归一化变体 (Dice >= threshold)。"""
+    ni = normalize(item)
+    for o in other_items:
+        no = normalize(o)
+        if ni != no and _dice(ni, no) >= threshold:
+            return True
+    return False
+
+
+def classify_field_errors(
+    pred_items: Sequence[str],
+    gold_items: Sequence[str],
+    field: str,
+    full_pred: Dict[str, Any],
+    full_gold: Dict[str, Any],
+) -> list[ErrorRecord]:
+    """对单个列表字段分类错误 (E1/E2/E3/E8)。"""
+    errors: list[ErrorRecord] = []
+    unmatched_pred, unmatched_gold = match_lists_detail(pred_items, gold_items)
+    current_attr = dict(LIST_FIELDS)[field]
+
+    for fp in unmatched_pred:
+        if _is_cross_field_match(fp, current_attr, full_gold):
+            errors.append(
+                ErrorRecord(
+                    ErrorType.MISCLASSIFIED,
+                    field,
+                    pred_item=fp,
+                    detail=f"'{fp}' matched gold in another field",
+                )
+            )
+        elif _is_normalization_variant(fp, gold_items):
+            errors.append(
+                ErrorRecord(
+                    ErrorType.NORMALIZATION,
+                    field,
+                    pred_item=fp,
+                    detail=f"'{fp}' is normalization variant of a gold item",
+                )
+            )
+        else:
+            errors.append(
+                ErrorRecord(
+                    ErrorType.HALLUCINATED,
+                    field,
+                    pred_item=fp,
+                    detail=f"'{fp}' not in any gold field",
+                )
+            )
+
+    for fn in unmatched_gold:
+        if _is_cross_field_match(fn, current_attr, full_pred):
+            errors.append(
+                ErrorRecord(
+                    ErrorType.MISCLASSIFIED,
+                    field,
+                    gold_item=fn,
+                    detail=f"'{fn}' exists in pred but in wrong field",
+                )
+            )
+        elif _is_normalization_variant(fn, pred_items):
+            errors.append(
+                ErrorRecord(
+                    ErrorType.NORMALIZATION,
+                    field,
+                    gold_item=fn,
+                    detail=f"'{fn}' has normalization variant in pred",
+                )
+            )
+        else:
+            errors.append(
+                ErrorRecord(
+                    ErrorType.MISSING,
+                    field,
+                    gold_item=fn,
+                    detail=f"'{fn}' missing from pred",
+                )
+            )
+
+    # Granularity heuristic: significant count mismatch
+    if len(pred_items) > len(gold_items) * 2 and len(gold_items) > 0:
+        errors.append(
+            ErrorRecord(
+                ErrorType.GRANULARITY,
+                field,
+                detail=f"Potential over-splitting: pred {len(pred_items)} items vs gold {len(gold_items)} items",
+            )
+        )
+    elif len(gold_items) > len(pred_items) * 2 and len(pred_items) > 0:
+        errors.append(
+            ErrorRecord(
+                ErrorType.GRANULARITY,
+                field,
+                detail=f"Potential under-splitting: gold {len(gold_items)} items vs pred {len(pred_items)} items",
+            )
+        )
+
+    return errors
+
+
+def classify_dimension_errors(
+    pred: Dict[str, Any], gold: Dict[str, Any]
+) -> list[ErrorRecord]:
+    """分类维度错误 (E6)。"""
+    errors: list[ErrorRecord] = []
+    gold_dims = {k: int(v) for k, v in (gold.get("dimensions") or {}).items()}
+    pred_map: Dict[str, int] = {}
+    for req in pred.get("dimension_requirements") or []:
+        d = str(req.get("dimension", "")).strip().upper()
+        if d in DIMENSIONS and d not in pred_map:
+            pred_map[d] = int(req.get("level") or 0)
+
+    for d in DIMENSIONS:
+        field = f"dimension_{d}"
+        if d in gold_dims and d in pred_map:
+            if pred_map[d] != gold_dims[d]:
+                errors.append(
+                    ErrorRecord(
+                        ErrorType.DIMENSION,
+                        field,
+                        pred_item=f"level={pred_map[d]}",
+                        gold_item=f"level={gold_dims[d]}",
+                        detail=f"{d}: predicted {pred_map[d]}, gold {gold_dims[d]}",
+                    )
+                )
+        elif d in gold_dims and d not in pred_map:
+            errors.append(
+                ErrorRecord(
+                    ErrorType.MISSING,
+                    field,
+                    gold_item=f"level={gold_dims[d]}",
+                    detail=f"{d} missing from prediction",
+                )
+            )
+        elif d not in gold_dims and d in pred_map:
+            errors.append(
+                ErrorRecord(
+                    ErrorType.HALLUCINATED,
+                    field,
+                    pred_item=f"level={pred_map[d]}",
+                    detail=f"{d} not in gold",
+                )
+            )
+    return errors
+
+
+def classify_hidden_errors(
+    pred: Dict[str, Any], gold: Dict[str, Any]
+) -> list[ErrorRecord]:
+    """分类潜台词错误 (E7)。"""
+    errors: list[ErrorRecord] = []
+    gold_subtexts = gold.get("subtext") or []
+    pred_subtexts = pred.get("subtext_decoded") or []
+
+    gold_surfaces = [
+        str(s.get("surface_requirement") or s.get("surface") or "").strip()
+        for s in gold_subtexts
+    ]
+    gold_surfaces = [g for g in gold_surfaces if g]
+
+    pred_surfaces = [
+        str(p.get("surface_requirement") or p.get("surface") or "").strip()
+        for p in pred_subtexts
+    ]
+    pred_surfaces = [p for p in pred_surfaces if p]
+
+    for surface in gold_surfaces:
+        matched = any(
+            items_match(surface, p.get("surface_requirement") or p.get("surface") or "")
+            for p in pred_subtexts
+        )
+        if not matched:
+            errors.append(
+                ErrorRecord(
+                    ErrorType.HIDDEN,
+                    "subtext_decoded",
+                    gold_item=surface,
+                    detail=f"Hidden requirement not identified: {surface}",
+                )
+            )
+
+    for surface in pred_surfaces:
+        matched = any(
+            items_match(surface, s.get("surface_requirement") or s.get("surface") or "")
+            for s in gold_subtexts
+        )
+        if not matched:
+            errors.append(
+                ErrorRecord(
+                    ErrorType.HALLUCINATED,
+                    "subtext_decoded",
+                    pred_item=surface,
+                    detail=f"Hidden requirement hallucinated: {surface}",
+                )
+            )
+    return errors
+
+
+def classify_case_errors(
+    pred: Dict[str, Any], gold: Dict[str, Any]
+) -> list[ErrorRecord]:
+    """对单个 case 分类全部错误。"""
+    errors: list[ErrorRecord] = []
+    for field, attr in LIST_FIELDS:
+        pred_items = [str(x) for x in (pred.get(attr) or [])]
+        gold_items = [str(x) for x in (gold.get(attr) or [])]
+        errors.extend(classify_field_errors(pred_items, gold_items, field, pred, gold))
+    errors.extend(classify_dimension_errors(pred, gold))
+    errors.extend(classify_hidden_errors(pred, gold))
+    return errors
+
+
+def error_taxonomy_summary(errors: Sequence[ErrorRecord]) -> Dict[str, int]:
+    """按错误类型汇总计数。"""
+    summary: Dict[str, int] = {e.value: 0 for e in ErrorType}
+    for error in errors:
+        summary[error.error_type.value] += 1
+    return summary
+
+
+def error_taxonomy_by_field(errors: Sequence[ErrorRecord]) -> Dict[str, Dict[str, int]]:
+    """按字段和错误类型汇总计数。"""
+    summary: Dict[str, Dict[str, int]] = {}
+    for error in errors:
+        fld = error.field
+        if fld not in summary:
+            summary[fld] = {e.value: 0 for e in ErrorType}
+        summary[fld][error.error_type.value] += 1
+    return summary
+
+
+# ============================================================
+# Field Completeness + Critical Error Rate (v0.4)
+# ============================================================
+
+
+def field_completeness(pred: Dict[str, Any], gold: Dict[str, Any]) -> Dict[str, float]:
+    """计算每字段的完整度 (gold 中有多少比例被 pred 填充)。"""
+    result: Dict[str, float] = {}
+    for field, attr in LIST_FIELDS:
+        pred_items = [str(x) for x in (pred.get(attr) or [])]
+        gold_items = [str(x) for x in (gold.get(attr) or [])]
+        if not gold_items:
+            result[field] = 1.0
+            continue
+        matched = sum(
+            1 for g in gold_items if any(items_match(g, p) for p in pred_items)
+        )
+        result[field] = matched / len(gold_items)
+    for field in SCALAR_FIELDS:
+        result[field] = (
+            1.0
+            if exact_match_shape(str(gold.get(field) or ""), pred.get(field))
+            else 0.0
+        )
+    return result
+
+
+def critical_error_rate(errors: Sequence[ErrorRecord]) -> float:
+    """计算关键错误率 (required_skills / preferred_skills 字段的 E3 占比)。
+
+    关键错误: required ↔ preferred 误分类，对求职决策影响最大。
+    """
+    critical_fields = {"required_skills", "preferred_skills"}
+    critical = 0
+    total = 0
+    for error in errors:
+        if error.field in critical_fields:
+            total += 1
+            if error.error_type == ErrorType.MISCLASSIFIED:
+                critical += 1
+    return critical / total if total else 0.0

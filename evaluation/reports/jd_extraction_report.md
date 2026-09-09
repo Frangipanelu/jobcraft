@@ -1,16 +1,17 @@
-# JD Extraction Evaluation Report (v0.3)
+# JD Extraction Evaluation Report (v0.4)
 
 ## Status
 
-**v0.3 — JD Extraction 回测完成（10 条中文合成 JD，2026-09-09）。**
+**v0.4 — JD Extraction 回测完成（10 条中文合成 JD，2026-09）。**
 
 模型: `glm-4.7-flash`（用户已切换）。链路: JD 原文 → `JdAtsAgent` → `ATSProfile`。
 重点：**AI 是否正确抽取岗位要求**（Required/Preferred Skills、Responsibilities、Keywords、Dimension、Salary/Location、Hidden Requirement）。
+v0.4 新增：**Error Taxonomy（E1-E8）**、**Field Completeness**、**Critical Error Rate**。
 
 - LLM 调用: 0（缓存命中 10）
 - Token 用量: prompt 0 / completion 0 / total 0
 - 估算成本（$0.06/1M in + $0.4/1M out）: $0.0000
-- 墙钟延迟: 1.45s
+- 墙钟延迟: 0.0s
 
 ## Results（字段抽取 P/R/F1，micro 聚合）
 
@@ -26,6 +27,51 @@
 | Dimension (D1-D8 level) | 0.4125 |
 | salary Exact Match | 10/10 |
 | location Exact Match | 9/10 |
+
+## Error Taxonomy
+
+错误分类（E1-E8）。自动识别 E1/E2/E3/E6/E7/E8；E4（粒度）用数量比启发式；缩写等需词典的归类为 E2。
+
+| 类型 | 含义 | 数量 |
+|---|---|---:|
+| E1 MISSING | gold 有，pred 没有 | 33 |
+| E2 HALLUCINATED | pred 有，gold 没有 | 79 |
+| E3 MISCLASSIFIED | 字段间误分类 | 41 |
+| E4 GRANULARITY | 粒度不匹配 | 1 |
+| E5 SEMANTIC | 语义理解错误 | 0 |
+| E6 DIMENSION | D1-D8 等级错误 | 47 |
+| E7 HIDDEN | 潜台词未识别 | 5 |
+| E8 NORMALIZATION | 同义词/缩写/格式 | 33 |
+
+**Critical Error Rate（required/preferred 字段误分类占比）: 33.90%**
+
+| 字段 | E1 Missing | E2 Hallucinated | E3 Misclassified | E4 Granularity | E6 Dimension | E7 Hidden | E8 Normalization |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| required_skills | 10 | 15 | 18 | 0 | 0 | 0 | 4 |
+| responsibilities | 12 | 9 | 15 | 0 | 0 | 0 | 20 |
+| culture_keywords | 10 | 17 | 6 | 1 | 0 | 0 | 6 |
+| preferred_skills | 1 | 6 | 2 | 0 | 0 | 0 | 3 |
+| dimension_D1 | 0 | 0 | 0 | 0 | 5 | 0 | 0 |
+| dimension_D2 | 0 | 0 | 0 | 0 | 5 | 0 | 0 |
+| dimension_D3 | 0 | 0 | 0 | 0 | 7 | 0 | 0 |
+| dimension_D4 | 0 | 0 | 0 | 0 | 3 | 0 | 0 |
+| dimension_D5 | 0 | 0 | 0 | 0 | 7 | 0 | 0 |
+| dimension_D6 | 0 | 0 | 0 | 0 | 10 | 0 | 0 |
+| dimension_D7 | 0 | 0 | 0 | 0 | 3 | 0 | 0 |
+| dimension_D8 | 0 | 0 | 0 | 0 | 7 | 0 | 0 |
+
+## Field Completeness
+
+gold 字段缺失字段完整性（被 pred 覆盖的比例，micro 平均）。
+
+| 字段 | Completeness |
+|---|---:|
+| required_skills | 0.735 |
+| responsibilities | 0.462 |
+| culture_keywords | 0.350 |
+| preferred_skills | 0.800 |
+| salary | 1.000 |
+| location | 0.900 |
 
 ## Hidden Requirements（人工复核清单）
 
@@ -54,15 +100,15 @@
 
 ## Case-level 明细
 
-| case | job | RequiredSkills F1 | Responsibilities F1 | Keywords F1 | PreferredSkills F1 | DimAcc | Salary | Location |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|
-| jd_001 | 后端开发工程师 | 0.74 | 0.36 | 0.80 | 0.80 | 5/8 | ✓ | ✓ |
-| jd_002 | 数据分析师 | 0.67 | 0.67 | 0.33 | 1.00 | 3/8 | ✓ | ✓ |
-| jd_003 | AI 产品经理 | 0.33 | 0.25 | 0.29 | 0.50 | 2/8 | ✓ | ✓ |
-| jd_004 | 前端开发工程师 | 0.92 | 0.44 | 0.00 | 0.80 | 5/8 | ✓ | ✗ |
-| jd_005 | 测试开发工程师 | 0.53 | 0.44 | 0.50 | 0.50 | 2/8 | ✓ | ✓ |
-| jd_006 | DevOps 工程师 | 0.71 | 0.00 | 0.33 | 0.50 | 6/8 | ✓ | ✓ |
-| jd_007 | 产品运营专员 | 0.60 | 0.44 | 0.80 | 1.00 | 3/8 | ✓ | ✓ |
-| jd_008 | iOS 工程师 | 0.86 | 0.25 | 0.00 | 1.00 | 4/8 | ✓ | ✓ |
-| jd_009 | 财务会计 | 0.36 | 0.60 | 0.00 | 0.00 | 1/8 | ✓ | ✓ |
-| jd_010 | 客户成功经理 | 0.62 | 0.40 | 0.40 | 1.00 | 2/8 | ✓ | ✓ |
+| case | job | RequiredSkills F1 | Responsibilities F1 | Keywords F1 | PreferredSkills F1 | DimAcc | Salary | Location | Errors |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| jd_001 | 后端开发工程师 | 0.74 | 0.36 | 0.80 | 0.80 | 5/8 | ✓ | ✓ | 20 |
+| jd_002 | 数据分析师 | 0.67 | 0.67 | 0.33 | 1.00 | 3/8 | ✓ | ✓ | 19 |
+| jd_003 | AI 产品经理 | 0.33 | 0.25 | 0.29 | 0.50 | 2/8 | ✓ | ✓ | 29 |
+| jd_004 | 前端开发工程师 | 0.92 | 0.44 | 0.00 | 0.80 | 5/8 | ✓ | ✗ | 22 |
+| jd_005 | 测试开发工程师 | 0.53 | 0.44 | 0.50 | 0.50 | 2/8 | ✓ | ✓ | 27 |
+| jd_006 | DevOps 工程师 | 0.71 | 0.00 | 0.33 | 0.50 | 6/8 | ✓ | ✓ | 26 |
+| jd_007 | 产品运营专员 | 0.60 | 0.44 | 0.80 | 1.00 | 3/8 | ✓ | ✓ | 20 |
+| jd_008 | iOS 工程师 | 0.86 | 0.25 | 0.00 | 1.00 | 4/8 | ✓ | ✓ | 20 |
+| jd_009 | 财务会计 | 0.36 | 0.60 | 0.00 | 0.00 | 1/8 | ✓ | ✓ | 31 |
+| jd_010 | 客户成功经理 | 0.62 | 0.40 | 0.40 | 1.00 | 2/8 | ✓ | ✓ | 25 |

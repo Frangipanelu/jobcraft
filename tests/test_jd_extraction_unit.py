@@ -4,13 +4,24 @@ from __future__ import annotations
 
 from evaluation.jd_metrics import (
     DIMENSIONS,
+    ErrorRecord,
+    ErrorType,
     aggregate_cases,
+    classify_case_errors,
+    classify_dimension_errors,
+    classify_field_errors,
+    classify_hidden_errors,
+    critical_error_rate,
     dimension_accuracy,
+    error_taxonomy_by_field,
+    error_taxonomy_summary,
     evaluate_case,
     exact_match_shape,
+    field_completeness,
     hidden_requirements_review,
     items_match,
     match_lists,
+    match_lists_detail,
     normalize,
     prf,
 )
@@ -211,3 +222,250 @@ def test_aggregate_cases():
     assert agg["required_skills"]["f1"] == 1.0
     assert agg["dimension_accuracy"] == 0.9  # 平均各 case 的精度
     assert agg["salary"] == (2, 2)
+
+
+# ---------------- Error Taxonomy (v0.4) ----------------
+
+
+def _full_case(
+    required=None,
+    preferred=None,
+    resp=None,
+    culture=None,
+    dims=None,
+    subtext=None,
+    salary="",
+    location="",
+):
+    return {
+        "required_skills": required or [],
+        "preferred_skills": preferred or [],
+        "responsibilities": resp or [],
+        "culture_keywords": culture or [],
+        "dimensions": dims or {f"D{i}": 3 for i in range(1, 9)},
+        "subtext": subtext or [],
+        "salary": salary,
+        "location": location,
+    }
+
+
+def _ats_case(
+    required=None,
+    preferred=None,
+    resp=None,
+    culture=None,
+    dims=None,
+    subtext=None,
+    salary=None,
+    location=None,
+):
+    return {
+        "required_skills": required or [],
+        "preferred_skills": preferred or [],
+        "responsibilities": resp or [],
+        "culture_keywords": culture or [],
+        "dimension_requirements": (
+            [{"dimension": d, "level": v} for d, v in (dims or {}).items()]
+            if dims
+            else []
+        ),
+        "subtext_decoded": subtext or [],
+        "salary": salary,
+        "location": location,
+    }
+
+
+def test_match_lists_detail():
+    unmatched_pred, unmatched_gold = match_lists_detail(
+        ["Python", "Golang"], ["Python", "Redis"]
+    )
+    assert unmatched_pred == ["Golang"]
+    assert unmatched_gold == ["Redis"]
+
+
+def test_classify_field_errors_missing():
+    pred = _ats_case(required=["Python"])
+    gold = _full_case(required=["Python", "Redis"])
+    errors = classify_field_errors(
+        pred["required_skills"], gold["required_skills"], "required_skills", pred, gold
+    )
+    e1 = [e for e in errors if e.error_type == ErrorType.MISSING]
+    assert len(e1) == 1
+    assert e1[0].gold_item == "Redis"
+
+
+def test_classify_field_errors_hallucinated():
+    pred = _ats_case(required=["Python", "Golang"])
+    gold = _full_case(required=["Python"])
+    errors = classify_field_errors(
+        pred["required_skills"], gold["required_skills"], "required_skills", pred, gold
+    )
+    e2 = [e for e in errors if e.error_type == ErrorType.HALLUCINATED]
+    assert len(e2) == 1
+    assert e2[0].pred_item == "Golang"  # 非跨字段、非变体 → 幻觉
+
+
+def test_classify_field_errors_misclassified_required_vs_preferred():
+    # pred 把 gold.preferred_skills 的内容放进了 required_skills
+    pred = _ats_case(required=["Docker"], preferred=[])
+    gold = _full_case(required=[], preferred=["Docker"])
+    errors = classify_field_errors(
+        pred["required_skills"], gold["required_skills"], "required_skills", pred, gold
+    )
+    e3 = [e for e in errors if e.error_type == ErrorType.MISCLASSIFIED]
+    assert len(e3) == 1
+    assert e3[0].pred_item == "Docker"  # 跨字段匹配 preferred_skills
+
+
+def test_classify_field_errors_misclassified_skill_vs_responsibility():
+    # pred 把 gold.responsibilities 的内容放进了 required_skills
+    pred = _ats_case(required=["性能优化"])
+    gold = _full_case(required=[], resp=["性能优化"])
+    errors = classify_field_errors(
+        pred["required_skills"], gold["required_skills"], "required_skills", pred, gold
+    )
+    e3 = [e for e in errors if e.error_type == ErrorType.MISCLASSIFIED]
+    assert len(e3) == 1
+
+
+def test_classify_field_errors_normalization():
+    # "数据处理与分析" 与 "数据分析与处理" Dice≈0.5 (>0.4 且 <0.6)：
+    # items_match 判不中，但归一化变体检测能识别 → E8
+    pred = _ats_case(required=["Python", "数据分析与处理"])
+    gold = _full_case(required=["Python", "数据处理与分析"])
+    errors = classify_field_errors(
+        pred["required_skills"], gold["required_skills"], "required_skills", pred, gold
+    )
+    e8 = [e for e in errors if e.error_type == ErrorType.NORMALIZATION]
+    assert len(e8) >= 1
+
+
+def test_classify_field_errors_abbreviation_requires_lexicon():
+    # 缩写（K8s vs Kubernetes）Dice=0，无共享 bigram，自动识别需词表 → 归为 E2 幻觉（诚实标注）
+    pred = _ats_case(required=["Python", "K8s"])
+    gold = _full_case(required=["Python", "Kubernetes"])
+    errors = classify_field_errors(
+        pred["required_skills"], gold["required_skills"], "required_skills", pred, gold
+    )
+    e2 = [e for e in errors if e.error_type == ErrorType.HALLUCINATED]
+    assert len(e2) >= 1
+
+
+def test_classify_field_errors_granularity_oversplit():
+    # pred 3 条 vs gold 1 条 → 潜在过度拆分
+    pred = _ats_case(required=["Python", "Python 3.12", "Python 高效编码"])
+    gold = _full_case(required=["Python"])
+    errors = classify_field_errors(
+        pred["required_skills"], gold["required_skills"], "required_skills", pred, gold
+    )
+    e4 = [e for e in errors if e.error_type == ErrorType.GRANULARITY]
+    assert len(e4) == 1
+
+
+def test_classify_dimension_errors_level_mismatch():
+    pred = _ats_case(dims={"D1": 4})
+    gold = _full_case(dims={"D1": 3})
+    errors = classify_dimension_errors(pred, gold)
+    e6 = [e for e in errors if e.error_type == ErrorType.DIMENSION]
+    assert len(e6) == 1
+    assert "D1" in e6[0].field
+
+
+def test_classify_dimension_errors_missing_dimension():
+    pred = _ats_case(dims={})  # 完全没输出维度
+    gold = _full_case(dims={"D1": 3, "D2": 4})
+    errors = classify_dimension_errors(pred, gold)
+    e1 = [e for e in errors if e.error_type == ErrorType.MISSING]
+    assert len(e1) == 2  # D1、D2 都被判为缺失
+
+
+def test_classify_hidden_errors_not_identified():
+    pred = _ats_case(subtext=[])
+    gold = _full_case(
+        subtext=[
+            {"surface": "具备良好的业务理解能力", "hidden": "期望从数据中发现业务问题"}
+        ]
+    )
+    errors = classify_hidden_errors(pred, gold)
+    e7 = [e for e in errors if e.error_type == ErrorType.HIDDEN]
+    assert len(e7) == 1
+
+
+def test_classify_hidden_errors_hallucinated():
+    pred = _ats_case(
+        subtext=[
+            {"surface_requirement": "熟悉分布式系统", "hidden_meaning": "高并发经验"}
+        ]
+    )
+    gold = _full_case(subtext=[])
+    errors = classify_hidden_errors(pred, gold)
+    e2 = [e for e in errors if e.error_type == ErrorType.HALLUCINATED]
+    assert len(e2) == 1
+
+
+def test_classify_case_errors_integration():
+    pred = _ats_case(
+        required=["Python", "Golang"],
+        preferred=[],
+        dims={"D1": 4},
+    )
+    gold = _full_case(
+        required=["Python", "Redis"],
+        preferred=["Golang"],
+        dims={"D1": 3},
+    )
+    errors = classify_case_errors(pred, gold)
+    types = {e.error_type.value for e in errors}
+    assert "E3" in types  # Golang 被误放进 required
+    assert "E6" in types  # D1 等级错
+
+
+def test_error_taxonomy_summary():
+    errors = [
+        ErrorRecord(ErrorType.MISSING, "required_skills", gold_item="Redis"),
+        ErrorRecord(ErrorType.HALLUCINATED, "required_skills", pred_item="Golang"),
+        ErrorRecord(ErrorType.MISCLASSIFIED, "required_skills", pred_item="Docker"),
+    ]
+    summary = error_taxonomy_summary(errors)
+    assert summary["E1"] == 1
+    assert summary["E2"] == 1
+    assert summary["E3"] == 1
+    assert summary["E4"] == 0
+
+
+def test_error_taxonomy_by_field():
+    errors = [
+        ErrorRecord(ErrorType.MISSING, "required_skills", gold_item="Redis"),
+        ErrorRecord(ErrorType.MISSING, "responsibilities", gold_item="性能优化"),
+    ]
+    by_field = error_taxonomy_by_field(errors)
+    assert by_field["required_skills"]["E1"] == 1
+    assert by_field["responsibilities"]["E1"] == 1
+
+
+# ---------------- Field Completeness + Critical Error Rate (v0.4) ----------------
+
+
+def test_field_completeness():
+    pred = _ats_case(required=["Python"], salary="15-25K")
+    gold = _full_case(required=["Python", "Redis"], salary="15-25K")
+    fc = field_completeness(pred, gold)
+    assert fc["required_skills"] == 0.5  # 2 条 gold，1 条被填充
+    assert fc["salary"] == 1.0
+    assert fc["location"] == 0.0  # gold 无 location → pred 空 → 0
+
+
+def test_field_completeness_empty_gold():
+    pred = _ats_case(required=["Python"])
+    gold = _full_case(required=[])
+    fc = field_completeness(pred, gold)
+    assert fc["required_skills"] == 1.0  # gold 字段为空 → 视为完整
+
+
+def test_critical_error_rate_required_preferred_mix():
+    errors = [
+        ErrorRecord(ErrorType.MISCLASSIFIED, "required_skills", pred_item="Docker"),
+        ErrorRecord(ErrorType.MISSING, "required_skills", gold_item="Redis"),
+        ErrorRecord(ErrorType.HALLUCINATED, "responsibilities", pred_item="杂项"),
+    ]
+    assert critical_error_rate(errors) == 0.5  # 2 条 required 字段错误中 1 条是误分类

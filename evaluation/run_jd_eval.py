@@ -26,8 +26,14 @@ from app.tools.llm_json import register_usage_observer
 from evaluation.datasets import DEFAULT_DATASET
 from evaluation.jd_metrics import (
     LIST_FIELDS,
+    ErrorType,
     aggregate_cases,
+    classify_case_errors,
+    critical_error_rate,
+    error_taxonomy_by_field,
+    error_taxonomy_summary,
     evaluate_case,
+    field_completeness,
 )
 from evaluation.run_chinese_eval import UsageCollector, estimate_cost
 
@@ -156,9 +162,12 @@ def run_benchmark(gold_path: Path, outdir: Path) -> Dict[str, Any]:
         gold = gold_by_id.get(pred["case_id"])
         if gold is None:
             continue
-        case_results.append(
-            evaluate_case(pred.get("ats") or {}, gold.get("gold") or {})
-        )
+        ats = pred.get("ats") or {}
+        g = gold.get("gold") or {}
+        case_result = evaluate_case(ats, g)
+        case_result["errors"] = classify_case_errors(ats, g)
+        case_result["completeness"] = field_completeness(ats, g)
+        case_results.append(case_result)
 
     return {
         "gold_cases": gold_cases,
@@ -167,6 +176,28 @@ def run_benchmark(gold_path: Path, outdir: Path) -> Dict[str, Any]:
         "latency": round(latency, 2),
         "pred_file": pred_file,
     }
+
+
+def _agg_errors(case_results: list[dict]) -> list:
+    """汇总所有 case 的错误记录。"""
+    out: list = []
+    for r in case_results:
+        out.extend(r.get("errors") or [])
+    return out
+
+
+def e_desc(e: ErrorType) -> str:
+    """ErrorType → 中文描述。"""
+    return {
+        ErrorType.MISSING: "gold 有，pred 没有",
+        ErrorType.HALLUCINATED: "pred 有，gold 没有",
+        ErrorType.MISCLASSIFIED: "字段间误分类",
+        ErrorType.GRANULARITY: "粒度不匹配",
+        ErrorType.SEMANTIC: "语义理解错误",
+        ErrorType.DIMENSION: "D1-D8 等级错误",
+        ErrorType.HIDDEN: "潜台词未识别",
+        ErrorType.NORMALIZATION: "同义词/缩写/格式",
+    }[e]
 
 
 def build_report(result: Dict[str, Any], report_path: Path) -> None:
@@ -179,16 +210,21 @@ def build_report(result: Dict[str, Any], report_path: Path) -> None:
     case_results = result["case_results"]
     usage = result["usage"]
     summary = aggregate_cases(case_results)
+    all_errors = _agg_errors(case_results)
+    taxonomy = error_taxonomy_summary(all_errors)
+    by_field = error_taxonomy_by_field(all_errors)
+    crit_rate = critical_error_rate(all_errors)
 
     lines: list[str] = [
-        "# JD Extraction Evaluation Report (v0.3)",
+        "# JD Extraction Evaluation Report (v0.4)",
         "",
         "## Status",
         "",
-        f"**v0.3 — JD Extraction 回测完成（{len(gold_cases)} 条中文合成 JD，2026-09-09）。**",
+        f"**v0.4 — JD Extraction 回测完成（{len(gold_cases)} 条中文合成 JD，2026-09）。**",
         "",
         "模型: `glm-4.7-flash`（用户已切换）。链路: JD 原文 → `JdAtsAgent` → `ATSProfile`。",
         "重点：**AI 是否正确抽取岗位要求**（Required/Preferred Skills、Responsibilities、Keywords、Dimension、Salary/Location、Hidden Requirement）。",
+        "v0.4 新增：**Error Taxonomy（E1-E8）**、**Field Completeness**、**Critical Error Rate**。",
         "",
         f"- LLM 调用: {usage['llm_calls']}（缓存命中 {usage['llm_calls_cached']}）",
         f"- Token 用量: prompt {usage['prompt_tokens']} / completion {usage['completion_tokens']} / total {usage['total_tokens']}",
@@ -218,6 +254,47 @@ def build_report(result: Dict[str, Any], report_path: Path) -> None:
 
     lines += [
         "",
+        "## Error Taxonomy",
+        "",
+        "错误分类（E1-E8）。自动识别 E1/E2/E3/E6/E7/E8；E4（粒度）用数量比启发式；缩写等需词典的归类为 E2。",
+        "",
+        "| 类型 | 含义 | 数量 |",
+        "|---|---|---:|",
+    ]
+    for e in ErrorType:
+        lines.append(f"| {e.value} {e.name} | {e_desc(e)} | {taxonomy[e.value]} |")
+    lines += [
+        "",
+        f"**Critical Error Rate（required/preferred 字段误分类占比）: {crit_rate:.2%}**",
+        "",
+        "| 字段 | E1 Missing | E2 Hallucinated | E3 Misclassified | E4 Granularity | E6 Dimension | E7 Hidden | E8 Normalization |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|",
+    ]
+    field_order = [attr for _, attr in LIST_FIELDS] + [
+        "dimension_D" + str(i) for i in range(1, 9)
+    ]
+    for fld in field_order:
+        row = by_field.get(fld) or {e.value: 0 for e in ErrorType}
+        lines.append(
+            f"| {fld} | {row['E1']} | {row['E2']} | {row['E3']} | {row['E4']} | {row['E6']} | {row['E7']} | {row['E8']} |"
+        )
+
+    lines += [
+        "",
+        "## Field Completeness",
+        "",
+        "gold 字段缺失字段完整性（被 pred 覆盖的比例，micro 平均）。",
+        "",
+        "| 字段 | Completeness |",
+        "|---|---:|",
+    ]
+    for fld, _ in LIST_FIELDS + [("salary", "salary"), ("location", "location")]:
+        vals = [r["completeness"].get(fld, 0.0) for r in case_results]
+        avg = sum(vals) / len(vals) if vals else 0.0
+        lines.append(f"| {fld} | {avg:.3f} |")
+
+    lines += [
+        "",
         "## Hidden Requirements（人工复核清单）",
         "",
         "模型 `subtext_decoded` 是对潜台词的解读，主观性高，脚本仅输出待审清单：",
@@ -242,13 +319,14 @@ def build_report(result: Dict[str, Any], report_path: Path) -> None:
         "",
         "## Case-level 明细",
         "",
-        "| case | job | RequiredSkills F1 | Responsibilities F1 | Keywords F1 | PreferredSkills F1 | DimAcc | Salary | Location |",
-        "|---|---:|---:|---:|---:|---:|---:|---:|---:|",
+        "| case | job | RequiredSkills F1 | Responsibilities F1 | Keywords F1 | PreferredSkills F1 | DimAcc | Salary | Location | Errors |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for case_result, case in zip(case_results, gold_cases):
         r = case_result
         dim = r["dimension_hits"]
         dim_acc = f"{sum(1 for v in dim.values() if v)}/8"
+        n_errors = len(r.get("errors") or [])
         rows = [
             case["case_id"],
             case.get("job_title", ""),
@@ -259,6 +337,7 @@ def build_report(result: Dict[str, Any], report_path: Path) -> None:
             dim_acc,
             "✓" if r["salary"] else "✗",
             "✓" if r["location"] else "✗",
+            str(n_errors),
         ]
         lines.append("| " + " | ".join(rows) + " |")
 
