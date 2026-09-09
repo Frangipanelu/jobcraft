@@ -2,6 +2,40 @@
 
 Evaluates how reliably JobCraft matches candidate experience cards to job requirements.
 
+## v0.3 — JD Extraction benchmark（2026-09）
+
+在第一层链路验证：`JD 原文 → JdAtsAgent → ATSProfile`（结构化抽取），默认模型 `glm-4.7-flash`。
+
+10 条合成中文 JD（jd_001..jd_010），gold 含八维能力要求（D1-D8 level）与隐性需求（subtext）。按以下维度评测：
+
+| 维度 | 指标 |
+|------|------|
+| Required Skills | Precision / Recall / F1（bigram Dice ≥0.6 + 单边包含）|
+| Responsibilities | P / R / F1 |
+| Keywords | P / R / F1 |
+| Soft/Preferred Skills | P / R / F1 |
+| Dimension Accuracy | 八维 level 命中率 |
+| Salary / Location | Exact Match（允许单边包含）|
+| Hidden Requirements | 表面覆盖 + 人工复核清单 |
+
+运行（支持断点续跑，失败条目自动重试）：
+
+```bash
+python -m evaluation.run_jd_eval \
+  --gold evaluation/datasets/jd_cases.jsonl \
+  --report evaluation/reports/jd_extraction_report.md
+```
+
+产出报告：[`reports/jd_extraction_report.md`](reports/jd_extraction_report.md)。
+
+v0.3 结论：
+
+- **Required Skills / Preferred Skills 抽取可靠**（F1 0.65 / 0.71）；Responsibilities 与 Keywords 偏弱（F1 0.39 / 0.32）。
+- **Dimension Accuracy 偏低（0.41）**且各能力维度差异大，是下一轮 Prompt 优化的主要方向。
+- **Salary 全对、Location 9/10**，结构化字段（Exact Match）抽取基本可靠。
+- **Hidden Requirements 覆盖不稳定**（部分 case 100% 命中表层关键词、其余 0%），需要更强 subtext 解析约束。
+- 工程：`glm-4.7-flash` 单次抽取约 20s，10 条全量 ≈200s+；首次运行无缓存约 10 次 LLM 调用，Redis ai_cache 命中后 $0 成本可复现。
+
 ## v0.2 — Chinese real-world benchmark（2026-09）
 
 在 10 条中文真实风格 case（direct×3 / semantic×2 / partial×2 / negative×2 / transfer×1）上，
@@ -73,14 +107,18 @@ evaluation/
 ├── README.md
 ├── datasets/
 │   ├── matching_cases.jsonl         # v0.1 英文合成数据集
-│   └── chinese_cases.jsonl          # v0.2 中文真实风格数据集
+│   ├── chinese_cases.jsonl          # v0.2 中文真实风格数据集
+│   └── jd_cases.jsonl               # v0.3 合成中文 JD（含八维要求 + subtext 隐性需求）
 ├── strategies.py
 ├── generate.py
 ├── run_matching_eval.py
 ├── run_chinese_eval.py              # v0.2 runner（含 latency/calls/cost 采集）
+├── jd_metrics.py                    # v0.3 JD 抽取评测纯函数（P/R/F1、维度命中、精确匹配、隐性需求复核）
+├── run_jd_eval.py                   # v0.3 runner（断点续跑 + usage/cost 汇总）
 └── reports/
     ├── matching_report.md           # v0.1 + 权重消融
-    └── chinese_matching_report.md   # v0.2 中文回测
+    ├── chinese_matching_report.md   # v0.2 中文回测
+    └── jd_extraction_report.md      # v0.3 JD 抽取评测
 ```
 
 - `strategies.py` — 三种策略的预测生成器，复用现有生产代码（`_local_score` / `ScoreMatchAgent`）。
