@@ -164,6 +164,41 @@ def test_jd_ats_agent_with_mock_llm(monkeypatch):
     assert "python" in out["ats"]["required_skills"]
 
 
+def test_jd_ats_agent_v3_mock_llm(monkeypatch):
+    from app.agents.jd_ats_agent import JdAtsAgent
+
+    def _fake_invoke(model, schema, prompt, **kwargs):
+        assert "evidence-first" in prompt
+        return schema(
+            job_title="高级后端工程师",
+            required_skills=["python", "go"],
+            evidence_items=[
+                {
+                    "id": 1,
+                    "field": "required_skills",
+                    "span": "精通 Python",
+                    "derived": "python",
+                }
+            ],
+        )
+
+    monkeypatch.setattr("app.agents.jd_ats_agent.invoke_structured", _fake_invoke)
+    out = JdAtsAgent().run({"jd_text": "JD 文本", "prompt_version": "v3"})
+    assert "raw" in out
+    # 证据校验：go 无证据支撑 → 被丢弃
+    assert out["ats"]["required_skills"] == ["python"]
+    assert out["raw"]["required_skills"] == ["python", "go"]
+
+
+def test_jd_ats_agent_v3_prompt_version_default_v1(monkeypatch):
+    from app.agents.jd_ats_agent import _build_ats_prompt
+
+    p1 = _build_ats_prompt("JD", version="v1")
+    p3 = _build_ats_prompt("JD", version="v3")
+    assert "evidence-first" not in p1
+    assert "evidence-first" in p3
+
+
 # ---------- AtsRecommendAgent ----------
 
 

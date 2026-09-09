@@ -2,11 +2,17 @@
 JD ATS 解析 Agent
 
 从 JD 文本提取 8 维能力要求与岗位画像（单次 LLM 调用）。
+
+支持 prompt 版本：
+- v1：基础抽取（默认，向后兼容）
+- v3：evidence-first（先抽证据、后出画像），输出附 `evidence_items`，
+      后端以 `reconcile_evidence` 做确定性证据校验。
 """
 
 from typing import Any, Dict
 
 from app.agents.base_agent import BaseAgent
+from app.agents.evidence import reconcile_evidence
 from app.core.llm import model
 from app.core.prompts import load_prompt
 from app.schemas.jobcraft import ATSProfile
@@ -24,14 +30,26 @@ DIMENSION_DESCRIPTIONS = {
     "D8": "职业规划：自我定位、成长路径与岗位匹配度",
 }
 
+# 支持的 prompt 版本（v2 预留，Issue 4 补充）
+_ATS_PROMPT_VERSIONS = {"v1": 1, "v3": 3}
 
-def _build_ats_prompt(jd_text: str) -> str:
+
+def _build_ats_prompt(jd_text: str, *, version: str = "v1") -> str:
     dims = "\n".join([f"{k}: {v}" for k, v in DIMENSION_DESCRIPTIONS.items()])
-    return load_prompt("jd", "jd_ats_analysis", dims=dims, jd_text=jd_text[:6000])
+    ver = _ATS_PROMPT_VERSIONS.get(version, 1)
+    return load_prompt(
+        "jd", "jd_ats_analysis", version=ver, dims=dims, jd_text=jd_text[:6000]
+    )
 
 
 class JdAtsAgent(BaseAgent):
-    """解析 JD，返回 ATSProfile（单次 LLM 调用）"""
+    """解析 JD，返回 ATSProfile（单次 LLM 调用）
+
+    state 支持 ``prompt_version``（"v1" / "v3"，默认 "v1"）：
+    v3 证据模式返回原始输出 raw 与证据校验后的 ats 两份结果。
+    """
+
+    _DEFAULT_OUTPUT_SCHEMA = ATSProfile
 
     def _get_output_schema(self):
         return ATSProfile
@@ -39,12 +57,17 @@ class JdAtsAgent(BaseAgent):
     def run(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """解析 JD 文本。
 
-        :param state: {"jd_text": str}
-        :return: {"ats": ATSProfile dict}
+        :param state: {"jd_text": str, "prompt_version"?: "v1"|"v3"}
+        :return: {"ats": ATSProfile dict}；v3 时另含 {"raw": 校验前原始 dict}
         """
         jd_text = state.get("jd_text", "")
         if not jd_text or not jd_text.strip():
             raise ValueError("JD 文本不能为空")
-        prompt = _build_ats_prompt(jd_text)
+        version = state.get("prompt_version", "v1")
+        prompt = _build_ats_prompt(jd_text, version=version)
         ats = invoke_structured(model, ATSProfile, prompt, debug_label="jd_ats")
-        return {"ats": ats.model_dump()}
+        result: Dict[str, Any] = {"ats": ats.model_dump()}
+        if version == "v3":
+            result["raw"] = result["ats"]
+            result["ats"] = reconcile_evidence(result["ats"])
+        return result

@@ -161,6 +161,25 @@ class DimensionRequirement(BaseModel):
     evidence: str = Field("", description="JD 中体现该要求的原文/关键词")
 
 
+class EvidenceItem(BaseModel):
+    """JD 证据条目：每条输出值必须由 JD 原文佐证（evidence-first 模式）"""
+
+    id: int = Field(..., description="证据编号，从 1 开始")
+    field: str = Field(
+        ...,
+        description=(
+            "证据支撑的输出字段：required_skills / preferred_skills / "
+            "responsibilities / culture_keywords / key_metrics / "
+            "dimension_D1..dimension_D8 / salary / location / subtext"
+        ),
+    )
+    span: str = Field(..., description="JD 原文逐字摘录（不加解释）")
+    derived: str = Field(
+        ...,
+        description="从证据提炼出的字段值（列表字段=该条目；dimension_*=level 等级 1-5）",
+    )
+
+
 class SubtextDecode(BaseModel):
     """JD 潜台词解码：表面要求 → 实际期望能力"""
 
@@ -170,6 +189,9 @@ class SubtextDecode(BaseModel):
     )
     key_ability: str = Field("", description="真正需要证明的关键能力")
     how_to_prove: str = Field("", description="如何用经历/量化成果证明")
+    confidence: float = Field(
+        0.5, ge=0.0, le=1.0, description="模型自评把握度 0-1，供人工复核按置信度排序"
+    )
 
 
 class JDRequirements(BaseModel):
@@ -203,6 +225,9 @@ class ATSProfile(BaseModel):
     culture_keywords: List[str] = Field(default_factory=list)
     dimension_requirements: List[DimensionRequirement] = Field(default_factory=list)
     subtext_decoded: List[SubtextDecode] = Field(default_factory=list)
+    evidence_items: List[EvidenceItem] = Field(
+        default_factory=list, description="证据列表（evidence-first Prompt C 模式产出）"
+    )
     raw_summary: str = Field("", description="JD 原文摘要")
 
 
