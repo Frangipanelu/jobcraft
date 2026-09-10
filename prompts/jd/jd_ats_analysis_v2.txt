@@ -18,5 +18,6 @@ JD 文本：
 7. 【职责提取】responsibilities 按 JD 列出的逐条职责拆分，粒度与原文一致（不合并、不拆分原文一句话为多条）。
 8. 【文化/指标】culture_keywords 只取 JD 原文表达的价值观/文化词（如"扁平""结果导向"）；key_metrics 只取明确量化 KPI（如"活跃用户数提升 20%"）；二者不可从职责里自行演绎。
 9. 【学历/年限归位】统招本科及以上学历、计算机相关专业等学历/专业门槛 → 只填 `education`；3年以上后端开发经验等年限门槛 → 只填 `years_of_experience`；二者禁止写入 `required_skills`/`preferred_skills`/`responsibilities`。
+10. 【职责/技能独立判定】responsibilities 与 required_skills 按句首区分：动作动词开头（负责/主导/设计/开发/搭建/维护/推动）→ responsibilities；能力动词开头（熟悉/精通/掌握/熟练）或纯技术名词（MySQL/Kubernetes/分布式系统）→ required_skills；同一能力禁止同时出现在两个字段。
 
 输出必须仅包含 ATSProfile JSON，不得输出额外解释。

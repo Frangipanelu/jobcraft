@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 from app.agents.evidence import (
+    classify_sentence_role,
     coverage_stats,
     normalize,
     reconcile_evidence,
+    reclassify_claims,
     split_ontology_claims,
     trusted_view,
     validate_list_item,
@@ -271,6 +273,39 @@ def test_split_ontology_does_not_touch_evidence_items():
     out = split_ontology_claims(ats)
     assert out["evidence_items"] == ats["evidence_items"]
     assert "统招本科及以上学历" not in out["required_skills"]
+
+
+def test_classify_sentence_role():
+    assert classify_sentence_role("负责后台服务架构设计") == "responsibility"
+    assert classify_sentence_role("主导高并发系统改造") == "responsibility"
+    assert classify_sentence_role("参与跨团队需求评审") == "responsibility"
+    assert classify_sentence_role("熟悉分布式缓存中间件") == "skill"
+    assert classify_sentence_role("精通 Java 与 Spring 全家桶") == "skill"
+    assert classify_sentence_role("熟练使用 Flink 实时计算") == "skill"
+    assert classify_sentence_role("MySQL 性能调优") == "ambiguous"  # 无动词→歧义，不搬
+    assert classify_sentence_role("保证线上服务稳定性") == "ambiguous"
+
+
+def test_reclassify_claims_moves_misplaced_items():
+    ats = _ats(
+        required_skills=[
+            "负责系统性能调优",  # 动作句被写入技能 → 搬回 responsibilities
+            "熟悉 Kubernetes",
+            "MySQL 调优",  # 无动词名词短语 → 原位保留
+        ],
+        responsibilities=[
+            "熟悉 Docker 容器化部署",  # 能力句被写入职责 → 搬回 required_skills
+            "负责业务需求评审",
+            "稳定性保障",  # 无动词名词短语 → 原位保留
+        ],
+    )
+    out = reclassify_claims(ats)
+    assert "负责系统性能调优" in out["responsibilities"]
+    assert "熟悉 Kubernetes" in out["required_skills"]
+    assert "熟悉 Docker 容器化部署" in out["required_skills"]
+    assert "负责业务需求评审" in out["responsibilities"]
+    assert "MySQL 调优" in out["required_skills"]  # ambiguous 原位
+    assert "稳定性保障" in out["responsibilities"]  # ambiguous 原位
 
 
 def test_reconcile_scalars_without_evidence_dropped():

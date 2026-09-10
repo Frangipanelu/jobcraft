@@ -47,6 +47,76 @@ _YEARS_RE = re.compile(
 # 本体归位扫描的列表字段（学历/年限只可能混入技能类字段）
 _ONTOLOGY_FIELDS = ("required_skills", "preferred_skills")
 
+# —— Responsibilities 独立判定（Issue：P0，Skill↔Responsibility 边界混淆）——
+# 能力表述动词（capability 开头 → Skill）
+_CAPABILITY_VERBS = (
+    "熟悉", "精通", "掌握", "熟练", "了解", "具备", "拥有", "理解",
+    "深入理解", "熟悉并使用", "能熟练",
+)
+# 动作/职责表述动词（action 开头 → Responsibility）
+_ACTION_VERBS = (
+    "负责", "主导", "参与", "设计", "开发", "搭建", "构建", "维护", "优化",
+    "推动", "制定", "跟进", "协调", "管理", "落地", "执行", "支持", "把控",
+    "交付", "保障", "评估", "调研", "分析", "梳理", "沉淀", "培训", "指导",
+    "监督", "验收", "重构", "建设", "实施", "规划", "推进",
+)
+
+
+def classify_sentence_role(sentence: str) -> str:
+    """独立判定一句话属于 Responsibility 还是 Skill（确定性词表，无 LLM）。
+
+    规则（Issue 3 独立判定要件）：
+    - 以能力动词开头（熟悉/精通/掌握…）→ ``skill``
+    - 以动作动词开头（负责/主导/设计…）→ ``responsibility``
+    - 其余（无动词的名词/工具/领域短语）→ ``ambiguous``
+
+    仅"动词开头"是高精度判据：名词短语双向都有歧义（"MySQL 调优"既可能
+    是职责态也可能是能力态），不做确定性搬移。``ambiguous`` 由
+    `reclassify_claims` 原位保留。
+
+    :param sentence: 待分类句子
+    :return: "responsibility" | "skill" | "ambiguous"
+    """
+    head = sentence.strip()[:6]
+    for v in _CAPABILITY_VERBS:
+        if head.startswith(v):
+            return "skill"
+    for v in _ACTION_VERBS:
+        if head.startswith(v):
+            return "responsibility"
+    return "ambiguous"
+
+
+def reclassify_claims(ats: Dict[str, Any]) -> Dict[str, Any]:
+    """按独立判定规则纠正 responsibilities ↔ required_skills 的错位（确定性）。
+
+    模型倾向把能力句（"熟悉Docker"）写进 responsibilities，把动作句
+    （"负责系统性能优化"）写进 required_skills（E3 MISCLASSIFIED 的头号来源）。
+    仅搬移动词开头的高置信条目：能力动词开头 → required_skills；动作动词开头
+    → responsibilities；无动词名词短语（ambiguous）原位保留。不新增/删除条目。
+
+    :param ats: ATSProfile dict
+    :return: 搬移后的新 dict
+    """
+    result = dict(ats)
+    skills_to_res: List[str] = []
+    res_kept: List[str] = []
+    for x in ats.get("responsibilities") or []:
+        if classify_sentence_role(str(x)) == "skill":
+            skills_to_res.append(str(x))
+        else:
+            res_kept.append(str(x))
+    res_to_skills: List[str] = []
+    skill_kept: List[str] = []
+    for x in ats.get("required_skills") or []:
+        if classify_sentence_role(str(x)) == "responsibility":
+            res_to_skills.append(str(x))
+        else:
+            skill_kept.append(str(x))
+    result["responsibilities"] = res_kept + res_to_skills
+    result["required_skills"] = skill_kept + skills_to_res
+    return result
+
 _EV_SUPPORTED_FIELDS = {
     "required_skills",
     "preferred_skills",

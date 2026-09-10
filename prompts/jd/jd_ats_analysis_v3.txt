@@ -17,7 +17,8 @@
 2. `salary`/`location` 逐字采用证据值。
 3. `subtext_decoded` 每条必须对应 `subtext` 证据（span 含该句原文）。
 4. `education` 仅填 JD 明确要求的学历/专业门槛短语（如"统招本科及以上学历"）；`years_of_experience` 仅填 JD 明确要求的年限门槛短语（如"3年以上后端开发经验"）。
-5. 未提及的信息输出空，绝不编造。
+5. `responsibilities` 与 `required_skills` 用独立判定区分：句子主语是动作（负责/主导/设计/开发/搭建/维护/推动类）→ `responsibilities`；主语是能力或技术名词（熟悉/精通/掌握类、纯工具/领域名词如 MySQL/Kubernetes/分布式系统）→ `required_skills`。同一能力不得同时出现在两个字段。
+6. 未提及的信息输出空，绝不编造。
 
 8 维能力矩阵说明（D1-D8，level 1-5）：
 {{dims}}
