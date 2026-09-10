@@ -13,7 +13,11 @@ JD ATS 解析 Agent
 from typing import Any, Dict
 
 from app.agents.base_agent import BaseAgent
-from app.agents.evidence import reconcile_evidence, reclassify_claims, split_ontology_claims
+from app.agents.evidence import (
+    reconcile_evidence,
+    reclassify_claims,
+    split_ontology_claims,
+)
 from app.core.llm import model
 from app.core.prompts import load_prompt
 from app.schemas.jobcraft import ATSProfile

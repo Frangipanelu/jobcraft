@@ -50,15 +50,54 @@ _ONTOLOGY_FIELDS = ("required_skills", "preferred_skills")
 # —— Responsibilities 独立判定（Issue：P0，Skill↔Responsibility 边界混淆）——
 # 能力表述动词（capability 开头 → Skill）
 _CAPABILITY_VERBS = (
-    "熟悉", "精通", "掌握", "熟练", "了解", "具备", "拥有", "理解",
-    "深入理解", "熟悉并使用", "能熟练",
+    "熟悉",
+    "精通",
+    "掌握",
+    "熟练",
+    "了解",
+    "具备",
+    "拥有",
+    "理解",
+    "深入理解",
+    "熟悉并使用",
+    "能熟练",
 )
 # 动作/职责表述动词（action 开头 → Responsibility）
 _ACTION_VERBS = (
-    "负责", "主导", "参与", "设计", "开发", "搭建", "构建", "维护", "优化",
-    "推动", "制定", "跟进", "协调", "管理", "落地", "执行", "支持", "把控",
-    "交付", "保障", "评估", "调研", "分析", "梳理", "沉淀", "培训", "指导",
-    "监督", "验收", "重构", "建设", "实施", "规划", "推进",
+    "负责",
+    "主导",
+    "参与",
+    "设计",
+    "开发",
+    "搭建",
+    "构建",
+    "维护",
+    "优化",
+    "推动",
+    "制定",
+    "跟进",
+    "协调",
+    "管理",
+    "落地",
+    "执行",
+    "支持",
+    "把控",
+    "交付",
+    "保障",
+    "评估",
+    "调研",
+    "分析",
+    "梳理",
+    "沉淀",
+    "培训",
+    "指导",
+    "监督",
+    "验收",
+    "重构",
+    "建设",
+    "实施",
+    "规划",
+    "推进",
 )
 
 
@@ -116,6 +155,7 @@ def reclassify_claims(ats: Dict[str, Any]) -> Dict[str, Any]:
     result["responsibilities"] = res_kept + res_to_skills
     result["required_skills"] = skill_kept + skills_to_res
     return result
+
 
 _EV_SUPPORTED_FIELDS = {
     "required_skills",
