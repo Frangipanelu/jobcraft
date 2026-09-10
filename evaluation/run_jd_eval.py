@@ -40,8 +40,12 @@ from evaluation.run_chinese_eval import UsageCollector, estimate_cost
 
 REPORT_PATH = Path(__file__).parent / "reports" / "jd_extraction_report.md"
 
-# 单条 LLM 调用超时（秒）。超过即放弃本轮，留待下次续跑重试，避免卡死整个评测。
-_LLM_CALL_TIMEOUT_S = 150.0
+# 单条 LLM 调用超时（秒）。高于底层 HTTP 超时（llm.py 默认 180s），
+# 让请求先自断而非仅被弃线程；超时即放弃本轮，留待下次续跑重试。
+_LLM_CALL_TIMEOUT_S = 200.0
+# 账号级 429 限流（code 1302）的退避重试参数
+_RATE_LIMIT_BACKOFF_S = 60.0
+_RATE_LIMIT_MAX_RETRIES = 3
 
 
 def _run_agent_with_timeout(
@@ -69,6 +73,38 @@ def _run_agent_with_timeout(
         raise
     finally:
         executor.shutdown(wait=False)
+
+
+def _run_agent_with_retry(
+    jd_text: str, prompt_version: str, timeout_s: float = _LLM_CALL_TIMEOUT_S
+) -> Dict[str, Any]:
+    """带超时与 429 退避重试调用 JdAtsAgent（评测专用）。
+
+    账号级限流（code 1302 / HTTP 429）时按 60s×N 退避重试最多
+    ``_RATE_LIMIT_MAX_RETRIES`` 次，避免一次 429 把整轮打成假失败。
+
+    :param jd_text: JD 文本
+    :param prompt_version: prompt 版本
+    :param timeout_s: 单次调用超时秒数
+    :return: agent.run 结果 dict
+    :raises Exception: 最终失败（含重试耗尽后的限流异常）
+    """
+    attempt = 0
+    while True:
+        try:
+            return _run_agent_with_timeout(jd_text, prompt_version, timeout_s)
+        except Exception as exc:  # noqa: BLE001 - 429 需从任意异常中识别
+            msg = str(exc)
+            if ("429" in msg or "1302" in msg) and attempt < _RATE_LIMIT_MAX_RETRIES:
+                attempt += 1
+                wait = _RATE_LIMIT_BACKOFF_S * attempt
+                print(
+                    f"[jd_eval] 429 限流退避 {wait}s（第 {attempt} 次重试）...",
+                    flush=True,
+                )
+                time.sleep(wait)
+                continue
+            raise
 
 
 def _run_agent_with_timeout_impl(state: Dict[str, Any]) -> Dict[str, Any]:
@@ -147,7 +183,7 @@ def observed_generate_ats(
             continue
         before = collector.snapshot()
         try:
-            out = _run_agent_with_timeout(case["jd_text"], prompt_version)
+            out = _run_agent_with_retry(case["jd_text"], prompt_version)
             entry = {"case_id": case["case_id"], "ats": out["ats"]}
             if "raw" in out:
                 entry["raw"] = out["raw"]
@@ -299,6 +335,23 @@ def _load_version_preds(outdir: Path, version: str) -> list[dict[str, Any]]:
     ]
 
 
+def _load_version_preds_latest(outdir: Path, version: str) -> list[dict[str, Any]]:
+    """读取某版本预测缓存，同 case 多行时取最新一条（续跑会追加覆盖行）。
+
+    :param outdir: 预测输出目录
+    :param version: prompt 版本（"v1"/"v2"/"v3"）
+    :return: latest-per-case 预测列表
+    """
+    by_id: dict[str, dict[str, Any]] = {}
+    for line in _load_version_preds(outdir, version):
+        try:
+            row = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        by_id[row.get("case_id")] = row
+    return list(by_id.values())
+
+
 def _criterion_summary(case_results: list[dict[str, Any]]) -> dict[str, Any]:
     """单组 case_results 的关键指标字典（供对比表）。"""
     if not case_results:
@@ -319,17 +372,42 @@ def _criterion_summary(case_results: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 def _add_prompt_comparison(lines: list[str], result: Dict[str, Any]) -> None:
-    """写 Prompt 版本对比小节（v3 含 raw / 校验两态）。"""
-    baseline = result.get("baseline_cases") or []
-    raw_results = result.get("case_results_raw") or []
-    recon_results = result.get("case_results") or []
+    """写 Prompt 版本对比小节（A/B/C 全量对比，数据来自各版本预测缓存）。
+
+    表结构（列按可用性动态生成）：
+      Prompt A (v1) 基线 / Prompt B (v2) 显式规则 / Prompt C (v3) raw / Prompt C (v3) 证据校验
+    """
+    gold_by_id = {c["case_id"]: c for c in result["gold_cases"]}
+    outdir = result.get("pred_file", Path()).parent
+
+    def _cr(version: str, *, ats_key: str = "ats") -> list[dict[str, Any]]:
+        preds = _load_version_preds_latest(outdir, version)
+        if not preds:
+            return []
+        rows = [
+            {**p, "ats": p.get(ats_key) or {}} for p in preds if p.get(ats_key) or {}
+        ]
+        return _case_results_from_preds(rows, gold_by_id)
+
+    if "baseline_cases" in result and result["baseline_cases"]:
+        baseline = result["baseline_cases"]
+    else:
+        baseline = _case_results_from_preds(
+            _load_version_preds_latest(outdir, "v1"), gold_by_id
+        )
+
+    ver = result.get("prompt_version", "v1")
+    current = _cr(ver)
     groups: list[tuple[str, list[dict[str, Any]]]] = []
     if baseline:
         groups.append(("Prompt A (v1) 基线", baseline))
-    if raw_results:
-        groups.append(("Prompt C (v3) raw", raw_results))
-    if recon_results and (baseline or raw_results):
-        groups.append(("Prompt C (v3) 证据校验", recon_results))
+    if ver == "v2" and current:
+        groups.append(("Prompt B (v2) 显式规则", current))
+    if ver == "v3" and current:
+        groups.append(("Prompt C (v3) raw", current))
+    v3_recon = _cr("v3")
+    if baseline and v3_recon:
+        groups.append(("Prompt C (v3) 证据校验", v3_recon))
     if not groups:
         return
 
@@ -361,27 +439,24 @@ def _add_prompt_comparison(lines: list[str], result: Dict[str, Any]) -> None:
     lines.append("")
 
     # 证据校验统计（仅单次调用的确定性效果，无额外 LLM 成本）
-    preds_path = result.get("pred_file")
-    if preds_path and preds_path.exists():
+    v3_rows = [
+        r for r in _load_version_preds_latest(outdir, "v3") if r.get("raw") is not None
+    ]
+    if v3_rows:
         from app.agents.evidence import coverage_stats
 
-        per_case = []
-        for line in preds_path.read_text(encoding="utf-8").splitlines():
-            row = json.loads(line)
-            if row.get("raw") is not None:
-                per_case.append(coverage_stats(row["raw"]))
-        if per_case:
-            total_ev = sum(c["evidence_total"] for c in per_case)
-            total_dropped = sum(c["dropped_values"] for c in per_case)
-            ev_cases = sum(1 for c in per_case if c["evidence_total"] > 0)
-            lines += [
-                "**证据校验统计（v3）**：LLM 单次输出 → 确定性校验去除无证据条目。",
-                "",
-                f"- 证据命中 case：{ev_cases}/{len(per_case)}",
-                f"- 证据条目总数：{total_ev}",
-                f"- 校验丢弃条目数：{total_dropped}（无证据支撑的幻造值）",
-                "",
-            ]
+        per_case = [coverage_stats(row["raw"]) for row in v3_rows]
+        total_ev = sum(c["evidence_total"] for c in per_case)
+        total_dropped = sum(c["dropped_values"] for c in per_case)
+        ev_cases = sum(1 for c in per_case if c["evidence_total"] > 0)
+        lines += [
+            "**证据校验统计（v3）**：LLM 单次输出 → 确定性校验去除无证据条目。",
+            "",
+            f"- 证据命中 case：{ev_cases}/{len(per_case)}",
+            f"- 证据条目总数：{total_ev}",
+            f"- 校验丢弃条目数：{total_dropped}（无证据支撑的幻造值）",
+            "",
+        ]
 
 
 def build_report(result: Dict[str, Any], report_path: Path) -> None:
@@ -546,9 +621,9 @@ def main() -> None:
     parser.add_argument("--report", type=Path, default=REPORT_PATH)
     parser.add_argument(
         "--prompt-version",
-        choices=["v1", "v3"],
+        choices=["v1", "v2", "v3"],
         default="v1",
-        help="ATS 解析 prompt 版本（v1 基础 / v3 evidence-first）",
+        help="ATS 解析 prompt 版本（v1 基础 / v2 显式规则 / v3 evidence-first）",
     )
     parser.add_argument(
         "--pace-sec",
@@ -564,11 +639,9 @@ def main() -> None:
         prompt_version=args.prompt_version,
         pace_sec=args.pace_sec,
     )
-    # v3 运行时补 v1 基线（复用缓存，避免重复调用）
-    if args.prompt_version == "v3":
-        baseline_preds = []
-        for line in _load_version_preds(args.outdir, "v1"):
-            baseline_preds.append(json.loads(line))
+    # 非 v1 运行时补 v1 基线（复用缓存，避免重复调用）
+    if args.prompt_version != "v1":
+        baseline_preds = _load_version_preds_latest(args.outdir, "v1")
         if baseline_preds:
             gold_by_id = {c["case_id"]: c for c in result["gold_cases"]}
             result["baseline_cases"] = _case_results_from_preds(

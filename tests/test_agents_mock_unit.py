@@ -199,6 +199,30 @@ def test_jd_ats_agent_v3_prompt_version_default_v1(monkeypatch):
     assert "evidence-first" in p3
 
 
+def test_jd_ats_agent_v2_prompt_explicit_rules(monkeypatch):
+    from app.agents.jd_ats_agent import JdAtsAgent, _build_ats_prompt
+
+    p2 = _build_ats_prompt("JD", version="v2")
+    # Prompt B 显式规则：禁止编造 / 技能归属 / 缩写归一
+    assert "禁止编造" in p2
+    assert "preferred_skills" in p2
+    assert "缩写归一" in p2
+
+    def _fake_invoke(model, schema, prompt, **kwargs):
+        assert "硬性规则" in prompt
+        return schema(
+            job_title="后端工程师",
+            required_skills=["Python"],
+            responsibilities=["服务开发"],
+        )
+
+    monkeypatch.setattr("app.agents.jd_ats_agent.invoke_structured", _fake_invoke)
+    out = JdAtsAgent().run({"jd_text": "JD 文本", "prompt_version": "v2"})
+    # v2 与 v1 输出契约一致：仅 ats，无 raw
+    assert "raw" not in out
+    assert out["ats"]["required_skills"] == ["Python"]
+
+
 # ---------- AtsRecommendAgent ----------
 
 

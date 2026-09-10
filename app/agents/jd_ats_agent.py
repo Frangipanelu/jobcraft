@@ -5,6 +5,7 @@ JD ATS 解析 Agent
 
 支持 prompt 版本：
 - v1：基础抽取（默认，向后兼容）
+- v2：显式规则抽取（Issue 4，把 E1-E8 错误类写成硬性规则，单次调用，输出同 v1）
 - v3：evidence-first（先抽证据、后出画像），输出附 `evidence_items`，
       后端以 `reconcile_evidence` 做确定性证据校验。
 """
@@ -30,8 +31,8 @@ DIMENSION_DESCRIPTIONS = {
     "D8": "职业规划：自我定位、成长路径与岗位匹配度",
 }
 
-# 支持的 prompt 版本（v2 预留，Issue 4 补充）
-_ATS_PROMPT_VERSIONS = {"v1": 1, "v3": 3}
+# 支持的 prompt 版本（v2 为显式规则版 Prompt B）
+_ATS_PROMPT_VERSIONS = {"v1": 1, "v2": 2, "v3": 3}
 
 
 def _build_ats_prompt(jd_text: str, *, version: str = "v1") -> str:
@@ -45,7 +46,7 @@ def _build_ats_prompt(jd_text: str, *, version: str = "v1") -> str:
 class JdAtsAgent(BaseAgent):
     """解析 JD，返回 ATSProfile（单次 LLM 调用）
 
-    state 支持 ``prompt_version``（"v1" / "v3"，默认 "v1"）：
+    state 支持 ``prompt_version``（"v1" / "v2" / "v3"，默认 "v1"）：
     v3 证据模式返回原始输出 raw 与证据校验后的 ats 两份结果。
     """
 
@@ -57,7 +58,7 @@ class JdAtsAgent(BaseAgent):
     def run(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """解析 JD 文本。
 
-        :param state: {"jd_text": str, "prompt_version"?: "v1"|"v3"}
+        :param state: {"jd_text": str, "prompt_version"?: "v1"|"v2"|"v3"}
         :return: {"ats": ATSProfile dict}；v3 时另含 {"raw": 校验前原始 dict}
         """
         jd_text = state.get("jd_text", "")
