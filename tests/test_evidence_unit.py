@@ -6,6 +6,8 @@ from app.agents.evidence import (
     coverage_stats,
     normalize,
     reconcile_evidence,
+    trusted_view,
+    validate_list_item,
     values_match,
 )
 from app.schemas.jobcraft import ATSProfile, EvidenceItem, SubtextDecode
@@ -125,7 +127,8 @@ def test_reconcile_dimensions_only_evidenced():
     assert [r["dimension"] for r in recon["dimension_requirements"]] == ["D1"]
 
 
-def test_reconcile_dimension_level_mismatch_dropped():
+def test_reconcile_dimension_kept_with_evidence_even_level_mismatch():
+    # 软校验：维度只要有 dimension_Dx 证据即保留，level 是推断值不做字符串匹配
     ats = _ats(
         dimension_requirements=[
             {"dimension": "D1", "level": 2, "evidence": ""},  # 证据 derived=4
@@ -133,7 +136,90 @@ def test_reconcile_dimension_level_mismatch_dropped():
         evidence_items=_evidents(),
     )
     recon = reconcile_evidence(ats)
-    assert recon["dimension_requirements"] == []
+    assert [r["dimension"] for r in recon["dimension_requirements"]] == ["D1"]
+
+
+def test_validate_list_item_tiers():
+    ev = [
+        {"span": "负责缓存架构设计", "derived": "缓存架构"},
+    ]
+    assert validate_list_item("缓存架构", ev) == "ACCEPT"  # 等价
+    assert validate_list_item("缓存设计", ev) == "REVIEW"  # 弱相似（Dice 0.4）
+    assert validate_list_item("Kubernetes", ev) == "REJECT"  # 无支撑
+    assert validate_list_item("缓存架构", []) == "REJECT"
+
+
+def test_reconcile_keeps_review_tier_instead_of_dropping():
+    # 软校验：弱相似语义的项走 REVIEW 保留，不再像旧版一样被删
+    ats = _ats(
+        required_skills=["缓存架构", "Kubernetes"],
+        evidence_items=[
+            {
+                "id": 1,
+                "field": "required_skills",
+                "span": "负责缓存架构设计",
+                "derived": "缓存架构",
+            },
+        ],
+    )
+    recon = reconcile_evidence(ats)
+    assert "缓存架构" in recon["required_skills"]  # 强支持 ACCEPT
+    assert "Kubernetes" not in recon["required_skills"]  # 无支撑 REJECT
+    ats_weak = _ats(
+        required_skills=["缓存设计"],
+        evidence_items=[
+            {
+                "id": 1,
+                "field": "required_skills",
+                "span": "负责缓存架构设计",
+                "derived": "缓存架构",
+            },
+        ],
+    )
+    recon_weak = reconcile_evidence(ats_weak)
+    assert "缓存设计" in recon_weak["required_skills"]  # 弱相似 REVIEW 保留
+
+
+def test_reconcile_flags_review_items_and_trusted_view_strips_them():
+    # REVIEW 档保留但不入信任口径：review_flagged 标注，trusted_view 剥离
+    ats = _ats(
+        required_skills=["缓存架构", "缓存设计", "Kubernetes"],
+        evidence_items=[
+            {
+                "id": 1,
+                "field": "required_skills",
+                "span": "负责缓存架构设计",
+                "derived": "缓存架构",
+            },
+        ],
+    )
+    recon = reconcile_evidence(ats)
+    assert recon["review_flagged"] == {"required_skills": ["缓存设计"]}
+    trusted = trusted_view(recon)
+    assert trusted["required_skills"] == ["缓存架构"]  # REVIEW 项被剥离
+    assert (
+        "Kubernetes" not in trusted["required_skills"]
+    )  # REJECT 项已被 reconcile 丢弃
+
+
+def test_trusted_view_tolerates_missing_review_flagged():
+    # 旧版预测文件可能没有 review_flagged 键，trusted_view 必须兼容
+    ats = reconcile_evidence(
+        _ats(
+            required_skills=["缓存架构"],
+            evidence_items=[
+                {
+                    "id": 1,
+                    "field": "required_skills",
+                    "span": "负责缓存架构设计",
+                    "derived": "缓存架构",
+                }
+            ],
+        )
+    )
+    ats.pop("review_flagged", None)
+    trusted = trusted_view(ats)
+    assert trusted["required_skills"] == ["缓存架构"]
 
 
 def test_reconcile_scalars_without_evidence_dropped():

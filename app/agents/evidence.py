@@ -1,15 +1,29 @@
-"""确定性证据校验器（Prompt C evidence-first 的后处理）。
+"""确定性证据校验器（Prompt C evidence-first 的后处理，软校验版）。
 
 职责：LLM 输出 ATSProfile 后，用 `evidence_items` 反向校验每个字段值是否有
-JD 原文证据支撑，**无证据的值一律丢弃**（确定性、无 LLM 调用）。
+JD 原文证据支撑，按三档决定去留（确定性、无 LLM 调用）：
 
-作用：把"先证据、后画像"落成可复核的硬约束，直接压低 E2 Hallucinated 类错误；
-同时暴露"无证据即判缺失"的 Recall 代价，供评测对照。
+- ``ACCEPT``：强支持（归一化相等 / 单边包含 / Dice >= 0.6）→ 保留。
+- ``REVIEW``：弱支持（0.4 <= Dice < 0.6，语义相近但非同一实体）→ **保留并标注**
+  （软校验：不再"无强证据即删"，避免把 paraphrase 当成幻觉误杀；标注后交由
+  `trusted_view` 从信任口径剥离，单列为人工复审队列，不进入 Critical 统计）。
+- ``REJECT``：无支撑（Dice < 0.4）→ 丢弃（真正的幻觉/编造）。
+
+兼容性：`reconcile_evidence` 仍返回完整列表字段（ACCEPT+REVIEW 合并），并新增
+``review_flagged: {field: [item, ...]}`` 标注 REVIEW 档字段值；评测/下游信任口径
+用 `trusted_view(ats)` 剥离 REVIEW 项再计算指标，避免弱支撑项污染 Critical。
+
+作用：把"先证据、后画像"落成可复核的硬约束：压 E2 Hallucinated 的同时，
+避免 E1 Missing 暴增（旧版无证据即丢是过滤器，本版是有三态的判错器）。
+
+维度处理（回归直接模型输出 + 证据约束）：只要存在对应 dimension_Dx 证据
+即保留该维度 level，不再要求 derived 与 level 字符串精确一致——level 是
+推断值而非 JD 原文实体，精确匹配要求既不现实也无意义。
 
 匹配规则（与评测 normalize 语义近似，轻量实现避免 app→evaluation 依赖）：
-- 归一化后相等 → 支撑
-- 单边包含（长度 >= 4）→ 支撑
-- 兜底 bigram Dice >= 0.6 → 支撑
+- 归一化后相等 → ACCEPT
+- 单边包含（长度 >= 4）→ ACCEPT
+- 兜底 bigram Dice >= 0.6 → ACCEPT；>= 0.4 → REVIEW；否则 REJECT
 """
 
 from typing import Any, Dict, List, Sequence
@@ -32,6 +46,10 @@ _EV_SUPPORTED_FIELDS = {
     "location",
     "subtext",
 }
+
+# 三态校验阈值
+_ACCEPT_THRESHOLD = 0.6
+_REVIEW_THRESHOLD = 0.4
 
 # 直接按 evidence_items 过滤的列表字段
 _LIST_FIELDS = [
@@ -108,34 +126,78 @@ def _evidenced_by_span(value: str, evidence_list: Sequence[Dict[str, str]]) -> b
     return any(values_match(value, ev["span"]) for ev in evidence_list)
 
 
-def reconcile_evidence(ats: Dict[str, Any]) -> Dict[str, Any]:
-    """按证据过滤 ATSProfile，丢弃无证据支撑的字段值。
+def _match_level(value: str, evidence_list: Sequence[Dict[str, str]]) -> float:
+    """值与证据集的最佳匹配分数：等价/包含视为 1.0，否则取最大 Dice。"""
+    if not value or not evidence_list:
+        return 0.0
+    best = 0.0
+    for ev in evidence_list:
+        if values_match(value, ev["derived"]) or values_match(value, ev["span"]):
+            return 1.0
+        best = max(
+            best,
+            _dice(value, ev["derived"]),
+            _dice(value, ev["span"]),
+        )
+    return best
 
-    列表字段：只能保留有证据支撑的条目。
+
+def validate_list_item(value: str, evidence_list: Sequence[Dict[str, str]]) -> str:
+    """判定单个列表值的三态：ACCEPT / REVIEW / REJECT。
+
+    :param value: 字段值
+    :param evidence_list: 该字段的证据 {span, derived} 列表
+    :return: "ACCEPT"（强支持）/ "REVIEW"（弱支持）/ "REJECT"（无支撑）
+    """
+    score = _match_level(value, evidence_list)
+    if score >= _ACCEPT_THRESHOLD:
+        return "ACCEPT"
+    if score >= _REVIEW_THRESHOLD:
+        return "REVIEW"
+    return "REJECT"
+
+
+def reconcile_evidence(ats: Dict[str, Any]) -> Dict[str, Any]:
+    """按证据软校验 ATSProfile，只 REJECT 无证据支撑的值，REVIEW/ACCEPT 保留。
+
+    列表字段：ACCEPT 与 REVIEW 都保留（REVIEW 写入 ``review_flagged`` 标注），
+    仅 REJECT 丢弃（弱相似不再误删）。
     标量字段（salary/location）：值有证据支撑则保留；值缺失/不符时，若证据
     恰好只有唯一取值，则用证据 derived 回填（结果可复核）；多条互不一致才置空。
-    维度：level 必须被其一 dimension_Dx 证据支撑。
+    维度：只要存在对应 dimension_Dx 证据即保留（level 为推断值，不做字符串匹配）。
 
     :param ats: ATSProfile dict（含 evidence_items）
-    :return: 过滤后的副本；evidence_items 原样保留
+    :return: 过滤后的副本 + ``review_flagged``（field → REVIEW 项列表）；
+             evidence_items 原样保留
     """
     result = dict(ats)
     evidence_items = list(ats.get("evidence_items") or [])
     evidence = _evidence_by_field(evidence_items)
+    review_flagged: Dict[str, List[str]] = {}
 
     for field in _LIST_FIELDS:
         items = [str(x) for x in (ats.get(field) or [])]
-        result[field] = [
-            x for x in items if _evidenced_by_derived(x, evidence.get(field, []))
-        ]
+        kept, flagged = [], []
+        for x in items:
+            tier = validate_list_item(x, evidence.get(field, []))
+            if tier == "REJECT":
+                continue
+            kept.append(x)
+            if tier == "REVIEW":
+                flagged.append(x)
+        result[field] = kept
+        if flagged:
+            review_flagged[field] = flagged
+
+    result["review_flagged"] = review_flagged
 
     if "dimension_requirements" in ats:
         kept_dim = []
         for req in ats.get("dimension_requirements") or []:
             d = _get(req, "dimension").strip().upper()
             dim_evidence = evidence.get(f"dimension_{d.lower()}", [])
-            level = _get(req, "level")
-            if dim_evidence and _evidenced_by_derived(level, dim_evidence):
+            # 有证据即保留（level 为从证据推断的值，不做字符串精确匹配）
+            if dim_evidence:
                 kept_dim.append(req)
         result["dimension_requirements"] = kept_dim
 
@@ -172,6 +234,23 @@ def reconcile_evidence(ats: Dict[str, Any]) -> Dict[str, Any]:
             sub_items.append(item)
     result["subtext_decoded"] = sub_items
 
+    return result
+
+
+def trusted_view(ats: Dict[str, Any]) -> Dict[str, Any]:
+    """生成信任口径视图：剥离 REVIEW 档标注项，供评测 Critical / 下游可信消费。
+
+    仅去除 ``review_flagged`` 中标注的列表值；ACCEPT 档与标量、维度、subtext
+    维持 `reconcile_evidence` 结果不变。防止弱支撑项污染 Critical 统计。
+
+    :param ats: reconcile_evidence 输出（含 review_flagged）
+    :return: 不含 REVIEW 项的副本；``review_flagged`` 保留供展示
+    """
+    result = dict(ats)
+    flagged = ats.get("review_flagged") or {}
+    for field, items in flagged.items():
+        block = {str(x) for x in items}
+        result[field] = [x for x in (ats.get(field) or []) if x not in block]
     return result
 
 
