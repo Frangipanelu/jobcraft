@@ -479,22 +479,27 @@ def _add_prompt_comparison(lines: list[str], result: Dict[str, Any]) -> None:
     summaries = [(name, _criterion_summary(cr)) for name, cr in groups]
     if summaries:
         crit_best = min(summaries, key=lambda nc: nc[1].get("critical", 1.0))
+        by_name = dict(summaries)
         has_c = any("(v3)" in name for name, _ in groups)
         if has_c:
-            c_s = summaries[-1][1]
+            c_s = by_name.get("Prompt C (v3) 证据校验") or summaries[-1][1]
+            raw_s = by_name.get("Prompt C (v3) raw")
+            raw_sal = raw_s.get("salary", "?") if raw_s else "?"
+            # 校验列的标量回填相对 raw 口径的提升（raw 列可能因失败占位缺人）
             safe_line = (
                 "- **安全（Critical Error Rate）**："
                 + "、".join(
                     f"{name} **{c.get('critical', 0.0):.2%}**" for name, c in summaries
                 )
                 + "。确定性软校验（C' 证据校验列：本体归位→职责/技能纠正→"
-                + "ACCEPT/REVIEW/REJECT）把 Critical 压到三类设计最低，同时修复了"
-                + "硬删除带来的召回崩陷（Salary 21/40 → "
+                + "ACCEPT/REVIEW/REJECT）把 Critical 压到三类设计最低，同时标量回填"
+                + f"优于 raw 列（Salary {raw_sal} → "
                 + f"{c_s.get('salary', '0/0')}、Location {c_s.get('location', '0/0')}）。"
                 + "剩余风险在 REVIEW 档过窄（语义门槛 ~0.78 用嵌入相似度升级，列为"
                 + "Layer-2 架构迭代）。"
             )
         else:
+            c_s = summaries[-1][1]
             safe_line = (
                 "- **安全（Critical Error Rate）**："
                 + "、".join(
@@ -502,17 +507,26 @@ def _add_prompt_comparison(lines: list[str], result: Dict[str, Any]) -> None:
                 )
                 + f"，最低为 {crit_best[0]}。"
             )
+        resp_raw = by_name.get("Prompt C (v3) raw", {}).get("responsibilities", 0.0)
+        resp_chk = by_name.get("Prompt C (v3) 证据校验", {}).get(
+            "responsibilities", 0.0
+        )
+        kw_min = min(c.get("culture_keywords", 0.0) for _, c in summaries)
+        kw_max = max(c.get("culture_keywords", 0.0) for _, c in summaries)
         lines += [
             "**总结论（A/B/C）**：基于 40 条中文合成 JD，对比三种提示词设计。",
             "",
             safe_line,
             "- **召回**：evidence-first + 软校验后字段 F1 不再全线下行"
             + f"（Required F1 {summaries[0][1].get('required_skills', 0.0):.3f} → "
-            + f"{summaries[-1][1].get('required_skills', 0.0):.3f}），标量回填显著"
-            + f"（Salary {summaries[-1][1].get('salary', '0/0')}）；确定性后处理（教育/年限归位、"
-            + "职责/技能句首判定）分别压低 E2 与 E3（MISCLASSIFIED）。",
+            + f"{c_s.get('required_skills', 0.0):.3f}），标量回填显著"
+            + f"（Salary {c_s.get('salary', '0/0')}）；确定性后处理（教育/年限归位、"
+            + "职责/技能句首判定）分别压低 E2 与 E3（MISCLASSIFIED）。注意校验列的"
+            + f"职责 F1 仍有下降（{resp_raw:.3f} → {resp_chk:.3f}），REJECT 档过严"
+            + "会继续吃职责召回，属 REVIEW 宽度升级的待办。",
             "- **维度全线偏弱**：三版本 Dimension Accuracy 均低于 0.36，D1-D8 等级出数与校验都不可靠 → 建议回归直接模型输出 + 单独约束，勿叠加证据校验放大损失。",
-            "- **Keywords 召回很低**：三版本仅 0.06–0.23，文化类关键词基本抓不住 → 需单独提示词或独立任务。",
+            "- **Keywords 召回很低**："
+            + f"三版本仅 {kw_min:.2f}–{kw_max:.2f}，文化类关键词基本抓不住 → 需单独提示词或独立任务。",
             "",
         ]
 
