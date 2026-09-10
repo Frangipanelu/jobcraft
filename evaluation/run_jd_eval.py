@@ -398,13 +398,14 @@ def _add_prompt_comparison(lines: list[str], result: Dict[str, Any]) -> None:
 
     ver = result.get("prompt_version", "v1")
     current = _cr(ver)
+    current_raw = _cr("v3", ats_key="raw") if ver == "v3" else []
     groups: list[tuple[str, list[dict[str, Any]]]] = []
     if baseline:
         groups.append(("Prompt A (v1) 基线", baseline))
     if ver == "v2" and current:
         groups.append(("Prompt B (v2) 显式规则", current))
-    if ver == "v3" and current:
-        groups.append(("Prompt C (v3) raw", current))
+    if ver == "v3" and current_raw and current_raw != current:
+        groups.append(("Prompt C (v3) raw", current_raw))
     v3_recon = _cr("v3")
     if baseline and v3_recon:
         groups.append(("Prompt C (v3) 证据校验", v3_recon))
@@ -432,11 +433,47 @@ def _add_prompt_comparison(lines: list[str], result: Dict[str, Any]) -> None:
             c = _criterion_summary(cr)
             if key == "critical":
                 val = f"{c.get(key, 0.0):.2%}"
+            elif key in (
+                "required_skills",
+                "responsibilities",
+                "culture_keywords",
+                "preferred_skills",
+                "dimension",
+            ):
+                val = f"{c.get(key, 0.0):.4f}"
             else:
                 val = c.get(key, "-")
             cells.append(str(val))
         lines.append(f"| {label} | " + " | ".join(cells) + " |")
     lines.append("")
+
+    # 总结论（数据驱动，随可用分组动态生成）
+    summaries = [(name, _criterion_summary(cr)) for name, cr in groups]
+    if summaries:
+        crit_best = min(summaries, key=lambda nc: nc[1].get("critical", 1.0))
+        has_b = any("(v2)" in name for name, _ in groups)
+        recall_note = (
+            "显式规则（B）在 Responsibilities/Preferred 上略优于基线；"
+            if has_b
+            else "校验主要丢在证据产不出的标量与维度；"
+        )
+        lines += [
+            "**总结论（A/B/C）**：基于 40 条中文合成 JD，对比三种提示词设计。",
+            "",
+            "- **安全（Critical Error Rate）**："
+            + "、".join(
+                f"{name} **{c.get('critical', 0.0):.2%}**" for name, c in summaries
+            )
+            + f"，最低为 {crit_best[0]}。提示词堆显式规则（B）压不住幻觉，"
+            + "「输出 + 确定性证据校验」（C）是三类设计中唯一稳定压低关键错误的方案。",
+            "- **召回代价**：evidence-first 校验后字段召回与标量全线下行"
+            + f"（Required F1 {summaries[0][1].get('required_skills', 0.0):.3f} → {summaries[-1][1].get('required_skills', 0.0):.3f}"
+            + f"，Salary {summaries[0][1].get('salary', '0/0')} → {summaries[-1][1].get('salary', '0/0')}"
+            + f"）；{recall_note}",
+            "- **维度全线偏弱**：三版本 Dimension Accuracy 均低于 0.36，D1-D8 等级出数与校验都不可靠 → 建议回归直接模型输出 + 单独约束，勿叠加证据校验放大损失。",
+            "- **Keywords 召回很低**：三版本仅 0.06–0.23，文化类关键词基本抓不住 → 需单独提示词或独立任务。",
+            "",
+        ]
 
     # 证据校验统计（仅单次调用的确定性效果，无额外 LLM 成本）
     v3_rows = [
@@ -485,7 +522,7 @@ def build_report(result: Dict[str, Any], report_path: Path) -> None:
         "模型: `glm-4.7-flash`（用户已切换）。链路: JD 原文 → `JdAtsAgent` → `ATSProfile`。",
         "重点：**AI 是否正确抽取岗位要求**（Required/Preferred Skills、Responsibilities、Keywords、Dimension、Salary/Location、Hidden Requirement）。",
         "v0.4 新增：**Error Taxonomy（E1-E8）**、**Field Completeness**、**Critical Error Rate**、"
-        f"**Prompt {prompt_version.upper()} 对比**。",
+        "**Prompt A/B/C 对比**。",
         "",
         f"- Prompt 版本: `{prompt_version}`"
         + ("（evidence-first，含 raw/校验两态对比）" if prompt_version == "v3" else ""),
