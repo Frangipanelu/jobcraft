@@ -27,6 +27,25 @@ JD 原文证据支撑，按三档决定去留（确定性、无 LLM 调用）：
 """
 
 from typing import Any, Dict, List, Sequence
+import re
+
+_EDU_PATTERNS = (
+    re.compile(r"统招|全日制|专升本"),
+    re.compile(
+        r"(本科|硕士|博士|专科|大专|研究生)(?:及以上|及以下|或以上|以上|学位|学历)?"
+    ),
+    re.compile(r"学历|学位"),
+    re.compile(r"相关专业|专业背景|对口专业"),
+    re.compile(r"应届(?:生)?毕业|高校应届"),
+)
+
+_YEARS_RE = re.compile(
+    r"(\d+|[一二三四五六七八九十两])\s*年\s*(以上|及以上|左右|起)?"
+    r"[^，。；、]{0,14}?(经验|经历)"
+)
+
+# 本体归位扫描的列表字段（学历/年限只可能混入技能类字段）
+_ONTOLOGY_FIELDS = ("required_skills", "preferred_skills")
 
 _EV_SUPPORTED_FIELDS = {
     "required_skills",
@@ -155,6 +174,128 @@ def validate_list_item(value: str, evidence_list: Sequence[Dict[str, str]]) -> s
     if score >= _REVIEW_THRESHOLD:
         return "REVIEW"
     return "REJECT"
+
+
+# 技能/动作动词：残留中出现则视为"技能+本体"混合条目，不动
+_SKILL_VERBS = (
+    "熟悉",
+    "掌握",
+    "精通",
+    "负责",
+    "开发",
+    "设计",
+    "维护",
+    "使用",
+    "搭建",
+    "熟练",
+    "编写",
+    "调优",
+)
+# 年限短语的"方向词"残渣（归位后应清空）
+_ROLE_DIRECTION_RE = re.compile(
+    r"(相关|后端|前端|全栈|软件|设计|算法|测试|运维|架构|大数据|数据|工作|从业|项目|开发)+"
+)
+# 学历/年限短语的尾缀残渣（整体归位后应清空）
+_CLAIM_TRAILER_RE = re.compile(
+    "(优先|加分项|加分|及以上|及以下|或以上|以上|左右|等|之类)+$"
+)
+_CLAIM_CONNECTOR_RE = re.compile(r"[\s，。；、·（）：:；()/]+")
+
+
+def _claim_remainder(text: str, patterns: Sequence[re.Pattern]) -> str:
+    """去掉文本中被 patterns 命中的片段，返回剩余内容（归一化）。
+
+    :param text: 待检条目
+    :param patterns: 本体类短语（学历/年限）正则
+    :return: 移除命中片段及尾缀残渣后归一化的剩余文本；空表示"整条都是本体短语"
+    """
+    out = text
+    for pat in patterns:
+        out = pat.sub("", out)
+    out = _CLAIM_TRAILER_RE.sub("", _CLAIM_CONNECTOR_RE.sub("", out))
+    return normalize(out)
+
+
+def _is_education_claim(item: str) -> bool:
+    """判断条目是否为学历/专业门槛短语（可整条归位 education）。
+
+    先要求至少命中一个学历关键词（避免"前端架构"这类 4 字技能误判），
+    再允许"计算机""数学"等短学科主语残留（≤ 4 字且无技能动词）。
+    """
+    if not any(p.search(item) for p in _EDU_PATTERNS):
+        return False
+    residue = _claim_remainder(item, _EDU_PATTERNS)
+    if not residue:
+        return True
+    return len(residue) <= 4 and not any(v in residue for v in _SKILL_VERBS)
+
+
+def _is_years_claim(item: str) -> bool:
+    """判断条目是否为工作年限门槛短语（可整条归位 years_of_experience）。"""
+    m = _YEARS_RE.search(item)
+    if not m:
+        return False
+    out = item[: m.start()] + item[m.end() :]
+    out = _CLAIM_TRAILER_RE.sub("", _CLAIM_CONNECTOR_RE.sub("", out))
+    residue = _ROLE_DIRECTION_RE.sub("", normalize(out))
+    return not residue
+
+
+def _merge_free_text(existing: Any, claims: List[str]) -> str:
+    """合并自由文本字段（education/years_of_experience），逗号分隔并去重。"""
+    parts: List[str] = []
+    if existing:
+        parts.append(str(existing))
+    seen = set()
+    for claim in claims:
+        if claim not in seen:
+            seen.add(claim)
+            parts.append(claim)
+    return "；".join(parts) if parts else str(existing or "")
+
+
+def split_ontology_claims(ats: Dict[str, Any]) -> Dict[str, Any]:
+    """确定性本体归位：把混入技能字段的学历/年限门槛移回 ATSProfile 自有字段。
+
+    背景：v3 精简 prompt 丢失 education / years_of_experience 归因指令后，模型把
+    "统招本科及以上学历""3年以上后端开发经验""计算机相关专业"等门槛短语塞进
+    required_skills / preferred_skills（本体错误，非幻觉）。
+
+    规则（无 LLM，纯正则，保守优先）：
+    - 条目整体为学历/专业短语（去除命中片段后无剩余）→ 移入 ``education``
+    - 条目整体为"N年以上XX经验"短语 → 移入 ``years_of_experience``
+    - 混合短语（如"熟悉Java，统招本科以上"）保持原位，交由 prompt 修复
+    - 不修改 evidence_items；返回副本
+
+    :param ats: ATSProfile dict
+    :return: 归位后的新 dict（education / years_of_experience 合并 FreeText）
+    """
+    result = dict(ats)
+    seen_edu: List[str] = []
+    seen_years: List[str] = []
+
+    for field in _ONTOLOGY_FIELDS:
+        items = [str(x) for x in (ats.get(field) or [])]
+        kept = []
+        for x in items:
+            if _is_education_claim(x):
+                if x not in seen_edu:
+                    seen_edu.append(x)
+                continue
+            if _is_years_claim(x):
+                if x not in seen_years:
+                    seen_years.append(x)
+                continue
+            kept.append(x)
+        result[field] = kept
+
+    if seen_edu:
+        result["education"] = _merge_free_text(ats.get("education"), seen_edu)
+    if seen_years:
+        result["years_of_experience"] = _merge_free_text(
+            ats.get("years_of_experience"), seen_years
+        )
+    return result
 
 
 def reconcile_evidence(ats: Dict[str, Any]) -> Dict[str, Any]:

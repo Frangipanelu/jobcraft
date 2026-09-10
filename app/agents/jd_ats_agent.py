@@ -13,7 +13,7 @@ JD ATS 解析 Agent
 from typing import Any, Dict
 
 from app.agents.base_agent import BaseAgent
-from app.agents.evidence import reconcile_evidence
+from app.agents.evidence import reconcile_evidence, split_ontology_claims
 from app.core.llm import model
 from app.core.prompts import load_prompt
 from app.schemas.jobcraft import ATSProfile
@@ -70,5 +70,6 @@ class JdAtsAgent(BaseAgent):
         result: Dict[str, Any] = {"ats": ats.model_dump()}
         if version == "v3":
             result["raw"] = result["ats"]
-            result["ats"] = reconcile_evidence(result["ats"])
+            # 确定性后处理：本体归位（学历/年限移出技能列表）→ 证据软校验
+            result["ats"] = reconcile_evidence(split_ontology_claims(result["ats"]))
         return result

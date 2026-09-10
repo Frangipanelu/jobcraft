@@ -5,10 +5,10 @@
 通读 JD，为最终画像里会出现的每一项内容抽取证据。每条证据：
 - `id`：连续编号（从 1 开始）。
 - `span`：JD 原文逐字摘录（≤ 60 字，不得改写，support折合成一条）。
-- `field`：取值必须为 one of：`required_skills`、`preferred_skills`、`responsibilities`、`culture_keywords`、`key_metrics`、`dimension_D1`~`dimension_D8`、`salary`、`location`、`subtext`。
+- `field`：取值必须为 one of：`required_skills`、`preferred_skills`、`responsibilities`、`culture_keywords`、`key_metrics`、`dimension_D1`~`dimension_D8`、`salary`、`location`、`subtext`、`education`、`years_of_experience`。
 - `derived`：从证据提炼的最终字段值（列表字段即该条对应值、`salary`/`location` 直接写最终值）。
 
-字段归属：硬性要求（精通/熟悉/任职要求/负责）+ 职责中隐含的技能 → `required_skills`；软性（优先/加分项/有?者优先）→ `preferred_skills`。缩写按语义等价归一。
+字段归属：硬性要求（精通/熟悉/任职要求/负责）+ 职责中隐含的技能 → `required_skills`；软性（优先/加分项/有?者优先）→ `preferred_skills`。缩写按语义等价归一。**学历/专业门槛（统招本科及以上学历、计算机相关专业等）→ 只进 `education` 条目；工作年限门槛（3年以上后端开发经验等）→ 只进 `years_of_experience` 条目；二者一律禁止写入 `required_skills`/`preferred_skills`。**
 
 ## 步骤 2：基于证据生成画像
 
@@ -16,7 +16,8 @@
 1. 每个输出值必须能从证据 `derived`/`span` 找到依据；无依据的值不输出（宁缺毋滥）。
 2. `salary`/`location` 逐字采用证据值。
 3. `subtext_decoded` 每条必须对应 `subtext` 证据（span 含该句原文）。
-4. 未提及的信息输出空，绝不编造。
+4. `education` 仅填 JD 明确要求的学历/专业门槛短语（如"统招本科及以上学历"）；`years_of_experience` 仅填 JD 明确要求的年限门槛短语（如"3年以上后端开发经验"）。
+5. 未提及的信息输出空，绝不编造。
 
 8 维能力矩阵说明（D1-D8，level 1-5）：
 {{dims}}

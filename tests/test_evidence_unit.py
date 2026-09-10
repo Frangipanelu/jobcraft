@@ -6,6 +6,7 @@ from app.agents.evidence import (
     coverage_stats,
     normalize,
     reconcile_evidence,
+    split_ontology_claims,
     trusted_view,
     validate_list_item,
     values_match,
@@ -220,6 +221,56 @@ def test_trusted_view_tolerates_missing_review_flagged():
     ats.pop("review_flagged", None)
     trusted = trusted_view(ats)
     assert trusted["required_skills"] == ["缓存架构"]
+
+
+def test_split_ontology_relocates_education_and_years():
+    ats = _ats(
+        required_skills=[
+            "统招本科及以上学历",
+            "计算机相关专业",
+            "3年以上后端开发经验",
+            "Kubernetes",
+        ],
+        preferred_skills=["5年及以上大型系统架构经验", "Docker"],
+        evidence_items=_evidents(),
+    )
+    out = split_ontology_claims(ats)
+    assert out["required_skills"] == ["Kubernetes"]
+    assert out["preferred_skills"] == ["Docker"]
+    assert "统招本科及以上学历" in out["education"]
+    assert "计算机相关专业" in out["education"]
+    assert "3年以上后端开发经验" in out["years_of_experience"]
+    assert "5年及以上大型系统架构经验" in out["years_of_experience"]
+
+
+def test_split_ontology_merges_with_existing_fields():
+    ats = _ats(
+        required_skills=["硕士及以上学历"],
+        education="计算机硕士",
+        years_of_experience="3年",
+    )
+    out = split_ontology_claims(ats)
+    assert "计算机硕士" in out["education"]
+    assert "硕士及以上学历" in out["education"]
+    assert out["years_of_experience"] == "3年"
+
+
+def test_split_ontology_keeps_mixed_claims_in_place():
+    # 混合短语（技能+学历）保守不动；纯学历短语整体归位
+    ats = _ats(
+        required_skills=["熟悉Java，统招本科以上", "大专学历"],
+        education=None,
+    )
+    out = split_ontology_claims(ats)
+    assert out["required_skills"] == ["熟悉Java，统招本科以上"]
+    assert out["education"] == "大专学历"
+
+
+def test_split_ontology_does_not_touch_evidence_items():
+    ats = _ats(required_skills=["统招本科及以上学历"], evidence_items=_evidents())
+    out = split_ontology_claims(ats)
+    assert out["evidence_items"] == ats["evidence_items"]
+    assert "统招本科及以上学历" not in out["required_skills"]
 
 
 def test_reconcile_scalars_without_evidence_dropped():
