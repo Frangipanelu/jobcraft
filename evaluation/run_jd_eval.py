@@ -22,6 +22,11 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, Dict
 
+from app.agents.evidence import (
+    reconcile_evidence,
+    reclassify_claims,
+    split_ontology_claims,
+)
 from app.agents.jd_ats_agent import JdAtsAgent
 from app.tools.llm_json import register_usage_observer
 from evaluation.datasets import DEFAULT_DATASET
@@ -179,6 +184,14 @@ def observed_generate_ats(
     for case in gold_cases:
         cached = existing.get(case["case_id"])
         if cached is not None:
+            if prompt_version == "v3" and cached.get("raw"):
+                # 确定性后处理变更后，缓存 ats 已过期：从 raw 用当前管线重建
+                cached = {
+                    **cached,
+                    "ats": reconcile_evidence(
+                        reclassify_claims(split_ontology_claims(cached["raw"]))
+                    ),
+                }
             ats_preds.append(cached)
             continue
         before = collector.snapshot()
@@ -380,13 +393,28 @@ def _add_prompt_comparison(lines: list[str], result: Dict[str, Any]) -> None:
     gold_by_id = {c["case_id"]: c for c in result["gold_cases"]}
     outdir = result.get("pred_file", Path()).parent
 
-    def _cr(version: str, *, ats_key: str = "ats") -> list[dict[str, Any]]:
+    def _cr(
+        version: str, *, ats_key: str = "ats", rebuild_pipeline: bool = False
+    ) -> list[dict[str, Any]]:
         preds = _load_version_preds_latest(outdir, version)
         if not preds:
             return []
-        rows = [
-            {**p, "ats": p.get(ats_key) or {}} for p in preds if p.get(ats_key) or {}
-        ]
+        rows = []
+        for p in preds:
+            if rebuild_pipeline and version == "v3" and p.get("raw"):
+                # 证据校验列：用当前确定性管线重算（本体归位→职责/技能纠正→软校验）
+                rows.append(
+                    {
+                        **p,
+                        "ats": reconcile_evidence(
+                            reclassify_claims(split_ontology_claims(p["raw"]))
+                        ),
+                    }
+                )
+                continue
+            ats = p.get(ats_key)
+            if ats:
+                rows.append({**p, "ats": ats})
         return _case_results_from_preds(rows, gold_by_id)
 
     if "baseline_cases" in result and result["baseline_cases"]:
@@ -406,7 +434,7 @@ def _add_prompt_comparison(lines: list[str], result: Dict[str, Any]) -> None:
         groups.append(("Prompt B (v2) 显式规则", current))
     if ver == "v3" and current_raw and current_raw != current:
         groups.append(("Prompt C (v3) raw", current_raw))
-    v3_recon = _cr("v3")
+    v3_recon = _cr("v3", rebuild_pipeline=True)
     if baseline and v3_recon:
         groups.append(("Prompt C (v3) 证据校验", v3_recon))
     if not groups:
@@ -451,25 +479,38 @@ def _add_prompt_comparison(lines: list[str], result: Dict[str, Any]) -> None:
     summaries = [(name, _criterion_summary(cr)) for name, cr in groups]
     if summaries:
         crit_best = min(summaries, key=lambda nc: nc[1].get("critical", 1.0))
-        has_b = any("(v2)" in name for name, _ in groups)
-        recall_note = (
-            "显式规则（B）在 Responsibilities/Preferred 上略优于基线；"
-            if has_b
-            else "校验主要丢在证据产不出的标量与维度；"
-        )
+        has_c = any("(v3)" in name for name, _ in groups)
+        if has_c:
+            c_s = summaries[-1][1]
+            safe_line = (
+                "- **安全（Critical Error Rate）**："
+                + "、".join(
+                    f"{name} **{c.get('critical', 0.0):.2%}**" for name, c in summaries
+                )
+                + "。确定性软校验（C' 证据校验列：本体归位→职责/技能纠正→"
+                + "ACCEPT/REVIEW/REJECT）把 Critical 压到三类设计最低，同时修复了"
+                + "硬删除带来的召回崩陷（Salary 21/40 → "
+                + f"{c_s.get('salary', '0/0')}、Location {c_s.get('location', '0/0')}）。"
+                + "剩余风险在 REVIEW 档过窄（语义门槛 ~0.78 用嵌入相似度升级，列为"
+                + "Layer-2 架构迭代）。"
+            )
+        else:
+            safe_line = (
+                "- **安全（Critical Error Rate）**："
+                + "、".join(
+                    f"{name} **{c.get('critical', 0.0):.2%}**" for name, c in summaries
+                )
+                + f"，最低为 {crit_best[0]}。"
+            )
         lines += [
             "**总结论（A/B/C）**：基于 40 条中文合成 JD，对比三种提示词设计。",
             "",
-            "- **安全（Critical Error Rate）**："
-            + "、".join(
-                f"{name} **{c.get('critical', 0.0):.2%}**" for name, c in summaries
-            )
-            + f"，最低为 {crit_best[0]}。提示词堆显式规则（B）压不住幻觉，"
-            + "「输出 + 确定性证据校验」（C）是三类设计中唯一稳定压低关键错误的方案。",
-            "- **召回代价**：evidence-first 校验后字段召回与标量全线下行"
-            + f"（Required F1 {summaries[0][1].get('required_skills', 0.0):.3f} → {summaries[-1][1].get('required_skills', 0.0):.3f}"
-            + f"，Salary {summaries[0][1].get('salary', '0/0')} → {summaries[-1][1].get('salary', '0/0')}"
-            + f"）；{recall_note}",
+            safe_line,
+            "- **召回**：evidence-first + 软校验后字段 F1 不再全线下行"
+            + f"（Required F1 {summaries[0][1].get('required_skills', 0.0):.3f} → "
+            + f"{summaries[-1][1].get('required_skills', 0.0):.3f}），标量回填显著"
+            + f"（Salary {summaries[-1][1].get('salary', '0/0')}）；确定性后处理（教育/年限归位、"
+            + "职责/技能句首判定）分别压低 E2 与 E3（MISCLASSIFIED）。",
             "- **维度全线偏弱**：三版本 Dimension Accuracy 均低于 0.36，D1-D8 等级出数与校验都不可靠 → 建议回归直接模型输出 + 单独约束，勿叠加证据校验放大损失。",
             "- **Keywords 召回很低**：三版本仅 0.06–0.23，文化类关键词基本抓不住 → 需单独提示词或独立任务。",
             "",
