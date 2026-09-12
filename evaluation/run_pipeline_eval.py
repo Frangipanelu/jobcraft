@@ -14,11 +14,14 @@ v0.5 §二十六 落地。给定 40 条 gold 语料，仅跑确定性 L1 管道
 culture/D1-D8/subtext 属 L2（LLM），本层不评测（merge 时空 inference）。
 
 用法：
-    uv run python -m evaluation.run_pipeline_eval
+    uv run python -m evaluation.run_pipeline_eval [数据集路径]
+    缺省用 evaluation/datasets/jd_cases.jsonl（40 条 gold）；
+    传 real_jd_cases.jsonl 即真实语料评测。
 """
 
 from __future__ import annotations
 
+import argparse
 from pathlib import Path
 from typing import Any
 
@@ -81,8 +84,8 @@ def _evidence_by_span_outputs(
     return counts
 
 
-def run() -> dict[str, Any]:
-    cases = load_cases(CASES)
+def run(cases_path: Path) -> tuple[dict[str, Any], int]:
+    cases = load_cases(cases_path)
     stats = {
         "structurer": {"sections_hit": {}, "span_mismatch": 0},
         "classifier": {"unknown": 0, "items": 0},
@@ -149,22 +152,23 @@ def run() -> dict[str, Any]:
         for k in ("accept", "review", "reject", "total"):
             stats["safety"][k] += sv[k]
     stats["structurer"]["sections_hit"]["见区块"] = sorted(section_tracker)
-    return stats
+    return stats, len(cases)
 
 
-def format_report(stats: dict[str, Any]) -> str:
+def format_report(stats: dict[str, Any], n: int, dataset_name: str) -> str:
     s = stats
     lines = [
         "# Pipeline 分层评测报告（L1 无 LLM 基线）",
         "",
-        f"- 语料：{CASES.name}（40 条）",
+        f"- 语料：{dataset_name}（{n} 条）",
         "- 范围：L1 确定性管道 + 空 inference 的 ATS 合并；L2（culture/D1-D8/subtext）不在本层",
         "",
         "## L1-1 Structurer",
         f"span 失配：{s['structurer']['span_mismatch']}",
         "",
         "## L1-2 Classifier",
-        f"条目数：{s['classifier']['items']}；UNKNOWN：{s['classifier']['unknown']}",
+        f"条目数：{s['classifier']['items']}；UNKNOWN：{s['classifier']['unknown']}"
+        f"（{s['classifier']['unknown'] / max(s['classifier']['items'], 1):.1%}）",
         "",
         "## L1-3 Extractor（gold 近似命中）",
         "| field | hit/total | rate |",
@@ -181,7 +185,7 @@ def format_report(stats: dict[str, Any]) -> str:
         )
     lines += [
         "",
-        f"- education 覆盖：{s['extractor']['education']}/40；years 覆盖：{s['extractor']['years']}/40",
+        f"- education 覆盖：{s['extractor']['education']}/{n}；years 覆盖：{s['extractor']['years']}/{n}",
         f"- key_metrics 总计：{s['extractor']['metrics']}",
         f"- core_keywords 分布：high {s['extractor']['keywords']['high']} / medium {s['extractor']['keywords']['medium']} / low {s['extractor']['keywords']['low']}",
         "",
@@ -196,9 +200,21 @@ def format_report(stats: dict[str, Any]) -> str:
 
 
 def main() -> None:
-    stats = run()
-    report = format_report(stats)
-    REPORT.write_text(report, encoding="utf-8")
+    parser = argparse.ArgumentParser(description="Pipeline 分层评测（L1 无 LLM 基线）")
+    parser.add_argument(
+        "dataset", nargs="?", default=str(CASES), help="gold 数据集路径"
+    )
+    args = parser.parse_args()
+    dataset_path = Path(args.dataset)
+    stats, n = run(dataset_path)
+    dataset_name = dataset_path.name or CASES.name
+    report = format_report(stats, n, dataset_name)
+    report_path = (
+        REPORT
+        if dataset_path == CASES
+        else REPORT.with_name(f"ats_pipeline_{dataset_path.stem}_report.md")
+    )
+    report_path.write_text(report, encoding="utf-8")
     print(report)
 
 
