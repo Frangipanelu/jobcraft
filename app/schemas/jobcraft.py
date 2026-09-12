@@ -219,6 +219,30 @@ class KeywordSignal(BaseModel):
     evidence: str = Field(description="首次命中的 JD 原文条目")
 
 
+class AmbiguousDecision(BaseModel):
+    """LLM 对算法不确定条目的歧义裁决（v0.5 §八 UNKNOWN→LLM fallback）。"""
+
+    item_id: str = Field(description="对应传入条目 id")
+    label: str = Field(
+        description="required | preferred | responsibility | soft_skill"
+    )
+    reason: str = Field("", description="裁决理由")
+
+
+class AtsInference(BaseModel):
+    """收窄后 LLM 只负责的推理结果（v0.5 Task06）。
+
+    L1 管道已确定性产出技能/职责/学历/年限/指标等字段；LLM 仅补：
+    岗位名、文化关键词、D1-D8 维度、潜台词、以及算法 UNKNOWN/低置信条目的裁决。
+    """
+
+    job_title: str = Field("", description="岗位名称")
+    culture_keywords: List[str] = Field(default_factory=list)
+    dimension_requirements: List[DimensionRequirement] = Field(default_factory=list)
+    subtext_decoded: List[SubtextDecode] = Field(default_factory=list)
+    ambiguous: List[AmbiguousDecision] = Field(default_factory=list)
+
+
 class ATSProfile(BaseModel):
     """JD ATS 解析结果"""
 

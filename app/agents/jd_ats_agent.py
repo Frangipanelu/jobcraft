@@ -1,26 +1,40 @@
 """
 JD ATS 解析 Agent
 
-从 JD 文本提取 8 维能力要求与岗位画像（单次 LLM 调用）。
+从 JD 文本提取 8 维能力要求与岗位画像。
 
 支持 prompt 版本：
 - v1：基础抽取（默认，向后兼容）
 - v2：显式规则抽取（Issue 4，把 E1-E8 错误类写成硬性规则，单次调用，输出同 v1）
 - v3：evidence-first（先抽证据、后出画像），输出附 `evidence_items`，
       后端以 `reconcile_evidence` 做确定性证据校验。
+- v4：分层收窄（v0.5 Task06）——先跑确定性 L1 管道
+      （structurer→classifier→extractor→evidence），LLM 只收结构化摘要 +
+      截断 JD，只出「岗位名/文化词/D1-D8/潜台词/歧义裁决」，
+      再由确定性合并回 ATSProfile。
 """
 
-from typing import Any, Dict
+import json
+from typing import Any, Dict, Sequence
 
 from app.agents.base_agent import BaseAgent
 from app.agents.evidence import (
+    normalize,
     reconcile_evidence,
     reclassify_claims,
     split_ontology_claims,
 )
 from app.core.llm import model
 from app.core.prompts import load_prompt
-from app.schemas.jobcraft import ATSProfile
+from app.pipeline.evidence_builder import build_source_evidence
+from app.pipeline.jd_classifier import ClassifiedItem, classify_jd
+from app.pipeline.jd_extractor import JDExtraction, extract_jd
+from app.pipeline.jd_structurer import StructuredJD, structure_jd
+from app.schemas.jobcraft import (
+    ATSProfile,
+    AtsInference,
+    EvidenceItem,
+)
 from app.tools.llm_json import invoke_structured
 
 # 8 维能力说明，用于 prompts
@@ -35,8 +49,19 @@ DIMENSION_DESCRIPTIONS = {
     "D8": "职业规划：自我定位、成长路径与岗位匹配度",
 }
 
-# 支持的 prompt 版本（v2 为显式规则版 Prompt B）
-_ATS_PROMPT_VERSIONS = {"v1": 1, "v2": 2, "v3": 3}
+# 支持的 prompt 版本（v2 为显式规则版 Prompt B，v4 为分层收窄版）
+_ATS_PROMPT_VERSIONS = {"v1": 1, "v2": 2, "v3": 3, "v4": 4}
+
+# LLM 歧义裁决标签 → ATSProfile 列表字段
+_LABEL_TO_FIELD = {
+    "required": "required_skills",
+    "preferred": "preferred_skills",
+    "responsibility": "responsibilities",
+    "soft_skill": "soft_skills",
+}
+
+# 低置信阈值：低于此值或 UNKNOWN 的条目交由 LLM 复核
+_REVIEW_CONFIDENCE = 0.6
 
 
 def _build_ats_prompt(jd_text: str, *, version: str = "v1") -> str:
@@ -47,11 +72,132 @@ def _build_ats_prompt(jd_text: str, *, version: str = "v1") -> str:
     )
 
 
-class JdAtsAgent(BaseAgent):
-    """解析 JD，返回 ATSProfile（单次 LLM 调用）
+def _needs_review(classified: Sequence[ClassifiedItem]) -> list[ClassifiedItem]:
+    """算法把握不足的条目（UNKNOWN 或低置信），交由 LLM 裁决。"""
+    return [
+        c
+        for c in classified
+        if c.label.value == "unknown" or c.confidence < _REVIEW_CONFIDENCE
+    ]
 
-    state 支持 ``prompt_version``（"v1" / "v2" / "v3"，默认 "v1"）：
-    v3 证据模式返回原始输出 raw 与证据校验后的 ats 两份结果。
+
+def _build_structured_summary(
+    structured: StructuredJD,
+    classified: Sequence[ClassifiedItem],
+    extraction: JDExtraction,
+) -> str:
+    """构造给 LLM 的紧凑结构化摘要（JSON 字符串）。"""
+    payload = {
+        "sections": sorted({c.section.value for c in classified}),
+        "items": [
+            {
+                "id": c.item_id,
+                "section": c.section.value,
+                "label": c.label.value,
+                "confidence": round(c.confidence, 2),
+                "text": c.text[:80],
+            }
+            for c in classified
+        ],
+        "needs_review": [c.item_id for c in _needs_review(classified)],
+        "extraction": {
+            "required_skills": extraction.required_skills,
+            "preferred_skills": extraction.preferred_skills,
+            "responsibilities": extraction.responsibilities,
+            "soft_skills": extraction.soft_skills,
+            "education": extraction.education,
+            "years_of_experience": extraction.years_of_experience,
+            "salary": extraction.salary,
+            "location": extraction.location,
+            "key_metrics": extraction.key_metrics,
+        },
+        "candidate_signals": [
+            {"keyword": k.keyword, "category": k.category, "importance": k.importance}
+            for k in extraction.core_keywords
+        ],
+    }
+    return json.dumps(payload, ensure_ascii=False)
+
+
+def _build_v4_prompt(
+    jd_text: str,
+    structured: StructuredJD,
+    classified: Sequence[ClassifiedItem],
+    extraction: JDExtraction,
+) -> str:
+    dims = "\n".join([f"{k}: {v}" for k, v in DIMENSION_DESCRIPTIONS.items()])
+    return load_prompt(
+        "jd",
+        "jd_ats_analysis",
+        version=4,
+        dims=dims,
+        structured_summary=_build_structured_summary(structured, classified, extraction),
+        jd_text=jd_text[:3000],
+    )
+
+
+def merge_ats(
+    extraction: JDExtraction,
+    classified: Sequence[ClassifiedItem],
+    inference: AtsInference,
+    jd_text: str,
+) -> ATSProfile:
+    """把 L1 算法抽取与收窄 LLM 推理确定性地合并为 ATSProfile。
+
+    :param extraction: :func:`jd_extractor.extract_jd` 的算法抽取结果。
+    :param classified: :func:`jd_classifier.classify_jd` 的分类结果（供歧义裁决定位）。
+    :param inference: 收窄 LLM 输出（文化词/维度/潜台词/歧义裁决）。
+    :param jd_text: JD 原文（用于 EvidenceItem 的 span 校验语义）。
+    :return: 合并后的 ATSProfile。
+    """
+    text_by_id = {c.item_id: c.text for c in classified}
+    bucket = {
+        "required_skills": list(extraction.required_skills),
+        "preferred_skills": list(extraction.preferred_skills),
+        "responsibilities": list(extraction.responsibilities),
+        "soft_skills": list(extraction.soft_skills),
+    }
+    for decision in inference.ambiguous:
+        field = _LABEL_TO_FIELD.get(decision.label)
+        text = text_by_id.get(decision.item_id)
+        if not field or not text:
+            continue
+        existing = {normalize(v) for v in bucket[field]}
+        if normalize(text) not in existing:
+            bucket[field].append(text)
+
+    evidence = [
+        EvidenceItem(id=i, field=e.field, span=e.text, derived=e.text)
+        for i, e in enumerate(build_source_evidence(classified), start=1)
+    ]
+
+    ats = ATSProfile(
+        job_title=inference.job_title or "",
+        location=extraction.location,
+        salary=extraction.salary,
+        years_of_experience=extraction.years_of_experience,
+        education=extraction.education,
+        required_skills=bucket["required_skills"],
+        preferred_skills=bucket["preferred_skills"],
+        responsibilities=bucket["responsibilities"],
+        soft_skills=bucket["soft_skills"],
+        key_metrics=list(extraction.key_metrics),
+        culture_keywords=list(inference.culture_keywords),
+        core_keywords=list(extraction.core_keywords),
+        dimension_requirements=list(inference.dimension_requirements),
+        subtext_decoded=list(inference.subtext_decoded),
+        evidence_items=evidence,
+        raw_summary=jd_text[:500],
+    )
+    return ats
+
+
+class JdAtsAgent(BaseAgent):
+    """解析 JD，返回 ATSProfile
+
+    state 支持 ``prompt_version``（"v1" / "v2" / "v3" / "v4"，默认 "v1"）：
+    v3 证据模式返回原始输出 raw 与证据校验后的 ats 两份结果；
+    v4 分层模式返回 L1 合并后的 ats 与 LLM 原始推理 raw。
     """
 
     _DEFAULT_OUTPUT_SCHEMA = ATSProfile
@@ -62,13 +208,17 @@ class JdAtsAgent(BaseAgent):
     def run(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """解析 JD 文本。
 
-        :param state: {"jd_text": str, "prompt_version"?: "v1"|"v2"|"v3"}
-        :return: {"ats": ATSProfile dict}；v3 时另含 {"raw": 校验前原始 dict}
+        :param state: {"jd_text": str, "prompt_version"?: "v1"|"v2"|"v3"|"v4"}
+        :return: {"ats": ATSProfile dict}；v3/v4 时另含 {"raw": ...}
         """
         jd_text = state.get("jd_text", "")
         if not jd_text or not jd_text.strip():
             raise ValueError("JD 文本不能为空")
         version = state.get("prompt_version", "v1")
+
+        if version == "v4":
+            return self._run_v4(jd_text)
+
         prompt = _build_ats_prompt(jd_text, version=version)
         ats = invoke_structured(model, ATSProfile, prompt, debug_label="jd_ats")
         result: Dict[str, Any] = {"ats": ats.model_dump()}
@@ -80,3 +230,20 @@ class JdAtsAgent(BaseAgent):
                 reclassify_claims(split_ontology_claims(result["ats"]))
             )
         return result
+
+    def _run_v4(self, jd_text: str) -> Dict[str, Any]:
+        """分层收窄路径：L1 管道（确定性）+ 收窄 LLM 推理 + 确定性合并。"""
+        structured = structure_jd(jd_text)
+        classified = classify_jd(structured)
+        extraction = extract_jd(structured, classified)
+
+        prompt = _build_v4_prompt(jd_text, structured, classified, extraction)
+        inference = invoke_structured(
+            model, AtsInference, prompt, debug_label="jd_ats_v4"
+        )
+
+        merged = merge_ats(extraction, classified, inference, jd_text)
+        return {
+            "ats": merged.model_dump(),
+            "raw": inference.model_dump(),
+        }

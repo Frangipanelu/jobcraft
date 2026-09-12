@@ -223,6 +223,96 @@ def test_jd_ats_agent_v2_prompt_explicit_rules(monkeypatch):
     assert out["ats"]["required_skills"] == ["Python"]
 
 
+# ---------- JdAtsAgent v4（分层收窄） ----------
+
+
+def test_jd_ats_v4_merges_pipeline_and_inference(monkeypatch):
+    from app.agents.jd_ats_agent import JdAtsAgent
+
+    captured = {}
+
+    def _fake_invoke(model, schema, prompt, **kwargs):
+        from app.schemas.jobcraft import AtsInference
+
+        assert schema is AtsInference
+        captured["prompt"] = prompt
+        return AtsInference(
+            job_title="后端工程师",
+            culture_keywords=["代码规范"],
+            dimension_requirements=[{"dimension": "D1", "level": 4, "evidence": "熟悉 Python"}],
+            subtext_decoded=[
+                {
+                    "surface_requirement": "能抗压",
+                    "hidden_meaning": "节奏快",
+                    "key_ability": "执行力",
+                    "how_to_prove": "高压交付案例",
+                    "confidence": 0.7,
+                }
+            ],
+        )
+
+    monkeypatch.setattr("app.agents.jd_ats_agent.invoke_structured", _fake_invoke)
+    jd = "职位描述\n岗位职责：\n1）负责交易系统后端开发\n岗位要求：\n1）熟悉 Python、Redis\n2）具备良好的沟通能力"
+    out = JdAtsAgent().run({"jd_text": jd, "prompt_version": "v4"})
+
+    assert out["raw"]["culture_keywords"] == ["代码规范"]
+    ats = out["ats"]
+    assert ats["job_title"] == "后端工程师"
+    # L1 算法产出的技能被保留（LLM 未返回技能字段也不丢失）
+    assert {"Python", "Redis"} <= set(ats["required_skills"])
+    assert ats["culture_keywords"] == ["代码规范"]
+    assert ats["soft_skills"]
+    assert ats["dimension_requirements"][0]["dimension"] == "D1"
+    assert ats["subtext_decoded"][0]["key_ability"] == "执行力"
+    assert ats["core_keywords"]
+    assert ats["evidence_items"]
+    # prompt 只包含结构化摘要，不含"重复抽取技能"指令
+    assert "needs_review" in captured["prompt"]
+
+
+def test_jd_ats_v4_ambiguous_decision_relabels_item(monkeypatch):
+    from app.agents.jd_ats_agent import JdAtsAgent
+
+    def _fake_invoke(model, schema, prompt, **kwargs):
+        from app.schemas.jobcraft import AtsInference
+
+        # 找出 needs_review 中真实存在的 item_id
+        import json
+        import re
+
+        m = re.search(r"```json\n(.*?)\n```", prompt, re.S)
+        summary = json.loads(m.group(1))
+        ids = summary["needs_review"]
+        decisions = (
+            [{"item_id": ids[0], "label": "required", "reason": "实为硬性要求"}]
+            if ids
+            else []
+        )
+        return AtsInference(job_title="X", ambiguous=decisions)
+
+    monkeypatch.setattr("app.agents.jd_ats_agent.invoke_structured", _fake_invoke)
+    out = JdAtsAgent().run(
+        {"jd_text": "职位描述\n岗位要求：\n1）有良好的编码习惯与自我驱动能力", "prompt_version": "v4"}
+    )
+    assert "ats" in out
+
+
+def test_jd_ats_v4_prompt_is_narrowed():
+    from app.agents.jd_ats_agent import _build_v4_prompt
+    from app.pipeline.jd_classifier import classify_jd
+    from app.pipeline.jd_extractor import extract_jd
+    from app.pipeline.jd_structurer import structure_jd
+
+    jd = "职位描述\n岗位职责：\n1）负责系统开发\n岗位要求：\n1）熟悉 Python"
+    s = structure_jd(jd)
+    c = classify_jd(s)
+    e = extract_jd(s, c)
+    prompt = _build_v4_prompt(jd, s, c, e)
+    assert "只负责算法无法可靠完成" in prompt
+    assert "structured_summary" not in prompt  # 占位符已填充
+    assert "禁止**重复输出 required_skills" in prompt or "禁止" in prompt
+
+
 # ---------- AtsRecommendAgent ----------
 
 
