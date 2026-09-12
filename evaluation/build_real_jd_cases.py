@@ -10,7 +10,8 @@
 gold 解析规则：
 - 逗号/顿号/分号/换行/项目编号 分隔列表字段；dimensions 形如 "D1:4,D2:3"；
   subtext 每条 "表面|潜台词|关键能力|如何证明|置信度"，多条用 ; 分隔。
-- gold_pending：required_skills / preferred_skills / responsibilities 任一为空 → True。
+- gold_pending：required_skills / preferred_skills / responsibilities 任一为空 → True；
+  重建时保留 jsonl 中已手工确认的 gold_pending（覆盖自动规则）。
 """
 
 from __future__ import annotations
@@ -27,7 +28,7 @@ TEMPLATE = DATASETS / "real_jd_cases_template.xlsx"
 COMPLETED = DATASETS / "real_jd_cases_completed.xlsx"
 OUT = DATASETS / "real_jd_cases.jsonl"
 
-_LIST_SEP = re.compile(r"[,，、;；/\n\t]+")
+_LIST_SEP = re.compile(r"[,，、;；\n\t]+")
 _DIM_RE = re.compile(r"^(D\d):(\d)$")
 _BULLET_RE = re.compile(r"^\s*(?:\d+[\.、\)）]|[-–—•·*/]|\(?\d+\)?)\s*")
 
@@ -35,8 +36,14 @@ _BULLET_RE = re.compile(r"^\s*(?:\d+[\.、\)）]|[-–—•·*/]|\(?\d+\)?)\s*"
 def _split(value: str | None, default: list[str] | None = None) -> list[str]:
     if not value or not str(value).strip():
         return list(default or [])
+    raw = str(value)
+    if "\n" in raw:
+        segments = re.split(r"[；;、\n\t]+", raw)
+    else:
+        segments = _LIST_SEP.split(raw)
+
     out = []
-    for seg in _LIST_SEP.split(str(value)):
+    for seg in segments:
         seg = _BULLET_RE.sub("", seg).strip()
         if seg:
             out.append(seg)
@@ -118,12 +125,19 @@ def build(in_path: Path) -> int:
     new_ids = {c["case_id"] for c in new_cases}
 
     existing: list[dict] = []
+    prior_flags: dict[str, bool] = {}
     if OUT.exists():
         for line in OUT.read_text(encoding="utf-8").splitlines():
-            if line.strip():
-                case = json.loads(line)
-                if case.get("case_id") not in new_ids:
-                    existing.append(case)
+            if not line.strip():
+                continue
+            case = json.loads(line)
+            prior_flags[case["case_id"]] = case["gold_pending"]
+            if case.get("case_id") not in new_ids:
+                existing.append(case)
+
+    for c in new_cases:
+        if c["case_id"] in prior_flags:
+            c["gold_pending"] = prior_flags[c["case_id"]]
 
     merged = existing + new_cases
     OUT.write_text(

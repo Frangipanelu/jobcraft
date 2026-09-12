@@ -12,9 +12,9 @@ span 失配：0
 ## L1-3 Extractor（gold 近似命中）
 | field | hit/total | rate |
 |---|---|---|
-| required | 138/769 | 17.95%
-| preferred | 36/211 | 17.06%
-| responsibility | 572/888 | 64.41%
+| required | 110/551 | 19.96%
+| preferred | 29/177 | 16.38%
+| responsibility | 370/554 | 66.79%
 
 - education 覆盖：35/40；years 覆盖：13/40
 - key_metrics 总计：47
