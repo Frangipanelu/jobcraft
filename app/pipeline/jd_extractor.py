@@ -32,6 +32,7 @@ from app.pipeline.jd_classifier import (
     _SOFT_WORDS,
 )
 from app.pipeline.jd_structurer import SectionKind, StructuredJD
+from app.schemas.jobcraft import KeywordSignal
 
 # 多词/带标点技术词优先（长词先匹配，避免 "Vue" 抢走 "Vue.js"）
 _TECH_BY_LEN = tuple(sorted(_TECH_WORDS, key=len, reverse=True))
@@ -49,16 +50,6 @@ _PRODUCT_WORDS = (
     "数据分析",
     "可视化",
 )
-
-
-class KeywordSignal(BaseModel):
-    """Recruitment Signal：关键词 + 类别 + 算法重要性（v0.5 §十五/§十六）。"""
-
-    keyword: str
-    category: str = Field(description="technical | product | soft")
-    importance: str = Field(description="high | medium | low")
-    score: int = Field(description="score = section_weight + strength + freq")
-    evidence: str = Field(description="首次命中的 JD 原文条目")
 
 
 class JDExtraction(BaseModel):

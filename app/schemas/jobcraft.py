@@ -209,6 +209,16 @@ class JDRequirements(BaseModel):
     location: Optional[str] = Field(None)
 
 
+class KeywordSignal(BaseModel):
+    """算法抽取的招聘信号关键词（v0.5 §十五/§十六）。"""
+
+    keyword: str
+    category: str = Field(description="technical | product | soft")
+    importance: str = Field(description="high | medium | low")
+    score: int = Field(description="score = section_weight + strength + freq")
+    evidence: str = Field(description="首次命中的 JD 原文条目")
+
+
 class ATSProfile(BaseModel):
     """JD ATS 解析结果"""
 
@@ -223,6 +233,12 @@ class ATSProfile(BaseModel):
     responsibilities: List[str] = Field(default_factory=list)
     key_metrics: List[str] = Field(default_factory=list)
     culture_keywords: List[str] = Field(default_factory=list)
+    soft_skills: List[str] = Field(
+        default_factory=list, description="软能力关键词（算法抽取，可选字段）"
+    )
+    core_keywords: List[KeywordSignal] = Field(
+        default_factory=list, description="招聘信号关键词（算法抽取，v0.5 §十五/十六）"
+    )
     dimension_requirements: List[DimensionRequirement] = Field(default_factory=list)
     subtext_decoded: List[SubtextDecode] = Field(default_factory=list)
     evidence_items: List[EvidenceItem] = Field(

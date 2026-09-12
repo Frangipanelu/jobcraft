@@ -9,6 +9,7 @@ from app.pipeline.jd_extractor import (
     _find_tech_tokens,
 )
 from app.pipeline.jd_structurer import SectionKind, structure_jd
+from app.schemas.jobcraft import ATSProfile
 
 
 def _item(
@@ -164,6 +165,41 @@ class TestKeywords:
 
         prod = extract_keywords([_item("负责需求分析与原型设计", ClassLabel.REQUIRED)])
         assert any(s.category == "product" for s in prod)
+
+
+class TestAtsProfileContract:
+    def test_legacy_dict_still_validates(self):
+        ats = ATSProfile.model_validate(
+            {
+                "job_title": "后端工程师",
+                "required_skills": ["Python"],
+                "responsibilities": ["接口开发"],
+                "culture_keywords": ["代码规范"],
+                "salary": "25K",
+            }
+        )
+        assert ats.required_skills == ["Python"]
+        assert ats.soft_skills == []
+        assert ats.core_keywords == []
+
+    def test_new_optional_fields_roundtrip(self):
+        ats = ATSProfile.model_validate(
+            {
+                "job_title": "后端工程师",
+                "soft_skills": ["沟通能力"],
+                "core_keywords": [
+                    {
+                        "keyword": "Python",
+                        "category": "technical",
+                        "importance": "high",
+                        "score": 5,
+                        "evidence": "熟悉 Python",
+                    }
+                ],
+            }
+        )
+        assert ats.soft_skills == ["沟通能力"]
+        assert ats.core_keywords[0].keyword == "Python"
 
 
 class TestEndToEnd:
