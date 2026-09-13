@@ -268,7 +268,8 @@ def analyze_structured_jd(
 
     与 ``v4`` 分层路径区别：不需要 ``structure_jd`` 区块检测，
     也不需要 classifier 猜 required/preferred——用户标签即事实。
-    L1 仍负责 学历/年限/指标/技能token/经验证据 的确定性抽取。
+    L1 仍负责 指标/技能token/经验证据 的确定性抽取；
+    学历/年限/薪资/地点 门槛由前端用户直接表达（hard 标签），后端不做二次解析。
 
     :param duties: 岗位职责逐条。
     :param requirements: 任职要求逐条（用户已打 hard/required/preferred 标签）。
@@ -278,6 +279,10 @@ def analyze_structured_jd(
     if not classified:
         raise ValueError("岗位职责与任职要求不能同时为空")
     extraction = extract_jd(structured, classified)
+    # 学历/年限门槛由 hard 标签表达，不再重复解析（与薪资/地点一致，不进入分析）
+    extraction = extraction.model_copy(
+        update={"education": None, "years_of_experience": None}
+    )
     jd_text = _structured_to_text(duties, requirements)
 
     inference = invoke_structured(

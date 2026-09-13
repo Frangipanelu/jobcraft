@@ -387,18 +387,17 @@ def test_analyze_structured_jd_reuses_pipeline(monkeypatch):
     assert ats["job_title"] == "AI 产品经理"
     assert "大模型" in ats["required_skills"] or ats["required_skills"]
     assert any("评测" in s or "自动化" in s for s in ats["preferred_skills"])
-    # 硬性门槛进入 education/years（L1 确定性抽取，非 LLM）
-    assert ats["education"]
-    assert ats["years_of_experience"]
+    # 学历/年限/薪资/地点门槛由 hard 标签表达，后端不做二次解析（均不进入分析）
+    assert ats["education"] is None
+    assert ats["years_of_experience"] is None
+    assert ats["salary"] is None
+    assert ats["location"] is None
     # L1 保留职责
     assert any("端侧大模型" in r for r in ats["responsibilities"])
     assert ats["culture_keywords"] == ["数据驱动"]
     assert ats["dimension_requirements"][0]["dimension"] == "D1"
     assert ats["core_keywords"]
     assert ats["evidence_items"]
-    # 结构化路径没有薪资/地点分析（接口不传这些字段）
-    assert ats["salary"] is None
-    assert ats["location"] is None
     # LLM prompt 只含两块内容 + 结构化摘要
     assert "【岗位职责】" in captured["prompt"]
     assert "【任职要求】" in captured["prompt"]
