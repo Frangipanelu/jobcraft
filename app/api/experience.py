@@ -150,6 +150,75 @@ class ConfirmUploadPayload(BaseModel):
     raw_text: Optional[str] = None
 
 
+class BaseResumePayload(BaseModel):
+    name: str = "上传简历"
+    file_size: str = ""
+    format: str = "docx"
+    parsed_count: int = 0
+    tags: List[str] = []
+
+
+@router.post("/base-resumes", response_model=Dict[str, Any])
+async def create_base_resume(
+    payload: BaseResumePayload,
+    current_user: int = Depends(get_current_user),
+):
+    """记录一条上传的底座简历（元信息），用于历史版本列表的持久化。"""
+    from app.tools.db_base_resume import create_base_resume as db_create
+    from app.tools.db_base_resume import list_base_resumes
+
+    existing = list_base_resumes(current_user)
+    resume_id = db_create(
+        {
+            "user_id": current_user,
+            "name": payload.name,
+            "file_size": payload.file_size,
+            "format": payload.format,
+            "parsed_count": payload.parsed_count,
+            "tags": payload.tags,
+            "is_default": len(existing) == 0,
+        }
+    )
+    from app.tools.db_base_resume import get_base_resume
+
+    return get_base_resume(resume_id, current_user)
+
+
+@router.get("/base-resumes", response_model=List[Dict[str, Any]])
+async def list_base_resumes(current_user: int = Depends(get_current_user)):
+    """返回当前用户的全部底座简历历史版本。"""
+    from app.tools.db_base_resume import list_base_resumes as db_list
+
+    return db_list(current_user)
+
+
+@router.patch("/base-resumes/{resume_id}/default", response_model=Dict[str, Any])
+async def set_default_base_resume(
+    resume_id: int,
+    current_user: int = Depends(get_current_user),
+):
+    """把指定底座简历设为默认。"""
+    from app.tools.db_base_resume import get_base_resume, set_default_base_resume
+
+    if not get_base_resume(resume_id, current_user):
+        raise HTTPException(status_code=404, detail="底座简历不存在")
+    set_default_base_resume(resume_id, current_user)
+    return get_base_resume(resume_id, current_user)
+
+
+@router.delete("/base-resumes/{resume_id}")
+async def delete_base_resume(
+    resume_id: int,
+    current_user: int = Depends(get_current_user),
+):
+    """删除一条底座简历历史记录。"""
+    from app.tools.db_base_resume import delete_base_resume as db_delete
+
+    if not db_delete(resume_id, current_user):
+        raise HTTPException(status_code=404, detail="底座简历不存在")
+    return {"ok": True}
+
+
 @router.post("/upload/confirm")
 async def jobcraft_experience_upload_confirm(
     payload: ConfirmUploadPayload,

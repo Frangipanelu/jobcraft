@@ -408,6 +408,143 @@ class TestExperienceBackfill:
         assert resp.status_code == 500
 
 
+class TestBaseResume:
+    """底座简历历史版本 CRUD"""
+
+    def _mock_db(self, monkeypatch):
+        """把 db_base_resume 的函数替换为可控假实现。"""
+        from app.tools import db_base_resume as mod
+
+        store = {
+            "rows": [],
+            "seq": 1,
+        }
+
+        def _fake_create(data):
+            rec = {
+                "id": store["seq"],
+                "user_id": data["user_id"],
+                "name": data.get("name", "上传简历"),
+                "file_size": data.get("file_size", ""),
+                "format": data.get("format", "docx"),
+                "parsed_count": data.get("parsed_count", 0),
+                "tags": data.get("tags") or [],
+                "is_default": bool(data.get("is_default", False)),
+                "created_at": "2026-09-14T00:00:00",
+                "updated_at": "2026-09-14T00:00:00",
+            }
+            store["seq"] += 1
+            store["rows"].append(rec)
+            return rec["id"]
+
+        def _fake_list(user_id):
+            return [r for r in store["rows"] if r["user_id"] == user_id]
+
+        def _fake_get(resume_id, user_id=None):
+            for r in store["rows"]:
+                if r["id"] == resume_id and (
+                    user_id is None or r["user_id"] == user_id
+                ):
+                    return r
+            return None
+
+        def _fake_delete(resume_id, user_id=None):
+            for i, r in enumerate(store["rows"]):
+                if r["id"] == resume_id and (
+                    user_id is None or r["user_id"] == user_id
+                ):
+                    store["rows"].pop(i)
+                    return True
+            return False
+
+        def _fake_set_default(resume_id, user_id):
+            for r in store["rows"]:
+                r["is_default"] = r["user_id"] == user_id and r["id"] == resume_id
+            return any(
+                r["id"] == resume_id and r["user_id"] == user_id for r in store["rows"]
+            )
+
+        monkeypatch.setattr(mod, "create_base_resume", _fake_create)
+        monkeypatch.setattr(mod, "list_base_resumes", _fake_list)
+        monkeypatch.setattr(mod, "get_base_resume", _fake_get)
+        monkeypatch.setattr(mod, "delete_base_resume", _fake_delete)
+        monkeypatch.setattr(mod, "set_default_base_resume", _fake_set_default)
+        return store
+
+    def test_create_first_is_default(self, monkeypatch):
+        store = self._mock_db(monkeypatch)
+        resp = client.post(
+            "/api/jobcraft/experience/base-resumes",
+            json={
+                "name": "resume_a.pdf",
+                "file_size": "1.2 MB",
+                "parsed_count": 3,
+                "format": "pdf",
+            },
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["id"] == 1
+        assert data["is_default"] is True
+        assert data["parsed_count"] == 3
+        assert len(store["rows"]) == 1
+
+    def test_create_second_not_default(self, monkeypatch):
+        store = self._mock_db(monkeypatch)
+        client.post(
+            "/api/jobcraft/experience/base-resumes",
+            json={"name": "a.pdf", "format": "pdf"},
+        )
+        client.post(
+            "/api/jobcraft/experience/base-resumes",
+            json={"name": "b.docx", "format": "docx"},
+        )
+        row2 = store["rows"][1]
+        assert row2["is_default"] is False
+        resp = client.get("/api/jobcraft/experience/base-resumes")
+        assert resp.status_code == 200
+        assert len(resp.json()) == 2
+
+    def test_set_default_flips_ownership(self, monkeypatch):
+        store = self._mock_db(monkeypatch)
+        client.post(
+            "/api/jobcraft/experience/base-resumes",
+            json={"name": "a.pdf", "format": "pdf"},
+        )
+        client.post(
+            "/api/jobcraft/experience/base-resumes",
+            json={"name": "b.docx", "format": "docx"},
+        )
+        resp = client.patch("/api/jobcraft/experience/base-resumes/2/default")
+        assert resp.status_code == 200
+        assert resp.json()["id"] == 2
+        assert resp.json()["is_default"] is True
+        # 只有 id=2 保持默认
+        defaults = [r for r in store["rows"] if r["is_default"]]
+        assert [r["id"] for r in defaults] == [2]
+
+    def test_set_default_missing_returns_404(self, monkeypatch):
+        self._mock_db(monkeypatch)
+        resp = client.patch("/api/jobcraft/experience/base-resumes/99/default")
+        assert resp.status_code == 404
+
+    def test_delete_normal(self, monkeypatch):
+        store = self._mock_db(monkeypatch)
+        client.post(
+            "/api/jobcraft/experience/base-resumes",
+            json={"name": "a.pdf", "format": "pdf"},
+        )
+        resp = client.delete("/api/jobcraft/experience/base-resumes/1")
+        assert resp.status_code == 200
+        assert resp.json()["ok"] is True
+        assert len(store["rows"]) == 0
+
+    def test_delete_missing_returns_404(self, monkeypatch):
+        self._mock_db(monkeypatch)
+        resp = client.delete("/api/jobcraft/experience/base-resumes/99")
+        assert resp.status_code == 404
+
+
 # ============================================================
 # 2. job_analysis.py — 岗位分析路由
 # ============================================================
