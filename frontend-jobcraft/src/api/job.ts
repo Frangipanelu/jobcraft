@@ -114,6 +114,37 @@ export async function step2GapPolish(payload: {
 }
 
 // ============================================================
+// 结构化 JD 分析（前端已分好类）
+// ============================================================
+
+export interface StructuredRequirementItem {
+  text: string
+  tag: 'hard' | 'required' | 'preferred'
+}
+
+export async function analyzeStructuredJd(payload: {
+  company: string
+  position: string
+  duties: string[]
+  requirements: StructuredRequirementItem[]
+}): Promise<{ ats_profile: ATSProfile; raw: Record<string, unknown>; company: string; position: string }> {
+  return request('/api/jobcraft/job/analyze-ats-structured', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function splitJd(jdText: string): Promise<{
+  duties: string[]
+  requirements: { text: string; tag: string }[]
+}> {
+  return request('/api/jobcraft/job/split-jd', {
+    method: 'POST',
+    body: JSON.stringify({ jd_text: jdText }),
+  })
+}
+
+// ============================================================
 // 投递记录
 // ============================================================
 

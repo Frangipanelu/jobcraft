@@ -4,30 +4,32 @@ import {
   FileSearch,
   Sparkles,
   Plus,
-  ArrowRight,
   Trash2,
-  Building2,
-  Calendar,
-  Layers,
   Search,
-  ExternalLink,
-  BookOpen,
   CheckCircle2,
-  AlertCircle,
-  FileText,
-  Clock
+  Clock,
+  Wand2
 } from 'lucide-react';
+import { splitJd } from '../../api/job';
 
 export const JDAnalysisCenterView: React.FC = () => {
-  const { jdAnalyses, createJDAnalysis, deleteJDAnalysis, navigateTo, interviewDraft } = useJobCraft();
+  const { jdAnalyses, createStructuredJDAnalysis, deleteJDAnalysis, navigateTo, interviewDraft } = useJobCraft();
 
   const [activeTab, setActiveTab] = useState<'create' | 'history'>('create');
   const [company, setCompany] = useState('');
   const [role, setRole] = useState('');
-  const [salaryRange, setSalaryRange] = useState('');
-  const [rawText, setRawText] = useState('');
+  const [dutyText, setDutyText] = useState('');
+  const [requirements, setRequirements] = useState<{ text: string; tag: 'hard' | 'required' | 'preferred' }[]>([]);
+  const [pastedRaw, setPastedRaw] = useState('');
+  const [isSplitting, setIsSplitting] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+
+  const TAG_LABELS: Record<string, string> = {
+    hard: '硬性门槛',
+    required: '必选',
+    preferred: '加分项'
+  };
 
   const sampleJD = `【岗位职责】
 1. 主导端侧大模型（On-Device LLM）与个人生产力场景的 AI 交互形态设计与业务落地；
@@ -40,34 +42,74 @@ export const JDAnalysisCenterView: React.FC = () => {
 2. 具备从 0 到 1 搭建质量评估基准体系的成熟方法论，熟练掌握常用评估指标（NDCG/Faithfulness/Recall 等）；
 3. 出色的跨团队推进力与严谨的数据敏感度，有技术背景或能直接与算法架构师对话者优先。`;
 
+  const handleSplitPrefill = async () => {
+    if (!pastedRaw.trim()) return;
+    setIsSplitting(true);
+    try {
+      const result = await splitJd(pastedRaw.trim());
+      setDutyText(result.duties.join('\n'));
+      setRequirements(result.requirements.map((r) => ({
+        text: r.text,
+        tag: (r.tag === 'hard' || r.tag === 'required' || r.tag === 'preferred') ? r.tag : 'required'
+      })));
+    } catch (e) {
+      console.error('JD 拆分失败:', e);
+    } finally {
+      setIsSplitting(false);
+    }
+  };
+
+  const handleUsePreset = () => {
+    setCompany('某头部科技公司');
+    setRole('AI 产品经理（端侧与 Agent 方向）');
+    setPastedRaw(sampleJD);
+    const lines = sampleJD.split('\n').map((l) => l.trim()).filter(Boolean);
+    const dutyLines: string[] = [];
+    const reqLines: string[] = [];
+    let section: 'duty' | 'req' | null = null;
+    for (const line of lines) {
+      if (line.includes('岗位职责')) { section = 'duty'; continue; }
+      if (line.includes('任职要求')) { section = 'req'; continue; }
+      const clean = line.replace(/^[\d①-⑩）.)、.\s]+/, '');
+      if (!clean) continue;
+      if (section === 'duty') dutyLines.push(clean);
+      else if (section === 'req') reqLines.push(clean);
+    }
+    setDutyText(dutyLines.join('\n'));
+    setRequirements(reqLines.map((t) => ({ text: t, tag: /优先|加分|尤佳/.test(t) ? 'preferred' : 'required' as 'required' })));
+    setPastedRaw('');
+  };
+
   const handleStartAnalysis = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!company.trim() || !role.trim() || !rawText.trim()) return;
+    const duties = dutyText.split('\n').map((d) => d.trim()).filter(Boolean);
+    const nonEmptyReqs = requirements.filter((r) => r.text.trim());
+    if (!company.trim() || !role.trim() || (duties.length === 0 && nonEmptyReqs.length === 0)) return;
 
     setIsAnalyzing(true);
     setTimeout(() => {
-      const newAnalysisId = createJDAnalysis({
+      const newAnalysisId = createStructuredJDAnalysis({
         company: company.trim(),
         role: role.trim(),
-        rawText: rawText.trim()
+        duties,
+        requirements: nonEmptyReqs.map((r) => ({ text: r.text.trim(), tag: r.tag }))
       });
       setIsAnalyzing(false);
       setCompany('');
       setRole('');
-      setSalaryRange('');
-      setRawText('');
+      setDutyText('');
+      setRequirements([]);
+      setPastedRaw('');
 
       // Navigate to the full JD report to view results and provide return button
       navigateTo('jd_report', { jdId: newAnalysisId });
     }, 800);
   };
 
-  const handleUsePreset = () => {
-    setCompany('某头部科技公司');
-    setRole('AI 产品经理（端侧与 Agent 方向）');
-    setSalaryRange('40K-60K · 16薪');
-    setRawText(sampleJD);
-  };
+  const addRequirement = () => setRequirements((prev) => [...prev, { text: '', tag: 'required' }]);
+  const updateRequirement = (idx: number, patch: Partial<{ text: string; tag: 'hard' | 'required' | 'preferred' }>) =>
+    setRequirements((prev) => prev.map((r, i) => (i === idx ? { ...r, ...patch } : r)));
+  const removeRequirement = (idx: number) => setRequirements((prev) => prev.filter((_, i) => i !== idx));
 
   const filteredAnalyses = jdAnalyses.filter(
     (a) =>
@@ -82,7 +124,8 @@ export const JDAnalysisCenterView: React.FC = () => {
         <div>
           <h1 className="text-2xl font-bold text-ink tracking-tight">全局 JD 深度分析中心</h1>
           <p className="text-xs md:text-sm text-muted mt-1">
-            仅依赖真实 JD 原文进行全景结构化研判，穿透 ATS 关键词、隐藏招聘意图与能力缺口，指导后续简历定制与面试应答
+            前端分好类：公司 / 岗位 / 岗位职责 / 任职要求（逐条打标签），
+            仅对职责与要求两块内容做 LLM 细节分析（地址、薪资不纳入分析）
           </p>
         </div>
 
@@ -122,8 +165,8 @@ export const JDAnalysisCenterView: React.FC = () => {
                 <FileSearch className="w-4 h-4 text-sage" />
               </div>
               <div>
-                <h2 className="text-sm font-bold text-ink">新建 JD 全景研判表单</h2>
-                <p className="text-[11px] text-muted">填写岗位基本信息并粘贴 JD 原文，系统将自动拆解分析维度</p>
+                <h2 className="text-sm font-bold text-ink">新建结构化 JD 研判表单</h2>
+                <p className="text-[11px] text-muted">职责与任职要求已分栏；任职要求逐条点选标签（硬性门槛/必选/加分项）</p>
               </div>
             </div>
 
@@ -138,11 +181,11 @@ export const JDAnalysisCenterView: React.FC = () => {
           </div>
 
           <form onSubmit={handleStartAnalysis} className="p-6 md:p-8 space-y-6">
-            {/* Meta Fields Table */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+            {/* Meta Fields Table：公司 + 岗位（地址/薪资不再采集） */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
               <div>
                 <label className="block text-xs font-bold text-ink mb-1.5">
-                  目标公司名称 <span className="text-error">*</span>
+                  公司名称 <span className="text-error">*</span>
                 </label>
                 <input
                   type="text"
@@ -153,10 +196,9 @@ export const JDAnalysisCenterView: React.FC = () => {
                   className="w-full px-3.5 py-2.5 rounded-lg border border-edge focus:border-sage focus:ring-1 focus:ring-sage text-xs text-ink bg-white outline-none placeholder:text-faint"
                 />
               </div>
-
               <div>
                 <label className="block text-xs font-bold text-ink mb-1.5">
-                  应聘岗位名称 <span className="text-error">*</span>
+                  岗位名称 <span className="text-error">*</span>
                 </label>
                 <input
                   type="text"
@@ -167,62 +209,145 @@ export const JDAnalysisCenterView: React.FC = () => {
                   className="w-full px-3.5 py-2.5 rounded-lg border border-edge focus:border-sage focus:ring-1 focus:ring-sage text-xs text-ink bg-white outline-none placeholder:text-faint"
                 />
               </div>
+            </div>
 
-              <div>
-                <label className="block text-xs font-bold text-ink mb-1.5">
-                  预期薪酬范围 (选填)
-                </label>
-                <input
-                  type="text"
-                  placeholder="例如：35K-50K · 16薪"
-                  value={salaryRange}
-                  onChange={(e) => setSalaryRange(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-lg border border-edge focus:border-sage focus:ring-1 focus:ring-sage text-xs text-ink bg-white outline-none placeholder:text-faint"
+            {/* 粘贴原文 → 自动拆分预填 */}
+            <div>
+              <label className="block text-xs font-bold text-ink mb-1.5">
+                从招聘原文自动拆分（选填）
+              </label>
+              <div className="flex flex-col gap-2">
+                <textarea
+                  rows={4}
+                  placeholder="直接粘贴整段 JD 原文，点「拆分预填」后自动把职责/硬性要求/加分项分到下方对应栏，可再手工微调..."
+                  value={pastedRaw}
+                  onChange={(e) => setPastedRaw(e.target.value)}
+                  className="w-full p-4 rounded-lg border border-edge focus:border-sage focus:ring-1 focus:ring-sage text-xs text-ink bg-canvas font-mono leading-relaxed outline-none placeholder:text-faint"
                 />
+                <button
+                  type="button"
+                  onClick={handleSplitPrefill}
+                  disabled={isSplitting || !pastedRaw.trim()}
+                  className="self-start flex items-center gap-1.5 px-4 py-2 rounded-lg border border-sage/40 text-sage hover:bg-sage-soft disabled:opacity-40 text-xs font-semibold transition cursor-pointer"
+                >
+                  <Wand2 className="w-3.5 h-3.5" />
+                  {isSplitting ? '拆分中...' : '拆分预填到下方'}
+                </button>
               </div>
             </div>
 
-            {/* Raw JD Text Field */}
+            {/* 岗位职责 */}
             <div>
               <div className="flex items-center justify-between mb-1.5">
                 <label className="block text-xs font-bold text-ink">
-                  岗位招聘要求原文 (JD Text) <span className="text-error">*</span>
+                  岗位职责 <span className="text-error">*</span>
                 </label>
-                <span className="text-[11px] text-faint">
-                  已输入 {rawText.length} 字 · 包含职责与要求即可
-                </span>
+                <span className="text-[11px] text-faint">每行一条</span>
               </div>
               <textarea
-                required
-                rows={10}
-                placeholder="直接从招聘网站或猎头渠道复制粘贴岗位的职位描述、任职要求与加分项..."
-                value={rawText}
-                onChange={(e) => setRawText(e.target.value)}
+                rows={5}
+                required={requirements.length === 0}
+                placeholder={'每行一条职责，例如：\n主导端侧大模型交互形态设计\n搭建自动化 Eval 评测管线'}
+                value={dutyText}
+                onChange={(e) => setDutyText(e.target.value)}
                 className="w-full p-4 rounded-lg border border-edge focus:border-sage focus:ring-1 focus:ring-sage text-xs text-ink bg-canvas font-mono leading-relaxed outline-none placeholder:text-faint"
               />
+            </div>
+
+            {/* 任职要求 + 标签 */}
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-xs font-bold text-ink">
+                  任职要求 <span className="text-error">*</span>
+                </label>
+                <button
+                  type="button"
+                  onClick={addRequirement}
+                  className="flex items-center gap-1 text-xs text-sage hover:text-sage-dim font-semibold transition cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  添加一条
+                </button>
+              </div>
+              <div className="space-y-2">
+                {requirements.map((req, idx) => (
+                  <div key={idx} className="flex items-center gap-2">
+                    <div className="flex items-center p-0.5 bg-page rounded-lg border border-edge shrink-0">
+                      {(['hard', 'required', 'preferred'] as const).map((tag) => (
+                        <button
+                          key={tag}
+                          type="button"
+                          onClick={() => updateRequirement(idx, { tag })}
+                          className={`px-2 py-1 rounded-md text-[11px] font-semibold transition cursor-pointer ${
+                            req.tag === tag
+                              ? tag === 'hard'
+                                ? 'bg-error/10 text-error'
+                                : tag === 'preferred'
+                                  ? 'bg-info/10 text-info'
+                                  : 'bg-white text-ink shadow-2xs'
+                              : 'text-faint hover:text-ink'
+                          }`}
+                        >
+                          {TAG_LABELS[tag]}
+                        </button>
+                      ))}
+                    </div>
+                    <input
+                      type="text"
+                      value={req.text}
+                      onChange={(e) => updateRequirement(idx, { text: e.target.value })}
+                      placeholder={
+                        idx === 0
+                          ? '例如：本科及以上学历，3 年以上 AI 产品经验'
+                          : idx === 1
+                            ? '例如：熟悉 Python、Redis（点左侧选必选/加分）'
+                            : '输入任职要求条目...'
+                      }
+                      className="flex-1 px-3.5 py-2 rounded-lg border border-edge focus:border-sage focus:ring-1 focus:ring-sage text-xs text-ink bg-white outline-none placeholder:text-faint"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeRequirement(idx)}
+                      className="p-1.5 rounded-lg text-muted hover:text-error hover:bg-error-bg transition cursor-pointer shrink-0"
+                      title="删除该条"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
+                {requirements.length === 0 && (
+                  <button
+                    type="button"
+                    onClick={addRequirement}
+                    className="w-full py-3 rounded-lg border border-dashed border-edge text-xs text-faint hover:text-sage hover:border-sage transition cursor-pointer"
+                  >
+                    + 点击添加第一条任职要求（可打 硬性门槛 / 必选 / 加分项 标签）
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Submit Action Bar */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-4 border-t border-edge">
               <div className="flex items-center gap-2 text-xs text-muted">
                 <CheckCircle2 className="w-4 h-4 text-sage" />
-                <span>分析将自动生成：ATS 关键词库、招聘暗话潜台词、能力缺口审计与经历匹配清单</span>
+                <span>仅分析职责与要求：ATS 关键词、学历/年限门槛、招聘暗话、D1-D8 维度；地址与薪资不纳入</span>
               </div>
 
               <button
                 type="submit"
-                disabled={isAnalyzing || !company.trim() || !role.trim() || !rawText.trim()}
+                disabled={isAnalyzing || !company.trim() || !role.trim() || (dutyText.trim() === '' && requirements.filter((r) => r.text.trim()).length === 0)}
                 className="px-6 py-2.5 rounded-lg bg-sage hover:bg-sage-dim disabled:opacity-50 text-white text-xs font-bold transition flex items-center justify-center gap-2 shadow-xs shrink-0 cursor-pointer"
               >
                 {isAnalyzing ? (
                   <>
                     <Sparkles className="w-4 h-4 animate-spin text-sage-dim" />
-                    <span>正在进行全景深度研判...</span>
+                    <span>正在进行结构化深度研判...</span>
                   </>
                 ) : (
                   <>
                     <Sparkles className="w-4 h-4 text-sage-dim" />
-                    <span>开始全景深度研判 →</span>
+                    <span>开始结构化深度研判 →</span>
                   </>
                 )}
               </button>
