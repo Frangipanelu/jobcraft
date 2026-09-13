@@ -1,0 +1,6632 @@
+{
+  "generated_at": "2026-09-13T08:35:36.013947+00:00",
+  "versions": [
+    "v3",
+    "v4"
+  ],
+  "gold": "real_jd_cases.jsonl",
+  "aggregate": {
+    "v3": {
+      "required_skills": 0.3030998851894374,
+      "preferred_skills": 0.3556851311953353,
+      "responsibilities": 0.46726572528883176,
+      "culture_keywords": 0.20454545454545456,
+      "critical": 0.3018867924528302,
+      "cases": 40
+    },
+    "v4": {
+      "required_skills": 0.24751066856330015,
+      "preferred_skills": 0.5863874345549739,
+      "responsibilities": 0.6139088729016786,
+      "culture_keywords": 0.2,
+      "critical": 0.3598326359832636,
+      "cases": 40
+    },
+    "delta": {
+      "required_skills": -0.05558921662613728,
+      "preferred_skills": 0.2307023033596386,
+      "responsibilities": 0.14664314761284686,
+      "culture_keywords": -0.004545454545454547,
+      "critical": 0.057945843530433416
+    }
+  },
+  "moves": {
+    "required_skills": {
+      "removed": 287,
+      "added": 119,
+      "kept": 33
+    },
+    "preferred_skills": {
+      "removed": 144,
+      "added": 183,
+      "kept": 22
+    },
+    "responsibilities": {
+      "removed": 157,
+      "added": 212,
+      "kept": 68
+    },
+    "core_keywords": {
+      "removed": 48,
+      "added": 195,
+      "kept": 4
+    }
+  },
+  "per_case": [
+    {
+      "case_id": "real_001",
+      "v3": {
+        "required_skills": [
+          "了解基础项目管理知识",
+          "知晓敏捷、瀑布基础模式",
+          "熟练使用Office办公软件",
+          "精通Excel基础数据处理",
+          "会JIRA、Confluence、Project基础操作"
+        ],
+        "preferred_skills": [
+          "MES/QMS制造业软件项目交付辅助经验"
+        ],
+        "responsibilities": [
+          "协助跟进多项目全生命周期进度，同步项目周报/例会纪要，登记项目风险与问题台账，跟进问题闭环，及时上报进度异常，协助把控项目关键节点，落地公司现有交付流程规范",
+          "负责各类项目资料的收集、整理、归档与版本管理，维护现有交付文档模板库，协助沉淀项目交付知识资产，完成日常项目文书撰写工作",
+          "统计项目进度、人天消耗、节点达成率等基础交付数据，制作日常数据报表，维护项目人力资源台账，协助排查基础资源中突，配合完成成本数据整理",
+          "对接销售、产品、研发及项目组完成内部信息同步，协助上级准备汇报基础材料、采集绩效统计数据，完成上级安排的其他PMO日常辅助工作"
+        ],
+        "core_keywords": []
+      },
+      "v4": {
+        "required_skills": [
+          "项目管理",
+          "使用Office办公软件",
+          "精通Excel基础数据处理",
+          "Confluence",
+          "JIRA",
+          "基础问题识别与上报能力",
+          "能适配多项目并行工作节奏",
+          "可接受短期出差驻场"
+        ],
+        "preferred_skills": [
+          "亦可",
+          "有MES",
+          "QMS制造业软件项目交付辅助经验"
+        ],
+        "responsibilities": [
+          "项目进度跟进:协助跟进多项目全生命周期进度，同步项目周报/例会纪要，登记项目风险与问题台账，跟进问题闭环，及时上报进度异常",
+          "协助把控项目关键节点，落地公司现有交付流程规范",
+          "文档与知识库管理:负责各类项目资料的收集、整理、归档与版本管理",
+          "维护现有交付文档模板库，协助沉淀项目交付知识资产，完成日常项目文书撰写工作",
+          "项目数据台账统计:统计项目进度、人天消耗、节点达成率等基础交付数据，制作日常数据报表",
+          "维护项目人力资源台账，协助排查基础资源中突，配合完成成本数据整理",
+          "日常协同与支撑:对接销售、产品、研发及项目组完成内部信息同步",
+          "协助上级准备汇报基础材料、采集绩效统计数据",
+          "完成上级安排的其他PMO日常辅助工作"
+        ],
+        "core_keywords": [
+          {
+            "keyword": "项目管理",
+            "category": "product",
+            "importance": "high",
+            "score": 5,
+            "evidence": "专业技能:了解基础项目管理知识，知晓敏捷、瀑布基础模式"
+          },
+          {
+            "keyword": "Confluence",
+            "category": "technical",
+            "importance": "medium",
+            "score": 4,
+            "evidence": "会JIRA、Confluence、Project基础操作"
+          },
+          {
+            "keyword": "JIRA",
+            "category": "technical",
+            "importance": "medium",
+            "score": 4,
+            "evidence": "会JIRA、Confluence、Project基础操作"
+          },
+          {
+            "keyword": "执行力",
+            "category": "soft",
+            "importance": "medium",
+            "score": 4,
+            "evidence": "综合素养:做事细心严谨，执行力强，沟通顺畅"
+          }
+        ]
+      },
+      "diff": {
+        "required_skills": {
+          "only_v3": [
+            "了解基础项目管理知识",
+            "会JIRA、Confluence、Project基础操作",
+            "熟练使用Office办公软件",
+            "知晓敏捷、瀑布基础模式"
+          ],
+          "only_v4": [
+            "Confluence",
+            "JIRA",
+            "使用Office办公软件",
+            "可接受短期出差驻场",
+            "基础问题识别与上报能力",
+            "能适配多项目并行工作节奏",
+            "项目管理"
+          ],
+          "both": [
+            "精通Excel基础数据处理"
+          ]
+        },
+        "preferred_skills": {
+          "only_v3": [
+            "MES/QMS制造业软件项目交付辅助经验"
+          ],
+          "only_v4": [
+            "QMS制造业软件项目交付辅助经验",
+            "亦可",
+            "有MES"
+          ],
+          "both": []
+        },
+        "responsibilities": {
+          "only_v3": [
+            "协助跟进多项目全生命周期进度，同步项目周报/例会纪要，登记项目风险与问题台账，跟进问题闭环，及时上报进度异常，协助把控项目关键节点，落地公司现有交付流程规范",
+            "对接销售、产品、研发及项目组完成内部信息同步，协助上级准备汇报基础材料、采集绩效统计数据，完成上级安排的其他PMO日常辅助工作",
+            "统计项目进度、人天消耗、节点达成率等基础交付数据，制作日常数据报表，维护项目人力资源台账，协助排查基础资源中突，配合完成成本数据整理",
+            "负责各类项目资料的收集、整理、归档与版本管理，维护现有交付文档模板库，协助沉淀项目交付知识资产，完成日常项目文书撰写工作"
+          ],
+          "only_v4": [
+            "协助上级准备汇报基础材料、采集绩效统计数据",
+            "协助把控项目关键节点，落地公司现有交付流程规范",
+            "完成上级安排的其他PMO日常辅助工作",
+            "文档与知识库管理:负责各类项目资料的收集、整理、归档与版本管理",
+            "日常协同与支撑:对接销售、产品、研发及项目组完成内部信息同步",
+            "维护现有交付文档模板库，协助沉淀项目交付知识资产，完成日常项目文书撰写工作",
+            "维护项目人力资源台账，协助排查基础资源中突，配合完成成本数据整理",
+            "项目数据台账统计:统计项目进度、人天消耗、节点达成率等基础交付数据，制作日常数据报表",
+            "项目进度跟进:协助跟进多项目全生命周期进度，同步项目周报/例会纪要，登记项目风险与问题台账，跟进问题闭环，及时上报进度异常"
+          ],
+          "both": []
+        },
+        "core_keywords": {
+          "only_v3": [],
+          "only_v4": [
+            "Confluence",
+            "JIRA",
+            "执行力",
+            "项目管理"
+          ],
+          "both": []
+        }
+      }
+    },
+    {
+      "case_id": "real_002",
+      "v3": {
+        "required_skills": [
+          "文字组织能力",
+          "人工智能",
+          "数据平台",
+          "智能应用",
+          "数字孪生",
+          "沟通协调能力",
+          "文档规范意识"
+        ],
+        "preferred_skills": [],
+        "responsibilities": [
+          "负责AI相关项目材料的编写、整理和优化，包括项目方案、技术方案、建设方案、实施方案、汇报材料等",
+          "参与投标文件、标书响应材料、技术偏离表、商务材料、资质材料、项目案例等内容整理",
+          "协助项目经理完成项目立项、申报、验收、汇报、会议纪要、周报月报等项目过程文档"
+        ],
+        "core_keywords": [
+          {
+            "keyword": "文字组织能力",
+            "category": "required_skills",
+            "importance": "high",
+            "score": 5,
+            "evidence": "具备较强的文字组织能力，能够独立完成项目方案、技术材料、PPT、投标文件、项目汇报等内容编写"
+          },
+          {
+            "keyword": "人工智能",
+            "category": "required_skills",
+            "importance": "high",
+            "score": 5,
+            "evidence": "对人工智能、大模型、数据平台、智能应用、数字孪生、机器人、云服务等方向有基本理解"
+          },
+          {
+            "keyword": "沟通协调能力",
+            "category": "soft_skills",
+            "importance": "high",
+            "score": 5,
+            "evidence": "具备良好的沟通协调能力、执行力和文档规范意识，能够配合项目团队推进材料交付"
+          }
+        ]
+      },
+      "v4": {
+        "required_skills": [
+          "较强的文字组织能力",
+          "能够独立完成项目方案",
+          "技术材料",
+          "PPT",
+          "投标文件",
+          "项目汇报等内容编写",
+          "大模型"
+        ],
+        "preferred_skills": [
+          "计算机",
+          "人工智能",
+          "电子信息",
+          "工程管理"
+        ],
+        "responsibilities": [
+          "负责AI相关项目材料的编写、整理和优化，包括项目方案、技术方案、建设方案、实施方案、汇报材料等",
+          "参与投标文件、标书响应材料、技术偏离表、商务材料、资质材料、项目案例等内容整理"
+        ],
+        "core_keywords": [
+          {
+            "keyword": "大模型",
+            "category": "technical",
+            "importance": "high",
+            "score": 5,
+            "evidence": "对人工智能、大模型、数据平台、智能应用、数字孪生、机器人、云服务等方向有基本理解"
+          },
+          {
+            "keyword": "对人工智能、大模型、数据平台、智能应用、数字孪生、机器人、云服务等方向有基本理解",
+            "category": "soft",
+            "importance": "high",
+            "score": 5,
+            "evidence": "对人工智能、大模型、数据平台、智能应用、数字孪生、机器人、云服务等方向有基本理解"
+          },
+          {
+            "keyword": "执行力",
+            "category": "soft",
+            "importance": "high",
+            "score": 5,
+            "evidence": "具备良好的沟通协调能力、执行力和文档规范意识，能够配合项目团队推进材料交付"
+          }
+        ]
+      },
+      "diff": {
+        "required_skills": {
+          "only_v3": [
+            "人工智能",
+            "数字孪生",
+            "数据平台",
+            "文字组织能力",
+            "文档规范意识",
+            "智能应用",
+            "沟通协调能力"
+          ],
+          "only_v4": [
+            "PPT",
+            "大模型",
+            "技术材料",
+            "投标文件",
+            "能够独立完成项目方案",
+            "较强的文字组织能力",
+            "项目汇报等内容编写"
+          ],
+          "both": []
+        },
+        "preferred_skills": {
+          "only_v3": [],
+          "only_v4": [
+            "人工智能",
+            "工程管理",
+            "电子信息",
+            "计算机"
+          ],
+          "both": []
+        },
+        "responsibilities": {
+          "only_v3": [
+            "协助项目经理完成项目立项、申报、验收、汇报、会议纪要、周报月报等项目过程文档"
+          ],
+          "only_v4": [],
+          "both": [
+            "参与投标文件、标书响应材料、技术偏离表、商务材料、资质材料、项目案例等内容整理",
+            "负责AI相关项目材料的编写、整理和优化，包括项目方案、技术方案、建设方案、实施方案、汇报材料等"
+          ]
+        },
+        "core_keywords": {
+          "only_v3": [
+            "人工智能",
+            "文字组织能力",
+            "沟通协调能力"
+          ],
+          "only_v4": [
+            "大模型",
+            "对人工智能、大模型、数据平台、智能应用、数字孪生、机器人、云服务等方向有基本理解",
+            "执行力"
+          ],
+          "both": []
+        }
+      }
+    },
+    {
+      "case_id": "real_003",
+      "v3": {
+        "required_skills": [
+          "熟练使用办公工具",
+          "具备基础的数据处理能力",
+          "沟通协调能力强"
+        ],
+        "preferred_skills": [
+          "有商务意识",
+          "了解AI、数据服务或政府信息化项目的基本逻辑"
+        ],
+        "responsibilities": [
+          "协助部门负责人的日常事务管理，日程安排、会议组织、重点事项跟进闭环",
+          "整理政企客户档案、合同台账、项目进度表，确保信息准确可追溯",
+          "协助对接政府及企业客户，协调内部技术、产品、交付团队资源",
+          "协助准备项目投标、方案简介、汇报材料等基础文档",
+          "对部门各类数据进行基础统计分析，为决策提供参考",
+          "领导安排的其他事务工作"
+        ],
+        "core_keywords": [
+          {
+            "keyword": "办公软件",
+            "category": "工具技能",
+            "importance": "高",
+            "score": 5,
+            "evidence": "熟练使用办公工具"
+          },
+          {
+            "keyword": "数据处理",
+            "category": "技能",
+            "importance": "中",
+            "score": 3,
+            "evidence": "具备基础的数据处理能力"
+          },
+          {
+            "keyword": "沟通协调",
+            "category": "软技能",
+            "importance": "高",
+            "score": 5,
+            "evidence": "沟通协调能力强"
+          },
+          {
+            "keyword": "政企客户",
+            "category": "业务",
+            "importance": "高",
+            "score": 5,
+            "evidence": "对接政府及企业客户"
+          },
+          {
+            "keyword": "文档撰写",
+            "category": "技能",
+            "importance": "中",
+            "score": 3,
+            "evidence": "协助准备项目投标、方案简介、汇报材料"
+          },
+          {
+            "keyword": "基础统计分析",
+            "category": "技能",
+            "importance": "中",
+            "score": 3,
+            "evidence": "对部门各类数据进行基础统计分析"
+          }
+        ]
+      },
+      "v4": {
+        "required_skills": [
+          "使用办公工具",
+          "具备基础的数据处理能力"
+        ],
+        "preferred_skills": [
+          "专业不限(计算机",
+          "数据科学",
+          "市场营销",
+          "有助理",
+          "商务支持或政企相关岗位经历",
+          "商务意识",
+          "了解AI"
+        ],
+        "responsibilities": [
+          "协助部门负责人的日常事务管理，日程安排、会议组",
+          "织、重点事项跟进闭环",
+          "整理政企客户档案、合同台账、项目进度表，确保信息准确可追溯",
+          "协助对接政府及企业客户，协调内部技术、产品、交付团队资源",
+          "协助准备项目投标、方案简介、汇报材料等基础文档",
+          "对部门各类数据进行基础统计分析，为决策提供参考",
+          "领导安排的其他事务工作"
+        ],
+        "core_keywords": [
+          {
+            "keyword": "商务意识，了解AI、数据服务或政府信息化项目的基本逻辑优先",
+            "category": "soft",
+            "importance": "high",
+            "score": 5,
+            "evidence": "有商务意识，了解AI、数据服务或政府信息化项目的基本逻辑优先"
+          },
+          {
+            "keyword": "熟练使用办公工具，具备基础的数据处理能力，沟通协调能力强",
+            "category": "soft",
+            "importance": "high",
+            "score": 5,
+            "evidence": "熟练使用办公工具，具备基础的数据处理能力，沟通协调能力强"
+          }
+        ]
+      },
+      "diff": {
+        "required_skills": {
+          "only_v3": [
+            "沟通协调能力强",
+            "熟练使用办公工具"
+          ],
+          "only_v4": [
+            "使用办公工具"
+          ],
+          "both": [
+            "具备基础的数据处理能力"
+          ]
+        },
+        "preferred_skills": {
+          "only_v3": [
+            "了解AI、数据服务或政府信息化项目的基本逻辑",
+            "有商务意识"
+          ],
+          "only_v4": [
+            "专业不限(计算机",
+            "了解AI",
+            "商务意识",
+            "商务支持或政企相关岗位经历",
+            "市场营销",
+            "数据科学",
+            "有助理"
+          ],
+          "both": []
+        },
+        "responsibilities": {
+          "only_v3": [
+            "协助部门负责人的日常事务管理，日程安排、会议组织、重点事项跟进闭环"
+          ],
+          "only_v4": [
+            "协助部门负责人的日常事务管理，日程安排、会议组",
+            "织、重点事项跟进闭环"
+          ],
+          "both": [
+            "协助准备项目投标、方案简介、汇报材料等基础文档",
+            "协助对接政府及企业客户，协调内部技术、产品、交付团队资源",
+            "对部门各类数据进行基础统计分析，为决策提供参考",
+            "整理政企客户档案、合同台账、项目进度表，确保信息准确可追溯",
+            "领导安排的其他事务工作"
+          ]
+        },
+        "core_keywords": {
+          "only_v3": [
+            "办公软件",
+            "基础统计分析",
+            "政企客户",
+            "数据处理",
+            "文档撰写",
+            "沟通协调"
+          ],
+          "only_v4": [
+            "商务意识，了解AI、数据服务或政府信息化项目的基本逻辑优先",
+            "熟练使用办公工具，具备基础的数据处理能力，沟通协调能力强"
+          ],
+          "both": []
+        }
+      }
+    },
+    {
+      "case_id": "real_004",
+      "v3": {
+        "required_skills": [
+          "Python",
+          "Matlab",
+          "数据分析"
+        ],
+        "preferred_skills": [
+          "英语阅读能力",
+          "科研写作能力"
+        ],
+        "responsibilities": [
+          "生理信号分析与建模",
+          "协助开展生理信号采集实验",
+          "参与科研论文撰写及相关科研工作",
+          "协助处理组内其他相关事务"
+        ],
+        "core_keywords": []
+      },
+      "v4": {
+        "required_skills": [
+          "深度学习"
+        ],
+        "preferred_skills": [
+          "Python",
+          "数据分析",
+          "深度学习",
+          "较好的编程与数据分析能力",
+          "熟练使用以下至少一种工具",
+          "Matlab",
+          "良好的英语阅读能力"
+        ],
+        "responsibilities": [
+          "生理信号(如EEG、fMRI、MEG等)分析与建模,包括信号预处理、特征构建、深度学习模型设计等",
+          "协助开展生理信号采集实验，包括实验实施、数据整理与分析",
+          "参与科研论文撰写及相关科研工作",
+          "协助处理组内其他相关事务"
+        ],
+        "core_keywords": [
+          {
+            "keyword": "深度学习",
+            "category": "technical",
+            "importance": "high",
+            "score": 7,
+            "evidence": "生理信号(如EEG、fMRI、MEG等)分析与建模,包括信号预处理、特征构建、深度学习模型设计等"
+          },
+          {
+            "keyword": "Python",
+            "category": "technical",
+            "importance": "high",
+            "score": 5,
+            "evidence": "具备较好的编程与数据分析能力，熟练使用以下至少一种工具:Python/Matlab/R语言(有深度学习经验者优先"
+          },
+          {
+            "keyword": "数据分析",
+            "category": "product",
+            "importance": "high",
+            "score": 5,
+            "evidence": "具备较好的编程与数据分析能力，熟练使用以下至少一种工具:Python/Matlab/R语言(有深度学习经验者优先"
+          },
+          {
+            "keyword": "的编程与数据分析能力，熟练使用以下至少一种工具:Python/Matlab/R语言(有深度学习经验者优先",
+            "category": "soft",
+            "importance": "high",
+            "score": 5,
+            "evidence": "具备较好的编程与数据分析能力，熟练使用以下至少一种工具:Python/Matlab/R语言(有深度学习经验者优先"
+          },
+          {
+            "keyword": "communication",
+            "category": "soft",
+            "importance": "medium",
+            "score": 4,
+            "evidence": "调控研究，以第一或通讯作者在PLoS Biology、Pain、Brain Stimulation, Communications Biology 等国际高水平期刊发表学术论文50余篇，已获授权发明专利3项和软件著作权登记1项，先后主持国家自然科学基金青年和面上项目，以及多项省市级科研项目，相关成果获得中"
+          },
+          {
+            "keyword": "对脑电信号分析、深度学习建模或神经科学研究有浓厚兴趣",
+            "category": "soft",
+            "importance": "medium",
+            "score": 4,
+            "evidence": "对脑电信号分析、深度学习建模或神经科学研究有浓厚兴趣"
+          },
+          {
+            "keyword": "沟通能力",
+            "category": "soft",
+            "importance": "medium",
+            "score": 4,
+            "evidence": "工作认真负责，具有良好的沟通能力和团队合作精神"
+          },
+          {
+            "keyword": "生理信号(如EEG、fMRI、MEG等)分析与建模,包括信号预处理、特征构建、深度学习模型设计等",
+            "category": "soft",
+            "importance": "medium",
+            "score": 3,
+            "evidence": "生理信号(如EEG、fMRI、MEG等)分析与建模,包括信号预处理、特征构建、深度学习模型设计等"
+          }
+        ]
+      },
+      "diff": {
+        "required_skills": {
+          "only_v3": [
+            "Matlab",
+            "Python",
+            "数据分析"
+          ],
+          "only_v4": [
+            "深度学习"
+          ],
+          "both": []
+        },
+        "preferred_skills": {
+          "only_v3": [
+            "科研写作能力",
+            "英语阅读能力"
+          ],
+          "only_v4": [
+            "Matlab",
+            "Python",
+            "数据分析",
+            "深度学习",
+            "熟练使用以下至少一种工具",
+            "良好的英语阅读能力",
+            "较好的编程与数据分析能力"
+          ],
+          "both": []
+        },
+        "responsibilities": {
+          "only_v3": [
+            "协助开展生理信号采集实验",
+            "生理信号分析与建模"
+          ],
+          "only_v4": [
+            "协助开展生理信号采集实验，包括实验实施、数据整理与分析",
+            "生理信号(如EEG、fMRI、MEG等)分析与建模,包括信号预处理、特征构建、深度学习模型设计等"
+          ],
+          "both": [
+            "协助处理组内其他相关事务",
+            "参与科研论文撰写及相关科研工作"
+          ]
+        },
+        "core_keywords": {
+          "only_v3": [],
+          "only_v4": [
+            "Python",
+            "communication",
+            "对脑电信号分析、深度学习建模或神经科学研究有浓厚兴趣",
+            "数据分析",
+            "沟通能力",
+            "深度学习",
+            "生理信号(如EEG、fMRI、MEG等)分析与建模,包括信号预处理、特征构建、深度学习模型设计等",
+            "的编程与数据分析能力，熟练使用以下至少一种工具:Python/Matlab/R语言(有深度学习经验者优先"
+          ],
+          "both": []
+        }
+      }
+    },
+    {
+      "case_id": "real_005",
+      "v3": {
+        "required_skills": [
+          "语义类AI",
+          "AI 原生开发",
+          "流打破\"不可能三角\"",
+          "精通 Vibe Coding(氛围编程)",
+          "熟练驾驭大模型辅助工具进行极速开发与调试",
+          "极强的代码实现能力",
+          "编排智能体工作流",
+          "编排 Tool(工具)描述(JSONSchema)",
+          "编排提示词管道",
+          "深厚的产品感觉",
+          "业务同理心",
+          "极强的沟通能力"
+        ],
+        "preferred_skills": [
+          "极度强悍的自驱学习能力",
+          "严密的逻辑思维"
+        ],
+        "responsibilities": [
+          "将业务逻辑和产品需求转化为AI可读的结构化提示词工作流和系统指令",
+          "编排智能体工作流、Tool(工具)描述(JSONSchema)和提示词管道",
+          "极速打样",
+          "对新的AI功能模块进行日常的E2E(端到端)本地闭环验证"
+        ],
+        "core_keywords": []
+      },
+      "v4": {
+        "required_skills": [
+          "大模型",
+          "Agent",
+          "提示词",
+          "语义类AI、AI 原生开发、流打破”不可能三角”精通 Vibe Coding、真正的实干家(Doer)、一人成团的独立能力、认知超能力编排智能体工作流"
+        ],
+        "preferred_skills": [],
+        "responsibilities": [
+          "将业务逻辑和产品需求，转化为AI可读的结构化提示词工作流和系统指令",
+          "编排智能体工作流、Tool(工具)描述(JSONSchema)和提示词管道",
+          "极速打样，并对新的AI功能模块进行日常的E2E(端到端)本地闭环验证",
+          "面试"
+        ],
+        "core_keywords": [
+          {
+            "keyword": "Agent",
+            "category": "technical",
+            "importance": "high",
+            "score": 7,
+            "evidence": "真正的实干家(Doer):你必须曾独立以Vibe Coding的方式，手搓过自己的AIAgent智能体产品(任何场景、任何体量皆可，再小也无所谓"
+          },
+          {
+            "keyword": "大模型",
+            "category": "technical",
+            "importance": "high",
+            "score": 6,
+            "evidence": "你必须精通 Vibe Coding(氛围编程)-即熟练驾驭大模型辅助工具进行极速开发与调试"
+          },
+          {
+            "keyword": "提示词",
+            "category": "technical",
+            "importance": "medium",
+            "score": 4,
+            "evidence": "将业务逻辑和产品需求，转化为AI可读的结构化提示词工作流和系统指令"
+          },
+          {
+            "keyword": "沟通能力",
+            "category": "soft",
+            "importance": "medium",
+            "score": 4,
+            "evidence": "认知超能力:极度强悍的自驱学习能力、严密的逻辑思维，以及极强的沟通能力"
+          },
+          {
+            "keyword": "执行力",
+            "category": "soft",
+            "importance": "low",
+            "score": 2,
+            "evidence": "我们只在乎你的执行力，以及你能亲自动手做出什么"
+          }
+        ]
+      },
+      "diff": {
+        "required_skills": {
+          "only_v3": [
+            "AI 原生开发",
+            "业务同理心",
+            "极强的代码实现能力",
+            "极强的沟通能力",
+            "流打破\"不可能三角\"",
+            "深厚的产品感觉",
+            "熟练驾驭大模型辅助工具进行极速开发与调试",
+            "精通 Vibe Coding(氛围编程)",
+            "编排 Tool(工具)描述(JSONSchema)",
+            "编排提示词管道",
+            "编排智能体工作流",
+            "语义类AI"
+          ],
+          "only_v4": [
+            "Agent",
+            "大模型",
+            "提示词",
+            "语义类AI、AI 原生开发、流打破”不可能三角”精通 Vibe Coding、真正的实干家(Doer)、一人成团的独立能力、认知超能力编排智能体工作流"
+          ],
+          "both": []
+        },
+        "preferred_skills": {
+          "only_v3": [
+            "严密的逻辑思维",
+            "极度强悍的自驱学习能力"
+          ],
+          "only_v4": [],
+          "both": []
+        },
+        "responsibilities": {
+          "only_v3": [
+            "对新的AI功能模块进行日常的E2E(端到端)本地闭环验证",
+            "将业务逻辑和产品需求转化为AI可读的结构化提示词工作流和系统指令",
+            "极速打样"
+          ],
+          "only_v4": [
+            "将业务逻辑和产品需求，转化为AI可读的结构化提示词工作流和系统指令",
+            "极速打样，并对新的AI功能模块进行日常的E2E(端到端)本地闭环验证",
+            "面试"
+          ],
+          "both": [
+            "编排智能体工作流、Tool(工具)描述(JSONSchema)和提示词管道"
+          ]
+        },
+        "core_keywords": {
+          "only_v3": [],
+          "only_v4": [
+            "Agent",
+            "大模型",
+            "执行力",
+            "提示词",
+            "沟通能力"
+          ],
+          "both": []
+        }
+      }
+    },
+    {
+      "case_id": "real_006",
+      "v3": {
+        "required_skills": [
+          "系统集成ERP系统",
+          "系统集成OA系统",
+          "系统集成CRM系统",
+          "备份云服务",
+          "存储",
+          "SaaS",
+          "PaaS",
+          "DSM操作系统",
+          "全闪存",
+          "分布式存储",
+          "NAS",
+          "视频监控",
+          "网络存储服务器",
+          "备份一体机",
+          "售前技术支持",
+          "产品推广",
+          "市场活动"
+        ],
+        "preferred_skills": [
+          "沟通能力",
+          "工作态度积极乐观",
+          "表达和宣讲能力",
+          "行业经验-计算机硬件",
+          "行业经验-计算机软件",
+          "行业经验-人工智能"
+        ],
+        "responsibilities": [
+          "公司渠道政策执行和管理",
+          "存储、备份等项目沟通和挖掘",
+          "协助渠道参加市场活动和产品推广",
+          "准备5-10分钟PPT形式的产品或方案介绍"
+        ],
+        "core_keywords": []
+      },
+      "v4": {
+        "required_skills": [],
+        "preferred_skills": [
+          "以下行业经验",
+          "计算机硬件计算机软件·人工智能"
+        ],
+        "responsibilities": [
+          "公司渠道政策执行和管理2、存储、备份等项目沟通和挖掘",
+          "协助渠道参加市场活动和产品推广",
+          "二次面试需准备5-10钟PPT形式的产品或方案介绍"
+        ],
+        "core_keywords": [
+          {
+            "keyword": "沟通能力",
+            "category": "soft",
+            "importance": "high",
+            "score": 5,
+            "evidence": "年龄22-25本科及以上，1-3年工作经验，2、有良好的沟通能力，工作态度积极乐观3、具备出色的表达和宣讲能力者优先*"
+          },
+          {
+            "keyword": "公司渠道政策执行和管理2、存储、备份等项目沟通和挖掘",
+            "category": "soft",
+            "importance": "medium",
+            "score": 3,
+            "evidence": "公司渠道政策执行和管理2、存储、备份等项目沟通和挖掘"
+          },
+          {
+            "keyword": "Synology群晖科技于2000成立，专注于网络存储服务器、备份一体机、视频监控服务器的国际级领导厂商",
+            "category": "soft",
+            "importance": "low",
+            "score": 2,
+            "evidence": "Synology群晖科技于2000成立，专注于网络存储服务器、备份一体机、视频监控服务器的国际级领导厂商"
+          },
+          {
+            "keyword": "分布式",
+            "category": "technical",
+            "importance": "low",
+            "score": 2,
+            "evidence": "群晖现今已面向全球市场推出多款全闪存、分布式存储和NAS，并搭载自主研发的操作系统DSM和应用软件，满足企业数据存储、备份、和远程办公等需求，快速提供经济、有效的软硬一体化解决方案，详情请参阅官网:www.synology.cnSynology"
+          },
+          {
+            "keyword": "计算机/通信相关专业备份云服务存储",
+            "category": "soft",
+            "importance": "low",
+            "score": 2,
+            "evidence": "计算机/通信相关专业备份云服务存储"
+          }
+        ]
+      },
+      "diff": {
+        "required_skills": {
+          "only_v3": [
+            "DSM操作系统",
+            "NAS",
+            "PaaS",
+            "SaaS",
+            "产品推广",
+            "全闪存",
+            "分布式存储",
+            "售前技术支持",
+            "备份一体机",
+            "备份云服务",
+            "存储",
+            "市场活动",
+            "系统集成CRM系统",
+            "系统集成ERP系统",
+            "系统集成OA系统",
+            "网络存储服务器",
+            "视频监控"
+          ],
+          "only_v4": [],
+          "both": []
+        },
+        "preferred_skills": {
+          "only_v3": [
+            "工作态度积极乐观",
+            "沟通能力",
+            "行业经验-人工智能",
+            "行业经验-计算机硬件",
+            "行业经验-计算机软件",
+            "表达和宣讲能力"
+          ],
+          "only_v4": [
+            "以下行业经验",
+            "计算机硬件计算机软件·人工智能"
+          ],
+          "both": []
+        },
+        "responsibilities": {
+          "only_v3": [
+            "公司渠道政策执行和管理",
+            "准备5-10分钟PPT形式的产品或方案介绍",
+            "存储、备份等项目沟通和挖掘"
+          ],
+          "only_v4": [
+            "二次面试需准备5-10钟PPT形式的产品或方案介绍",
+            "公司渠道政策执行和管理2、存储、备份等项目沟通和挖掘"
+          ],
+          "both": [
+            "协助渠道参加市场活动和产品推广"
+          ]
+        },
+        "core_keywords": {
+          "only_v3": [],
+          "only_v4": [
+            "Synology群晖科技于2000成立，专注于网络存储服务器、备份一体机、视频监控服务器的国际级领导厂商",
+            "公司渠道政策执行和管理2、存储、备份等项目沟通和挖掘",
+            "分布式",
+            "沟通能力",
+            "计算机/通信相关专业备份云服务存储"
+          ],
+          "both": []
+        }
+      }
+    },
+    {
+      "case_id": "real_007",
+      "v3": {
+        "required_skills": [
+          "多线程",
+          "NIO",
+          "网络编程",
+          "Springboot",
+          "Netty",
+          "Dubbo",
+          "Zookeeper",
+          "RocketMQ",
+          "JVM",
+          "MySQL",
+          "Redis",
+          "MongoDB",
+          "大型分布式系统开发",
+          "高并发",
+          "高负载",
+          "高可用系统开发"
+        ],
+        "preferred_skills": [
+          "IM",
+          "邮件",
+          "办公类系统经验",
+          "LLM相关知识",
+          "AI工具使用经验"
+        ],
+        "responsibilities": [
+          "负责核心业务系统的设计、开发与优化，保障系统高可用性、高性能和可扩展性",
+          "主导复杂模块的技术架构设计，推动技术方案落地，持续提升系统稳定性与研发效率",
+          "深入参与需求分析与技术评审，提供高质量的技术解决方案，确保系统安全与合规",
+          "乐于分享技术，跟踪前沿技术动态，推动新技术在项目中的落地应用，提升整体技术竞争力",
+          "参与系统性能调优、故障排查与应急响应，保障线上系统稳定运行",
+          "与产品、测试、运维等多部门紧密协作，推动项目高质量交付"
+        ],
+        "core_keywords": []
+      },
+      "v4": {
+        "required_skills": [
+          "Java",
+          "相关开源框架Springboot",
+          "Netty",
+          "Dubbo",
+          "Zk",
+          "rocketmq",
+          "熟悉jvm.",
+          "MongoDB",
+          "MySQL",
+          "Redis",
+          "分布式",
+          "高并发",
+          "需求分析"
+        ],
+        "preferred_skills": [
+          "LLM",
+          "责任感",
+          "有主人翁意识",
+          "有过团队带人经验佳7.有IM",
+          "邮件",
+          "办公类经验佳8.懂LLM相关的知识",
+          "有AI相关工具使用经验"
+        ],
+        "responsibilities": [
+          "负责核心业务系统的设计、开发与优化，保障系统高",
+          "可用性、高性能和可扩展性",
+          "主导复杂模块的技术架构设计，推动技术方案落地",
+          "持续提升系统稳定性与研发效率",
+          "深入参与需求分析与技术评审，提供高质量的技术解决方案，确保系统安全与合规",
+          "乐于分享技术，跟踪前沿技术动态，推动新技术在项目中的落地应用，提升整体技术竟争力",
+          "参与系统性能调优、故障排查与应急响应，保障线上系统稳定运行",
+          "与产品、测试、运维等多部门紧密协作，推动项目高质量交付"
+        ],
+        "core_keywords": [
+          {
+            "keyword": "Java",
+            "category": "technical",
+            "importance": "medium",
+            "score": 4,
+            "evidence": "大学本科学历及以上，具有java开发实习工作经验，熟习多线程，NIO,网络编程"
+          },
+          {
+            "keyword": "LLM",
+            "category": "technical",
+            "importance": "medium",
+            "score": 4,
+            "evidence": "有责任感，有主人翁意识，有过团队带人经验佳7.有IM，邮件，办公类经验佳8.懂LLM相关的知识，有AI相关工具使用经验加分"
+          },
+          {
+            "keyword": "MongoDB",
+            "category": "technical",
+            "importance": "medium",
+            "score": 4,
+            "evidence": "熟习数据库Mysql,熟习redis，Mongodb,mysqlpg4.有大型分布式，高并发，高负载，高可用系统开发经验"
+          },
+          {
+            "keyword": "MySQL",
+            "category": "technical",
+            "importance": "medium",
+            "score": 4,
+            "evidence": "熟习数据库Mysql,熟习redis，Mongodb,mysqlpg4.有大型分布式，高并发，高负载，高可用系统开发经验"
+          },
+          {
+            "keyword": "Redis",
+            "category": "technical",
+            "importance": "medium",
+            "score": 4,
+            "evidence": "熟习数据库Mysql,熟习redis，Mongodb,mysqlpg4.有大型分布式，高并发，高负载，高可用系统开发经验"
+          },
+          {
+            "keyword": "分布式",
+            "category": "technical",
+            "importance": "medium",
+            "score": 4,
+            "evidence": "熟习数据库Mysql,熟习redis，Mongodb,mysqlpg4.有大型分布式，高并发，高负载，高可用系统开发经验"
+          },
+          {
+            "keyword": "沟通能力",
+            "category": "soft",
+            "importance": "medium",
+            "score": 4,
+            "evidence": "有良好的沟通能力，乐于挑战"
+          },
+          {
+            "keyword": "高并发",
+            "category": "technical",
+            "importance": "medium",
+            "score": 4,
+            "evidence": "熟习数据库Mysql,熟习redis，Mongodb,mysqlpg4.有大型分布式，高并发，高负载，高可用系统开发经验"
+          },
+          {
+            "keyword": "与产品、测试、运维等多部门紧密协作，推动项目高质量交付",
+            "category": "soft",
+            "importance": "medium",
+            "score": 3,
+            "evidence": "与产品、测试、运维等多部门紧密协作，推动项目高质量交付"
+          },
+          {
+            "keyword": "需求分析",
+            "category": "product",
+            "importance": "medium",
+            "score": 3,
+            "evidence": "深入参与需求分析与技术评审，提供高质量的技术解决方案，确保系统安全与合规"
+          }
+        ]
+      },
+      "diff": {
+        "required_skills": {
+          "only_v3": [
+            "JVM",
+            "NIO",
+            "RocketMQ",
+            "Springboot",
+            "Zookeeper",
+            "多线程",
+            "大型分布式系统开发",
+            "网络编程",
+            "高可用系统开发",
+            "高负载"
+          ],
+          "only_v4": [
+            "Java",
+            "Zk",
+            "rocketmq",
+            "分布式",
+            "熟悉jvm.",
+            "相关开源框架Springboot",
+            "需求分析"
+          ],
+          "both": [
+            "Dubbo",
+            "MongoDB",
+            "MySQL",
+            "Netty",
+            "Redis",
+            "高并发"
+          ]
+        },
+        "preferred_skills": {
+          "only_v3": [
+            "AI工具使用经验",
+            "IM",
+            "LLM相关知识",
+            "办公类系统经验"
+          ],
+          "only_v4": [
+            "LLM",
+            "办公类经验佳8.懂LLM相关的知识",
+            "有AI相关工具使用经验",
+            "有主人翁意识",
+            "有过团队带人经验佳7.有IM",
+            "责任感"
+          ],
+          "both": [
+            "邮件"
+          ]
+        },
+        "responsibilities": {
+          "only_v3": [
+            "主导复杂模块的技术架构设计，推动技术方案落地，持续提升系统稳定性与研发效率",
+            "乐于分享技术，跟踪前沿技术动态，推动新技术在项目中的落地应用，提升整体技术竞争力",
+            "负责核心业务系统的设计、开发与优化，保障系统高可用性、高性能和可扩展性"
+          ],
+          "only_v4": [
+            "主导复杂模块的技术架构设计，推动技术方案落地",
+            "乐于分享技术，跟踪前沿技术动态，推动新技术在项目中的落地应用，提升整体技术竟争力",
+            "可用性、高性能和可扩展性",
+            "持续提升系统稳定性与研发效率",
+            "负责核心业务系统的设计、开发与优化，保障系统高"
+          ],
+          "both": [
+            "与产品、测试、运维等多部门紧密协作，推动项目高质量交付",
+            "参与系统性能调优、故障排查与应急响应，保障线上系统稳定运行",
+            "深入参与需求分析与技术评审，提供高质量的技术解决方案，确保系统安全与合规"
+          ]
+        },
+        "core_keywords": {
+          "only_v3": [],
+          "only_v4": [
+            "Java",
+            "LLM",
+            "MongoDB",
+            "MySQL",
+            "Redis",
+            "与产品、测试、运维等多部门紧密协作，推动项目高质量交付",
+            "分布式",
+            "沟通能力",
+            "需求分析",
+            "高并发"
+          ],
+          "both": []
+        }
+      }
+    },
+    {
+      "case_id": "real_008",
+      "v3": {
+        "required_skills": [
+          "了解移动端用户阅读和使用习惯",
+          "具有较强的文字整合和信息加工整理能力",
+          "善于捕捉社会热点",
+          "有一定的敏锐度"
+        ],
+        "preferred_skills": [
+          "熟练运用photoshop、premiere等图片、音视频软件",
+          "拥有微信公众平台运营经验",
+          "熟悉新媒体平台和运营"
+        ],
+        "responsibilities": [
+          "协助南方+客户端、南方网等平台的内容运营和维护",
+          "协助开展宣传策划、材料整合等，参与项目落地与执行",
+          "视频及图片产品的拍摄、剪辑、制作和发布",
+          "对平台数据进行监控、整理、分析等",
+          "服从部门工作安排，按时完成部门分配的工作任务"
+        ],
+        "core_keywords": [
+          {
+            "keyword": "新媒体平台和运营",
+            "category": "preferred_skills",
+            "importance": "高",
+            "score": 4,
+            "evidence": "熟悉新媒体平台和运营"
+          },
+          {
+            "keyword": "photoshop、premiere",
+            "category": "preferred_skills",
+            "importance": "中",
+            "score": 3,
+            "evidence": "熟练运用photoshop、premiere等图片、音视频软件"
+          },
+          {
+            "keyword": "微信公众平台运营",
+            "category": "preferred_skills",
+            "importance": "中",
+            "score": 3,
+            "evidence": "拥有微信公众平台运营经验"
+          }
+        ]
+      },
+      "v4": {
+        "required_skills": [],
+        "preferred_skills": [
+          "新媒体平台和运营",
+          "熟练运用photoshop",
+          "premiere等图片",
+          "音视频软件",
+          "拥有微信公众平台运营经验"
+        ],
+        "responsibilities": [
+          "协助南方+客户端、南方网等平台的内容运营和维",
+          "护",
+          "协助开展宣传策划、材料整合等，参与项目落地与执",
+          "行",
+          "视频及图片产品的拍摄、剪辑、制作和发布",
+          "对平台数据进行监控、整理、分析等",
+          "服从部门工作安排，按时完成部门分配的工作任务"
+        ],
+        "core_keywords": [
+          {
+            "keyword": "细心",
+            "category": "soft",
+            "importance": "medium",
+            "score": 4,
+            "evidence": "具有较强的责任感，工作态度严谨、细心、逻辑性强，应变能力强，刻苦耐劳，能承受一定的工作压力"
+          }
+        ]
+      },
+      "diff": {
+        "required_skills": {
+          "only_v3": [
+            "了解移动端用户阅读和使用习惯",
+            "具有较强的文字整合和信息加工整理能力",
+            "善于捕捉社会热点",
+            "有一定的敏锐度"
+          ],
+          "only_v4": [],
+          "both": []
+        },
+        "preferred_skills": {
+          "only_v3": [
+            "熟悉新媒体平台和运营",
+            "熟练运用photoshop、premiere等图片、音视频软件"
+          ],
+          "only_v4": [
+            "premiere等图片",
+            "新媒体平台和运营",
+            "熟练运用photoshop",
+            "音视频软件"
+          ],
+          "both": [
+            "拥有微信公众平台运营经验"
+          ]
+        },
+        "responsibilities": {
+          "only_v3": [
+            "协助南方+客户端、南方网等平台的内容运营和维护",
+            "协助开展宣传策划、材料整合等，参与项目落地与执行"
+          ],
+          "only_v4": [
+            "协助南方+客户端、南方网等平台的内容运营和维",
+            "协助开展宣传策划、材料整合等，参与项目落地与执",
+            "护",
+            "行"
+          ],
+          "both": [
+            "对平台数据进行监控、整理、分析等",
+            "服从部门工作安排，按时完成部门分配的工作任务",
+            "视频及图片产品的拍摄、剪辑、制作和发布"
+          ]
+        },
+        "core_keywords": {
+          "only_v3": [
+            "photoshop、premiere",
+            "微信公众平台运营",
+            "新媒体平台和运营"
+          ],
+          "only_v4": [
+            "细心"
+          ],
+          "both": []
+        }
+      }
+    },
+    {
+      "case_id": "real_009",
+      "v3": {
+        "required_skills": [
+          "Power BI",
+          "Tableau",
+          "SPSS",
+          "Python",
+          "SQL",
+          "CRM系统",
+          "Salesforce",
+          "HubSpot"
+        ],
+        "preferred_skills": [
+          "数据科学",
+          "统计学",
+          "商业分析",
+          "计算机科学",
+          "市场营销",
+          "数据运营",
+          "市场调研",
+          "销售运营",
+          "业务分析",
+          "B2B SaaS",
+          "科技公司",
+          "扎实的数据分析技能",
+          "基本SQL知识",
+          "销售流程和销售漏斗管理"
+        ],
+        "responsibilities": [
+          "利用人工智能工具(如 ChatGPT、Perplexity、Claude)和海外平台(Google、Linkedln、Crunchbase、G2、PitchBook等)进行市场研究和行业情报分析",
+          "收集、清理、分类、标注和标准化数据，以构建可靠的数据集和业务知识库",
+          "确保CRM(HubSpot)数据的完整性，管理数据录入和字段标准，并支持相关的业务系统",
+          "分析销售流程和销售渠道指标(线索生成、转化率、交易周期、成交率、销售渠道健康状况等)，构建仪表盘并提供可操作的见解",
+          "跟踪销售团队活动，评估效率，并提出流程改进建议",
+          "支持CRM和销售工具(Outreach、Apollo、HubSpot等)的日常运营和优化，并与多个团队合作，推动工作流程自动化和效率提升"
+        ],
+        "core_keywords": [
+          {
+            "keyword": "数据运营",
+            "category": "product",
+            "importance": "high",
+            "score": 15,
+            "evidence": "职位标题：GTM营收及数据运营分析师"
+          },
+          {
+            "keyword": "销售分析",
+            "category": "product",
+            "importance": "high",
+            "score": 15,
+            "evidence": "主要职责：分析销售流程和销售渠道指标"
+          },
+          {
+            "keyword": "CRM",
+            "category": "technical",
+            "importance": "high",
+            "score": 15,
+            "evidence": "熟悉CRM系统(Salesforce或HubSpot)"
+          },
+          {
+            "keyword": "数据质量",
+            "category": "technical",
+            "importance": "high",
+            "score": 15,
+            "evidence": "对数据质量有强烈的责任感"
+          },
+          {
+            "keyword": "数据挖掘",
+            "category": "technical",
+            "importance": "medium",
+            "score": 14,
+            "evidence": "Power BI数据分析/挖掘经验"
+          }
+        ]
+      },
+      "v4": {
+        "required_skills": [
+          "Python",
+          "SQL",
+          "数据分析",
+          "CRM系统(Salesforce或HubSpot",
+          "销售流程和销售漏斗管理",
+          "Go",
+          "Power BI数据分析/挖掘经验/Tableau/SPSS",
+          "我们正在寻找一位以数据为导向的GTM营收及数据运营分析师，通过高质量的数据收集、销售分析和流程优化来推动业务增长"
+        ],
+        "preferred_skills": [
+          "SQL",
+          "基本SQL知识"
+        ],
+        "responsibilities": [
+          "利用人工智能工具(如 ChatGPT、Perplexity、Claude)和海外平台(Google、Linkedln、Crunchbase、G2、PitchBook等)进行市场研究和行业情报分析",
+          "收集、清理、分类、标注和标准化数据，以构建可靠的数据集和业务知识库",
+          "确保CRM(HubSpot)数据的完整性，管理数据录入和字段标准，并支持相关的业务系统",
+          "分析销售流程和销售渠道指标(线索生成、转化率、交易周期、成交率、销售渠道健康状况等)，构建仪表盘并提供可操作的见解",
+          "跟踪销售团队活动，评估效率，并提出流程改进建议",
+          "您将深入运用人工智能和全球搜索工具，为商业智能和销售运营提供支持",
+          "主要"
+        ],
+        "core_keywords": [
+          {
+            "keyword": "SQL",
+            "category": "technical",
+            "importance": "high",
+            "score": 6,
+            "evidence": "计算机相关专业/Python/SQL"
+          },
+          {
+            "keyword": "协作能力",
+            "category": "soft",
+            "importance": "high",
+            "score": 5,
+            "evidence": "具备良好的跨团队沟通和协作能力"
+          },
+          {
+            "keyword": "数据分析",
+            "category": "product",
+            "importance": "high",
+            "score": 5,
+            "evidence": "Power BI数据分析/挖掘经验/Tableau/SPSS"
+          },
+          {
+            "keyword": "Go",
+            "category": "technical",
+            "importance": "medium",
+            "score": 3,
+            "evidence": "利用人工智能工具(如 ChatGPT、Perplexity、Claude)和海外平台(Google、Linkedln、Crunchbase、G2、PitchBook等)进行市场研究和行业情报分析"
+          },
+          {
+            "keyword": "团队合作",
+            "category": "soft",
+            "importance": "medium",
+            "score": 3,
+            "evidence": "支持CRM和销售工具(Outreach、Apollo、HubSpot等)的日常运营和优化，并与多个团队合作，推动工作流程自动化和效率提升"
+          },
+          {
+            "keyword": "Power BI",
+            "category": "technical",
+            "importance": "low",
+            "score": 2,
+            "evidence": "Power BI数据分析/挖掘经验/Tableau/SPSS"
+          },
+          {
+            "keyword": "Python",
+            "category": "technical",
+            "importance": "low",
+            "score": 2,
+            "evidence": "计算机相关专业/Python/SQL"
+          },
+          {
+            "keyword": "Tableau",
+            "category": "technical",
+            "importance": "low",
+            "score": 2,
+            "evidence": "Power BI数据分析/挖掘经验/Tableau/SPSS"
+          }
+        ]
+      },
+      "diff": {
+        "required_skills": {
+          "only_v3": [
+            "CRM系统",
+            "HubSpot",
+            "Power BI",
+            "SPSS",
+            "Salesforce",
+            "Tableau"
+          ],
+          "only_v4": [
+            "CRM系统(Salesforce或HubSpot",
+            "Go",
+            "Power BI数据分析/挖掘经验/Tableau/SPSS",
+            "我们正在寻找一位以数据为导向的GTM营收及数据运营分析师，通过高质量的数据收集、销售分析和流程优化来推动业务增长",
+            "数据分析",
+            "销售流程和销售漏斗管理"
+          ],
+          "both": [
+            "Python",
+            "SQL"
+          ]
+        },
+        "preferred_skills": {
+          "only_v3": [
+            "B2B SaaS",
+            "业务分析",
+            "商业分析",
+            "市场营销",
+            "市场调研",
+            "扎实的数据分析技能",
+            "数据科学",
+            "数据运营",
+            "科技公司",
+            "统计学",
+            "计算机科学",
+            "销售流程和销售漏斗管理",
+            "销售运营"
+          ],
+          "only_v4": [
+            "SQL"
+          ],
+          "both": [
+            "基本SQL知识"
+          ]
+        },
+        "responsibilities": {
+          "only_v3": [
+            "支持CRM和销售工具(Outreach、Apollo、HubSpot等)的日常运营和优化，并与多个团队合作，推动工作流程自动化和效率提升"
+          ],
+          "only_v4": [
+            "主要",
+            "您将深入运用人工智能和全球搜索工具，为商业智能和销售运营提供支持"
+          ],
+          "both": [
+            "分析销售流程和销售渠道指标(线索生成、转化率、交易周期、成交率、销售渠道健康状况等)，构建仪表盘并提供可操作的见解",
+            "利用人工智能工具(如 ChatGPT、Perplexity、Claude)和海外平台(Google、Linkedln、Crunchbase、G2、PitchBook等)进行市场研究和行业情报分析",
+            "收集、清理、分类、标注和标准化数据，以构建可靠的数据集和业务知识库",
+            "确保CRM(HubSpot)数据的完整性，管理数据录入和字段标准，并支持相关的业务系统",
+            "跟踪销售团队活动，评估效率，并提出流程改进建议"
+          ]
+        },
+        "core_keywords": {
+          "only_v3": [
+            "CRM",
+            "数据挖掘",
+            "数据质量",
+            "数据运营",
+            "销售分析"
+          ],
+          "only_v4": [
+            "Go",
+            "Power BI",
+            "Python",
+            "SQL",
+            "Tableau",
+            "协作能力",
+            "团队合作",
+            "数据分析"
+          ],
+          "both": []
+        }
+      }
+    },
+    {
+      "case_id": "real_010",
+      "v3": {
+        "required_skills": [
+          "具备良好的沟通协调能力",
+          "学习能力强"
+        ],
+        "preferred_skills": [],
+        "responsibilities": [
+          "协助整理、编写和维护技术文档，确保内容准确清晰",
+          "配合团队完成产品说明、操作手册及相关资料的制作",
+          "参与项目资料的收集与归档，支持跨部门信息传递",
+          "能高效完成上级分配任务",
+          "持续提升专业能力"
+        ],
+        "core_keywords": [
+          {
+            "keyword": "沟通协调能力",
+            "category": "required_skills",
+            "importance": "High",
+            "score": 0,
+            "evidence": "具备良好的沟通协调能力"
+          },
+          {
+            "keyword": "学习能力强",
+            "category": "required_skills",
+            "importance": "High",
+            "score": 0,
+            "evidence": "学习能力强"
+          },
+          {
+            "keyword": "技术文档",
+            "category": "responsibilities",
+            "importance": "High",
+            "score": 0,
+            "evidence": "协助整理、编写和维护技术文档，确保内容准确清晰"
+          },
+          {
+            "keyword": "资料制作",
+            "category": "responsibilities",
+            "importance": "High",
+            "score": 0,
+            "evidence": "配合团队完成产品说明、操作手册及相关资料的制作"
+          },
+          {
+            "keyword": "跨部门协作",
+            "category": "responsibilities",
+            "importance": "High",
+            "score": 0,
+            "evidence": "参与项目资料的收集与归档，支持跨部门信息传递"
+          }
+        ]
+      },
+      "v4": {
+        "required_skills": [
+          "能高效完成上级分配任务"
+        ],
+        "preferred_skills": [],
+        "responsibilities": [
+          "协助整理、编写和维护技术文档，确保内容准确清晰",
+          "配合团队完成产品说明、操作手册及相关资料的制作",
+          "参与项目资料的收集与归档，支持跨部门信息传递"
+        ],
+        "core_keywords": [
+          {
+            "keyword": "的沟通协调能力，能高效完成上级分配任务",
+            "category": "soft",
+            "importance": "high",
+            "score": 5,
+            "evidence": "具备良好的沟通协调能力，能高效完成上级分配任务"
+          },
+          {
+            "keyword": "团队协作",
+            "category": "soft",
+            "importance": "medium",
+            "score": 4,
+            "evidence": "有较强责任心，细心严谨，能适应团队协作工作模式"
+          },
+          {
+            "keyword": "学习能力",
+            "category": "soft",
+            "importance": "medium",
+            "score": 4,
+            "evidence": "学习能力强，愿意接受新知识，持续提升专业能力"
+          }
+        ]
+      },
+      "diff": {
+        "required_skills": {
+          "only_v3": [
+            "具备良好的沟通协调能力",
+            "学习能力强"
+          ],
+          "only_v4": [
+            "能高效完成上级分配任务"
+          ],
+          "both": []
+        },
+        "preferred_skills": {
+          "only_v3": [],
+          "only_v4": [],
+          "both": []
+        },
+        "responsibilities": {
+          "only_v3": [
+            "持续提升专业能力",
+            "能高效完成上级分配任务"
+          ],
+          "only_v4": [],
+          "both": [
+            "协助整理、编写和维护技术文档，确保内容准确清晰",
+            "参与项目资料的收集与归档，支持跨部门信息传递",
+            "配合团队完成产品说明、操作手册及相关资料的制作"
+          ]
+        },
+        "core_keywords": {
+          "only_v3": [
+            "学习能力强",
+            "技术文档",
+            "沟通协调能力",
+            "资料制作",
+            "跨部门协作"
+          ],
+          "only_v4": [
+            "团队协作",
+            "学习能力",
+            "的沟通协调能力，能高效完成上级分配任务"
+          ],
+          "both": []
+        }
+      }
+    },
+    {
+      "case_id": "real_011",
+      "v3": {
+        "required_skills": [],
+        "preferred_skills": [],
+        "responsibilities": [],
+        "core_keywords": []
+      },
+      "v4": {
+        "required_skills": [
+          "数据分析"
+        ],
+        "preferred_skills": [],
+        "responsibilities": [
+          "针对网络新兴热点事件、趋势、群体现象等深入观察与研究，分析特定领域的舆情态势与风险点，跟进趋势变",
+          "化与发展情况，撰写专题研究报告",
+          "深入研究不同人群的网络需求、偏好及行为模式，结合站内数据理解用户动机，提取识别特、构建用户画像，支持网络实务研究报告撰写工作",
+          "能够独立设计严谨、科学的调研问卷，运用专业的数据分析方法提炼出有价值的结论，为研究和策略制定提供强有力的数据支持",
+          "挖掘境内外网络生态新走向，搜集新兴理论研究资料对现象加以解释，持续跟进不同平台生态圈层的变化",
+          "支持对涉及网络新生态有害内容的治理摸排、数据分析、研究报告撰写",
+          "职位详情",
+          "数据挖掘和分析为主"
+        ],
+        "core_keywords": [
+          {
+            "keyword": "数据分析",
+            "category": "product",
+            "importance": "medium",
+            "score": 4,
+            "evidence": "能够独立设计严谨、科学的调研问卷，运用专业的数据分析方法提炼出有价值的结论，为研究和策略制定提供强有力的数据支持"
+          },
+          {
+            "keyword": "数据挖掘",
+            "category": "technical",
+            "importance": "low",
+            "score": 2,
+            "evidence": "数据挖掘和分析为主"
+          }
+        ]
+      },
+      "diff": {
+        "required_skills": {
+          "only_v3": [],
+          "only_v4": [
+            "数据分析"
+          ],
+          "both": []
+        },
+        "preferred_skills": {
+          "only_v3": [],
+          "only_v4": [],
+          "both": []
+        },
+        "responsibilities": {
+          "only_v3": [],
+          "only_v4": [
+            "化与发展情况，撰写专题研究报告",
+            "挖掘境内外网络生态新走向，搜集新兴理论研究资料对现象加以解释，持续跟进不同平台生态圈层的变化",
+            "支持对涉及网络新生态有害内容的治理摸排、数据分析、研究报告撰写",
+            "数据挖掘和分析为主",
+            "深入研究不同人群的网络需求、偏好及行为模式，结合站内数据理解用户动机，提取识别特、构建用户画像，支持网络实务研究报告撰写工作",
+            "职位详情",
+            "能够独立设计严谨、科学的调研问卷，运用专业的数据分析方法提炼出有价值的结论，为研究和策略制定提供强有力的数据支持",
+            "针对网络新兴热点事件、趋势、群体现象等深入观察与研究，分析特定领域的舆情态势与风险点，跟进趋势变"
+          ],
+          "both": []
+        },
+        "core_keywords": {
+          "only_v3": [],
+          "only_v4": [
+            "数据分析",
+            "数据挖掘"
+          ],
+          "both": []
+        }
+      }
+    },
+    {
+      "case_id": "real_012",
+      "v3": {
+        "required_skills": [
+          "大模型开发",
+          "机器学习技术背景",
+          "理解项目内容与进度推进逻辑",
+          "跨部门沟通",
+          "高效对接多方需求",
+          "学习能力",
+          "逻辑思维能力",
+          "沟通理性",
+          "情绪稳定",
+          "行为表达不情绪化",
+          "办公软件",
+          "文档编撰",
+          "数据整理",
+          "材料汇总与汇报"
+        ],
+        "preferred_skills": [
+          "Transformer",
+          "LSTM等架构核心逻辑",
+          "Agent编排",
+          "Prompt工程",
+          "特征工程落地流程",
+          "大模型微调"
+        ],
+        "responsibilities": [
+          "负责项目进度的跟踪与协调，常态化跟进执行情况，确保各环节按计划推进",
+          "负责项目全流程闭环核查，识别项目执行中的潜在风险，及时反馈并协助制定解决办法",
+          "负责项目相关文档的整理、会议纪要及汇报材料的撰写，并负责核验项目相关资料的完整性，确保所有事项可追溯、可核查",
+          "协助管理层开展各项工作，保障各事项的高效落地",
+          "完成上级交办的其他事项"
+        ],
+        "core_keywords": [
+          {
+            "keyword": "大模型开发",
+            "category": "required_skills",
+            "importance": "high",
+            "score": 5,
+            "evidence": "具备大模型开发及机器学习相关的技术背景"
+          },
+          {
+            "keyword": "机器学习",
+            "category": "required_skills",
+            "importance": "high",
+            "score": 5,
+            "evidence": "具备大模型开发及机器学习相关的技术背景"
+          },
+          {
+            "keyword": "跨部门沟通",
+            "category": "required_skills",
+            "importance": "high",
+            "score": 5,
+            "evidence": "具备优秀的跨部门沟通、协调与推进能力"
+          },
+          {
+            "keyword": "项目进度跟踪",
+            "category": "responsibilities",
+            "importance": "high",
+            "score": 4,
+            "evidence": "负责项目进度的跟踪与协调，常态化跟进执行情况"
+          },
+          {
+            "keyword": "文档编撰",
+            "category": "required_skills",
+            "importance": "medium",
+            "score": 3,
+            "evidence": "擅长文档编撰、数据整理材料汇总与汇报"
+          },
+          {
+            "keyword": "Agent编排",
+            "category": "preferred_skills",
+            "importance": "high",
+            "score": 5,
+            "evidence": "满足技术栈需求者优先:掌握...Agent编排"
+          }
+        ]
+      },
+      "v4": {
+        "required_skills": [
+          "机器学习",
+          "大模型",
+          "协调与推进能力",
+          "可高效对接多方需求",
+          "使用各类办公软件",
+          "擅长文档编撰",
+          "数据整理材料汇总与汇报"
+        ],
+        "preferred_skills": [
+          "Prompt",
+          "Agent",
+          "大模型",
+          "满足技术栈需求",
+          "掌握Transformer",
+          "LSTM等架构核心逻辑",
+          "熟悉Agent编排",
+          "Prompt工程",
+          "特征工程相关落地流程",
+          "了解大模型微调"
+        ],
+        "responsibilities": [
+          "负责项目进度的跟踪与协调，常态化跟进执行情况，确保各环节按计划推进",
+          "负责项目全流程闭环核查，识别项目执行中的潜在风险，及时反馈并协助制定解决办法",
+          "负责项目相关文档的整理、会议纪要及汇报材料的撰写，并负责核验项目相关资料的完整性，确保所有事项可追溯、可核查",
+          "协助管理层开展各项工作，保障各事项的高效落地",
+          "完成上级交办的其他事项"
+        ],
+        "core_keywords": [
+          {
+            "keyword": "大模型",
+            "category": "technical",
+            "importance": "high",
+            "score": 7,
+            "evidence": "具备大模型开发及机器学习相关的技术背景，能够理解项目内容与进度推进逻辑"
+          },
+          {
+            "keyword": "Agent",
+            "category": "technical",
+            "importance": "high",
+            "score": 6,
+            "evidence": "满足技术栈需求者优先:掌握Transformer、LSTM等架构核心逻辑，熟悉Agent编排、Prompt工程、特征工程相关落地流程，了解大模型微调"
+          },
+          {
+            "keyword": "Prompt",
+            "category": "technical",
+            "importance": "high",
+            "score": 6,
+            "evidence": "满足技术栈需求者优先:掌握Transformer、LSTM等架构核心逻辑，熟悉Agent编排、Prompt工程、特征工程相关落地流程，了解大模型微调"
+          },
+          {
+            "keyword": "保密意识",
+            "category": "soft",
+            "importance": "high",
+            "score": 5,
+            "evidence": "具备良好的职业素养与保密意识，能适应初创公司工作节奏"
+          },
+          {
+            "keyword": "大模型开发及机器学习相关的技术背景，能够理解项目内容与进度推进逻辑",
+            "category": "soft",
+            "importance": "high",
+            "score": 5,
+            "evidence": "具备大模型开发及机器学习相关的技术背景，能够理解项目内容与进度推进逻辑"
+          },
+          {
+            "keyword": "执行力",
+            "category": "soft",
+            "importance": "high",
+            "score": 5,
+            "evidence": "工作态度耐心、严谨、细致、有条理，具备极强的责任心与执行力，凡事有交代、件件有着落"
+          },
+          {
+            "keyword": "机器学习",
+            "category": "technical",
+            "importance": "high",
+            "score": 5,
+            "evidence": "具备大模型开发及机器学习相关的技术背景，能够理解项目内容与进度推进逻辑"
+          },
+          {
+            "keyword": "的跨部门沟通、协调与推进能力，可高效对接多方需求",
+            "category": "soft",
+            "importance": "high",
+            "score": 5,
+            "evidence": "具备优秀的跨部门沟通、协调与推进能力，可高效对接多方需求"
+          },
+          {
+            "keyword": "逻辑思维",
+            "category": "soft",
+            "importance": "high",
+            "score": 5,
+            "evidence": "具备优秀的学习能力及逻辑思维能力，沟通理性，情绪稳定，行为表达不情绪化"
+          }
+        ]
+      },
+      "diff": {
+        "required_skills": {
+          "only_v3": [
+            "办公软件",
+            "大模型开发",
+            "学习能力",
+            "情绪稳定",
+            "数据整理",
+            "文档编撰",
+            "机器学习技术背景",
+            "材料汇总与汇报",
+            "沟通理性",
+            "理解项目内容与进度推进逻辑",
+            "行为表达不情绪化",
+            "跨部门沟通",
+            "逻辑思维能力",
+            "高效对接多方需求"
+          ],
+          "only_v4": [
+            "使用各类办公软件",
+            "协调与推进能力",
+            "可高效对接多方需求",
+            "大模型",
+            "擅长文档编撰",
+            "数据整理材料汇总与汇报",
+            "机器学习"
+          ],
+          "both": []
+        },
+        "preferred_skills": {
+          "only_v3": [
+            "Agent编排",
+            "Transformer",
+            "大模型微调",
+            "特征工程落地流程"
+          ],
+          "only_v4": [
+            "Agent",
+            "Prompt",
+            "了解大模型微调",
+            "大模型",
+            "掌握Transformer",
+            "满足技术栈需求",
+            "熟悉Agent编排",
+            "特征工程相关落地流程"
+          ],
+          "both": [
+            "LSTM等架构核心逻辑",
+            "Prompt工程"
+          ]
+        },
+        "responsibilities": {
+          "only_v3": [],
+          "only_v4": [],
+          "both": [
+            "协助管理层开展各项工作，保障各事项的高效落地",
+            "完成上级交办的其他事项",
+            "负责项目全流程闭环核查，识别项目执行中的潜在风险，及时反馈并协助制定解决办法",
+            "负责项目相关文档的整理、会议纪要及汇报材料的撰写，并负责核验项目相关资料的完整性，确保所有事项可追溯、可核查",
+            "负责项目进度的跟踪与协调，常态化跟进执行情况，确保各环节按计划推进"
+          ]
+        },
+        "core_keywords": {
+          "only_v3": [
+            "Agent编排",
+            "大模型开发",
+            "文档编撰",
+            "跨部门沟通",
+            "项目进度跟踪"
+          ],
+          "only_v4": [
+            "Agent",
+            "Prompt",
+            "保密意识",
+            "大模型",
+            "大模型开发及机器学习相关的技术背景，能够理解项目内容与进度推进逻辑",
+            "执行力",
+            "的跨部门沟通、协调与推进能力，可高效对接多方需求",
+            "逻辑思维"
+          ],
+          "both": [
+            "机器学习"
+          ]
+        }
+      }
+    },
+    {
+      "case_id": "real_013",
+      "v3": {
+        "required_skills": [],
+        "preferred_skills": [],
+        "responsibilities": [],
+        "core_keywords": []
+      },
+      "v4": {
+        "required_skills": [
+          "项目管理"
+        ],
+        "preferred_skills": [
+          "专业不限",
+          "项目管理",
+          "过项目管理实习经历"
+        ],
+        "responsibilities": [
+          "协助完成行业研究、竞品分析及专题分析",
+          "基于数据与调研结果，输出结构化分析结论与洞察",
+          "支持日常汇报材料(整体业务规划、项目规划、项目交付、业务进展、产品模块解决方案等)材料的撰写与优化",
+          "PPT、Excel等",
+          "工作"
+        ],
+        "core_keywords": [
+          {
+            "keyword": "项目管理",
+            "category": "product",
+            "importance": "high",
+            "score": 7,
+            "evidence": "项目管理岗"
+          },
+          {
+            "keyword": "抗压能力",
+            "category": "soft",
+            "importance": "medium",
+            "score": 4,
+            "evidence": "有较强的学习、抗压能力，优秀的逻辑分析能力及沟通协调能力"
+          }
+        ]
+      },
+      "diff": {
+        "required_skills": {
+          "only_v3": [],
+          "only_v4": [
+            "项目管理"
+          ],
+          "both": []
+        },
+        "preferred_skills": {
+          "only_v3": [],
+          "only_v4": [
+            "专业不限",
+            "过项目管理实习经历",
+            "项目管理"
+          ],
+          "both": []
+        },
+        "responsibilities": {
+          "only_v3": [],
+          "only_v4": [
+            "PPT、Excel等",
+            "协助完成行业研究、竞品分析及专题分析",
+            "基于数据与调研结果，输出结构化分析结论与洞察",
+            "工作",
+            "支持日常汇报材料(整体业务规划、项目规划、项目交付、业务进展、产品模块解决方案等)材料的撰写与优化"
+          ],
+          "both": []
+        },
+        "core_keywords": {
+          "only_v3": [],
+          "only_v4": [
+            "抗压能力",
+            "项目管理"
+          ],
+          "both": []
+        }
+      }
+    },
+    {
+      "case_id": "real_014",
+      "v3": {
+        "required_skills": [],
+        "preferred_skills": [],
+        "responsibilities": [],
+        "core_keywords": []
+      },
+      "v4": {
+        "required_skills": [],
+        "preferred_skills": [],
+        "responsibilities": [
+          "Issued by HSBC Bank (China) In this role, you will",
+          "Oversees development of a project plans and recommendsmeasures to optimize the plan making it more effort, time andcost effective.",
+          "Collaborate closely with the team to define the project scope,objectives, requirements, and timeline.",
+          "Demonstrates working knowledge of Programme /ProjectFramework, supporting the creation of detailed plans includingkey activities and milestones",
+          "Has good knowledge of risks/issues/dependenciesmanagement techniques."
+        ],
+        "core_keywords": [
+          {
+            "keyword": "communication",
+            "category": "soft",
+            "importance": "medium",
+            "score": 4,
+            "evidence": "Strong verbal and written communication skills and solidexperience in face-to-face presentation"
+          },
+          {
+            "keyword": "Go",
+            "category": "technical",
+            "importance": "low",
+            "score": 2,
+            "evidence": "Has good knowledge of risks/issues/dependenciesmanagement techniques."
+          },
+          {
+            "keyword": "ownership",
+            "category": "soft",
+            "importance": "low",
+            "score": 2,
+            "evidence": "Takes ownership of problems and escalates when needed(remaining calm, knowing when to escalate, escalates withpossible solutions"
+          }
+        ]
+      },
+      "diff": {
+        "required_skills": {
+          "only_v3": [],
+          "only_v4": [],
+          "both": []
+        },
+        "preferred_skills": {
+          "only_v3": [],
+          "only_v4": [],
+          "both": []
+        },
+        "responsibilities": {
+          "only_v3": [],
+          "only_v4": [
+            "Collaborate closely with the team to define the project scope,objectives, requirements, and timeline.",
+            "Demonstrates working knowledge of Programme /ProjectFramework, supporting the creation of detailed plans includingkey activities and milestones",
+            "Has good knowledge of risks/issues/dependenciesmanagement techniques.",
+            "Issued by HSBC Bank (China) In this role, you will",
+            "Oversees development of a project plans and recommendsmeasures to optimize the plan making it more effort, time andcost effective."
+          ],
+          "both": []
+        },
+        "core_keywords": {
+          "only_v3": [],
+          "only_v4": [
+            "Go",
+            "communication",
+            "ownership"
+          ],
+          "both": []
+        }
+      }
+    },
+    {
+      "case_id": "real_015",
+      "v3": {
+        "required_skills": [
+          "HD平台底层运营规则",
+          "IDM系统操作",
+          "Vendor Center后台操作",
+          "Retail Media+广告后台操作",
+          "VMI补货机制",
+          "平台绩效规则",
+          "违规处罚标准",
+          "英文读写能力",
+          "CET-6",
+          "商务邮件沟通",
+          "买手需求文档解读",
+          "页面操作",
+          "会议记录能力"
+        ],
+        "preferred_skills": [
+          "跨境电商相关实习经验",
+          "Home Depot平台基础认知",
+          "HD买手日常对接经验",
+          "促销资源位申报",
+          "专供品链接提报",
+          "平台活动报名",
+          "D26(HVAC)类目运营经验",
+          "D28(户外)类目运营经验",
+          "D29(除湿机)类目运营经验",
+          "类目平台规则",
+          "用户消费偏好",
+          "沟通表达清晰",
+          "执行力强",
+          "高效同步工作进度",
+          "基础商务沟通素养",
+          "买手沟通协助",
+          "基础数据分析能力",
+          "广告ROI分析",
+          "库存周转率分析",
+          "转化率分析",
+          "数据预警与建议能力",
+          "排名异常分析",
+          "坑位丢失分析",
+          "日常投放管控",
+          "库存成本管控"
+        ],
+        "responsibilities": [
+          "运营数据整理与监控",
+          "运营数据监控",
+          "竞品监测与信息收集",
+          "买手对接辅助",
+          "BD执行",
+          "广告投放执行",
+          "促销活动执行",
+          "店铺运维",
+          "流程落地执行"
+        ],
+        "core_keywords": []
+      },
+      "v4": {
+        "required_skills": [
+          "VMI补货机制",
+          "平台绩效规则与违规处罚标",
+          "职位详情店铺站内推厂不接受居家办公亚马逊独立站3C数码欧洲有跨境电商运营经验日韩其他英语家装家具家用电器运动户外北美",
+          "任职要求]1.基础硬实力行业经验:社招通道:半年至1年Home Depot平台运营或助理经验，了解平台大促、广告投放、库存管理等基础流程",
+          "平台操作:社招:熟悉HD平台底层运营规则，能够独立操作IDM系统、Vendor Center后台及Retail Media+广告后台的基础模块",
+          "准",
+          "英语能力:具备良好的英文读写能力，大学英语六级(CET-6)或同等水平以上，可独立完成商务邮件基础沟通、买于需求又档解读义页面操作能配合组长完成线上买手会议的旁听、记录与纪要整理"
+        ],
+        "preferred_skills": [
+          "核心加分项BD协助经验",
+          "有HD买手日常对接经验",
+          "参与过促销资源位申报",
+          "专供品链接提报",
+          "平台活动报名",
+          "类目匹配经验",
+          "有D26",
+          "D28(户外",
+          "D29任一或多个类目运营经验",
+          "熟悉对应类目平台规则与用户消费偏好",
+          "需有跨境电商相关实习经验，或在校期间有独立运营跨境电商店铺(如Amazon、eBay、Shopify等)的经历，对Home Depot平台有浓厚兴趣与基础认知，愿意从0-1系统学习HD平台规则"
+        ],
+        "responsibilities": [
+          "岗位职责1、运营数据整理与监控:负责店铺日常运营数据的下载、清洗与整理，输出日/周/月报",
+          "重点跟踪主打产品的排名冲榜情况与广告坑位占位，记录并归档关键数据变",
+          "化",
+          "竞品监测与信息收集:执行日常竞品监控工作，关注对标竞品的价格、排名、促销活动及Listing变动，形成结构化的竞品观察报告，为运营策略调整提供基础信息支",
+          "持",
+          "买手对接辅助与BD执行:协助组长进行买手日常沟通的基础对接工作，包括资料准备、信息传递与进度跟进",
+          "配合执行日常BD(商务拓展)任务，如促销资源位的基础申报材料整理、活动报名流程跟进",
+          "广告与促销执行辅助:在组长指导下，执行平台广告投放的预设操作，跟踪广告基础数据(花费、曝光、点击",
+          "配合执行全周期促销活动的基础设置与效果记录",
+          "店铺运维与流程落地:负责店铺后台的基础运维操作，如产品信息更新、库存状态检查、流程文档归档",
+          "确保各项运营流程按标准落地执行，规避基础操作风险"
+        ],
+        "core_keywords": [
+          {
+            "keyword": "数据分析",
+            "category": "product",
+            "importance": "medium",
+            "score": 3,
+            "evidence": "数据敏感度:具备基础数据分析能力，能看懂广告ROI、库存周转率、转化率等核心数据，能通过数据报表发现日常运营问题(如排名异常、坑位丢失)并给出基础预警与建议，注重日常投放与库存成本管控意识"
+          },
+          {
+            "keyword": "基础商务沟通素养，能配合团队完成买手沟通协助",
+            "category": "soft",
+            "importance": "low",
+            "score": 2,
+            "evidence": "具备基础商务沟通素养，能配合团队完成买手沟通协助"
+          },
+          {
+            "keyword": "学习能力",
+            "category": "soft",
+            "importance": "low",
+            "score": 2,
+            "evidence": "应届生:有跨境电商后台操作基础，学习能力强，愿意快速掌握HD平台各系统操作"
+          },
+          {
+            "keyword": "英语能力:具备良好的英文读写能力，大学英语六级(CET-6)或同等水平以上，可独立完成商务邮件基础沟通、买于需求又档解读义页面操作能配合组长完成线上买手会议的旁听、记录与纪要整理",
+            "category": "soft",
+            "importance": "low",
+            "score": 2,
+            "evidence": "英语能力:具备良好的英文读写能力，大学英语六级(CET-6)或同等水平以上，可独立完成商务邮件基础沟通、买于需求又档解读义页面操作能配合组长完成线上买手会议的旁听、记录与纪要整理"
+          },
+          {
+            "keyword": "买手对接辅助与BD执行:协助组长进行买手日常沟通的基础对接工作，包括资料准备、信息传递与进度跟进",
+            "category": "soft",
+            "importance": "low",
+            "score": 1,
+            "evidence": "买手对接辅助与BD执行:协助组长进行买手日常沟通的基础对接工作，包括资料准备、信息传递与进度跟进"
+          },
+          {
+            "keyword": "执行力",
+            "category": "soft",
+            "importance": "low",
+            "score": 1,
+            "evidence": "软素质沟通执行力:沟通表达清晰，执行力强，能精准落实组长下达的各项运营任务，高效同步工作进度与异常问题"
+          },
+          {
+            "keyword": "需有跨境电商相关实习经验，或在校期间有独立运营跨境电商店铺(如Amazon、eBay、Shopify等)的经历，对Home Depot平台有浓厚兴趣与基础认知，愿意从0-1系统学习HD平台规则",
+            "category": "soft",
+            "importance": "low",
+            "score": 1,
+            "evidence": "需有跨境电商相关实习经验，或在校期间有独立运营跨境电商店铺(如Amazon、eBay、Shopify等)的经历，对Home Depot平台有浓厚兴趣与基础认知，愿意从0-1系统学习HD平台规则"
+          }
+        ]
+      },
+      "diff": {
+        "required_skills": {
+          "only_v3": [
+            "CET-6",
+            "HD平台底层运营规则",
+            "IDM系统操作",
+            "Retail Media+广告后台操作",
+            "Vendor Center后台操作",
+            "买手需求文档解读",
+            "会议记录能力",
+            "商务邮件沟通",
+            "平台绩效规则",
+            "英文读写能力",
+            "违规处罚标准",
+            "页面操作"
+          ],
+          "only_v4": [
+            "任职要求]1.基础硬实力行业经验:社招通道:半年至1年Home Depot平台运营或助理经验，了解平台大促、广告投放、库存管理等基础流程",
+            "准",
+            "平台操作:社招:熟悉HD平台底层运营规则，能够独立操作IDM系统、Vendor Center后台及Retail Media+广告后台的基础模块",
+            "平台绩效规则与违规处罚标",
+            "职位详情店铺站内推厂不接受居家办公亚马逊独立站3C数码欧洲有跨境电商运营经验日韩其他英语家装家具家用电器运动户外北美",
+            "英语能力:具备良好的英文读写能力，大学英语六级(CET-6)或同等水平以上，可独立完成商务邮件基础沟通、买于需求又档解读义页面操作能配合组长完成线上买手会议的旁听、记录与纪要整理"
+          ],
+          "both": [
+            "VMI补货机制"
+          ]
+        },
+        "preferred_skills": {
+          "only_v3": [
+            "D26(HVAC)类目运营经验",
+            "D28(户外)类目运营经验",
+            "D29(除湿机)类目运营经验",
+            "HD买手日常对接经验",
+            "Home Depot平台基础认知",
+            "买手沟通协助",
+            "促销资源位申报",
+            "坑位丢失分析",
+            "基础商务沟通素养",
+            "基础数据分析能力",
+            "广告ROI分析",
+            "库存周转率分析",
+            "库存成本管控",
+            "执行力强",
+            "排名异常分析",
+            "数据预警与建议能力",
+            "日常投放管控",
+            "沟通表达清晰",
+            "用户消费偏好",
+            "类目平台规则",
+            "跨境电商相关实习经验",
+            "转化率分析",
+            "高效同步工作进度"
+          ],
+          "only_v4": [
+            "D28(户外",
+            "D29任一或多个类目运营经验",
+            "参与过促销资源位申报",
+            "有D26",
+            "有HD买手日常对接经验",
+            "核心加分项BD协助经验",
+            "熟悉对应类目平台规则与用户消费偏好",
+            "类目匹配经验",
+            "需有跨境电商相关实习经验，或在校期间有独立运营跨境电商店铺(如Amazon、eBay、Shopify等)的经历，对Home Depot平台有浓厚兴趣与基础认知，愿意从0-1系统学习HD平台规则"
+          ],
+          "both": [
+            "专供品链接提报",
+            "平台活动报名"
+          ]
+        },
+        "responsibilities": {
+          "only_v3": [
+            "BD执行",
+            "买手对接辅助",
+            "促销活动执行",
+            "广告投放执行",
+            "店铺运维",
+            "流程落地执行",
+            "竞品监测与信息收集",
+            "运营数据整理与监控",
+            "运营数据监控"
+          ],
+          "only_v4": [
+            "买手对接辅助与BD执行:协助组长进行买手日常沟通的基础对接工作，包括资料准备、信息传递与进度跟进",
+            "化",
+            "岗位职责1、运营数据整理与监控:负责店铺日常运营数据的下载、清洗与整理，输出日/周/月报",
+            "广告与促销执行辅助:在组长指导下，执行平台广告投放的预设操作，跟踪广告基础数据(花费、曝光、点击",
+            "店铺运维与流程落地:负责店铺后台的基础运维操作，如产品信息更新、库存状态检查、流程文档归档",
+            "持",
+            "确保各项运营流程按标准落地执行，规避基础操作风险",
+            "竞品监测与信息收集:执行日常竞品监控工作，关注对标竞品的价格、排名、促销活动及Listing变动，形成结构化的竞品观察报告，为运营策略调整提供基础信息支",
+            "配合执行全周期促销活动的基础设置与效果记录",
+            "配合执行日常BD(商务拓展)任务，如促销资源位的基础申报材料整理、活动报名流程跟进",
+            "重点跟踪主打产品的排名冲榜情况与广告坑位占位，记录并归档关键数据变"
+          ],
+          "both": []
+        },
+        "core_keywords": {
+          "only_v3": [],
+          "only_v4": [
+            "买手对接辅助与BD执行:协助组长进行买手日常沟通的基础对接工作，包括资料准备、信息传递与进度跟进",
+            "基础商务沟通素养，能配合团队完成买手沟通协助",
+            "学习能力",
+            "执行力",
+            "数据分析",
+            "英语能力:具备良好的英文读写能力，大学英语六级(CET-6)或同等水平以上，可独立完成商务邮件基础沟通、买于需求又档解读义页面操作能配合组长完成线上买手会议的旁听、记录与纪要整理",
+            "需有跨境电商相关实习经验，或在校期间有独立运营跨境电商店铺(如Amazon、eBay、Shopify等)的经历，对Home Depot平台有浓厚兴趣与基础认知，愿意从0-1系统学习HD平台规则"
+          ],
+          "both": []
+        }
+      }
+    },
+    {
+      "case_id": "real_016",
+      "v3": {
+        "required_skills": [
+          "LLM应用落地",
+          "工作流编排",
+          "API对接",
+          "上线与监控",
+          "数据安全与合规",
+          "访问控制",
+          "LangChain",
+          "Milvus",
+          "vLLM",
+          "llama.cpp"
+        ],
+        "preferred_skills": [
+          "本地化LLM部署",
+          "推理性能优化",
+          "制造业AI应用",
+          "工业互联网场景",
+          "MCP工具链设计",
+          "插件开发"
+        ],
+        "responsibilities": [
+          "设计与优化Prompt，沉淀可复用模板与链路",
+          "构建与维护RAG管道与向量检索能力",
+          "建立评估与测试框架",
+          "实现LLM应用上线、监控与成本控制",
+          "与业务/数据/平台协作，推进流程自动化落地"
+        ],
+        "core_keywords": []
+      },
+      "v4": {
+        "required_skills": [
+          "Prompt",
+          "LLM",
+          "RAG",
+          "工作流编排(n8n/类似自动化平台",
+          "工程化交付能力(API对接",
+          "上线与监控",
+          "数据安全与合规(脱敏",
+          "审计",
+          "访问控制"
+        ],
+        "preferred_skills": [
+          "计算机",
+          "软件",
+          "LLM",
+          "本地化LLM部署与推理性能优化经验",
+          "制造业",
+          "工业互联网场景AI应用经验",
+          "MCP工具链设计或插件开发经验"
+        ],
+        "responsibilities": [
+          "设计与优化Prompt，沉淀可复用模板与链路",
+          "构建与维护RAG管道与向量检索能力",
+          "建立评估与测试框架(质量指标、基准集、回归测试",
+          "实现LLM应用上线、监控与成本控制",
+          "与业务/数据/平台协作，推进流程自动化落地",
+          "相关技术栈",
+          "MCP、n8n、LangChain等编排框架",
+          "RAG/向量数据库(Milvus",
+          "DMR/vLLM/llama.cpp(厂区离线推理)o",
+          "把AI能力转化为可落地的生产/运维应用，形成”流程化+可审计”的智能工作流",
+          "LLM直接落地生产与运维场景",
+          "MCP+n8n构建可审计流程",
+          "兼顾边缘离线推理与安全合规"
+        ],
+        "core_keywords": [
+          {
+            "keyword": "LLM",
+            "category": "technical",
+            "importance": "high",
+            "score": 9,
+            "evidence": "LLM直接落地生产与运维场景"
+          },
+          {
+            "keyword": "RAG",
+            "category": "technical",
+            "importance": "high",
+            "score": 7,
+            "evidence": "构建与维护RAG管道与向量检索能力"
+          },
+          {
+            "keyword": "Prompt",
+            "category": "technical",
+            "importance": "high",
+            "score": 6,
+            "evidence": "设计与优化Prompt，沉淀可复用模板与链路"
+          },
+          {
+            "keyword": "与业务/数据/平台协作，推进流程自动化落地",
+            "category": "soft",
+            "importance": "medium",
+            "score": 3,
+            "evidence": "与业务/数据/平台协作，推进流程自动化落地"
+          }
+        ]
+      },
+      "diff": {
+        "required_skills": {
+          "only_v3": [
+            "API对接",
+            "LLM应用落地",
+            "LangChain",
+            "Milvus",
+            "llama.cpp",
+            "vLLM",
+            "工作流编排",
+            "数据安全与合规"
+          ],
+          "only_v4": [
+            "LLM",
+            "Prompt",
+            "RAG",
+            "审计",
+            "工作流编排(n8n/类似自动化平台",
+            "工程化交付能力(API对接",
+            "数据安全与合规(脱敏"
+          ],
+          "both": [
+            "上线与监控",
+            "访问控制"
+          ]
+        },
+        "preferred_skills": {
+          "only_v3": [
+            "MCP工具链设计",
+            "制造业AI应用",
+            "工业互联网场景",
+            "推理性能优化",
+            "插件开发",
+            "本地化LLM部署"
+          ],
+          "only_v4": [
+            "LLM",
+            "MCP工具链设计或插件开发经验",
+            "制造业",
+            "工业互联网场景AI应用经验",
+            "本地化LLM部署与推理性能优化经验",
+            "计算机",
+            "软件"
+          ],
+          "both": []
+        },
+        "responsibilities": {
+          "only_v3": [
+            "建立评估与测试框架"
+          ],
+          "only_v4": [
+            "DMR/vLLM/llama.cpp(厂区离线推理)o",
+            "LLM直接落地生产与运维场景",
+            "MCP+n8n构建可审计流程",
+            "MCP、n8n、LangChain等编排框架",
+            "RAG/向量数据库(Milvus",
+            "兼顾边缘离线推理与安全合规",
+            "建立评估与测试框架(质量指标、基准集、回归测试",
+            "把AI能力转化为可落地的生产/运维应用，形成”流程化+可审计”的智能工作流",
+            "相关技术栈"
+          ],
+          "both": [
+            "与业务/数据/平台协作，推进流程自动化落地",
+            "实现LLM应用上线、监控与成本控制",
+            "构建与维护RAG管道与向量检索能力",
+            "设计与优化Prompt，沉淀可复用模板与链路"
+          ]
+        },
+        "core_keywords": {
+          "only_v3": [],
+          "only_v4": [
+            "LLM",
+            "Prompt",
+            "RAG",
+            "与业务/数据/平台协作，推进流程自动化落地"
+          ],
+          "both": []
+        }
+      }
+    },
+    {
+      "case_id": "real_017",
+      "v3": {
+        "required_skills": [],
+        "preferred_skills": [],
+        "responsibilities": [],
+        "core_keywords": []
+      },
+      "v4": {
+        "required_skills": [
+          "AIGC"
+        ],
+        "preferred_skills": [
+          "技术应用方向为加分项)理工科",
+          "计算机",
+          "Python",
+          "数据分析",
+          "技术应用方向)技术理解力",
+          "懂数据结构与API逻辑",
+          "懂基础数据处理",
+          "懂AI应用边界会写简单的Python脚本andas",
+          "requests)用于原型验证或数据分析此岗位属于太古可口可乐有限公司合肥分公司"
+        ],
+        "responsibilities": [
+          "创意沟通方向",
+          "雇主品牌传播、企业文化推广，新媒体运营",
+          "用AIGC工具快速产出海报、视频、文案",
+          "技术应用方向",
+          "从0到1参与HR数字化产品或AI应用的开发落地用代码和技术能力，直接改变HR工作的方式与效率"
+        ],
+        "core_keywords": [
+          {
+            "keyword": "AIGC",
+            "category": "technical",
+            "importance": "high",
+            "score": 6,
+            "evidence": "用AIGC工具快速产出海报、视频、文案"
+          },
+          {
+            "keyword": "Python",
+            "category": "technical",
+            "importance": "high",
+            "score": 5,
+            "evidence": "技术应用方向)技术理解力:懂数据结构与API逻辑、懂基础数据处理、懂AI应用边界(技术应用方向为加分项)会写简单的Python脚本andas/requests)用于原型验证或数据分析此岗位属于太古可口可乐(中国)有限公司合肥分公司"
+          },
+          {
+            "keyword": "对AI技术有热爱，具备创新思维与跨界洞察力(沟通创意方向)学科背景不限，具备探索精神与人文洞察力",
+            "category": "soft",
+            "importance": "high",
+            "score": 5,
+            "evidence": "对AI技术有热爱，具备创新思维与跨界洞察力(沟通创意方向)学科背景不限，具备探索精神与人文洞察力"
+          },
+          {
+            "keyword": "执行力",
+            "category": "soft",
+            "importance": "high",
+            "score": 5,
+            "evidence": "沟通创意方向)具备无限的想象力、审美力、内容创作力，有AIGC创作经验(AI绘图/写作/视频)、用AI放大文化传播的想象力与审美力(沟通创意方向)执行力与好奇心:工作积极主动，对热点反应快，能独立完成从选题到发布的完整流程"
+          },
+          {
+            "keyword": "数据分析",
+            "category": "product",
+            "importance": "high",
+            "score": 5,
+            "evidence": "技术应用方向)技术理解力:懂数据结构与API逻辑、懂基础数据处理、懂AI应用边界(技术应用方向为加分项)会写简单的Python脚本andas/requests)用于原型验证或数据分析此岗位属于太古可口可乐(中国)有限公司合肥分公司"
+          },
+          {
+            "keyword": "沟通创意方向)1-3年新媒体运营、内容策划、品牌文案或HR相关工作经验",
+            "category": "soft",
+            "importance": "medium",
+            "score": 4,
+            "evidence": "沟通创意方向)1-3年新媒体运营、内容策划、品牌文案或HR相关工作经验"
+          },
+          {
+            "keyword": "创意沟通方向",
+            "category": "soft",
+            "importance": "medium",
+            "score": 3,
+            "evidence": "创意沟通方向"
+          }
+        ]
+      },
+      "diff": {
+        "required_skills": {
+          "only_v3": [],
+          "only_v4": [
+            "AIGC"
+          ],
+          "both": []
+        },
+        "preferred_skills": {
+          "only_v3": [],
+          "only_v4": [
+            "Python",
+            "requests)用于原型验证或数据分析此岗位属于太古可口可乐有限公司合肥分公司",
+            "懂AI应用边界会写简单的Python脚本andas",
+            "懂基础数据处理",
+            "懂数据结构与API逻辑",
+            "技术应用方向)技术理解力",
+            "技术应用方向为加分项)理工科",
+            "数据分析",
+            "计算机"
+          ],
+          "both": []
+        },
+        "responsibilities": {
+          "only_v3": [],
+          "only_v4": [
+            "从0到1参与HR数字化产品或AI应用的开发落地用代码和技术能力，直接改变HR工作的方式与效率",
+            "创意沟通方向",
+            "技术应用方向",
+            "用AIGC工具快速产出海报、视频、文案",
+            "雇主品牌传播、企业文化推广，新媒体运营"
+          ],
+          "both": []
+        },
+        "core_keywords": {
+          "only_v3": [],
+          "only_v4": [
+            "AIGC",
+            "Python",
+            "创意沟通方向",
+            "对AI技术有热爱，具备创新思维与跨界洞察力(沟通创意方向)学科背景不限，具备探索精神与人文洞察力",
+            "执行力",
+            "数据分析",
+            "沟通创意方向)1-3年新媒体运营、内容策划、品牌文案或HR相关工作经验"
+          ],
+          "both": []
+        }
+      }
+    },
+    {
+      "case_id": "real_018",
+      "v3": {
+        "required_skills": [
+          "编程思维",
+          "编程基础",
+          "AI技术",
+          "AIAgent概念",
+          "应用场景",
+          "发展趋势",
+          "互联网软件架构",
+          "AI Agent实际开发",
+          "AI Agent搭建"
+        ],
+        "preferred_skills": [
+          "售前技术支持经验",
+          "流利的英语/粤语技术交流能力",
+          "支持海外客户对接",
+          "多任务处理能力",
+          "学习能力",
+          "适应快节奏工作环境",
+          "逻辑思维",
+          "表达能力",
+          "跨团队协作经验",
+          "产品协同",
+          "研发协同",
+          "销售协同",
+          "互联网行业经验",
+          "企业服务行业经验",
+          "计算机服务行业经验"
+        ],
+        "responsibilities": [
+          "面向国内及海外客户的技术支持与咨询",
+          "协助销售团队完成产品技术方案的演示、讲解及答疑",
+          "深入分析与理解客户业务场景与痛点",
+          "基于公司产品线(消息触达、客服系统、AI Agent平台等)设计并输出可落地的技术解决方案",
+          "撰写技术方案文档、产品白皮书及竞品分析报告",
+          "支持销售与市场活动",
+          "配合完成产品演示、技术培训及客户测试",
+          "确保客户充分理解产品价值与技术优势",
+          "收集并反馈客户需求与市场动态",
+          "协助产研团队优化产品功能与用户体验",
+          "参与重点项目投标",
+          "负责技术方案编写与讲解答辩"
+        ],
+        "core_keywords": []
+      },
+      "v4": {
+        "required_skills": [
+          "编程思维",
+          "了解编程基础",
+          "Agent",
+          "流利的英语/粵语技术交流能力",
+          "能够支持海外客户对接",
+          "互联网软件架构及开发者生态",
+          "粤语/英语可流利沟通"
+        ],
+        "preferred_skills": [
+          "软件工程",
+          "计算机科学与技术",
+          "以下行业经验"
+        ],
+        "responsibilities": [
+          "负责面向国内及海外客户的技术支持与咨询，协助销售团队完成产品技术方案的演示、讲解及答疑",
+          "深入分析与理解客户业务场景与痛点，基于公司产品线(消息触达、客服系统、AI Agent平台等)设计并输出可落地的技术解决方案",
+          "撰写技术方案文档、产品白皮书及竞品分析报告，支",
+          "持销售与市场活动",
+          "配合完成产品演示、技术培训及客户测试，确保客户充分理解产品价值与技术优势",
+          "收集并反馈客户需求与市场动态，协助产研团队优化产品功能与用户体验",
+          "参与重点项目投标，负责技术方案编写与讲解答辩",
+          "售前技术支持经验"
+        ],
+        "core_keywords": [
+          {
+            "keyword": "Agent",
+            "category": "technical",
+            "importance": "high",
+            "score": 7,
+            "evidence": "深入分析与理解客户业务场景与痛点，基于公司产品线(消息触达、客服系统、AI Agent平台等)设计并输出可落地的技术解决方案"
+          },
+          {
+            "keyword": "团队协作",
+            "category": "soft",
+            "importance": "high",
+            "score": 5,
+            "evidence": "具备跨团队协作经验，能与产品、研发、销售高效协同"
+          },
+          {
+            "keyword": "学习能力",
+            "category": "soft",
+            "importance": "high",
+            "score": 5,
+            "evidence": "具备多任务处理能力及学习能力，适应快节奏工作环境"
+          },
+          {
+            "keyword": "表达能力",
+            "category": "soft",
+            "importance": "high",
+            "score": 5,
+            "evidence": "具备较强的逻辑思维与表达能力"
+          },
+          {
+            "keyword": "以下行业经验:互联网·企业服务·计算机服务",
+            "category": "soft",
+            "importance": "low",
+            "score": 2,
+            "evidence": "有以下行业经验:互联网·企业服务·计算机服务"
+          },
+          {
+            "keyword": "粤语/英语可流利沟通",
+            "category": "soft",
+            "importance": "low",
+            "score": 2,
+            "evidence": "粤语/英语可流利沟通"
+          }
+        ]
+      },
+      "diff": {
+        "required_skills": {
+          "only_v3": [
+            "AI Agent实际开发",
+            "AI Agent搭建",
+            "AIAgent概念",
+            "AI技术",
+            "互联网软件架构",
+            "发展趋势",
+            "应用场景",
+            "编程基础"
+          ],
+          "only_v4": [
+            "Agent",
+            "了解编程基础",
+            "互联网软件架构及开发者生态",
+            "流利的英语/粵语技术交流能力",
+            "粤语/英语可流利沟通",
+            "能够支持海外客户对接"
+          ],
+          "both": [
+            "编程思维"
+          ]
+        },
+        "preferred_skills": {
+          "only_v3": [
+            "互联网行业经验",
+            "产品协同",
+            "企业服务行业经验",
+            "售前技术支持经验",
+            "多任务处理能力",
+            "学习能力",
+            "支持海外客户对接",
+            "流利的英语/粤语技术交流能力",
+            "研发协同",
+            "表达能力",
+            "计算机服务行业经验",
+            "跨团队协作经验",
+            "适应快节奏工作环境",
+            "逻辑思维",
+            "销售协同"
+          ],
+          "only_v4": [
+            "以下行业经验",
+            "计算机科学与技术",
+            "软件工程"
+          ],
+          "both": []
+        },
+        "responsibilities": {
+          "only_v3": [
+            "协助产研团队优化产品功能与用户体验",
+            "协助销售团队完成产品技术方案的演示、讲解及答疑",
+            "参与重点项目投标",
+            "基于公司产品线(消息触达、客服系统、AI Agent平台等)设计并输出可落地的技术解决方案",
+            "撰写技术方案文档、产品白皮书及竞品分析报告",
+            "支持销售与市场活动",
+            "收集并反馈客户需求与市场动态",
+            "深入分析与理解客户业务场景与痛点",
+            "确保客户充分理解产品价值与技术优势",
+            "负责技术方案编写与讲解答辩",
+            "配合完成产品演示、技术培训及客户测试",
+            "面向国内及海外客户的技术支持与咨询"
+          ],
+          "only_v4": [
+            "参与重点项目投标，负责技术方案编写与讲解答辩",
+            "售前技术支持经验",
+            "持销售与市场活动",
+            "撰写技术方案文档、产品白皮书及竞品分析报告，支",
+            "收集并反馈客户需求与市场动态，协助产研团队优化产品功能与用户体验",
+            "深入分析与理解客户业务场景与痛点，基于公司产品线(消息触达、客服系统、AI Agent平台等)设计并输出可落地的技术解决方案",
+            "负责面向国内及海外客户的技术支持与咨询，协助销售团队完成产品技术方案的演示、讲解及答疑",
+            "配合完成产品演示、技术培训及客户测试，确保客户充分理解产品价值与技术优势"
+          ],
+          "both": []
+        },
+        "core_keywords": {
+          "only_v3": [],
+          "only_v4": [
+            "Agent",
+            "以下行业经验:互联网·企业服务·计算机服务",
+            "团队协作",
+            "学习能力",
+            "粤语/英语可流利沟通",
+            "表达能力"
+          ],
+          "both": []
+        }
+      }
+    },
+    {
+      "case_id": "real_019",
+      "v3": {
+        "required_skills": [
+          "Python",
+          "JavaScript",
+          "HTML5",
+          "CSS3",
+          "FastAPI",
+          "Flask",
+          "Django",
+          "Vue.js",
+          "React",
+          "LangChain",
+          "LlamaIndex",
+          "Dify",
+          "OpenAI",
+          "大语言模型",
+          "脚本编写"
+        ],
+        "preferred_skills": [
+          "Ollama",
+          "LMS Studio",
+          "显存/内存管理",
+          "ITSM系统",
+          "企业知识库",
+          "审批流自动化"
+        ],
+        "responsibilities": [
+          "负责大语言模型(LLM)的接入、部署与调试",
+          "基于业务需求，利用API或本地开源模型搭建智能问答、数据识别或多智能体协作系统",
+          "使用Python编写高效、可维护的后端代码，开发自动化脚本处理日常流程，提取并清洗数据，实现系统间的API对接",
+          "运用HTML/CSS及JavaScript技术，为AI工具开发直观、流畅的Web用户交互界面，确保良好的用户体验",
+          "针对不同的业务场景设计并持续优化Prompt，提升AI输出的准确性和实用性",
+          "关注系统的运行效率与资源消耗，参与硬件(如GPU算力分配)与软件架构的综合优化，保障AI系统的稳定运行"
+        ],
+        "core_keywords": []
+      },
+      "v4": {
+        "required_skills": [
+          "FastAPI",
+          "Django",
+          "Python",
+          "Flask",
+          "JavaScript",
+          "Vue.js",
+          "React",
+          "HTML",
+          "CSS",
+          "LLM",
+          "大模型",
+          "AI应用开发框架(如LangChain",
+          "LlamaIndex",
+          "Dify",
+          "Prompt",
+          "提示词",
+          "本地化AI模型的部署与硬件配置(如熟悉Ollama",
+          "LMStuidio等工具",
+          "了解显存/内存对模型运行的影响",
+          "Agent",
+          "需求分析"
+        ],
+        "preferred_skills": [
+          "满足以下条件"
+        ],
+        "responsibilities": [
+          "javascript",
+          "大语言模型AI模型HTML5",
+          "Python",
+          "Multi-Agent",
+          "CSS3",
+          "OpenAI",
+          "Ollama",
+          "AI系统搭建与集成:负责大语言模型(LLM)的接入、部署与调试",
+          "能够基于业务需求，利用API或本地开源模型(如Qwen,GLM等)搭建智能问答、数据识别或多智能体(Multi-Agent)协作系统",
+          "后端与自动化开发:熟练使用Python编写高效、可维护的后端代码，开发自动化脚本处理日常流程，提取并清洗数据，实现系统间的API对接",
+          "Web前端开发:运用精湛的HTML/CSS及JavaScript技术，为AI工具开发直观、流畅的Web用户交互界面，确保良好的用户体验",
+          "Prompt工程与优化:针对不同的业务场景(如需求分析、代码辅助、流程审批等)，设计并持续优化Prompt，提升AI输出的准确性和实用性",
+          "系统维护与迭代:关注系统的运行效率与资源消耗，参与硬件(如GPU算力分配)与软件架构的综合优化，保障AI系统的稳定运行"
+        ],
+        "core_keywords": [
+          {
+            "keyword": "CSS",
+            "category": "technical",
+            "importance": "high",
+            "score": 8,
+            "evidence": "CSS3"
+          },
+          {
+            "keyword": "HTML",
+            "category": "technical",
+            "importance": "high",
+            "score": 8,
+            "evidence": "大语言模型AI模型HTML5"
+          },
+          {
+            "keyword": "JavaScript",
+            "category": "technical",
+            "importance": "high",
+            "score": 8,
+            "evidence": "javascript"
+          },
+          {
+            "keyword": "Python",
+            "category": "technical",
+            "importance": "high",
+            "score": 8,
+            "evidence": "Python"
+          },
+          {
+            "keyword": "Agent",
+            "category": "technical",
+            "importance": "high",
+            "score": 7,
+            "evidence": "Multi-Agent"
+          },
+          {
+            "keyword": "Django",
+            "category": "technical",
+            "importance": "high",
+            "score": 6,
+            "evidence": "Python技能(精通):深入理解Python核心机制，熟练使用常用的Python框架(如FastAPI,Flask或Django)，具备扎实的脚本编写和数据处理能力"
+          },
+          {
+            "keyword": "FastAPI",
+            "category": "technical",
+            "importance": "high",
+            "score": 6,
+            "evidence": "Python技能(精通):深入理解Python核心机制，熟练使用常用的Python框架(如FastAPI,Flask或Django)，具备扎实的脚本编写和数据处理能力"
+          },
+          {
+            "keyword": "Flask",
+            "category": "technical",
+            "importance": "high",
+            "score": 6,
+            "evidence": "Python技能(精通):深入理解Python核心机制，熟练使用常用的Python框架(如FastAPI,Flask或Django)，具备扎实的脚本编写和数据处理能力"
+          },
+          {
+            "keyword": "LLM",
+            "category": "technical",
+            "importance": "high",
+            "score": 6,
+            "evidence": "AI系统搭建与集成:负责大语言模型(LLM)的接入、部署与调试"
+          },
+          {
+            "keyword": "Prompt",
+            "category": "technical",
+            "importance": "high",
+            "score": 6,
+            "evidence": "Prompt工程与优化:针对不同的业务场景(如需求分析、代码辅助、流程审批等)，设计并持续优化Prompt，提升AI输出的准确性和实用性"
+          },
+          {
+            "keyword": "React",
+            "category": "technical",
+            "importance": "high",
+            "score": 6,
+            "evidence": "前端技能(精通):熟练掌握HTML5,CSS3，精通至少一种主流前端JavaScript框架(如Vue.js,React)，能独立完成高质量的Web前端开发"
+          },
+          {
+            "keyword": "Vue.js",
+            "category": "technical",
+            "importance": "high",
+            "score": 6,
+            "evidence": "前端技能(精通):熟练掌握HTML5,CSS3，精通至少一种主流前端JavaScript框架(如Vue.js,React)，能独立完成高质量的Web前端开发"
+          },
+          {
+            "keyword": "大模型",
+            "category": "technical",
+            "importance": "high",
+            "score": 5,
+            "evidence": "熟悉主流大模型生态，有实际调用OpenAI等主流LLMAPI的经验"
+          },
+          {
+            "keyword": "学习能力",
+            "category": "soft",
+            "importance": "high",
+            "score": 5,
+            "evidence": "综合素质:具备极强的自我驱动力和学习能力，能够快速跟进开源AI社区的新技术"
+          },
+          {
+            "keyword": "提示词",
+            "category": "technical",
+            "importance": "high",
+            "score": 5,
+            "evidence": "具备一定的PromptEngineering(提示词工程)实操经验"
+          },
+          {
+            "keyword": "熟悉多智能体(Multi-Agent)协作框架的搭建",
+            "category": "soft",
+            "importance": "high",
+            "score": 5,
+            "evidence": "熟悉多智能体(Multi-Agent)协作框架的搭建"
+          },
+          {
+            "keyword": "逻辑思维",
+            "category": "soft",
+            "importance": "high",
+            "score": 5,
+            "evidence": "拥有优秀的逻辑思维能力和解决复杂问题的能力"
+          },
+          {
+            "keyword": "ITSM(IT服务管理)系统开发对接经验，或参与过企业内部知识库、审批流自动化项目开发",
+            "category": "soft",
+            "importance": "medium",
+            "score": 4,
+            "evidence": "有ITSM(IT服务管理)系统开发对接经验，或参与过企业内部知识库、审批流自动化项目开发"
+          },
+          {
+            "keyword": "能够基于业务需求，利用API或本地开源模型(如Qwen,GLM等)搭建智能问答、数据识别或多智能体(Multi-Agent)协作系统",
+            "category": "soft",
+            "importance": "medium",
+            "score": 3,
+            "evidence": "能够基于业务需求，利用API或本地开源模型(如Qwen,GLM等)搭建智能问答、数据识别或多智能体(Multi-Agent)协作系统"
+          },
+          {
+            "keyword": "需求分析",
+            "category": "product",
+            "importance": "medium",
+            "score": 3,
+            "evidence": "Prompt工程与优化:针对不同的业务场景(如需求分析、代码辅助、流程审批等)，设计并持续优化Prompt，提升AI输出的准确性和实用性"
+          }
+        ]
+      },
+      "diff": {
+        "required_skills": {
+          "only_v3": [
+            "CSS3",
+            "HTML5",
+            "LangChain",
+            "OpenAI",
+            "大语言模型",
+            "脚本编写"
+          ],
+          "only_v4": [
+            "AI应用开发框架(如LangChain",
+            "Agent",
+            "CSS",
+            "HTML",
+            "LLM",
+            "LMStuidio等工具",
+            "Prompt",
+            "了解显存/内存对模型运行的影响",
+            "大模型",
+            "提示词",
+            "本地化AI模型的部署与硬件配置(如熟悉Ollama",
+            "需求分析"
+          ],
+          "both": [
+            "Dify",
+            "Django",
+            "FastAPI",
+            "Flask",
+            "JavaScript",
+            "LlamaIndex",
+            "Python",
+            "React",
+            "Vue.js"
+          ]
+        },
+        "preferred_skills": {
+          "only_v3": [
+            "ITSM系统",
+            "LMS Studio",
+            "Ollama",
+            "企业知识库",
+            "审批流自动化",
+            "显存/内存管理"
+          ],
+          "only_v4": [
+            "满足以下条件"
+          ],
+          "both": []
+        },
+        "responsibilities": {
+          "only_v3": [
+            "使用Python编写高效、可维护的后端代码，开发自动化脚本处理日常流程，提取并清洗数据，实现系统间的API对接",
+            "关注系统的运行效率与资源消耗，参与硬件(如GPU算力分配)与软件架构的综合优化，保障AI系统的稳定运行",
+            "基于业务需求，利用API或本地开源模型搭建智能问答、数据识别或多智能体协作系统",
+            "负责大语言模型(LLM)的接入、部署与调试",
+            "运用HTML/CSS及JavaScript技术，为AI工具开发直观、流畅的Web用户交互界面，确保良好的用户体验",
+            "针对不同的业务场景设计并持续优化Prompt，提升AI输出的准确性和实用性"
+          ],
+          "only_v4": [
+            "AI系统搭建与集成:负责大语言模型(LLM)的接入、部署与调试",
+            "CSS3",
+            "Multi-Agent",
+            "Ollama",
+            "OpenAI",
+            "Prompt工程与优化:针对不同的业务场景(如需求分析、代码辅助、流程审批等)，设计并持续优化Prompt，提升AI输出的准确性和实用性",
+            "Python",
+            "Web前端开发:运用精湛的HTML/CSS及JavaScript技术，为AI工具开发直观、流畅的Web用户交互界面，确保良好的用户体验",
+            "javascript",
+            "后端与自动化开发:熟练使用Python编写高效、可维护的后端代码，开发自动化脚本处理日常流程，提取并清洗数据，实现系统间的API对接",
+            "大语言模型AI模型HTML5",
+            "系统维护与迭代:关注系统的运行效率与资源消耗，参与硬件(如GPU算力分配)与软件架构的综合优化，保障AI系统的稳定运行",
+            "能够基于业务需求，利用API或本地开源模型(如Qwen,GLM等)搭建智能问答、数据识别或多智能体(Multi-Agent)协作系统"
+          ],
+          "both": []
+        },
+        "core_keywords": {
+          "only_v3": [],
+          "only_v4": [
+            "Agent",
+            "CSS",
+            "Django",
+            "FastAPI",
+            "Flask",
+            "HTML",
+            "ITSM(IT服务管理)系统开发对接经验，或参与过企业内部知识库、审批流自动化项目开发",
+            "JavaScript",
+            "LLM",
+            "Prompt",
+            "Python",
+            "React",
+            "Vue.js",
+            "大模型",
+            "学习能力",
+            "提示词",
+            "熟悉多智能体(Multi-Agent)协作框架的搭建",
+            "能够基于业务需求，利用API或本地开源模型(如Qwen,GLM等)搭建智能问答、数据识别或多智能体(Multi-Agent)协作系统",
+            "逻辑思维",
+            "需求分析"
+          ],
+          "both": []
+        }
+      }
+    },
+    {
+      "case_id": "real_020",
+      "v3": {
+        "required_skills": [],
+        "preferred_skills": [],
+        "responsibilities": [],
+        "core_keywords": []
+      },
+      "v4": {
+        "required_skills": [],
+        "preferred_skills": [
+          "整机类产品经验(桌面CNC",
+          "3D打印",
+          "消费级激光雕刻机",
+          "机械结构",
+          "运动控制轨迹",
+          "材料特性及FDM原理"
+        ],
+        "responsibilities": [
+          "负责消费级/桌面级CNC产品整机规划与生命周期管",
+          "理，0-1定义产品方向",
+          "主导市场调研与竞品分析，输出差异化产品策略",
+          "主导产品成本规划，规格定义，性能指标拆解，平衡体验，技术与商业目标",
+          "跟进研发项目全流程落地，把控进度与风险",
+          "参与产品上市策略制定，协同市场完成卖点提炼与产品定位"
+        ],
+        "core_keywords": [
+          {
+            "keyword": "团队协作",
+            "category": "soft",
+            "importance": "medium",
+            "score": 3,
+            "evidence": "与供应商，研件研发，质量团队协作，确保产品可量产与稳定交付"
+          }
+        ]
+      },
+      "diff": {
+        "required_skills": {
+          "only_v3": [],
+          "only_v4": [],
+          "both": []
+        },
+        "preferred_skills": {
+          "only_v3": [],
+          "only_v4": [
+            "3D打印",
+            "整机类产品经验(桌面CNC",
+            "机械结构",
+            "材料特性及FDM原理",
+            "消费级激光雕刻机",
+            "运动控制轨迹"
+          ],
+          "both": []
+        },
+        "responsibilities": {
+          "only_v3": [],
+          "only_v4": [
+            "主导产品成本规划，规格定义，性能指标拆解，平衡体验，技术与商业目标",
+            "主导市场调研与竞品分析，输出差异化产品策略",
+            "参与产品上市策略制定，协同市场完成卖点提炼与产品定位",
+            "理，0-1定义产品方向",
+            "负责消费级/桌面级CNC产品整机规划与生命周期管",
+            "跟进研发项目全流程落地，把控进度与风险"
+          ],
+          "both": []
+        },
+        "core_keywords": {
+          "only_v3": [],
+          "only_v4": [
+            "团队协作"
+          ],
+          "both": []
+        }
+      }
+    },
+    {
+      "case_id": "real_021",
+      "v3": {
+        "required_skills": [
+          "使用项目管理工具（飞书多维表等）",
+          "跟踪项目实际进度，定期输出项目状态报告",
+          "识别延期、资源冲突等偏差并及时上报",
+          "组织项目例会，记录会议行动项并跟进闭环",
+          "建立并维护项目风险与问题台账",
+          "协助整理项目度量数据",
+          "结构性思维",
+          "沟通协作",
+          "学习能力",
+          "抗压韧性",
+          "了解项目管理、智能硬件产品开发流程等基础理念",
+          "擅于运用各种AI工具"
+        ],
+        "preferred_skills": [],
+        "responsibilities": [
+          "协助制定产品开发项目计划，使用项目管理工具跟踪任务执行状态",
+          "负责项目文档的全周期管理，包括立项报告、需求文档、会议纪要、变更记录、验收报告等的整理、归档与版本控制",
+          "跟踪项目实际进度，定期输出项目状态报告，识别延期、资源冲突等偏差并及时上报",
+          "组织项目例会，记录会议行动项并跟进闭环，确保各环节责任清晰",
+          "协调产品、设计、研发、测试、采购、生产等团队之间的信息传递，保障关键节点衔接顺畅",
+          "建立并维护项目风险与问题台账，协助评估影响并跟踪应对措施的落实",
+          "收集项目流程中的痛点，提出改进建议",
+          "协助整理项目度量数据，支撑项目复盘",
+          "协调产品、设计、研发、测试、采购、生产等团队之间的信息传递"
+        ],
+        "core_keywords": []
+      },
+      "v4": {
+        "required_skills": [
+          "项目管理"
+        ],
+        "preferred_skills": [
+          "条件1.24届",
+          "25届往届生有项目经历的",
+          "26届有项目工作优秀的的也可以"
+        ],
+        "responsibilities": [
+          "协助项目经理制定产品开发项目计划，使用项目管理工具(飞书多维表等)跟踪任务执行状态",
+          "负责项目文档的全周期管理，包括立项报告、需求文",
+          "档、会议纪要、变更记录、验收报告等的整理、归档与版本控制",
+          "跟踪项目实际进度，定期输出项目状态报告，识别延期、资源冲突等偏差并及时上报",
+          "组织项目例会，记录会议行动项并跟进闭环，确保各环节责任清晰",
+          "协调产品、设计、研发、测试、采购、生产等团队之间的信息传递，保障关键节点(TR评审、试产、发布)衔接顺畅",
+          "建立并维护项目风险与问题台账，协助评估影响并跟踪应对措施的落实",
+          "收集项目流程中的痛点，提出改进建议",
+          "协助整理项目度量数据，支撑项目复盘"
+        ],
+        "core_keywords": [
+          {
+            "keyword": "项目管理",
+            "category": "product",
+            "importance": "high",
+            "score": 7,
+            "evidence": "协助项目经理制定产品开发项目计划，使用项目管理工具(飞书多维表等)跟踪任务执行状态"
+          },
+          {
+            "keyword": "了解项目管理、智能硬件产品开发流程等基础理念(或有相关在线课程学习经历)3.擅于运用各种AI工具，将固定的工作自动化、智能化运行",
+            "category": "soft",
+            "importance": "high",
+            "score": 5,
+            "evidence": "了解项目管理、智能硬件产品开发流程等基础理念(或有相关在线课程学习经历)3.擅于运用各种AI工具，将固定的工作自动化、智能化运行"
+          },
+          {
+            "keyword": "学习能力",
+            "category": "soft",
+            "importance": "high",
+            "score": 5,
+            "evidence": "4学习能力:原意快速掌握项目管理方法与工具"
+          },
+          {
+            "keyword": "3沟通协作:能与技术、采购、生产等不同角色清晰对齐信息，敢于推动和确认",
+            "category": "soft",
+            "importance": "medium",
+            "score": 4,
+            "evidence": "3沟通协作:能与技术、采购、生产等不同角色清晰对齐信息，敢于推动和确认"
+          },
+          {
+            "keyword": "组织协调",
+            "category": "soft",
+            "importance": "medium",
+            "score": 4,
+            "evidence": "有校园/实习/竟赛中的组织协调类角色经验(如组长、社团负责人、活动统筹"
+          },
+          {
+            "keyword": "责任心",
+            "category": "soft",
+            "importance": "medium",
+            "score": 4,
+            "evidence": "2责任心与闭环意识:主动反馈进展，遇阻提前预警，不隐瞒风险"
+          },
+          {
+            "keyword": "韧性",
+            "category": "soft",
+            "importance": "medium",
+            "score": 4,
+            "evidence": "5抗压韧性:适应项目冲刺节奏，理性处理计划变更"
+          }
+        ]
+      },
+      "diff": {
+        "required_skills": {
+          "only_v3": [
+            "了解项目管理、智能硬件产品开发流程等基础理念",
+            "使用项目管理工具（飞书多维表等）",
+            "协助整理项目度量数据",
+            "学习能力",
+            "建立并维护项目风险与问题台账",
+            "抗压韧性",
+            "擅于运用各种AI工具",
+            "沟通协作",
+            "组织项目例会，记录会议行动项并跟进闭环",
+            "结构性思维",
+            "识别延期、资源冲突等偏差并及时上报",
+            "跟踪项目实际进度，定期输出项目状态报告"
+          ],
+          "only_v4": [
+            "项目管理"
+          ],
+          "both": []
+        },
+        "preferred_skills": {
+          "only_v3": [],
+          "only_v4": [
+            "25届往届生有项目经历的",
+            "26届有项目工作优秀的的也可以",
+            "条件1.24届"
+          ],
+          "both": []
+        },
+        "responsibilities": {
+          "only_v3": [
+            "协助制定产品开发项目计划，使用项目管理工具跟踪任务执行状态",
+            "协调产品、设计、研发、测试、采购、生产等团队之间的信息传递",
+            "协调产品、设计、研发、测试、采购、生产等团队之间的信息传递，保障关键节点衔接顺畅",
+            "负责项目文档的全周期管理，包括立项报告、需求文档、会议纪要、变更记录、验收报告等的整理、归档与版本控制"
+          ],
+          "only_v4": [
+            "协助项目经理制定产品开发项目计划，使用项目管理工具(飞书多维表等)跟踪任务执行状态",
+            "协调产品、设计、研发、测试、采购、生产等团队之间的信息传递，保障关键节点(TR评审、试产、发布)衔接顺畅",
+            "档、会议纪要、变更记录、验收报告等的整理、归档与版本控制",
+            "负责项目文档的全周期管理，包括立项报告、需求文"
+          ],
+          "both": [
+            "协助整理项目度量数据，支撑项目复盘",
+            "建立并维护项目风险与问题台账，协助评估影响并跟踪应对措施的落实",
+            "收集项目流程中的痛点，提出改进建议",
+            "组织项目例会，记录会议行动项并跟进闭环，确保各环节责任清晰",
+            "跟踪项目实际进度，定期输出项目状态报告，识别延期、资源冲突等偏差并及时上报"
+          ]
+        },
+        "core_keywords": {
+          "only_v3": [],
+          "only_v4": [
+            "3沟通协作:能与技术、采购、生产等不同角色清晰对齐信息，敢于推动和确认",
+            "了解项目管理、智能硬件产品开发流程等基础理念(或有相关在线课程学习经历)3.擅于运用各种AI工具，将固定的工作自动化、智能化运行",
+            "学习能力",
+            "组织协调",
+            "责任心",
+            "韧性",
+            "项目管理"
+          ],
+          "both": []
+        }
+      }
+    },
+    {
+      "case_id": "real_022",
+      "v3": {
+        "required_skills": [
+          "大模型应用",
+          "提示词工程",
+          "AI工具组合应用",
+          "流程文件编写",
+          "使用指南编写",
+          "英文文档阅读",
+          "流程梳理与再造",
+          "流程建模",
+          "SOP编写",
+          "知识库搭建与维护",
+          "知识检索",
+          "自助解答",
+          "工单智能分类",
+          "AI辅助生成汇报材料",
+          "服务数据智能分析",
+          "AI嵌入售后系统",
+          "流程图绘制",
+          "方法论沉淀",
+          "操作规范编写",
+          "最佳实践沉淀",
+          "对比评估报告输出",
+          "简报输出"
+        ],
+        "preferred_skills": [
+          "Python",
+          "Coze",
+          "Dify",
+          "流程管理方法论",
+          "个人作品集",
+          "技术博客",
+          "相关实习经历"
+        ],
+        "responsibilities": [],
+        "core_keywords": []
+      },
+      "v4": {
+        "required_skills": [
+          "大模型",
+          "提示词"
+        ],
+        "preferred_skills": [
+          "计算机",
+          "信息管理",
+          "人工智能",
+          "理工科或管理类专业",
+          "AI小项目",
+          "智能体搭建",
+          "Python",
+          "基础Python",
+          "或有用Coze",
+          "Dify等平台搭建AI应用",
+          "工作流的经验",
+          "流程管理方法论",
+          "或有相关实习经历",
+          "个人作品集可供展示",
+          "品内容审核",
+          "品线下拓展运营",
+          "品 数据",
+          "深圳华大智造科技股份有限公司",
+          "医疗器械·已上市·1000-9999人"
+        ],
+        "responsibilities": [
+          "1，AI工具调研与引入",
+          "持续调研各类AI工具（大模型应用、AI办公、自动化/低代码工具等），结合售后业务场景输出对比评估报告与引入建议",
+          "负责已引入AI工具的日常运营与推广，编写使用指南，面向变革小组及售后团队开展赋能分享",
+          "跟踪AI行业动态与同业应用案例，定期输出简报，为变革提供新思路",
+          "2，AI应用场景试点执行",
+          "参与售后知识库的搭建、内容整理与大模型训练调优，提升知识检索与自助解答能力",
+          "协助开展工单智能分类、AI辅助生成汇报材料、服务数据智能分析等场景试点，跟进落地执行",
+          "跟踪试点效果数据，收集一线反馈，形成阶段性小结与优化建议",
+          "配合IT团队梳理AI嵌入售后系统的功能需求，参与测试与验收",
+          "3，流程梳理与文档沉淀",
+          "参与售后核心流程（工单、备件、退换赔、服务SLA等）的梳理与再造讨论，绘制流程图并编写流程文件",
+          "负责变革项目知识库的搭建与维护，沉淀方法论、操作规范与最佳实践，形成可复用的知识资产"
+        ],
+        "core_keywords": [
+          {
+            "keyword": "大模型",
+            "category": "technical",
+            "importance": "high",
+            "score": 6,
+            "evidence": "持续调研各类AI工具（大模型应用、AI办公、自动化/低代码工具等），结合售后业务场景输出对比评估报告与引入建议"
+          },
+          {
+            "keyword": "参与售后核心流程（工单、备件、退换赔、服务SLA等）的梳理与再造讨论，绘制流程图并编写流程文件",
+            "category": "soft",
+            "importance": "high",
+            "score": 5,
+            "evidence": "参与售后核心流程（工单、备件、退换赔、服务SLA等）的梳理与再造讨论，绘制流程图并编写流程文件"
+          },
+          {
+            "keyword": "学习能力",
+            "category": "soft",
+            "importance": "medium",
+            "score": 4,
+            "evidence": "学习能力强、自驱力足：面对陌生领域能快速上手，主动推动而非等待安排"
+          },
+          {
+            "keyword": "提示词",
+            "category": "technical",
+            "importance": "medium",
+            "score": 4,
+            "evidence": "深度使用过大模型类产品解决实际问题，对提示词工程、AI工具组合应用有实践经验"
+          },
+          {
+            "keyword": "解决问题",
+            "category": "soft",
+            "importance": "medium",
+            "score": 4,
+            "evidence": "落地意识：不只是“尝鲜”，更关注工具能否真正解决问题，愿意做试点推广、培训赋能等琐碎但关键的工作"
+          },
+          {
+            "keyword": "逻辑与抽象能力：能把复杂的业务流程拆解清楚，用流程图和文档结构化表达",
+            "category": "soft",
+            "importance": "medium",
+            "score": 4,
+            "evidence": "逻辑与抽象能力：能把复杂的业务流程拆解清楚，用流程图和文档结构化表达"
+          },
+          {
+            "keyword": "Python",
+            "category": "technical",
+            "importance": "medium",
+            "score": 3,
+            "evidence": "掌握基础Python，或有用Coze、Dify等平台搭建AI应用/工作流的经验"
+          },
+          {
+            "keyword": "协助开展工单智能分类、AI辅助生成汇报材料、服务数据智能分析等场景试点，跟进落地执行",
+            "category": "soft",
+            "importance": "medium",
+            "score": 3,
+            "evidence": "协助开展工单智能分类、AI辅助生成汇报材料、服务数据智能分析等场景试点，跟进落地执行"
+          }
+        ]
+      },
+      "diff": {
+        "required_skills": {
+          "only_v3": [
+            "AI嵌入售后系统",
+            "AI工具组合应用",
+            "AI辅助生成汇报材料",
+            "SOP编写",
+            "使用指南编写",
+            "大模型应用",
+            "对比评估报告输出",
+            "工单智能分类",
+            "提示词工程",
+            "操作规范编写",
+            "方法论沉淀",
+            "最佳实践沉淀",
+            "服务数据智能分析",
+            "流程图绘制",
+            "流程建模",
+            "流程文件编写",
+            "流程梳理与再造",
+            "知识库搭建与维护",
+            "知识检索",
+            "简报输出",
+            "自助解答",
+            "英文文档阅读"
+          ],
+          "only_v4": [
+            "大模型",
+            "提示词"
+          ],
+          "both": []
+        },
+        "preferred_skills": {
+          "only_v3": [
+            "Coze",
+            "Dify",
+            "个人作品集",
+            "技术博客",
+            "相关实习经历"
+          ],
+          "only_v4": [
+            "AI小项目",
+            "Dify等平台搭建AI应用",
+            "个人作品集可供展示",
+            "人工智能",
+            "信息管理",
+            "医疗器械·已上市·1000-9999人",
+            "品 数据",
+            "品内容审核",
+            "品线下拓展运营",
+            "基础Python",
+            "工作流的经验",
+            "或有用Coze",
+            "或有相关实习经历",
+            "智能体搭建",
+            "深圳华大智造科技股份有限公司",
+            "理工科或管理类专业",
+            "计算机"
+          ],
+          "both": [
+            "Python",
+            "流程管理方法论"
+          ]
+        },
+        "responsibilities": {
+          "only_v3": [],
+          "only_v4": [
+            "1，AI工具调研与引入",
+            "2，AI应用场景试点执行",
+            "3，流程梳理与文档沉淀",
+            "协助开展工单智能分类、AI辅助生成汇报材料、服务数据智能分析等场景试点，跟进落地执行",
+            "参与售后核心流程（工单、备件、退换赔、服务SLA等）的梳理与再造讨论，绘制流程图并编写流程文件",
+            "参与售后知识库的搭建、内容整理与大模型训练调优，提升知识检索与自助解答能力",
+            "持续调研各类AI工具（大模型应用、AI办公、自动化/低代码工具等），结合售后业务场景输出对比评估报告与引入建议",
+            "负责变革项目知识库的搭建与维护，沉淀方法论、操作规范与最佳实践，形成可复用的知识资产",
+            "负责已引入AI工具的日常运营与推广，编写使用指南，面向变革小组及售后团队开展赋能分享",
+            "跟踪AI行业动态与同业应用案例，定期输出简报，为变革提供新思路",
+            "跟踪试点效果数据，收集一线反馈，形成阶段性小结与优化建议",
+            "配合IT团队梳理AI嵌入售后系统的功能需求，参与测试与验收"
+          ],
+          "both": []
+        },
+        "core_keywords": {
+          "only_v3": [],
+          "only_v4": [
+            "Python",
+            "协助开展工单智能分类、AI辅助生成汇报材料、服务数据智能分析等场景试点，跟进落地执行",
+            "参与售后核心流程（工单、备件、退换赔、服务SLA等）的梳理与再造讨论，绘制流程图并编写流程文件",
+            "大模型",
+            "学习能力",
+            "提示词",
+            "解决问题",
+            "逻辑与抽象能力：能把复杂的业务流程拆解清楚，用流程图和文档结构化表达"
+          ],
+          "both": []
+        }
+      }
+    },
+    {
+      "case_id": "real_023",
+      "v3": {
+        "required_skills": [
+          "Word",
+          "Excel",
+          "英语",
+          "沟通协调",
+          "团队合作"
+        ],
+        "preferred_skills": [],
+        "responsibilities": [
+          "安排每日进出库存货物",
+          "与内外部门合作，跟踪和协调有关发货延迟、损坏和其他故障解决问题",
+          "通过日常运营进行分析和确定改善点，以提高生产力和效率"
+        ],
+        "core_keywords": []
+      },
+      "v4": {
+        "required_skills": [
+          "使用Word",
+          "Excel等常用办公软件"
+        ],
+        "preferred_skills": [],
+        "responsibilities": [
+          "负责及时安排每日进出库存货物",
+          "积极与内外部门合作，及时有效地跟踪和协调有关发货",
+          "通过日常运营进行分析和确定改善点，以提高生产力和效率"
+        ],
+        "core_keywords": [
+          {
+            "keyword": "团队合作",
+            "category": "soft",
+            "importance": "high",
+            "score": 5,
+            "evidence": "具备良好的沟通协调能力和团队合作意识，工作细致，学习能力强"
+          },
+          {
+            "keyword": "解决问题",
+            "category": "soft",
+            "importance": "medium",
+            "score": 3,
+            "evidence": "延迟、损坏和其他故障解决问题"
+          }
+        ]
+      },
+      "diff": {
+        "required_skills": {
+          "only_v3": [
+            "Excel",
+            "Word",
+            "团队合作",
+            "沟通协调",
+            "英语"
+          ],
+          "only_v4": [
+            "Excel等常用办公软件",
+            "使用Word"
+          ],
+          "both": []
+        },
+        "preferred_skills": {
+          "only_v3": [],
+          "only_v4": [],
+          "both": []
+        },
+        "responsibilities": {
+          "only_v3": [
+            "与内外部门合作，跟踪和协调有关发货延迟、损坏和其他故障解决问题",
+            "安排每日进出库存货物"
+          ],
+          "only_v4": [
+            "积极与内外部门合作，及时有效地跟踪和协调有关发货",
+            "负责及时安排每日进出库存货物"
+          ],
+          "both": [
+            "通过日常运营进行分析和确定改善点，以提高生产力和效率"
+          ]
+        },
+        "core_keywords": {
+          "only_v3": [],
+          "only_v4": [
+            "团队合作",
+            "解决问题"
+          ],
+          "both": []
+        }
+      }
+    },
+    {
+      "case_id": "real_024",
+      "v3": {
+        "required_skills": [
+          "Python",
+          "JavaScript/TypeScript",
+          "Go",
+          "系统架构设计",
+          "大语言模型应用开发",
+          "Prompt Engineering",
+          "RAG",
+          "Agent",
+          "Fine-tuning"
+        ],
+        "preferred_skills": [
+          "Claude",
+          "Cursor",
+          "Copilot",
+          "多模态AI技术（文本、图像、视频、语音）",
+          "全栈开发能力"
+        ],
+        "responsibilities": [
+          "直接面向业务方及客户，独立完成需求调研、沟通对接、痛点分析，深入理解营销场景下的真实业务需求",
+          "从需求分析、产品方案设计、开发实现到上线交付，以AINative的方式独立驱动项目全流程推进，确保高效落地",
+          "基于业务场景，利用AI工具和技术，完成从0到1的产品开发，将业务需求快速转化为可用的产品与工具",
+          "针对业务需求，设计并落地AI相关的技术解决方案，包括但不限于大模型应用、智能体搭建、工作流自动化等",
+          "持续关注并学习AI领域最新技术趋势，主动将新技术、新工具引入业务实践，推动团队技术能力升级"
+        ],
+        "core_keywords": []
+      },
+      "v4": {
+        "required_skills": [
+          "大模型",
+          "JavaScript",
+          "TypeScript",
+          "Python",
+          "Go",
+          "需求调研",
+          "需求分析",
+          "Agent"
+        ],
+        "preferred_skills": [
+          "计算机科学",
+          "人工智能",
+          "软件工程",
+          "工作经验",
+          "有AINative产品或项目的从0到1开发经历",
+          "Prompt",
+          "Agent",
+          "LLM",
+          "RAG",
+          "大模型",
+          "大模型应用经验",
+          "熟悉大语言模型的应用开发",
+          "有Prompt Engineering",
+          "Fine-tuning",
+          "直接对接客户",
+          "业务方并推动产品落地的实际经验",
+          "多模态AI技术的应用开发",
+          "全栈开发能力",
+          "能独立完成前后端开发及部署",
+          "蓝色光标2027校园招聘"
+        ],
+        "responsibilities": [
+          "业务/客户直接对接：直接面向业务方及客户，独立完成需求调研、沟通对接、痛点分析，深入理解营销场景下的真实业务需求",
+          "全链路产品推进：从需求分析、产品方案设计、开发实现到上线交付，以AINative的方式独立驱动项目全流程推进，确保高效落地",
+          "AI驱动的产品构建：基于业务场景，利用AI工具和技术，完成从0到1的产品开发，将业务需求快速转化为可用的产品与工具",
+          "AI工具链整合：熟练运用主流AI开发工具(如Claude、Cursor、Copilot等)，高效完成编码、测试及部署，持续提升研发效率",
+          "技术方案设计：针对业务需求，设计并落地AI相关的技术解决方案，包括但不限于大模型应用、智能体（Agent)搭建、工作流自动化等",
+          "前沿技术探索：持续关注并学习AI领域最新技术趋势，主动将新技术、新工具引入业务实践，推动团队技术能力升级"
+        ],
+        "core_keywords": [
+          {
+            "keyword": "大模型",
+            "category": "technical",
+            "importance": "high",
+            "score": 7,
+            "evidence": "技术方案设计：针对业务需求，设计并落地AI相关的技术解决方案，包括但不限于大模型应用、智能体（Agent)搭建、工作流自动化等"
+          },
+          {
+            "keyword": "Agent",
+            "category": "technical",
+            "importance": "high",
+            "score": 6,
+            "evidence": "技术方案设计：针对业务需求，设计并落地AI相关的技术解决方案，包括但不限于大模型应用、智能体（Agent)搭建、工作流自动化等"
+          },
+          {
+            "keyword": "需求调研",
+            "category": "product",
+            "importance": "high",
+            "score": 6,
+            "evidence": "业务/客户直接对接：直接面向业务方及客户，独立完成需求调研、沟通对接、痛点分析，深入理解营销场景下的真实业务需求"
+          },
+          {
+            "keyword": "Go",
+            "category": "technical",
+            "importance": "high",
+            "score": 5,
+            "evidence": "技术基础：具备扎实的编程功底，熟悉至少一门主流编程语言(如Python、JavaScript/TypeScript、Go等)，了解常见的系统架构设计"
+          },
+          {
+            "keyword": "JavaScript",
+            "category": "technical",
+            "importance": "high",
+            "score": 5,
+            "evidence": "技术基础：具备扎实的编程功底，熟悉至少一门主流编程语言(如Python、JavaScript/TypeScript、Go等)，了解常见的系统架构设计"
+          },
+          {
+            "keyword": "LLM",
+            "category": "technical",
+            "importance": "high",
+            "score": 5,
+            "evidence": "大模型应用经验：熟悉大语言模型（LLM）的应用开发，有Prompt Engineering、RAG、Agent、Fine-tuning等相关实践经验者优先"
+          },
+          {
+            "keyword": "Prompt",
+            "category": "technical",
+            "importance": "high",
+            "score": 5,
+            "evidence": "大模型应用经验：熟悉大语言模型（LLM）的应用开发，有Prompt Engineering、RAG、Agent、Fine-tuning等相关实践经验者优先"
+          },
+          {
+            "keyword": "Python",
+            "category": "technical",
+            "importance": "high",
+            "score": 5,
+            "evidence": "技术基础：具备扎实的编程功底，熟悉至少一门主流编程语言(如Python、JavaScript/TypeScript、Go等)，了解常见的系统架构设计"
+          },
+          {
+            "keyword": "RAG",
+            "category": "technical",
+            "importance": "high",
+            "score": 5,
+            "evidence": "大模型应用经验：熟悉大语言模型（LLM）的应用开发，有Prompt Engineering、RAG、Agent、Fine-tuning等相关实践经验者优先"
+          },
+          {
+            "keyword": "TypeScript",
+            "category": "technical",
+            "importance": "high",
+            "score": 5,
+            "evidence": "技术基础：具备扎实的编程功底，熟悉至少一门主流编程语言(如Python、JavaScript/TypeScript、Go等)，了解常见的系统架构设计"
+          },
+          {
+            "keyword": "学习能力",
+            "category": "soft",
+            "importance": "high",
+            "score": 5,
+            "evidence": "自驱与学习能力：对AI技术充满热情，具备强烈的自驱力和好奇心，能够快速学习并掌握新技术、新工具"
+          },
+          {
+            "keyword": "沟通能力",
+            "category": "soft",
+            "importance": "high",
+            "score": 5,
+            "evidence": "业务沟通能力：具备直接面向业务方/客户的沟通能力，能够独立完成需求调研与方案沟通，准确理解并转化业务需求"
+          },
+          {
+            "keyword": "业务/客户直接对接：直接面向业务方及客户，独立完成需求调研、沟通对接、痛点分析，深入理解营销场景下的真实业务需求",
+            "category": "soft",
+            "importance": "medium",
+            "score": 4,
+            "evidence": "业务/客户直接对接：直接面向业务方及客户，独立完成需求调研、沟通对接、痛点分析，深入理解营销场景下的真实业务需求"
+          },
+          {
+            "keyword": "前沿技术探索：持续关注并学习AI领域最新技术趋势，主动将新技术、新工具引入业务实践，推动团队技术能力升级",
+            "category": "soft",
+            "importance": "medium",
+            "score": 3,
+            "evidence": "前沿技术探索：持续关注并学习AI领域最新技术趋势，主动将新技术、新工具引入业务实践，推动团队技术能力升级"
+          },
+          {
+            "keyword": "需求分析",
+            "category": "product",
+            "importance": "medium",
+            "score": 3,
+            "evidence": "全链路产品推进：从需求分析、产品方案设计、开发实现到上线交付，以AINative的方式独立驱动项目全流程推进，确保高效落地"
+          }
+        ]
+      },
+      "diff": {
+        "required_skills": {
+          "only_v3": [
+            "Fine-tuning",
+            "JavaScript/TypeScript",
+            "Prompt Engineering",
+            "RAG",
+            "大语言模型应用开发",
+            "系统架构设计"
+          ],
+          "only_v4": [
+            "JavaScript",
+            "TypeScript",
+            "大模型",
+            "需求分析",
+            "需求调研"
+          ],
+          "both": [
+            "Agent",
+            "Go",
+            "Python"
+          ]
+        },
+        "preferred_skills": {
+          "only_v3": [
+            "Claude",
+            "Copilot",
+            "Cursor",
+            "多模态AI技术（文本、图像、视频、语音）"
+          ],
+          "only_v4": [
+            "Agent",
+            "Fine-tuning",
+            "LLM",
+            "Prompt",
+            "RAG",
+            "业务方并推动产品落地的实际经验",
+            "人工智能",
+            "多模态AI技术的应用开发",
+            "大模型",
+            "大模型应用经验",
+            "工作经验",
+            "有AINative产品或项目的从0到1开发经历",
+            "有Prompt Engineering",
+            "熟悉大语言模型的应用开发",
+            "直接对接客户",
+            "能独立完成前后端开发及部署",
+            "蓝色光标2027校园招聘",
+            "计算机科学",
+            "软件工程"
+          ],
+          "both": [
+            "全栈开发能力"
+          ]
+        },
+        "responsibilities": {
+          "only_v3": [
+            "从需求分析、产品方案设计、开发实现到上线交付，以AINative的方式独立驱动项目全流程推进，确保高效落地",
+            "基于业务场景，利用AI工具和技术，完成从0到1的产品开发，将业务需求快速转化为可用的产品与工具",
+            "持续关注并学习AI领域最新技术趋势，主动将新技术、新工具引入业务实践，推动团队技术能力升级",
+            "直接面向业务方及客户，独立完成需求调研、沟通对接、痛点分析，深入理解营销场景下的真实业务需求",
+            "针对业务需求，设计并落地AI相关的技术解决方案，包括但不限于大模型应用、智能体搭建、工作流自动化等"
+          ],
+          "only_v4": [
+            "AI工具链整合：熟练运用主流AI开发工具(如Claude、Cursor、Copilot等)，高效完成编码、测试及部署，持续提升研发效率",
+            "AI驱动的产品构建：基于业务场景，利用AI工具和技术，完成从0到1的产品开发，将业务需求快速转化为可用的产品与工具",
+            "业务/客户直接对接：直接面向业务方及客户，独立完成需求调研、沟通对接、痛点分析，深入理解营销场景下的真实业务需求",
+            "全链路产品推进：从需求分析、产品方案设计、开发实现到上线交付，以AINative的方式独立驱动项目全流程推进，确保高效落地",
+            "前沿技术探索：持续关注并学习AI领域最新技术趋势，主动将新技术、新工具引入业务实践，推动团队技术能力升级",
+            "技术方案设计：针对业务需求，设计并落地AI相关的技术解决方案，包括但不限于大模型应用、智能体（Agent)搭建、工作流自动化等"
+          ],
+          "both": []
+        },
+        "core_keywords": {
+          "only_v3": [],
+          "only_v4": [
+            "Agent",
+            "Go",
+            "JavaScript",
+            "LLM",
+            "Prompt",
+            "Python",
+            "RAG",
+            "TypeScript",
+            "业务/客户直接对接：直接面向业务方及客户，独立完成需求调研、沟通对接、痛点分析，深入理解营销场景下的真实业务需求",
+            "前沿技术探索：持续关注并学习AI领域最新技术趋势，主动将新技术、新工具引入业务实践，推动团队技术能力升级",
+            "大模型",
+            "学习能力",
+            "沟通能力",
+            "需求分析",
+            "需求调研"
+          ],
+          "both": []
+        }
+      }
+    },
+    {
+      "case_id": "real_025",
+      "v3": {
+        "required_skills": [],
+        "preferred_skills": [],
+        "responsibilities": [],
+        "core_keywords": []
+      },
+      "v4": {
+        "required_skills": [
+          "产品运营意识",
+          "能够将技术参数",
+          "测试结果和产品功能转化为清晰的卖点",
+          "应用场景",
+          "选型建议和推广内容"
+        ],
+        "preferred_skills": [
+          "机器人",
+          "自动化",
+          "电子信息",
+          "计算机",
+          "机械工程",
+          "人工智能",
+          "光电信息",
+          "物联网",
+          "机器人或智能硬件一手开发",
+          "调试",
+          "测试经验",
+          "接触过ROS",
+          "ROS2",
+          "机械臂",
+          "移动机器人",
+          "深度相机",
+          "激光雷达",
+          "传感器",
+          "嵌入式开发",
+          "机器人公司",
+          "智能硬件公司",
+          "实验室",
+          "机器人竞赛",
+          "RoboMaster",
+          "具身智能",
+          "3D视觉",
+          "机械臂开发",
+          "英文产品资料撰写能力"
+        ],
+        "responsibilities": [
+          "负责机器人产品线的产品营销推广工作，覆盖产品选品、上架、参数维护、详情页优化、价格维护、库存协同及推广执行",
+          "负责机器人及核心部件产品的资料整理、卖点提炼和产品表达优化",
+          "参与机器人产品样品研究、安装调试、功能测试、参数验证和竞品对比，梳理产品优势、适用场景、选型建议和客户常见问题",
+          "调研高校科研、机器人开发者、实验室、集成商及行业客户需求，分析产品应用场景，支持重点产品的推广策略制定",
+          "负责产品介绍、功能说明、应用案例、FAQ、选型指南、Demo内容、技术文章等内容建设，提升客户理解和询盘转化",
+          "协同供应商和内部团队，跟进产品资料补齐、测试问题反馈、备货计划、客户需求和销售增长目标"
+        ],
+        "core_keywords": [
+          {
+            "keyword": "负责机器人及核心部件产品的资料整理、卖点提炼和产品表达优化",
+            "category": "soft",
+            "importance": "high",
+            "score": 5,
+            "evidence": "负责机器人及核心部件产品的资料整理、卖点提炼和产品表达优化"
+          },
+          {
+            "keyword": "团队协作",
+            "category": "soft",
+            "importance": "medium",
+            "score": 4,
+            "evidence": "有温度的团队，长期一起成长：重视科技与人文结合，关注个人成长、团队协作与社会价值，提供转正、出国参展与持续发展的机会"
+          },
+          {
+            "keyword": "执行力",
+            "category": "soft",
+            "importance": "medium",
+            "score": 4,
+            "evidence": "工作细致负责，学习能力和执行力强，愿意动手研究样品，能适应产品、技术、运营、供应链、销售多方协作"
+          },
+          {
+            "keyword": "Go",
+            "category": "technical",
+            "importance": "low",
+            "score": 2,
+            "evidence": "机器人代理产品线：宇树、奥比中光、速腾聚创、雷赛智能、强脑科技、本末机器人、松灵机器人等-DIY代理产品线：Elegoo、创想三维(Creality）、优利德(Uni-Trend)、LaserPecker、Genmitsu等- 全球化布局：德国慕尼黑|中国深圳|美国弗吉尼亚|土耳其伊斯坦布尔"
+          },
+          {
+            "keyword": "自成立以来，OpenELAB已为多家世界500强企业以及超过全球200所顶尖高校和研究所提供服务，并致力于打造全球智能硬件开发者社区，加速智能硬件产品落地，赋能智能硬件品牌出海",
+            "category": "soft",
+            "importance": "low",
+            "score": 2,
+            "evidence": "自成立以来，OpenELAB已为多家世界500强企业以及超过全球200所顶尖高校和研究所提供服务，并致力于打造全球智能硬件开发者社区，加速智能硬件产品落地，赋能智能硬件品牌出海"
+          }
+        ]
+      },
+      "diff": {
+        "required_skills": {
+          "only_v3": [],
+          "only_v4": [
+            "产品运营意识",
+            "应用场景",
+            "测试结果和产品功能转化为清晰的卖点",
+            "能够将技术参数",
+            "选型建议和推广内容"
+          ],
+          "both": []
+        },
+        "preferred_skills": {
+          "only_v3": [],
+          "only_v4": [
+            "3D视觉",
+            "ROS2",
+            "RoboMaster",
+            "人工智能",
+            "传感器",
+            "光电信息",
+            "具身智能",
+            "实验室",
+            "嵌入式开发",
+            "接触过ROS",
+            "智能硬件公司",
+            "机器人",
+            "机器人公司",
+            "机器人或智能硬件一手开发",
+            "机器人竞赛",
+            "机械工程",
+            "机械臂",
+            "机械臂开发",
+            "测试经验",
+            "深度相机",
+            "激光雷达",
+            "物联网",
+            "电子信息",
+            "移动机器人",
+            "自动化",
+            "英文产品资料撰写能力",
+            "计算机",
+            "调试"
+          ],
+          "both": []
+        },
+        "responsibilities": {
+          "only_v3": [],
+          "only_v4": [
+            "协同供应商和内部团队，跟进产品资料补齐、测试问题反馈、备货计划、客户需求和销售增长目标",
+            "参与机器人产品样品研究、安装调试、功能测试、参数验证和竞品对比，梳理产品优势、适用场景、选型建议和客户常见问题",
+            "调研高校科研、机器人开发者、实验室、集成商及行业客户需求，分析产品应用场景，支持重点产品的推广策略制定",
+            "负责产品介绍、功能说明、应用案例、FAQ、选型指南、Demo内容、技术文章等内容建设，提升客户理解和询盘转化",
+            "负责机器人产品线的产品营销推广工作，覆盖产品选品、上架、参数维护、详情页优化、价格维护、库存协同及推广执行",
+            "负责机器人及核心部件产品的资料整理、卖点提炼和产品表达优化"
+          ],
+          "both": []
+        },
+        "core_keywords": {
+          "only_v3": [],
+          "only_v4": [
+            "Go",
+            "团队协作",
+            "执行力",
+            "自成立以来，OpenELAB已为多家世界500强企业以及超过全球200所顶尖高校和研究所提供服务，并致力于打造全球智能硬件开发者社区，加速智能硬件产品落地，赋能智能硬件品牌出海",
+            "负责机器人及核心部件产品的资料整理、卖点提炼和产品表达优化"
+          ],
+          "both": []
+        }
+      }
+    },
+    {
+      "case_id": "real_026",
+      "v3": {
+        "required_skills": [
+          "产品研发流程",
+          "交互设计",
+          "文案撰写",
+          "交互原型设计",
+          "审美能力"
+        ],
+        "preferred_skills": [
+          "学习能力强",
+          "目标导向",
+          "独立思考能力",
+          "技术理解与沟通能力",
+          "数据分析原理",
+          "看板产品设计经验",
+          "AI产品工作经验",
+          "AI项目实践落地经验",
+          "游戏行业制作流程",
+          "影视行业制作流程"
+        ],
+        "responsibilities": [
+          "平台产品全流程策划",
+          "需求调研",
+          "功能设计",
+          "原型制作",
+          "搭建AIGC工具与工作流",
+          "研究AI市场趋势",
+          "制定产品推广和营销策略",
+          "促进市场推广和用户增长",
+          "制定产品迭代计划",
+          "优化产品功能和用户体验",
+          "整体项目管理",
+          "策略跟进落地"
+        ],
+        "core_keywords": []
+      },
+      "v4": {
+        "required_skills": [
+          "需求调研",
+          "AIGC",
+          "数据分析",
+          "项目管理"
+        ],
+        "preferred_skills": [
+          "数据分析",
+          "常用的数据分析原理",
+          "具备数据分析看板产品设计经验",
+          "或有AI项目实践落地经验",
+          "游戏或影视行业的制作流程",
+          "工作地址",
+          "深圳南山区同方信息港"
+        ],
+        "responsibilities": [
+          "C端产品",
+          "作为游戏中台AI产品经理，负责平台产品全流程策划，包括需求调研、功能设计、原型制作等，确保产品功能满足用户需求和业务目标",
+          "负责搭建美术、视频、3D相关的AIGC工具与工作流",
+          "深入研究AI市场趋势、行业动态，与运营团队紧密合作，制定产品推广和营销策略，促进产品的市场推广和用户增长",
+          "根据数据分析结果和用户反馈，制定产品迭代计划，不断优化产品功能和用户体验，提升产品的市场竞争力",
+          "负责整体项目管理和策略跟进落地全流程，实现体验优化和业务增长的长期目标",
+          "腾娱】AI工具产品经理12-20K·13薪"
+        ],
+        "core_keywords": [
+          {
+            "keyword": "原型设计",
+            "category": "product",
+            "importance": "high",
+            "score": 5,
+            "evidence": "本科及以上学历，3年以上互联网产品经理工作经验，熟悉产品研发流程、能独立输出高品质交互、设计稿2、学习能力强、良好自驱力、基于目标导向的独立思考能力、良好的技术理解与沟通能力3、具备优秀的文案撰写、交互原型设计与审美能力"
+          },
+          {
+            "keyword": "沟通能力",
+            "category": "soft",
+            "importance": "high",
+            "score": 5,
+            "evidence": "本科及以上学历，3年以上互联网产品经理工作经验，熟悉产品研发流程、能独立输出高品质交互、设计稿2、学习能力强、良好自驱力、基于目标导向的独立思考能力、良好的技术理解与沟通能力3、具备优秀的文案撰写、交互原型设计与审美能力"
+          },
+          {
+            "keyword": "数据分析",
+            "category": "product",
+            "importance": "medium",
+            "score": 4,
+            "evidence": "根据数据分析结果和用户反馈，制定产品迭代计划，不断优化产品功能和用户体验，提升产品的市场竞争力"
+          },
+          {
+            "keyword": "AIGC",
+            "category": "technical",
+            "importance": "medium",
+            "score": 3,
+            "evidence": "负责搭建美术、视频、3D相关的AIGC工具与工作流"
+          },
+          {
+            "keyword": "需求调研",
+            "category": "product",
+            "importance": "medium",
+            "score": 3,
+            "evidence": "作为游戏中台AI产品经理，负责平台产品全流程策划，包括需求调研、功能设计、原型制作等，确保产品功能满足用户需求和业务目标"
+          },
+          {
+            "keyword": "项目管理",
+            "category": "product",
+            "importance": "medium",
+            "score": 3,
+            "evidence": "负责整体项目管理和策略跟进落地全流程，实现体验优化和业务增长的长期目标"
+          }
+        ]
+      },
+      "diff": {
+        "required_skills": {
+          "only_v3": [
+            "交互原型设计",
+            "交互设计",
+            "产品研发流程",
+            "审美能力",
+            "文案撰写"
+          ],
+          "only_v4": [
+            "AIGC",
+            "数据分析",
+            "需求调研",
+            "项目管理"
+          ],
+          "both": []
+        },
+        "preferred_skills": {
+          "only_v3": [
+            "AI产品工作经验",
+            "AI项目实践落地经验",
+            "学习能力强",
+            "影视行业制作流程",
+            "技术理解与沟通能力",
+            "数据分析原理",
+            "游戏行业制作流程",
+            "独立思考能力",
+            "目标导向",
+            "看板产品设计经验"
+          ],
+          "only_v4": [
+            "具备数据分析看板产品设计经验",
+            "工作地址",
+            "常用的数据分析原理",
+            "或有AI项目实践落地经验",
+            "数据分析",
+            "深圳南山区同方信息港",
+            "游戏或影视行业的制作流程"
+          ],
+          "both": []
+        },
+        "responsibilities": {
+          "only_v3": [
+            "优化产品功能和用户体验",
+            "促进市场推广和用户增长",
+            "制定产品推广和营销策略",
+            "制定产品迭代计划",
+            "功能设计",
+            "原型制作",
+            "平台产品全流程策划",
+            "搭建AIGC工具与工作流",
+            "整体项目管理",
+            "研究AI市场趋势",
+            "策略跟进落地",
+            "需求调研"
+          ],
+          "only_v4": [
+            "C端产品",
+            "作为游戏中台AI产品经理，负责平台产品全流程策划，包括需求调研、功能设计、原型制作等，确保产品功能满足用户需求和业务目标",
+            "根据数据分析结果和用户反馈，制定产品迭代计划，不断优化产品功能和用户体验，提升产品的市场竞争力",
+            "深入研究AI市场趋势、行业动态，与运营团队紧密合作，制定产品推广和营销策略，促进产品的市场推广和用户增长",
+            "腾娱】AI工具产品经理12-20K·13薪",
+            "负责搭建美术、视频、3D相关的AIGC工具与工作流",
+            "负责整体项目管理和策略跟进落地全流程，实现体验优化和业务增长的长期目标"
+          ],
+          "both": []
+        },
+        "core_keywords": {
+          "only_v3": [],
+          "only_v4": [
+            "AIGC",
+            "原型设计",
+            "数据分析",
+            "沟通能力",
+            "需求调研",
+            "项目管理"
+          ],
+          "both": []
+        }
+      }
+    },
+    {
+      "case_id": "real_027",
+      "v3": {
+        "required_skills": [
+          "Office办公软件",
+          "数据分析",
+          "逻辑分析",
+          "信息搜集",
+          "网络文案撰写",
+          "文档处理",
+          "中英文翻译",
+          "亚马逊测评管理",
+          "新供应商开发",
+          "ERP系统评估",
+          "商标与公司注册",
+          "保险采购",
+          "订单数据分析",
+          "客户投诉处理",
+          "售后回复模板",
+          "评价优化",
+          "海外仓比对",
+          "海外库存数据核实",
+          "订单跟进",
+          "物流跟进",
+          "VIP客户跟进",
+          "业务指标监控"
+        ],
+        "preferred_skills": [
+          "跨境电商总经理助理经验",
+          "亚马逊运营经验",
+          "B2B外贸业务经验",
+          "外贸跟单经验",
+          "抗压能力",
+          "目标导向意识",
+          "快节奏工作环境适应",
+          "积极主动",
+          "团队协作意识"
+        ],
+        "responsibilities": [],
+        "core_keywords": []
+      },
+      "v4": {
+        "required_skills": [
+          "数据分析"
+        ],
+        "preferred_skills": [],
+        "responsibilities": [
+          "贸易/物流专业外贸跟单英语可用于工作",
+          "商务支持：系统整理与分析各项订单数据（包括商超商务对接、订单状态、备货情况、货物跟进等），为业务决策提供数据支持及过程跟进",
+          "客户服务协助：参与客户投诉处理，完善售后回复模板，协调处理评价优化事宜，并定期汇总相关服务数据",
+          "物流协调：如大客订单跟进及物流跟进、海外仓比对与优化，协助物流部门核实海外库存数据，保障物流环节高效运转",
+          "专项协助：协助上级完成部分VIP客户的日常跟进及中英文翻译等事务",
+          "数据分析与处理：业务数据的分析，监控业务指标的运行情况，根据数据情况可以提出针对性优化建议，实现数据驱动业务增长",
+          "综合事务处理：高效完成上级交办的各类任务，包括但不限于商标与公司注册、保险采购、ERP系统评估、新供应商开发及亚马逊测评管理等",
+          "商务助理"
+        ],
+        "core_keywords": [
+          {
+            "keyword": "团队协作",
+            "category": "soft",
+            "importance": "high",
+            "score": 5,
+            "evidence": "熟练使用Office办公软件，优秀的数据处理及逻辑分析能力，注重细节，拥有良好的团队协作意识"
+          },
+          {
+            "keyword": "抗压能力",
+            "category": "soft",
+            "importance": "high",
+            "score": 5,
+            "evidence": "具备较强的抗压能力和目标导向意识，能够适应快节奏工作环境，积极主动推进任务完成"
+          },
+          {
+            "keyword": "客户服务协助：参与客户投诉处理，完善售后回复模板，协调处理评价优化事宜，并定期汇总相关服务数据",
+            "category": "soft",
+            "importance": "medium",
+            "score": 3,
+            "evidence": "客户服务协助：参与客户投诉处理，完善售后回复模板，协调处理评价优化事宜，并定期汇总相关服务数据"
+          },
+          {
+            "keyword": "数据分析",
+            "category": "product",
+            "importance": "medium",
+            "score": 3,
+            "evidence": "数据分析与处理：业务数据的分析，监控业务指标的运行情况，根据数据情况可以提出针对性优化建议，实现数据驱动业务增长"
+          }
+        ]
+      },
+      "diff": {
+        "required_skills": {
+          "only_v3": [
+            "ERP系统评估",
+            "Office办公软件",
+            "VIP客户跟进",
+            "业务指标监控",
+            "中英文翻译",
+            "亚马逊测评管理",
+            "保险采购",
+            "信息搜集",
+            "售后回复模板",
+            "商标与公司注册",
+            "客户投诉处理",
+            "文档处理",
+            "新供应商开发",
+            "海外仓比对",
+            "海外库存数据核实",
+            "物流跟进",
+            "网络文案撰写",
+            "订单数据分析",
+            "订单跟进",
+            "评价优化",
+            "逻辑分析"
+          ],
+          "only_v4": [],
+          "both": [
+            "数据分析"
+          ]
+        },
+        "preferred_skills": {
+          "only_v3": [
+            "B2B外贸业务经验",
+            "亚马逊运营经验",
+            "团队协作意识",
+            "外贸跟单经验",
+            "快节奏工作环境适应",
+            "抗压能力",
+            "目标导向意识",
+            "积极主动",
+            "跨境电商总经理助理经验"
+          ],
+          "only_v4": [],
+          "both": []
+        },
+        "responsibilities": {
+          "only_v3": [],
+          "only_v4": [
+            "专项协助：协助上级完成部分VIP客户的日常跟进及中英文翻译等事务",
+            "商务助理",
+            "商务支持：系统整理与分析各项订单数据（包括商超商务对接、订单状态、备货情况、货物跟进等），为业务决策提供数据支持及过程跟进",
+            "客户服务协助：参与客户投诉处理，完善售后回复模板，协调处理评价优化事宜，并定期汇总相关服务数据",
+            "数据分析与处理：业务数据的分析，监控业务指标的运行情况，根据数据情况可以提出针对性优化建议，实现数据驱动业务增长",
+            "物流协调：如大客订单跟进及物流跟进、海外仓比对与优化，协助物流部门核实海外库存数据，保障物流环节高效运转",
+            "综合事务处理：高效完成上级交办的各类任务，包括但不限于商标与公司注册、保险采购、ERP系统评估、新供应商开发及亚马逊测评管理等",
+            "贸易/物流专业外贸跟单英语可用于工作"
+          ],
+          "both": []
+        },
+        "core_keywords": {
+          "only_v3": [],
+          "only_v4": [
+            "团队协作",
+            "客户服务协助：参与客户投诉处理，完善售后回复模板，协调处理评价优化事宜，并定期汇总相关服务数据",
+            "抗压能力",
+            "数据分析"
+          ],
+          "both": []
+        }
+      }
+    },
+    {
+      "case_id": "real_028",
+      "v3": {
+        "required_skills": [
+          "欧美等市场潮流趋势",
+          "合规要求",
+          "市场嗅觉",
+          "数据分析能力",
+          "产品生产工艺",
+          "成本意识",
+          "跨部门沟通协调",
+          "抗压能力"
+        ],
+        "preferred_skills": [
+          "出海电商产品企划经验",
+          "IP联名项目经验"
+        ],
+        "responsibilities": [
+          "规划IP联名系列的产品矩阵、价格带与上市波段，确保IP风格与品牌调性融合",
+          "联动设计、运营、合规等团队，参与出海电商产品开发，协同供应链完成打样、审版、量产与成本管控",
+          "监控销售数据、库存周转与毛利表现，对销售目标负责；输出产品上市复盘，持续优化IP合作方向与产品策略"
+        ],
+        "core_keywords": []
+      },
+      "v4": {
+        "required_skills": [
+          "数据分析",
+          "产品生产工艺",
+          "成本意识强"
+        ],
+        "preferred_skills": [
+          "3年以上产品开发",
+          "产品企划经验",
+          "具备出海电商产品企划经验",
+          "有IP联名项目经验"
+        ],
+        "responsibilities": [
+          "基于欧美市场趋势与消费者洞察，规划IP联名系列的产品矩阵、价格带与上市波段，确保IP风格与品牌调性融合",
+          "联动设计、运营、合规等团队，参与出海电商产品开发，协同供应链完成打样、审版、量产与成本管控",
+          "监控销售数据、库存周转与毛利表现，对销售目标负责",
+          "输出产品上市复盘，持续优化IP合作方向与产品策略"
+        ],
+        "core_keywords": [
+          {
+            "keyword": "数据分析",
+            "category": "product",
+            "importance": "high",
+            "score": 5,
+            "evidence": "熟悉欧美等市场潮流趋势与合规要求，具备敏锐的市场嗅觉与数据分析能力"
+          },
+          {
+            "keyword": "抗压能力",
+            "category": "soft",
+            "importance": "medium",
+            "score": 4,
+            "evidence": "跨部门沟通协调能力强，抗压能力佳"
+          }
+        ]
+      },
+      "diff": {
+        "required_skills": {
+          "only_v3": [
+            "合规要求",
+            "市场嗅觉",
+            "成本意识",
+            "抗压能力",
+            "数据分析能力",
+            "欧美等市场潮流趋势",
+            "跨部门沟通协调"
+          ],
+          "only_v4": [
+            "成本意识强",
+            "数据分析"
+          ],
+          "both": [
+            "产品生产工艺"
+          ]
+        },
+        "preferred_skills": {
+          "only_v3": [
+            "IP联名项目经验",
+            "出海电商产品企划经验"
+          ],
+          "only_v4": [
+            "3年以上产品开发",
+            "产品企划经验",
+            "具备出海电商产品企划经验",
+            "有IP联名项目经验"
+          ],
+          "both": []
+        },
+        "responsibilities": {
+          "only_v3": [
+            "监控销售数据、库存周转与毛利表现，对销售目标负责；输出产品上市复盘，持续优化IP合作方向与产品策略",
+            "规划IP联名系列的产品矩阵、价格带与上市波段，确保IP风格与品牌调性融合"
+          ],
+          "only_v4": [
+            "基于欧美市场趋势与消费者洞察，规划IP联名系列的产品矩阵、价格带与上市波段，确保IP风格与品牌调性融合",
+            "监控销售数据、库存周转与毛利表现，对销售目标负责",
+            "输出产品上市复盘，持续优化IP合作方向与产品策略"
+          ],
+          "both": [
+            "联动设计、运营、合规等团队，参与出海电商产品开发，协同供应链完成打样、审版、量产与成本管控"
+          ]
+        },
+        "core_keywords": {
+          "only_v3": [],
+          "only_v4": [
+            "抗压能力",
+            "数据分析"
+          ],
+          "both": []
+        }
+      }
+    },
+    {
+      "case_id": "real_029",
+      "v3": {
+        "required_skills": [
+          "Excel数据透视表",
+          "Excel函数",
+          "数据分析",
+          "逻辑思维",
+          "财务合规审核",
+          "预算管理",
+          "费用管控",
+          "降本增效",
+          "跨部门协作",
+          "制造业环境适应",
+          "问题闭环管理"
+        ],
+        "preferred_skills": [
+          "沟通协调",
+          "抗压能力"
+        ],
+        "responsibilities": [
+          "负责公共事务中心与资产平台年度预算编制、执行监控及滚动预测",
+          "统筹月度财务结账与资金计划管理",
+          "对费用支出、采购合同等业务进行财务合规审核",
+          "作为财务接口人，承接并推动专项事项落地"
+        ],
+        "core_keywords": []
+      },
+      "v4": {
+        "required_skills": [],
+        "preferred_skills": [],
+        "responsibilities": [
+          "负责公共事务中心与资产平台年度预算编制、执行监控及滚动预测，确保预算目标达成率不低于95%",
+          "统筹月度财务结账与资金计划管理，保障结账准确率100%及资金使用效率提升10%",
+          "对费用支出、采购合同等业务进行财务合规审核，识别并推动整改合规问题，确保风险闭环"
+        ],
+        "core_keywords": [
+          {
+            "keyword": "数据分析",
+            "category": "product",
+            "importance": "high",
+            "score": 6,
+            "evidence": "熟练掌握Excel数据透视表及函数，具备出色的数据分析与逻辑思维能力"
+          },
+          {
+            "keyword": "逻辑思维",
+            "category": "soft",
+            "importance": "high",
+            "score": 6,
+            "evidence": "熟练掌握Excel数据透视表及函数，具备出色的数据分析与逻辑思维能力"
+          },
+          {
+            "keyword": "协作能力",
+            "category": "soft",
+            "importance": "high",
+            "score": 5,
+            "evidence": "具备优秀的沟通协调与跨部门协作能力，抗压性强，能快速适应制造业环境并独立开展工作"
+          },
+          {
+            "keyword": "统筹月度财务结账与资金计划管理，保障结账准确率100%及资金使用效率提升10%",
+            "category": "soft",
+            "importance": "medium",
+            "score": 3,
+            "evidence": "统筹月度财务结账与资金计划管理，保障结账准确率100%及资金使用效率提升10%"
+          },
+          {
+            "keyword": "问题解决",
+            "category": "soft",
+            "importance": "medium",
+            "score": 3,
+            "evidence": "作为财务接口人，承接并推动专项事项落地，确保事项闭环管理并及时反馈，问题解决率100%"
+          }
+        ]
+      },
+      "diff": {
+        "required_skills": {
+          "only_v3": [
+            "Excel函数",
+            "Excel数据透视表",
+            "制造业环境适应",
+            "数据分析",
+            "财务合规审核",
+            "费用管控",
+            "跨部门协作",
+            "逻辑思维",
+            "问题闭环管理",
+            "降本增效",
+            "预算管理"
+          ],
+          "only_v4": [],
+          "both": []
+        },
+        "preferred_skills": {
+          "only_v3": [
+            "抗压能力",
+            "沟通协调"
+          ],
+          "only_v4": [],
+          "both": []
+        },
+        "responsibilities": {
+          "only_v3": [
+            "作为财务接口人，承接并推动专项事项落地",
+            "对费用支出、采购合同等业务进行财务合规审核",
+            "统筹月度财务结账与资金计划管理",
+            "负责公共事务中心与资产平台年度预算编制、执行监控及滚动预测"
+          ],
+          "only_v4": [
+            "对费用支出、采购合同等业务进行财务合规审核，识别并推动整改合规问题，确保风险闭环",
+            "统筹月度财务结账与资金计划管理，保障结账准确率100%及资金使用效率提升10%",
+            "负责公共事务中心与资产平台年度预算编制、执行监控及滚动预测，确保预算目标达成率不低于95%"
+          ],
+          "both": []
+        },
+        "core_keywords": {
+          "only_v3": [],
+          "only_v4": [
+            "协作能力",
+            "数据分析",
+            "统筹月度财务结账与资金计划管理，保障结账准确率100%及资金使用效率提升10%",
+            "逻辑思维",
+            "问题解决"
+          ],
+          "both": []
+        }
+      }
+    },
+    {
+      "case_id": "real_030",
+      "v3": {
+        "required_skills": [
+          "薪酬福利体系管理",
+          "薪酬核算与发放",
+          "个税申报与汇算清缴",
+          "社保公积金管理",
+          "人力成本预算与分析",
+          "员工档案管理",
+          "薪酬报表制作",
+          "员工落户与人才引进",
+          "第三方机构对接",
+          "外部统计与报送"
+        ],
+        "preferred_skills": [],
+        "responsibilities": [
+          "协助上级定期修订并完善广州办公室薪酬福利管理体系、制度及操作流程",
+          "负责广州办公室员工月度考勤统计、薪酬核算与发放",
+          "负责员工个人所得税的月度申报、年度汇算清缴及专项附加扣除的维护与答疑",
+          "制作薪酬相关报表（如工资条、薪酬汇总表）",
+          "负责广州地区社保、公积金的日常操作，包括月度增减员报送、费用核算与缴纳",
+          "负责年度社保缴费基数申报与公积金基数调整工作",
+          "办理新员工参保、新主体社保/公积金开户、跨省/市社保转移接续等手续",
+          "协助编制广州办公室年度人力成本预算，按月/季度进行人力成本统计、偏差分析及预警",
+          "提供各部门人力成本分摊数据",
+          "负责员工全生命周期管理：入职手续办理、劳动合同签订/续签/变更/解除、转正、调岗、离职手续等",
+          "建立并维护员工人事档案（电子及纸质）",
+          "负责广州办公室员工落户、人才引进、居住证积分等政策性事务的办理",
+          "定期维护与第三方机构的合作",
+          "负责向外部机构（如工商、统计、人社等部门）报送各类人力资源相关报表",
+          "作为广州办公室员工薪酬、福利、社保公积金、人事流程等日常疑问的第一责任人，提供及时、专业的解答与指引"
+        ],
+        "core_keywords": []
+      },
+      "v4": {
+        "required_skills": [],
+        "preferred_skills": [],
+        "responsibilities": [
+          "参与年度薪酬调研，提出薪酬结构优化建议",
+          "负责员工个人所得税的月度申报、年度汇算清缴及专项附加扣除的维护与答疑",
+          "负责年度社保缴费基数申报与公积金基数调整工作",
+          "跟进广州当地社保公积金政策变动，及时调整内部操作流程",
+          "负责广州办公室员工落户、人才引进、居住证积分等政策性事务的办理",
+          "职位介绍",
+          "薪酬福利体系管理：根据业务发展需要，协助上级定期修订并完善广州办公室薪酬福利管理体系、制度及操作流程，确保符合总部政策与地方法规",
+          "薪酬核算与个税管理：负责广州办公室员工月度考勤统计、薪酬核算与发放，确保数据准确、按时完成",
+          "制作薪酬相关报表（如工资条、薪酬汇总表",
+          "社保公积金管理：负责广州地区社保、公积金的日常操作，包括月度增减员报送、费用核算与缴纳",
+          "办理新员工参保、新主体社保/公积金开户、跨省/市社保转移接续等手续",
+          "人力成本预算与分析：协助编制广州办公室年度人力成本预算，按月/季度进行人力成本统计、偏差分析及预警",
+          "提供各部门人力成本分摊数据，为管理决策提供数据支持",
+          "员工关系与人事服务：负责员工全生命周期管理：入职手续办理、劳动合同签订/续签/变更/解除、转正、调岗、离职手续等",
+          "建立并维护员工人事档案（电子及纸质），确保档案完整、合规、可追溯",
+          "第三方机构对接：定期维护与第三方机构的合作，确保日常工作有序进行",
+          "外部统计与报送：负责向外部机构（如工商、统计、人社等部门）报送各类人力资源相关报表，包括但不限于工商年检、经济普查信息填报、劳动工资统计年报等",
+          "员工咨询与支持：作为广州办公室员工薪酬、福利、社保公积金、人事流程等日常疑问的第一责任人，提供及时、专业的解答与指引",
+          "完成领导交办的其他工作"
+        ],
+        "core_keywords": [
+          {
+            "keyword": "员工关系与人事服务：负责员工全生命周期管理：入职手续办理、劳动合同签订/续签/变更/解除、转正、调岗、离职手续等",
+            "category": "soft",
+            "importance": "low",
+            "score": 1,
+            "evidence": "员工关系与人事服务：负责员工全生命周期管理：入职手续办理、劳动合同签订/续签/变更/解除、转正、调岗、离职手续等"
+          }
+        ]
+      },
+      "diff": {
+        "required_skills": {
+          "only_v3": [
+            "个税申报与汇算清缴",
+            "人力成本预算与分析",
+            "员工档案管理",
+            "员工落户与人才引进",
+            "外部统计与报送",
+            "社保公积金管理",
+            "第三方机构对接",
+            "薪酬报表制作",
+            "薪酬核算与发放",
+            "薪酬福利体系管理"
+          ],
+          "only_v4": [],
+          "both": []
+        },
+        "preferred_skills": {
+          "only_v3": [],
+          "only_v4": [],
+          "both": []
+        },
+        "responsibilities": {
+          "only_v3": [
+            "作为广州办公室员工薪酬、福利、社保公积金、人事流程等日常疑问的第一责任人，提供及时、专业的解答与指引",
+            "制作薪酬相关报表（如工资条、薪酬汇总表）",
+            "协助上级定期修订并完善广州办公室薪酬福利管理体系、制度及操作流程",
+            "协助编制广州办公室年度人力成本预算，按月/季度进行人力成本统计、偏差分析及预警",
+            "定期维护与第三方机构的合作",
+            "建立并维护员工人事档案（电子及纸质）",
+            "提供各部门人力成本分摊数据",
+            "负责向外部机构（如工商、统计、人社等部门）报送各类人力资源相关报表",
+            "负责员工全生命周期管理：入职手续办理、劳动合同签订/续签/变更/解除、转正、调岗、离职手续等",
+            "负责广州办公室员工月度考勤统计、薪酬核算与发放",
+            "负责广州地区社保、公积金的日常操作，包括月度增减员报送、费用核算与缴纳"
+          ],
+          "only_v4": [
+            "人力成本预算与分析：协助编制广州办公室年度人力成本预算，按月/季度进行人力成本统计、偏差分析及预警",
+            "制作薪酬相关报表（如工资条、薪酬汇总表",
+            "参与年度薪酬调研，提出薪酬结构优化建议",
+            "员工关系与人事服务：负责员工全生命周期管理：入职手续办理、劳动合同签订/续签/变更/解除、转正、调岗、离职手续等",
+            "员工咨询与支持：作为广州办公室员工薪酬、福利、社保公积金、人事流程等日常疑问的第一责任人，提供及时、专业的解答与指引",
+            "外部统计与报送：负责向外部机构（如工商、统计、人社等部门）报送各类人力资源相关报表，包括但不限于工商年检、经济普查信息填报、劳动工资统计年报等",
+            "完成领导交办的其他工作",
+            "建立并维护员工人事档案（电子及纸质），确保档案完整、合规、可追溯",
+            "提供各部门人力成本分摊数据，为管理决策提供数据支持",
+            "社保公积金管理：负责广州地区社保、公积金的日常操作，包括月度增减员报送、费用核算与缴纳",
+            "第三方机构对接：定期维护与第三方机构的合作，确保日常工作有序进行",
+            "职位介绍",
+            "薪酬核算与个税管理：负责广州办公室员工月度考勤统计、薪酬核算与发放，确保数据准确、按时完成",
+            "薪酬福利体系管理：根据业务发展需要，协助上级定期修订并完善广州办公室薪酬福利管理体系、制度及操作流程，确保符合总部政策与地方法规",
+            "跟进广州当地社保公积金政策变动，及时调整内部操作流程"
+          ],
+          "both": [
+            "办理新员工参保、新主体社保/公积金开户、跨省/市社保转移接续等手续",
+            "负责员工个人所得税的月度申报、年度汇算清缴及专项附加扣除的维护与答疑",
+            "负责年度社保缴费基数申报与公积金基数调整工作",
+            "负责广州办公室员工落户、人才引进、居住证积分等政策性事务的办理"
+          ]
+        },
+        "core_keywords": {
+          "only_v3": [],
+          "only_v4": [
+            "员工关系与人事服务：负责员工全生命周期管理：入职手续办理、劳动合同签订/续签/变更/解除、转正、调岗、离职手续等"
+          ],
+          "both": []
+        }
+      }
+    },
+    {
+      "case_id": "real_031",
+      "v3": {
+        "required_skills": [
+          "时尚内容趋势",
+          "创作者内容质量",
+          "平台适配性",
+          "数据意识",
+          "项目管理能力",
+          "创作者建联",
+          "关系维护",
+          "独立推进"
+        ],
+        "preferred_skills": [
+          "泛时尚相关垂类经验",
+          "行业资源"
+        ],
+        "responsibilities": [
+          "挖掘泛时尚领域具备视频生产能力和平台适配度的站外创作者",
+          "建立创作者筛选、建联、入驻及冷启动跟进机制",
+          "推动引入作者完成稳定视频内容生产和账号经营",
+          "建立头部、腰部及潜力作者分层运营策略",
+          "针对重点作者制定月度成长计划",
+          "协同流量、活动、产品等资源推动目标达成",
+          "持续跟进作者内容表现与合作体验，提升创作者活跃及留存",
+          "负责领域自有内容IP的策划、创作者组织、全周期传播及项目复盘",
+          "沉淀IP运营方法论，提升活动影响力、创作者参与度及商业合作承接能力"
+        ],
+        "core_keywords": [
+          {
+            "keyword": "创作者运营",
+            "category": "岗位核心",
+            "importance": "high",
+            "score": 5,
+            "evidence": "挖掘泛时尚领域具备视频生产能力和平台适配度的站外创作者"
+          },
+          {
+            "keyword": "IP策划与运营",
+            "category": "岗位核心",
+            "importance": "high",
+            "score": 5,
+            "evidence": "负责领域自有内容IP的策划、创作者组织、全周期传播及项目复盘"
+          },
+          {
+            "keyword": "数据驱动",
+            "category": "岗位核心",
+            "importance": "high",
+            "score": 5,
+            "evidence": "具备较强的数据意识和项目管理能力，能够基于运营表现优化调整策略"
+          },
+          {
+            "keyword": "跨团队协同",
+            "category": "岗位核心",
+            "importance": "medium",
+            "score": 3,
+            "evidence": "具备跨团队协同能力"
+          }
+        ]
+      },
+      "v4": {
+        "required_skills": [
+          "较强的创作者建联",
+          "可独立推进合作与项目落地",
+          "项目管理"
+        ],
+        "preferred_skills": [
+          "1年以上创作者",
+          "达人运营相关经验",
+          "有泛时尚相关垂类经验",
+          "相关行业资源"
+        ],
+        "responsibilities": [
+          "视频作者拓展：挖掘泛时尚领域具备视频生产能力和平台适配度的站外创作者，建立创作者筛选、建联、入驻及冷启动跟进机制",
+          "推动引入作者完成稳定视频内容生产和账号经营",
+          "重点及潜力创作者分层运营：建立头部、腰部及潜力作者分层运营策略，针对重点作者制定月度成长计划，协同流量、活动、产品等资源推动目标达成",
+          "持续跟进作者内容表现与合作体验，提升创作者活跃及留存",
+          "时尚内容IP策划与运营：负责领域自有内容IP的策划、创作者组织、全周期传播及项目复盘",
+          "沉淀IP运营方法论，提升活动影响力、创作者参与度及商业合作承接能力"
+        ],
+        "core_keywords": [
+          {
+            "keyword": "执行力",
+            "category": "soft",
+            "importance": "high",
+            "score": 5,
+            "evidence": "对时尚内容趋势、创作者内容质量及平台适配性有基础判断能力，执行力强，能适应多项目并行，并具备跨团队协同能力"
+          },
+          {
+            "keyword": "的创作者建联、沟通及关系维护能力，可独立推进合作与项目落地",
+            "category": "soft",
+            "importance": "high",
+            "score": 5,
+            "evidence": "具备较强的创作者建联、沟通及关系维护能力，可独立推进合作与项目落地"
+          },
+          {
+            "keyword": "项目管理",
+            "category": "product",
+            "importance": "high",
+            "score": 5,
+            "evidence": "具备较强的数据意识和项目管理能力，能够基于运营表现优化调整策略"
+          }
+        ]
+      },
+      "diff": {
+        "required_skills": {
+          "only_v3": [
+            "关系维护",
+            "创作者内容质量",
+            "创作者建联",
+            "平台适配性",
+            "数据意识",
+            "时尚内容趋势",
+            "独立推进",
+            "项目管理能力"
+          ],
+          "only_v4": [
+            "可独立推进合作与项目落地",
+            "较强的创作者建联",
+            "项目管理"
+          ],
+          "both": []
+        },
+        "preferred_skills": {
+          "only_v3": [
+            "泛时尚相关垂类经验",
+            "行业资源"
+          ],
+          "only_v4": [
+            "1年以上创作者",
+            "有泛时尚相关垂类经验",
+            "相关行业资源",
+            "达人运营相关经验"
+          ],
+          "both": []
+        },
+        "responsibilities": {
+          "only_v3": [
+            "协同流量、活动、产品等资源推动目标达成",
+            "建立创作者筛选、建联、入驻及冷启动跟进机制",
+            "建立头部、腰部及潜力作者分层运营策略",
+            "挖掘泛时尚领域具备视频生产能力和平台适配度的站外创作者",
+            "负责领域自有内容IP的策划、创作者组织、全周期传播及项目复盘",
+            "针对重点作者制定月度成长计划"
+          ],
+          "only_v4": [
+            "时尚内容IP策划与运营：负责领域自有内容IP的策划、创作者组织、全周期传播及项目复盘",
+            "视频作者拓展：挖掘泛时尚领域具备视频生产能力和平台适配度的站外创作者，建立创作者筛选、建联、入驻及冷启动跟进机制",
+            "重点及潜力创作者分层运营：建立头部、腰部及潜力作者分层运营策略，针对重点作者制定月度成长计划，协同流量、活动、产品等资源推动目标达成"
+          ],
+          "both": [
+            "持续跟进作者内容表现与合作体验，提升创作者活跃及留存",
+            "推动引入作者完成稳定视频内容生产和账号经营",
+            "沉淀IP运营方法论，提升活动影响力、创作者参与度及商业合作承接能力"
+          ]
+        },
+        "core_keywords": {
+          "only_v3": [
+            "IP策划与运营",
+            "创作者运营",
+            "数据驱动",
+            "跨团队协同"
+          ],
+          "only_v4": [
+            "执行力",
+            "的创作者建联、沟通及关系维护能力，可独立推进合作与项目落地",
+            "项目管理"
+          ],
+          "both": []
+        }
+      }
+    },
+    {
+      "case_id": "real_032",
+      "v3": {
+        "required_skills": [
+          "PS",
+          "AI",
+          "包装印刷工艺",
+          "生产流程",
+          "化妆品行业",
+          "包装设计",
+          "视觉标准",
+          "行业趋势",
+          "品牌定位",
+          "用户需求",
+          "包装打样",
+          "创意能力",
+          "审美能力",
+          "项目统筹能力",
+          "沟通协调能力"
+        ],
+        "preferred_skills": [
+          "快消品行业",
+          "包装设计管理经验",
+          "包装设计落地案例",
+          "视觉传达",
+          "包装设计",
+          "包装设计专业"
+        ],
+        "responsibilities": [
+          "负责化妆品全产品线包装设计体系搭建，制定包装设计规范与视觉标准",
+          "主导新品包装设计、老品包装升级项目，统筹从创意构思到落地打样全流程",
+          "对接供应商、印刷厂等合作方，把控包装打样、生产落地的质量与进度",
+          "分析行业包装设计趋势，结合品牌定位与用户需求，持续优化包装视觉体系",
+          "管理设计团队，分配设计任务，把控团队输出质量，提升团队专业能力",
+          "设计规范",
+          "设计体系"
+        ],
+        "core_keywords": []
+      },
+      "v4": {
+        "required_skills": [
+          "使用PS",
+          "AI等设计软件",
+          "熟悉包装印刷工艺与生产流程"
+        ],
+        "preferred_skills": [],
+        "responsibilities": [
+          "负责化妆品全产品线包装设计体系搭建，制定包装设计规范与视觉标准",
+          "主导新品包装设计、老品包装升级项目，统筹从创意构思到落地打样全流程",
+          "对接供应商、印刷厂等合作方，把控包装打样、生产落地的质量与进度",
+          "分析行业包装设计趋势，结合品牌定位与用户需求，持续优化包装视觉体系",
+          "管理设计团队，分配设计任务，把控团队输出质量，提升团队专业能力"
+        ],
+        "core_keywords": [
+          {
+            "keyword": "统筹能力",
+            "category": "soft",
+            "importance": "high",
+            "score": 5,
+            "evidence": "具备优秀的创意能力、审美能力与项目统筹能力，沟通协调能力强"
+          },
+          {
+            "keyword": "主导新品包装设计、老品包装升级项目，统筹从创意构思到落地打样全流程",
+            "category": "soft",
+            "importance": "medium",
+            "score": 3,
+            "evidence": "主导新品包装设计、老品包装升级项目，统筹从创意构思到落地打样全流程"
+          }
+        ]
+      },
+      "diff": {
+        "required_skills": {
+          "only_v3": [
+            "AI",
+            "PS",
+            "创意能力",
+            "包装印刷工艺",
+            "包装打样",
+            "包装设计",
+            "化妆品行业",
+            "品牌定位",
+            "审美能力",
+            "沟通协调能力",
+            "生产流程",
+            "用户需求",
+            "行业趋势",
+            "视觉标准",
+            "项目统筹能力"
+          ],
+          "only_v4": [
+            "AI等设计软件",
+            "使用PS",
+            "熟悉包装印刷工艺与生产流程"
+          ],
+          "both": []
+        },
+        "preferred_skills": {
+          "only_v3": [
+            "包装设计",
+            "包装设计专业",
+            "包装设计管理经验",
+            "包装设计落地案例",
+            "快消品行业",
+            "视觉传达"
+          ],
+          "only_v4": [],
+          "both": []
+        },
+        "responsibilities": {
+          "only_v3": [
+            "设计体系",
+            "设计规范"
+          ],
+          "only_v4": [],
+          "both": [
+            "主导新品包装设计、老品包装升级项目，统筹从创意构思到落地打样全流程",
+            "分析行业包装设计趋势，结合品牌定位与用户需求，持续优化包装视觉体系",
+            "对接供应商、印刷厂等合作方，把控包装打样、生产落地的质量与进度",
+            "管理设计团队，分配设计任务，把控团队输出质量，提升团队专业能力",
+            "负责化妆品全产品线包装设计体系搭建，制定包装设计规范与视觉标准"
+          ]
+        },
+        "core_keywords": {
+          "only_v3": [],
+          "only_v4": [
+            "主导新品包装设计、老品包装升级项目，统筹从创意构思到落地打样全流程",
+            "统筹能力"
+          ],
+          "both": []
+        }
+      }
+    },
+    {
+      "case_id": "real_033",
+      "v3": {
+        "required_skills": [],
+        "preferred_skills": [],
+        "responsibilities": [],
+        "core_keywords": []
+      },
+      "v4": {
+        "required_skills": [
+          "国家财税法律法规及企业财务制度",
+          "具备优秀的税务筹划能力",
+          "较强的财务分析",
+          "预算管理及资金运作能力",
+          "使用财务软件及办公软件",
+          "熟悉 ERP 系统（如 SAP",
+          "Oracle",
+          "金蝶",
+          "用友等",
+          "优秀的战略思维",
+          "商业敏感度",
+          "全局观念"
+        ],
+        "preferred_skills": [
+          "CPA",
+          "CMA",
+          "高级会计师"
+        ],
+        "responsibilities": [
+          "财务战略与规划：根据公司整体战略，制定并执行财务战略规划，支撑业务长期健康发展",
+          "参与公司重大经营决策，从财务视角提供可行性分析与风险评估",
+          "建立健全财务管理体系，持续优化财务制度、流程及标准化建设",
+          "预算与经营分析：主导年度预算编制、滚动预测及执行监控，确保资源合理配置",
+          "建立经营分析体系，定期输出财务分析报告，为管理层决策提供数据支持",
+          "监控关键财务指标，预警经营风险，推动业务部门达成经营目标",
+          "资金与融资管理：统筹公司资金计划，优化资金结构，提高资金使用效率",
+          "拓展并维护银行、金融机构及投资人关系，主导融资、授信及资本运作",
+          "管理现金流安全，确保公司日常运营及发展所需资金",
+          "税务筹划与合规：统筹公司税务筹划，合理降低税务成本，防范税务风险",
+          "确保各项纳税申报、汇算清缴及税务稽查应对的及时性与合规性",
+          "跟踪财税政策变化，及时调整税务策略并落地执行",
+          "内控与风险管理：建立并完善内部控制体系，防范财务及运营风险",
+          "主导或配合内外部审计，确保审计工作顺利完成",
+          "监控应收账款、存货及成本管控，推动降本增效",
+          "团队建设与管理：搭建并管理财务团队，明确分工、优化梯队，提升团队专业能力",
+          "推动财务数字化转型，提升财务信息化、自动化水平",
+          "负责财务部门日常管理及跨部门协作"
+        ],
+        "core_keywords": [
+          {
+            "keyword": "沟通能力",
+            "category": "soft",
+            "importance": "high",
+            "score": 5,
+            "evidence": "具备出色的跨部门沟通能力及团队领导力"
+          },
+          {
+            "keyword": "责任心",
+            "category": "soft",
+            "importance": "high",
+            "score": 5,
+            "evidence": "责任心强、作风严谨、具备良好的职业操守及优秀的保密意识"
+          },
+          {
+            "keyword": "税务筹划与合规：统筹公司税务筹划，合理降低税务成本，防范税务风险",
+            "category": "soft",
+            "importance": "medium",
+            "score": 3,
+            "evidence": "税务筹划与合规：统筹公司税务筹划，合理降低税务成本，防范税务风险"
+          },
+          {
+            "keyword": "负责财务部门日常管理及跨部门协作",
+            "category": "soft",
+            "importance": "medium",
+            "score": 3,
+            "evidence": "负责财务部门日常管理及跨部门协作"
+          },
+          {
+            "keyword": "资金与融资管理：统筹公司资金计划，优化资金结构，提高资金使用效率",
+            "category": "soft",
+            "importance": "medium",
+            "score": 3,
+            "evidence": "资金与融资管理：统筹公司资金计划，优化资金结构，提高资金使用效率"
+          }
+        ]
+      },
+      "diff": {
+        "required_skills": {
+          "only_v3": [],
+          "only_v4": [
+            "Oracle",
+            "优秀的战略思维",
+            "使用财务软件及办公软件",
+            "全局观念",
+            "具备优秀的税务筹划能力",
+            "商业敏感度",
+            "国家财税法律法规及企业财务制度",
+            "熟悉 ERP 系统（如 SAP",
+            "用友等",
+            "较强的财务分析",
+            "金蝶",
+            "预算管理及资金运作能力"
+          ],
+          "both": []
+        },
+        "preferred_skills": {
+          "only_v3": [],
+          "only_v4": [
+            "CMA",
+            "CPA",
+            "高级会计师"
+          ],
+          "both": []
+        },
+        "responsibilities": {
+          "only_v3": [],
+          "only_v4": [
+            "主导或配合内外部审计，确保审计工作顺利完成",
+            "内控与风险管理：建立并完善内部控制体系，防范财务及运营风险",
+            "参与公司重大经营决策，从财务视角提供可行性分析与风险评估",
+            "团队建设与管理：搭建并管理财务团队，明确分工、优化梯队，提升团队专业能力",
+            "建立健全财务管理体系，持续优化财务制度、流程及标准化建设",
+            "建立经营分析体系，定期输出财务分析报告，为管理层决策提供数据支持",
+            "拓展并维护银行、金融机构及投资人关系，主导融资、授信及资本运作",
+            "推动财务数字化转型，提升财务信息化、自动化水平",
+            "监控关键财务指标，预警经营风险，推动业务部门达成经营目标",
+            "监控应收账款、存货及成本管控，推动降本增效",
+            "确保各项纳税申报、汇算清缴及税务稽查应对的及时性与合规性",
+            "税务筹划与合规：统筹公司税务筹划，合理降低税务成本，防范税务风险",
+            "管理现金流安全，确保公司日常运营及发展所需资金",
+            "负责财务部门日常管理及跨部门协作",
+            "财务战略与规划：根据公司整体战略，制定并执行财务战略规划，支撑业务长期健康发展",
+            "资金与融资管理：统筹公司资金计划，优化资金结构，提高资金使用效率",
+            "跟踪财税政策变化，及时调整税务策略并落地执行",
+            "预算与经营分析：主导年度预算编制、滚动预测及执行监控，确保资源合理配置"
+          ],
+          "both": []
+        },
+        "core_keywords": {
+          "only_v3": [],
+          "only_v4": [
+            "沟通能力",
+            "税务筹划与合规：统筹公司税务筹划，合理降低税务成本，防范税务风险",
+            "负责财务部门日常管理及跨部门协作",
+            "责任心",
+            "资金与融资管理：统筹公司资金计划，优化资金结构，提高资金使用效率"
+          ],
+          "both": []
+        }
+      }
+    },
+    {
+      "case_id": "real_034",
+      "v3": {
+        "required_skills": [
+          "锂电回收工艺",
+          "设备",
+          "人员管理",
+          "品质管理",
+          "成本管理",
+          "安环管理"
+        ],
+        "preferred_skills": [
+          "沟通",
+          "分析",
+          "解决问题",
+          "组织协调能力",
+          "责任心",
+          "团队合作精神",
+          "创新意识"
+        ],
+        "responsibilities": [
+          "制定年度/月度/周生产计划",
+          "合理安排生产任务，协调人员、设备、物料等资源",
+          "保障订单按时交付",
+          "动态监控生产进度，及时调整计划",
+          "严格执行生产工艺标准和操作规程",
+          "确保产品符合质量要求",
+          "监督生产现场安全、6S管理",
+          "杜绝安全事故",
+          "优化生产流程",
+          "提高生产效率，降低生产成本",
+          "定期组织人员分析生产和技术情况，总结经验",
+          "监控原材料、人工、能源等生产消耗",
+          "分析成本偏差并制定改进措施",
+          "推进精益生产，减少浪费、提高人机效率"
+        ],
+        "core_keywords": []
+      },
+      "v4": {
+        "required_skills": [
+          "人员管理",
+          "品质管理",
+          "成本管理",
+          "安环管理等相关知识"
+        ],
+        "preferred_skills": [
+          "锂电回收工艺",
+          "设备及生产相关经验"
+        ],
+        "responsibilities": [
+          "根据公司目标和计划，制定年度/月度/周生产计划，确保产能与需求匹配",
+          "合理安排生产任务，协调人员、设备、物料等资源，保障订单按时交付动态监控生产进度，及时调整计划以应对突发情况",
+          "严格执行生产工艺标准和操作规程，确保产品符合质量要求，监督生产现场安全、6S管理，杜绝安全事故",
+          "优化生产流程，提高生产效率，降低生产成本（如能耗、废品率等",
+          "定期组织人员分析生产和技术情况，总结经验，提高生产管理与技术水平",
+          "监控原材料、人工、能源等生产消耗，分析成本偏差并制定改进措施",
+          "推进精益生产（如减少浪费、提高人机效率），实现降本增效"
+        ],
+        "core_keywords": [
+          {
+            "keyword": "团队合作",
+            "category": "soft",
+            "importance": "high",
+            "score": 5,
+            "evidence": "具备较强的沟通、分析、解决问题、组织协调能力，有强烈的责任心和团队合作精神"
+          },
+          {
+            "keyword": "沟通能力",
+            "category": "soft",
+            "importance": "high",
+            "score": 5,
+            "evidence": "具备良好的沟通能力、团队合作精神和创新意识"
+          }
+        ]
+      },
+      "diff": {
+        "required_skills": {
+          "only_v3": [
+            "安环管理",
+            "设备",
+            "锂电回收工艺"
+          ],
+          "only_v4": [
+            "安环管理等相关知识"
+          ],
+          "both": [
+            "人员管理",
+            "品质管理",
+            "成本管理"
+          ]
+        },
+        "preferred_skills": {
+          "only_v3": [
+            "分析",
+            "创新意识",
+            "团队合作精神",
+            "沟通",
+            "组织协调能力",
+            "解决问题",
+            "责任心"
+          ],
+          "only_v4": [
+            "设备及生产相关经验",
+            "锂电回收工艺"
+          ],
+          "both": []
+        },
+        "responsibilities": {
+          "only_v3": [
+            "严格执行生产工艺标准和操作规程",
+            "优化生产流程",
+            "保障订单按时交付",
+            "分析成本偏差并制定改进措施",
+            "制定年度/月度/周生产计划",
+            "动态监控生产进度，及时调整计划",
+            "合理安排生产任务，协调人员、设备、物料等资源",
+            "定期组织人员分析生产和技术情况，总结经验",
+            "推进精益生产，减少浪费、提高人机效率",
+            "提高生产效率，降低生产成本",
+            "杜绝安全事故",
+            "监控原材料、人工、能源等生产消耗",
+            "监督生产现场安全、6S管理",
+            "确保产品符合质量要求"
+          ],
+          "only_v4": [
+            "严格执行生产工艺标准和操作规程，确保产品符合质量要求，监督生产现场安全、6S管理，杜绝安全事故",
+            "优化生产流程，提高生产效率，降低生产成本（如能耗、废品率等",
+            "合理安排生产任务，协调人员、设备、物料等资源，保障订单按时交付动态监控生产进度，及时调整计划以应对突发情况",
+            "定期组织人员分析生产和技术情况，总结经验，提高生产管理与技术水平",
+            "推进精益生产（如减少浪费、提高人机效率），实现降本增效",
+            "根据公司目标和计划，制定年度/月度/周生产计划，确保产能与需求匹配",
+            "监控原材料、人工、能源等生产消耗，分析成本偏差并制定改进措施"
+          ],
+          "both": []
+        },
+        "core_keywords": {
+          "only_v3": [],
+          "only_v4": [
+            "团队合作",
+            "沟通能力"
+          ],
+          "both": []
+        }
+      }
+    },
+    {
+      "case_id": "real_035",
+      "v3": {
+        "required_skills": [
+          "对小米公司有一定认知和了解",
+          "商业分析",
+          "数据分析",
+          "数据/销售敏感度高",
+          "CRM",
+          "SAP",
+          "DMS",
+          "系统产品知识",
+          "沟通和协作能力",
+          "中英口语表达",
+          "书面表达能力"
+        ],
+        "preferred_skills": [
+          "Microsoft Excel能力",
+          "数据分析能力",
+          "热爱硬件产品",
+          "米粉"
+        ],
+        "responsibilities": [
+          "负责国际销售管理工作，对销售目标及各项销售运营指标负责",
+          "销售业绩管理，销售达成分析及销售提升方案制定",
+          "销售数据汇总、维护及分析",
+          "销售业务流程搭建",
+          "渠道政策及合规管理",
+          "市场洞察及数据系统搭建",
+          "搭建数据系统经验"
+        ],
+        "core_keywords": []
+      },
+      "v4": {
+        "required_skills": [
+          "数据分析"
+        ],
+        "preferred_skills": [
+          "数据分析",
+          "Microsoft Excel能力",
+          "数据分析能力",
+          "热爱硬件产品",
+          "米粉"
+        ],
+        "responsibilities": [
+          "负责国际销售管理工作，对销售目标及各项销售运营指标负责",
+          "销售业绩管理，销售达成分析及销售提升方案制定",
+          "销售数据汇总、维护及分析",
+          "销售业务流程搭建",
+          "渠道政策及合规管理",
+          "市场洞察及数据系统搭建"
+        ],
+        "core_keywords": [
+          {
+            "keyword": "数据分析",
+            "category": "product",
+            "importance": "high",
+            "score": 6,
+            "evidence": "对小米公司有一定认知和了解，商业分析、数据分析、外语等专业毕业"
+          },
+          {
+            "keyword": "协作能力",
+            "category": "soft",
+            "importance": "medium",
+            "score": 4,
+            "evidence": "较强的沟通和协作能力"
+          },
+          {
+            "keyword": "表达能力",
+            "category": "soft",
+            "importance": "medium",
+            "score": 4,
+            "evidence": "流利的中英口语及书面表达能力"
+          }
+        ]
+      },
+      "diff": {
+        "required_skills": {
+          "only_v3": [
+            "CRM",
+            "DMS",
+            "SAP",
+            "中英口语表达",
+            "书面表达能力",
+            "商业分析",
+            "对小米公司有一定认知和了解",
+            "数据/销售敏感度高",
+            "沟通和协作能力",
+            "系统产品知识"
+          ],
+          "only_v4": [],
+          "both": [
+            "数据分析"
+          ]
+        },
+        "preferred_skills": {
+          "only_v3": [],
+          "only_v4": [
+            "数据分析"
+          ],
+          "both": [
+            "Microsoft Excel能力",
+            "数据分析能力",
+            "热爱硬件产品",
+            "米粉"
+          ]
+        },
+        "responsibilities": {
+          "only_v3": [
+            "搭建数据系统经验"
+          ],
+          "only_v4": [],
+          "both": [
+            "市场洞察及数据系统搭建",
+            "渠道政策及合规管理",
+            "负责国际销售管理工作，对销售目标及各项销售运营指标负责",
+            "销售业务流程搭建",
+            "销售业绩管理，销售达成分析及销售提升方案制定",
+            "销售数据汇总、维护及分析"
+          ]
+        },
+        "core_keywords": {
+          "only_v3": [],
+          "only_v4": [
+            "协作能力",
+            "数据分析",
+            "表达能力"
+          ],
+          "both": []
+        }
+      }
+    },
+    {
+      "case_id": "real_036",
+      "v3": {
+        "required_skills": [
+          "多项目并行管理能力",
+          "跨部门沟通协调能力",
+          "数据分析能力"
+        ],
+        "preferred_skills": [
+          "员工福利",
+          "企业健康管理",
+          "保险TPA行业经验",
+          "工作态度认真",
+          "有一定的抗压能力",
+          "有团队精神",
+          "能适应加班"
+        ],
+        "responsibilities": [
+          "推进项目履约进展",
+          "统筹项目全流程",
+          "协调排期",
+          "资源调配",
+          "准备检前物料",
+          "系统数据对接",
+          "确保按时交付",
+          "处理突发问题",
+          "对接企业HR/工会/行政",
+          "进行促检与检中协调",
+          "设计并实施促检策略",
+          "提升企业客户到检率",
+          "协同供应链完成跨城市、跨机构排期",
+          "负责体检旺季资源冲突的优先级决策",
+          "质量控制与复盘",
+          "监控检后报告出具时效、数据准确性",
+          "跟踪异常结果反馈流程",
+          "收集客户反馈",
+          "定期输出项目运营报告",
+          "优化服务流程",
+          "定期回访企业客户",
+          "组织健康讲座、报告解读等增值服务",
+          "提升客户黏性"
+        ],
+        "core_keywords": []
+      },
+      "v4": {
+        "required_skills": [
+          "项目管理",
+          "数据分析"
+        ],
+        "preferred_skills": [
+          "协同供应链完成跨城市",
+          "跨机构排期",
+          "负责体检旺季资源冲突的级决策",
+          "医学",
+          "健康管理",
+          "市场营销",
+          "企业管理类专业",
+          "体检",
+          "员工福利",
+          "企业健康管理",
+          "保险TPA行业经验"
+        ],
+        "responsibilities": [
+          "配合商务/项目经理推进项目履约进展，负责签约后统筹项目全流程，包括配置系统、协调排期、资源调配、检前物料准备、系统数据对接等，确保各环节按时交付，处理突发问题",
+          "对接企业HR/工会/行政，进行促检与检中协调，设计并实施促检策略，提升企业客户到检率",
+          "质量控制与复盘，监控检后报告出具时效、数据准确性，跟踪异常结果反馈流程，收集客户反馈，定期输出项目运营报告，优化服务流程",
+          "定期回访企业客户，组织健康讲座、报告解读等增值服务，提升客户黏性"
+        ],
+        "core_keywords": [
+          {
+            "keyword": "多项目并行管理能力、跨部门沟通协调能力、数据分析能力",
+            "category": "soft",
+            "importance": "high",
+            "score": 5,
+            "evidence": "具备多项目并行管理能力、跨部门沟通协调能力、数据分析能力"
+          },
+          {
+            "keyword": "数据分析",
+            "category": "product",
+            "importance": "high",
+            "score": 5,
+            "evidence": "具备多项目并行管理能力、跨部门沟通协调能力、数据分析能力"
+          },
+          {
+            "keyword": "项目管理",
+            "category": "product",
+            "importance": "high",
+            "score": 5,
+            "evidence": "京东**销售运营-项目管理****15-30k·18薪**"
+          },
+          {
+            "keyword": "抗压能力",
+            "category": "soft",
+            "importance": "medium",
+            "score": 4,
+            "evidence": "工作态度认真，有一定的抗压能力，有团队精神，能担当，能适应加班"
+          },
+          {
+            "keyword": "定期回访企业客户，组织健康讲座、报告解读等增值服务，提升客户黏性",
+            "category": "soft",
+            "importance": "medium",
+            "score": 3,
+            "evidence": "定期回访企业客户，组织健康讲座、报告解读等增值服务，提升客户黏性"
+          },
+          {
+            "keyword": "质量控制与复盘，监控检后报告出具时效、数据准确性，跟踪异常结果反馈流程，收集客户反馈，定期输出项目运营报告，优化服务流程",
+            "category": "soft",
+            "importance": "medium",
+            "score": 3,
+            "evidence": "质量控制与复盘，监控检后报告出具时效、数据准确性，跟踪异常结果反馈流程，收集客户反馈，定期输出项目运营报告，优化服务流程"
+          },
+          {
+            "keyword": "配合商务/项目经理推进项目履约进展，负责签约后统筹项目全流程，包括配置系统、协调排期、资源调配、检前物料准备、系统数据对接等，确保各环节按时交付，处理突发问题",
+            "category": "soft",
+            "importance": "medium",
+            "score": 3,
+            "evidence": "配合商务/项目经理推进项目履约进展，负责签约后统筹项目全流程，包括配置系统、协调排期、资源调配、检前物料准备、系统数据对接等，确保各环节按时交付，处理突发问题"
+          }
+        ]
+      },
+      "diff": {
+        "required_skills": {
+          "only_v3": [
+            "多项目并行管理能力",
+            "数据分析能力",
+            "跨部门沟通协调能力"
+          ],
+          "only_v4": [
+            "数据分析",
+            "项目管理"
+          ],
+          "both": []
+        },
+        "preferred_skills": {
+          "only_v3": [
+            "工作态度认真",
+            "有一定的抗压能力",
+            "有团队精神",
+            "能适应加班"
+          ],
+          "only_v4": [
+            "企业管理类专业",
+            "体检",
+            "健康管理",
+            "医学",
+            "协同供应链完成跨城市",
+            "市场营销",
+            "负责体检旺季资源冲突的级决策",
+            "跨机构排期"
+          ],
+          "both": [
+            "企业健康管理",
+            "保险TPA行业经验",
+            "员工福利"
+          ]
+        },
+        "responsibilities": {
+          "only_v3": [
+            "优化服务流程",
+            "准备检前物料",
+            "协同供应链完成跨城市、跨机构排期",
+            "协调排期",
+            "处理突发问题",
+            "定期回访企业客户",
+            "定期输出项目运营报告",
+            "对接企业HR/工会/行政",
+            "推进项目履约进展",
+            "提升企业客户到检率",
+            "提升客户黏性",
+            "收集客户反馈",
+            "监控检后报告出具时效、数据准确性",
+            "确保按时交付",
+            "系统数据对接",
+            "组织健康讲座、报告解读等增值服务",
+            "统筹项目全流程",
+            "设计并实施促检策略",
+            "负责体检旺季资源冲突的优先级决策",
+            "质量控制与复盘",
+            "资源调配",
+            "跟踪异常结果反馈流程",
+            "进行促检与检中协调"
+          ],
+          "only_v4": [
+            "定期回访企业客户，组织健康讲座、报告解读等增值服务，提升客户黏性",
+            "对接企业HR/工会/行政，进行促检与检中协调，设计并实施促检策略，提升企业客户到检率",
+            "质量控制与复盘，监控检后报告出具时效、数据准确性，跟踪异常结果反馈流程，收集客户反馈，定期输出项目运营报告，优化服务流程",
+            "配合商务/项目经理推进项目履约进展，负责签约后统筹项目全流程，包括配置系统、协调排期、资源调配、检前物料准备、系统数据对接等，确保各环节按时交付，处理突发问题"
+          ],
+          "both": []
+        },
+        "core_keywords": {
+          "only_v3": [],
+          "only_v4": [
+            "多项目并行管理能力、跨部门沟通协调能力、数据分析能力",
+            "定期回访企业客户，组织健康讲座、报告解读等增值服务，提升客户黏性",
+            "抗压能力",
+            "数据分析",
+            "质量控制与复盘，监控检后报告出具时效、数据准确性，跟踪异常结果反馈流程，收集客户反馈，定期输出项目运营报告，优化服务流程",
+            "配合商务/项目经理推进项目履约进展，负责签约后统筹项目全流程，包括配置系统、协调排期、资源调配、检前物料准备、系统数据对接等，确保各环节按时交付，处理突发问题",
+            "项目管理"
+          ],
+          "both": []
+        }
+      }
+    },
+    {
+      "case_id": "real_037",
+      "v3": {
+        "required_skills": [
+          "大促运营",
+          "流量分发机制",
+          "商品池运营",
+          "跨部门协同",
+          "项目管理",
+          "数据监控",
+          "玩法设计",
+          "资源分配"
+        ],
+        "preferred_skills": [],
+        "responsibilities": [
+          "负责大促货架场景的整体运营方案制定，涵盖活动节奏、玩法设计、资源分配",
+          "拆解大促GMV、流量、转化率、客单价等核心指标，制定货架场景各阶段的运营策略并推动落地",
+          "统筹大促全周期货架场景的日常运营与异常响应，确保活动平稳运行",
+          "协同产品、算法团队优化大促期间货架场景的流量分发机制",
+          "搭建大促货架场景的数据监控体系",
+          "大促期间进行数据异动分析与快速决策",
+          "大促结束后输出完整复盘报告，总结经验教训",
+          "协同产品、算法、设计等团队，推动大促货架场景方案落地",
+          "管理大促项目进度，协调资源，识别风险并推动解决"
+        ],
+        "core_keywords": []
+      },
+      "v4": {
+        "required_skills": [
+          "项目管理"
+        ],
+        "preferred_skills": [],
+        "responsibilities": [
+          "规划与节奏把控 负责大促货架场景的整体运营方案制定，涵盖活动节奏、玩法设计、资源分配",
+          "拆解大促 GMV、流量、转化率、客单价等核心指标，制定货架场景各阶段的运营策略并推动落地",
+          "统筹大促全周期货架场景的日常运营与异常响应，确保活动平稳运行",
+          "玩法与机制设计 设计搜索、推荐、商品卡、商城首页、频道等货架场景的大促专属玩法（如官方立减、跨店满减、品类券、限时秒杀、价格力标签等",
+          "协同产品、算法团队优化大促期间货架场景的流量分发机制，提升流量效率与转化效果",
+          "设计大促商品池筛选规则与分层运营策略，保障优质商品获得充分曝光",
+          "数据监控与复盘优化 搭建大促货架场景的数据监控体系，实时跟踪流量、转化、GMV、客单价等核心指标",
+          "大促期间进行数据异动分析与快速决策，及时调整运营策略",
+          "大促结束后输出完整复盘报告，总结经验教训，沉淀可复用的运营方法论与 SOP",
+          "跨部门协同与项目管理 协同产品、算法、设计等团队，推动大促货架场景方案落地",
+          "管理大促项目进度，协调资源，识别风险并推动解决"
+        ],
+        "core_keywords": [
+          {
+            "keyword": "统筹大促全周期货架场景的日常运营与异常响应，确保活动平稳运行",
+            "category": "soft",
+            "importance": "medium",
+            "score": 3,
+            "evidence": "统筹大促全周期货架场景的日常运营与异常响应，确保活动平稳运行"
+          },
+          {
+            "keyword": "项目管理",
+            "category": "product",
+            "importance": "medium",
+            "score": 3,
+            "evidence": "跨部门协同与项目管理 协同产品、算法、设计等团队，推动大促货架场景方案落地"
+          }
+        ]
+      },
+      "diff": {
+        "required_skills": {
+          "only_v3": [
+            "商品池运营",
+            "大促运营",
+            "数据监控",
+            "流量分发机制",
+            "玩法设计",
+            "资源分配",
+            "跨部门协同"
+          ],
+          "only_v4": [],
+          "both": [
+            "项目管理"
+          ]
+        },
+        "preferred_skills": {
+          "only_v3": [],
+          "only_v4": [],
+          "both": []
+        },
+        "responsibilities": {
+          "only_v3": [
+            "协同产品、算法、设计等团队，推动大促货架场景方案落地",
+            "协同产品、算法团队优化大促期间货架场景的流量分发机制",
+            "大促期间进行数据异动分析与快速决策",
+            "大促结束后输出完整复盘报告，总结经验教训",
+            "拆解大促GMV、流量、转化率、客单价等核心指标，制定货架场景各阶段的运营策略并推动落地",
+            "搭建大促货架场景的数据监控体系",
+            "负责大促货架场景的整体运营方案制定，涵盖活动节奏、玩法设计、资源分配"
+          ],
+          "only_v4": [
+            "协同产品、算法团队优化大促期间货架场景的流量分发机制，提升流量效率与转化效果",
+            "大促期间进行数据异动分析与快速决策，及时调整运营策略",
+            "大促结束后输出完整复盘报告，总结经验教训，沉淀可复用的运营方法论与 SOP",
+            "拆解大促 GMV、流量、转化率、客单价等核心指标，制定货架场景各阶段的运营策略并推动落地",
+            "数据监控与复盘优化 搭建大促货架场景的数据监控体系，实时跟踪流量、转化、GMV、客单价等核心指标",
+            "玩法与机制设计 设计搜索、推荐、商品卡、商城首页、频道等货架场景的大促专属玩法（如官方立减、跨店满减、品类券、限时秒杀、价格力标签等",
+            "规划与节奏把控 负责大促货架场景的整体运营方案制定，涵盖活动节奏、玩法设计、资源分配",
+            "设计大促商品池筛选规则与分层运营策略，保障优质商品获得充分曝光",
+            "跨部门协同与项目管理 协同产品、算法、设计等团队，推动大促货架场景方案落地"
+          ],
+          "both": [
+            "管理大促项目进度，协调资源，识别风险并推动解决",
+            "统筹大促全周期货架场景的日常运营与异常响应，确保活动平稳运行"
+          ]
+        },
+        "core_keywords": {
+          "only_v3": [],
+          "only_v4": [
+            "统筹大促全周期货架场景的日常运营与异常响应，确保活动平稳运行",
+            "项目管理"
+          ],
+          "both": []
+        }
+      }
+    },
+    {
+      "case_id": "real_038",
+      "v3": {
+        "required_skills": [
+          "qualified lawyer in China",
+          "strong knowledge of international commercial legal practice",
+          "customer contracts, supplier agreements, settlement agreements, and strategic cooperation arrangements",
+          "commercial contracts, project businesses, manufacturing or industrial operations, dispute resolution, compliance, corporate governance",
+          "anti-corruption, antitrust, data privacy, export control, sanctions, third-party risk management",
+          "excellent communication, negotiation, drafting, presentation skills in both Chinese and English"
+        ],
+        "preferred_skills": [
+          "strong stakeholder management capabilities",
+          "strong judgment, resilience, integrity"
+        ],
+        "responsibilities": [
+          "serve as the primary legal and compliance partner",
+          "advising leadership on strategic, commercial, operational, corporate, and regulatory matters",
+          "lead and coordinate the review, negotiation, and approval of customer contracts, supplier agreements, settlement agreements, and strategic cooperation arrangements",
+          "identify, assess, and mitigate legal and compliance risks",
+          "collaborate with compliance, finance, procurement, sales, project management, HR, EHS, and tax teams to deliver practical, business-focused solutions across the organization",
+          "manage disputes, claims, investigations, regulatory inquiries, and external counsel while promoting a strong culture of integrity through training, awareness, and knowledge sharing"
+        ],
+        "core_keywords": []
+      },
+      "v4": {
+        "required_skills": [
+          "JavaScript",
+          "Go"
+        ],
+        "preferred_skills": [],
+        "responsibilities": [],
+        "core_keywords": [
+          {
+            "keyword": "Go",
+            "category": "technical",
+            "importance": "high",
+            "score": 8,
+            "evidence": "into clear, practical actions while balancing business opportunities with risk awareness. Every day, you will help strengthen governance, protect the business, and support sustainable growth in a dynamic multinational environment."
+          },
+          {
+            "keyword": "communication",
+            "category": "soft",
+            "importance": "medium",
+            "score": 4,
+            "evidence": "You have excellent communication, negotiation, drafting, and presentation skills in both Chinese and English, combined with sound judgment, resilience, integrity, and strong stakeholder management capabilities."
+          },
+          {
+            "keyword": "leadership",
+            "category": "soft",
+            "importance": "medium",
+            "score": 4,
+            "evidence": "You will serve as the primary legal and compliance partner to Transformation of Industry China, advising leadership on strategic, commercial, operational, corporate, and regulatory matters."
+          },
+          {
+            "keyword": "JavaScript",
+            "category": "technical",
+            "importance": "low",
+            "score": 2,
+            "evidence": "上海-浦东新区  10年以上  统招本科  招1人  javascript"
+          },
+          {
+            "keyword": "collaboration",
+            "category": "soft",
+            "importance": "low",
+            "score": 2,
+            "evidence": "The Legal and Compliance team supports Siemens Energy’s Transformation of Industry business in China by helping the organization grow responsibly and sustainably. The team works closely with business leaders and cross-functional partners to provide practical legal guidance and effective compliance governance. Their work spans commercial transactions, project execution, procurement, manufacturing, services, corporate governance, and regulatory matters. Team members are committed to helping the business navigate complex challenges while maintaining high standards of integrity and accountability. Collaboration is central to the team’s success, with close partnerships across finance, sales, project management, HR, EHS, tax, and compliance functions. Together, they enable informed decision-making, manage risk effectively, and contribute to Siemens Energy’s long-term success."
+          },
+          {
+            "keyword": "RAG",
+            "category": "technical",
+            "importance": "low",
+            "score": 1,
+            "evidence": "We uphold a 150-year legacy of innovation that encourages our search for people who will support our focus on decarbonization, new technologies, and energy transformation."
+          }
+        ]
+      },
+      "diff": {
+        "required_skills": {
+          "only_v3": [
+            "anti-corruption, antitrust, data privacy, export control, sanctions, third-party risk management",
+            "commercial contracts, project businesses, manufacturing or industrial operations, dispute resolution, compliance, corporate governance",
+            "customer contracts, supplier agreements, settlement agreements, and strategic cooperation arrangements",
+            "excellent communication, negotiation, drafting, presentation skills in both Chinese and English",
+            "qualified lawyer in China",
+            "strong knowledge of international commercial legal practice"
+          ],
+          "only_v4": [
+            "Go",
+            "JavaScript"
+          ],
+          "both": []
+        },
+        "preferred_skills": {
+          "only_v3": [
+            "strong judgment, resilience, integrity",
+            "strong stakeholder management capabilities"
+          ],
+          "only_v4": [],
+          "both": []
+        },
+        "responsibilities": {
+          "only_v3": [
+            "advising leadership on strategic, commercial, operational, corporate, and regulatory matters",
+            "collaborate with compliance, finance, procurement, sales, project management, HR, EHS, and tax teams to deliver practical, business-focused solutions across the organization",
+            "identify, assess, and mitigate legal and compliance risks",
+            "lead and coordinate the review, negotiation, and approval of customer contracts, supplier agreements, settlement agreements, and strategic cooperation arrangements",
+            "manage disputes, claims, investigations, regulatory inquiries, and external counsel while promoting a strong culture of integrity through training, awareness, and knowledge sharing",
+            "serve as the primary legal and compliance partner"
+          ],
+          "only_v4": [],
+          "both": []
+        },
+        "core_keywords": {
+          "only_v3": [],
+          "only_v4": [
+            "Go",
+            "JavaScript",
+            "RAG",
+            "collaboration",
+            "communication",
+            "leadership"
+          ],
+          "both": []
+        }
+      }
+    },
+    {
+      "case_id": "real_039",
+      "v3": {
+        "required_skills": [
+          "Python",
+          "SQL",
+          "R",
+          "SAS",
+          "估值模型",
+          "市场参数",
+          "监管统计",
+          "事后检验",
+          "压力测试",
+          "交易对手信用风险管理",
+          "金融工具估值",
+          "市场风险限额监测",
+          "场外衍生品管理",
+          "新产品风险评估",
+          "风险管理政策",
+          "风险管理程序"
+        ],
+        "preferred_skills": [
+          "CPA",
+          "CFA",
+          "FRM",
+          "团队管理经验",
+          "数分编程工具"
+        ],
+        "responsibilities": [
+          "制定和维护市场风险管理政策和程序",
+          "识别、计量和监测市场风险",
+          "监测业务部门对市场风险限额的遵守情况",
+          "设计、实施事后检验和压力测试",
+          "识别、评估新产品、新业务中所包含的市场风险",
+          "负责交易对手信用风险管理",
+          "负责交易对手额度的日常管控",
+          "负责金融工具估值模型的管理和验证",
+          "市场参数维护",
+          "市场风险相关监管统计工作"
+        ],
+        "core_keywords": [
+          {
+            "keyword": "市场风险管理",
+            "category": "product",
+            "importance": "high",
+            "score": 5,
+            "evidence": "制定和维护市场风险管理政策和程序"
+          },
+          {
+            "keyword": "估值模型",
+            "category": "technical",
+            "importance": "high",
+            "score": 5,
+            "evidence": "负责金融工具估值模型的管理和验证"
+          },
+          {
+            "keyword": "压力测试",
+            "category": "technical",
+            "importance": "high",
+            "score": 5,
+            "evidence": "设计、实施事后检验和压力测试"
+          },
+          {
+            "keyword": "场外衍生品管理",
+            "category": "technical",
+            "importance": "high",
+            "score": 5,
+            "evidence": "具有5年及以上市场风险、场外衍生品管理相关工作经历"
+          },
+          {
+            "keyword": "交易对手信用风险管理",
+            "category": "technical",
+            "importance": "high",
+            "score": 5,
+            "evidence": "负责交易对手信用风险管理"
+          },
+          {
+            "keyword": "Python",
+            "category": "technical",
+            "importance": "medium",
+            "score": 3,
+            "evidence": "掌握Python、SQL、R、SAS等数分编程工具"
+          },
+          {
+            "keyword": "SQL",
+            "category": "technical",
+            "importance": "medium",
+            "score": 3,
+            "evidence": "掌握Python、SQL、R、SAS等数分编程工具"
+          },
+          {
+            "keyword": "R",
+            "category": "technical",
+            "importance": "medium",
+            "score": 3,
+            "evidence": "掌握Python、SQL、R、SAS等数分编程工具"
+          },
+          {
+            "keyword": "SAS",
+            "category": "technical",
+            "importance": "medium",
+            "score": 3,
+            "evidence": "掌握Python、SQL、R、SAS等数分编程工具"
+          },
+          {
+            "keyword": "CPA",
+            "category": "product",
+            "importance": "medium",
+            "score": 3,
+            "evidence": "CPA、CFA、FRM持证者优先考虑"
+          },
+          {
+            "keyword": "CFA",
+            "category": "product",
+            "importance": "medium",
+            "score": 3,
+            "evidence": "CPA、CFA、FRM持证者优先考虑"
+          },
+          {
+            "keyword": "FRM",
+            "category": "product",
+            "importance": "medium",
+            "score": 3,
+            "evidence": "CPA、CFA、FRM持证者优先考虑"
+          },
+          {
+            "keyword": "团队管理",
+            "category": "soft",
+            "importance": "medium",
+            "score": 3,
+            "evidence": "具有团队管理经验"
+          }
+        ]
+      },
+      "v4": {
+        "required_skills": [],
+        "preferred_skills": [
+          "Python",
+          "SQL",
+          "团队管理经验",
+          "掌握Python",
+          "SAS",
+          "CPA",
+          "CFA",
+          "FRM"
+        ],
+        "responsibilities": [
+          "制定和维护市场风险管理政策和程序",
+          "识别、计量和监测市场风险",
+          "监测业务部门对市场风险限额的遵守情况，报告超限额情况",
+          "设计、实施事后检验和压力测试",
+          "识别、评估新产品、新业务中所包含的市场风险，审核相应的操作和风险管理程序",
+          "负责交易对手信用风险管理并负责交易对手额度的日常管控",
+          "负责金融工具估值模型的管理和验证及市场参数维护",
+          "市场风险相关监管统计工作等相关市场风险管理工作"
+        ],
+        "core_keywords": [
+          {
+            "keyword": "Python",
+            "category": "technical",
+            "importance": "high",
+            "score": 5,
+            "evidence": "具有团队管理经验，掌握Python、SQL、R、SAS等数分编程工具者优先考虑"
+          },
+          {
+            "keyword": "SQL",
+            "category": "technical",
+            "importance": "high",
+            "score": 5,
+            "evidence": "具有团队管理经验，掌握Python、SQL、R、SAS等数分编程工具者优先考虑"
+          }
+        ]
+      },
+      "diff": {
+        "required_skills": {
+          "only_v3": [
+            "Python",
+            "R",
+            "SAS",
+            "SQL",
+            "事后检验",
+            "交易对手信用风险管理",
+            "估值模型",
+            "压力测试",
+            "场外衍生品管理",
+            "市场参数",
+            "市场风险限额监测",
+            "新产品风险评估",
+            "监管统计",
+            "金融工具估值",
+            "风险管理政策",
+            "风险管理程序"
+          ],
+          "only_v4": [],
+          "both": []
+        },
+        "preferred_skills": {
+          "only_v3": [
+            "数分编程工具"
+          ],
+          "only_v4": [
+            "Python",
+            "SAS",
+            "SQL",
+            "掌握Python"
+          ],
+          "both": [
+            "CFA",
+            "CPA",
+            "FRM",
+            "团队管理经验"
+          ]
+        },
+        "responsibilities": {
+          "only_v3": [
+            "市场参数维护",
+            "市场风险相关监管统计工作",
+            "监测业务部门对市场风险限额的遵守情况",
+            "识别、评估新产品、新业务中所包含的市场风险",
+            "负责交易对手信用风险管理",
+            "负责交易对手额度的日常管控",
+            "负责金融工具估值模型的管理和验证"
+          ],
+          "only_v4": [
+            "市场风险相关监管统计工作等相关市场风险管理工作",
+            "监测业务部门对市场风险限额的遵守情况，报告超限额情况",
+            "识别、评估新产品、新业务中所包含的市场风险，审核相应的操作和风险管理程序",
+            "负责交易对手信用风险管理并负责交易对手额度的日常管控",
+            "负责金融工具估值模型的管理和验证及市场参数维护"
+          ],
+          "both": [
+            "制定和维护市场风险管理政策和程序",
+            "设计、实施事后检验和压力测试",
+            "识别、计量和监测市场风险"
+          ]
+        },
+        "core_keywords": {
+          "only_v3": [
+            "CFA",
+            "CPA",
+            "FRM",
+            "R",
+            "SAS",
+            "交易对手信用风险管理",
+            "估值模型",
+            "压力测试",
+            "团队管理",
+            "场外衍生品管理",
+            "市场风险管理"
+          ],
+          "only_v4": [],
+          "both": [
+            "Python",
+            "SQL"
+          ]
+        }
+      }
+    },
+    {
+      "case_id": "real_040",
+      "v3": {
+        "required_skills": [
+          "Excel",
+          "Word",
+          "日常办公流程",
+          "沟通能力",
+          "文字功底"
+        ],
+        "preferred_skills": [
+          "性格开朗外向",
+          "服务意识",
+          "吃苦耐劳",
+          "行政管理",
+          "公共管理"
+        ],
+        "responsibilities": [
+          "建立健全文件、资料、档案管理的规章制度",
+          "负责本部门人员考勤、绩效、福利的上报和存档工作",
+          "负责本部门文化建设、宣传等工作",
+          "做好公司通知的接收工作，并对收到的文件、资料、通知、通报及时向本部门领导报告",
+          "负责本部门接待工作及上级领导交待的其他工作"
+        ],
+        "core_keywords": [
+          {
+            "keyword": "Excel",
+            "category": "required_skills",
+            "importance": "高",
+            "score": 5,
+            "evidence": "能熟练使用excel/word/PPT"
+          },
+          {
+            "keyword": "Word",
+            "category": "required_skills",
+            "importance": "高",
+            "score": 5,
+            "evidence": "能熟练使用excel/word/PPT"
+          },
+          {
+            "keyword": "PPT",
+            "category": "required_skills",
+            "importance": "高",
+            "score": 5,
+            "evidence": "能熟练使用excel/word/PPT"
+          },
+          {
+            "keyword": "档案管理",
+            "category": "required_skills",
+            "importance": "高",
+            "score": 5,
+            "evidence": "建立健全文件、资料、档案管理的规章制度"
+          },
+          {
+            "keyword": "考勤/绩效/福利",
+            "category": "required_skills",
+            "importance": "高",
+            "score": 5,
+            "evidence": "负责本部门人员考勤、绩效、福利的上报和存档工作"
+          },
+          {
+            "keyword": "沟通能力",
+            "category": "required_skills",
+            "importance": "高",
+            "score": 5,
+            "evidence": "具备良好的沟通能力"
+          },
+          {
+            "keyword": "文字功底",
+            "category": "required_skills",
+            "importance": "高",
+            "score": 5,
+            "evidence": "文字功底"
+          }
+        ]
+      },
+      "v4": {
+        "required_skills": [],
+        "preferred_skills": [
+          "公共管理",
+          "文秘",
+          "中文",
+          "教育"
+        ],
+        "responsibilities": [
+          "建立健全文件、资料、档案管理的规章制度，按规定管理好部门保存的资料、档案",
+          "负责本部门人员考勤、绩效、福利的上报和存档工作",
+          "负责本部门文化建设、宣传等工作",
+          "做好公司通知的接收工作，并对收到的文件、资料、通知、通报及时向本部门领导报告",
+          "负责本部门接待工作及上级领导交待的其他工作"
+        ],
+        "core_keywords": [
+          {
+            "keyword": "服务意识",
+            "category": "soft",
+            "importance": "high",
+            "score": 5,
+            "evidence": "具备较强的服务意识和吃苦耐劳的精神"
+          },
+          {
+            "keyword": "沟通能力",
+            "category": "soft",
+            "importance": "high",
+            "score": 5,
+            "evidence": "性格开朗外向，具备良好的沟通能力和文字功底"
+          }
+        ]
+      },
+      "diff": {
+        "required_skills": {
+          "only_v3": [
+            "Excel",
+            "Word",
+            "文字功底",
+            "日常办公流程",
+            "沟通能力"
+          ],
+          "only_v4": [],
+          "both": []
+        },
+        "preferred_skills": {
+          "only_v3": [
+            "吃苦耐劳",
+            "性格开朗外向",
+            "服务意识",
+            "行政管理"
+          ],
+          "only_v4": [
+            "中文",
+            "教育",
+            "文秘"
+          ],
+          "both": [
+            "公共管理"
+          ]
+        },
+        "responsibilities": {
+          "only_v3": [
+            "建立健全文件、资料、档案管理的规章制度"
+          ],
+          "only_v4": [
+            "建立健全文件、资料、档案管理的规章制度，按规定管理好部门保存的资料、档案"
+          ],
+          "both": [
+            "做好公司通知的接收工作，并对收到的文件、资料、通知、通报及时向本部门领导报告",
+            "负责本部门人员考勤、绩效、福利的上报和存档工作",
+            "负责本部门接待工作及上级领导交待的其他工作",
+            "负责本部门文化建设、宣传等工作"
+          ]
+        },
+        "core_keywords": {
+          "only_v3": [
+            "Excel",
+            "PPT",
+            "Word",
+            "文字功底",
+            "档案管理",
+            "考勤/绩效/福利"
+          ],
+          "only_v4": [
+            "服务意识"
+          ],
+          "both": [
+            "沟通能力"
+          ]
+        }
+      }
+    }
+  ]
+}
