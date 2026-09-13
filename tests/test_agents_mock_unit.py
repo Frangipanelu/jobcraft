@@ -239,7 +239,9 @@ def test_jd_ats_v4_merges_pipeline_and_inference(monkeypatch):
         return AtsInference(
             job_title="后端工程师",
             culture_keywords=["代码规范"],
-            dimension_requirements=[{"dimension": "D1", "level": 4, "evidence": "熟悉 Python"}],
+            dimension_requirements=[
+                {"dimension": "D1", "level": 4, "evidence": "熟悉 Python"}
+            ],
             subtext_decoded=[
                 {
                     "surface_requirement": "能抗压",
@@ -292,7 +294,10 @@ def test_jd_ats_v4_ambiguous_decision_relabels_item(monkeypatch):
 
     monkeypatch.setattr("app.agents.jd_ats_agent.invoke_structured", _fake_invoke)
     out = JdAtsAgent().run(
-        {"jd_text": "职位描述\n岗位要求：\n1）有良好的编码习惯与自我驱动能力", "prompt_version": "v4"}
+        {
+            "jd_text": "职位描述\n岗位要求：\n1）有良好的编码习惯与自我驱动能力",
+            "prompt_version": "v4",
+        }
     )
     assert "ats" in out
 
@@ -311,6 +316,94 @@ def test_jd_ats_v4_prompt_is_narrowed():
     assert "只负责算法无法可靠完成" in prompt
     assert "structured_summary" not in prompt  # 占位符已填充
     assert "禁止**重复输出 required_skills" in prompt or "禁止" in prompt
+
+
+# ---------- 结构化 JD 分析（前端已分好 duties/requirements + 标签） ----------
+
+
+def test_build_structured_from_input_maps_user_tags():
+    from app.agents.jd_ats_agent import _build_structured_from_input
+    from app.pipeline.jd_classifier import ClassLabel
+    from app.pipeline.jd_structurer import SectionKind
+    from app.schemas.jobcraft import StructuredRequirementItem
+
+    doc, classified = _build_structured_from_input(
+        duties=["负责交易系统后端开发", "设计高可用架构"],
+        requirements=[
+            StructuredRequirementItem(text="本科及以上学历，5年以上经验", tag="hard"),
+            StructuredRequirementItem(text="熟悉 Python、Redis", tag="required"),
+            StructuredRequirementItem(text="有高并发经验者优先", tag="preferred"),
+        ],
+    )
+    assert len(classified) == 5
+    # duty → RESPONSIBILITY + responsibilities 区块
+    assert classified[0].label is ClassLabel.RESPONSIBILITY
+    assert classified[0].section is SectionKind.RESPONSIBILITIES
+    assert classified[0].rule == "structured:duty"
+    assert classified[1].label is ClassLabel.RESPONSIBILITY
+    # hard/required → REQUIRED + requirements 区块
+    assert classified[2].label is ClassLabel.REQUIRED
+    assert classified[2].section is SectionKind.REQUIREMENTS
+    assert classified[2].rule == "structured:hard"
+    assert classified[3].label is ClassLabel.REQUIRED
+    # preferred → PREFERRED + preferred 区块（不再靠 LLM 猜）
+    assert classified[4].label is ClassLabel.PREFERRED
+    assert classified[4].section is SectionKind.PREFERRED
+    # 全部确定性 1.0，没有 UNKNOWN（与 raw JD 路径不同）
+    assert all(c.confidence == 1.0 for c in classified)
+
+
+def test_analyze_structured_jd_reuses_pipeline(monkeypatch):
+    from app.agents.jd_ats_agent import analyze_structured_jd
+    from app.schemas.jobcraft import AtsInference, StructuredRequirementItem
+
+    captured = {}
+
+    def _fake_invoke(model, schema, prompt, **kwargs):
+        assert schema is AtsInference
+        captured["prompt"] = prompt
+        return AtsInference(
+            job_title="AI 产品经理",
+            culture_keywords=["数据驱动"],
+            dimension_requirements=[
+                {"dimension": "D1", "level": 4, "evidence": "熟悉 LLM"}
+            ],
+            subtext_decoded=[],
+        )
+
+    monkeypatch.setattr("app.agents.jd_ats_agent.invoke_structured", _fake_invoke)
+    out = analyze_structured_jd(
+        duties=["主导端侧大模型交互设计"],
+        requirements=[
+            StructuredRequirementItem(
+                text="本科及以上学历，3年以上AI产品经验", tag="hard"
+            ),
+            StructuredRequirementItem(text="熟悉大模型与 RAG 机制", tag="required"),
+            StructuredRequirementItem(text="有自动化评测经验者优先", tag="preferred"),
+        ],
+    )
+    ats = out["ats"]
+    # 用户标签直接落入 required/preferred，不需要 LLM 裁决
+    assert ats["job_title"] == "AI 产品经理"
+    assert "大模型" in ats["required_skills"] or ats["required_skills"]
+    assert any("评测" in s or "自动化" in s for s in ats["preferred_skills"])
+    # 硬性门槛进入 education/years（L1 确定性抽取，非 LLM）
+    assert ats["education"]
+    assert ats["years_of_experience"]
+    # L1 保留职责
+    assert any("端侧大模型" in r for r in ats["responsibilities"])
+    assert ats["culture_keywords"] == ["数据驱动"]
+    assert ats["dimension_requirements"][0]["dimension"] == "D1"
+    assert ats["core_keywords"]
+    assert ats["evidence_items"]
+    # 结构化路径没有薪资/地点分析（接口不传这些字段）
+    assert ats["salary"] is None
+    assert ats["location"] is None
+    # LLM prompt 只含两块内容 + 结构化摘要
+    assert "【岗位职责】" in captured["prompt"]
+    assert "【任职要求】" in captured["prompt"]
+    assert "（硬性门槛）" in captured["prompt"]
+    assert "（加分项）" in captured["prompt"]
 
 
 # ---------- AtsRecommendAgent ----------

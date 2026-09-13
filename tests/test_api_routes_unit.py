@@ -636,6 +636,73 @@ class TestAnalyzeAts:
         assert resp.json()["ats_profile"]["job_title"] == "SWE"
 
 
+class TestSplitJd:
+    """POST /api/jobcraft/job/split-jd"""
+
+    def test_split_jd_missing_text_returns_400(self):
+        resp = client.post("/api/jobcraft/job/split-jd", json={"jd_text": ""})
+        assert resp.status_code == 400
+
+    def test_split_jd_normal(self, monkeypatch):
+        monkeypatch.setattr(
+            "app.workflows.job_analysis_flow.run_structured_ats_split",
+            lambda *a: {"duties": ["负责开发"], "requirements": []},
+        )
+        resp = client.post(
+            "/api/jobcraft/job/split-jd",
+            json={"jd_text": "岗位职责：负责开发"},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["duties"] == ["负责开发"]
+
+
+class TestStructuredAnalyzeAts:
+    """POST /api/jobcraft/job/analyze-ats-structured"""
+
+    def test_structured_empty_returns_400(self):
+        resp = client.post(
+            "/api/jobcraft/job/analyze-ats-structured",
+            json={"duties": [], "requirements": []},
+        )
+        assert resp.status_code == 400
+
+    def test_structured_invalid_tag_returns_400(self):
+        resp = client.post(
+            "/api/jobcraft/job/analyze-ats-structured",
+            json={
+                "duties": ["负责开发"],
+                "requirements": [{"text": "熟悉 Python", "tag": "bad"}],
+            },
+        )
+        assert resp.status_code == 400
+
+    def test_structured_normal(self, monkeypatch):
+        monkeypatch.setattr(
+            "app.workflows.job_analysis_flow.run_structured_ats_workflow",
+            lambda **kw: {
+                "ats_profile": {"job_title": "后端", "required_skills": ["Python"]},
+                "raw": {},
+                "company": "C",
+                "position": "后端",
+            },
+        )
+        resp = client.post(
+            "/api/jobcraft/job/analyze-ats-structured",
+            json={
+                "company": "字节跳动",
+                "position": "后端工程师",
+                "duties": ["负责交易系统"],
+                "requirements": [
+                    {"text": "3年以上经验", "tag": "hard"},
+                    {"text": "熟悉 Python", "tag": "required"},
+                    {"text": "高并发经验者优先", "tag": "preferred"},
+                ],
+            },
+        )
+        assert resp.status_code == 200
+        assert resp.json()["ats_profile"]["required_skills"] == ["Python"]
+
+
 class TestJobResumePreview:
     """POST /api/jobcraft/job/{job_id}/resume-preview"""
 

@@ -47,6 +47,17 @@ class ATSOnlyPayload(BaseModel):
     jd_text: str
 
 
+class JDSplitPayload(BaseModel):
+    jd_text: str
+
+
+class StructuredJDRequest(BaseModel):
+    company: str = ""
+    position: str = ""
+    duties: List[str]
+    requirements: List[Dict[str, Any]]
+
+
 class SaveResumePayload(BaseModel):
     job_analysis_id: int
     selected_card_ids: List[int]
@@ -249,6 +260,69 @@ def jobcraft_job_analyze_ats(
     except Exception as e:
         logger.exception("ATS 解析失败")
         raise HTTPException(status_code=500, detail=f"ATS 解析失败: {e}")
+
+
+@router.post("/split-jd")
+def jobcraft_jd_split(
+    payload: JDSplitPayload,
+    current_user: int = Depends(get_current_user),
+):
+    """把粘贴的原始 JD 拆成 岗位职责/任职要求（含标签），供前端结构化表单预填。"""
+    if not payload.jd_text or not payload.jd_text.strip():
+        raise HTTPException(status_code=400, detail="JD 文本不能为空")
+    if len(payload.jd_text) > 10000:
+        raise HTTPException(
+            status_code=400, detail=f"JD 文本过长 ({len(payload.jd_text)} 字)"
+        )
+    try:
+        from app.workflows.job_analysis_flow import run_structured_ats_split
+
+        return run_structured_ats_split(payload.jd_text)
+    except Exception as e:
+        logger.exception("JD 拆分失败")
+        raise HTTPException(status_code=500, detail=f"JD 拆分失败: {e}")
+
+
+@router.post("/analyze-ats-structured")
+def jobcraft_job_analyze_ats_structured(
+    payload: StructuredJDRequest,
+    current_user: int = Depends(get_current_user),
+):
+    """结构化 JD 分析：前端已把文本分好类，只对两块内容做细节分析。
+
+    duties / requirements 均按条传入；requirements 的每条带 tag
+    （hard 硬性门槛 / required 必选 / preferred 加分）。
+    """
+    duties = [d.strip() for d in payload.duties if d and d.strip()]
+    reqs = []
+    for r in payload.requirements:
+        text = str(r.get("text", "")).strip()
+        if not text:
+            continue
+        tag = str(r.get("tag", "required")).strip().lower()
+        if tag not in ("hard", "required", "preferred"):
+            raise HTTPException(
+                status_code=400,
+                detail=f"标签 {tag} 非法，仅支持 hard/required/preferred",
+            )
+        reqs.append({"text": text, "tag": tag})
+    if not duties and not reqs:
+        raise HTTPException(status_code=400, detail="岗位职责与任职要求不能同时为空")
+    try:
+        from app.schemas.jobcraft import StructuredRequirementItem
+        from app.workflows.job_analysis_flow import run_structured_ats_workflow
+
+        return run_structured_ats_workflow(
+            company=payload.company,
+            position=payload.position,
+            duties=duties,
+            requirements=[StructuredRequirementItem(**r) for r in reqs],
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.exception("结构化 ATS 解析失败")
+        raise HTTPException(status_code=500, detail=f"结构化 ATS 解析失败: {e}")
 
 
 @router.post("/{job_id}/resume-preview")

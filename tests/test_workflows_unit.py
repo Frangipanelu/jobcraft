@@ -525,6 +525,63 @@ class TestJobAnalysisFlow:
         assert result is not None
         assert result["job_title"] == "后端工程师"
 
+    def test_structured_ats_workflow_normal(self, monkeypatch):
+        """结构化 JD 分析（前端已分好类）"""
+        from app.schemas.jobcraft import StructuredRequirementItem
+        from app.workflows.job_analysis_flow import run_structured_ats_workflow
+
+        def fake_structured_analyze(duties, requirements):
+            return {
+                "ats": {
+                    **_fake_ats_profile(),
+                    "required_skills": ["Python"],
+                    "preferred_skills": ["高并发"],
+                    "job_title": "AI 产品经理",
+                },
+                "raw": {"job_title": "AI 产品经理"},
+            }
+
+        monkeypatch.setattr(
+            "app.workflows.job_analysis_flow.analyze_structured_jd",
+            fake_structured_analyze,
+        )
+
+        result = run_structured_ats_workflow(
+            company="字节跳动",
+            position="AI 产品经理",
+            duties=["主导端侧大模型交互设计"],
+            requirements=[
+                StructuredRequirementItem(text="3年以上经验", tag="hard"),
+                StructuredRequirementItem(text="熟悉 Python", tag="required"),
+            ],
+        )
+        assert result["ats_profile"] is not None
+        assert result["ats_profile"]["job_title"] == "AI 产品经理"
+        assert result["ats_profile"]["required_skills"] == ["Python"]
+        assert result["position"] == "AI 产品经理"
+
+    def test_structured_ats_split_extracts_blocks(self, monkeypatch):
+        """把粘贴的原始 JD 拆成结构化块（含 preferred 分流）"""
+        from app.workflows.job_analysis_flow import run_structured_ats_split
+
+        jd = (
+            "职位描述\n"
+            "岗位职责：\n"
+            "1）负责交易系统后端开发\n"
+            "2）设计高可用架构\n"
+            "岗位要求：\n"
+            "1）熟悉 Python、Redis\n"
+            "2）有高并发经验者优先\n"
+        )
+        result = run_structured_ats_split(jd)
+        assert any("交易系统" in d for d in result["duties"])
+        assert any("高可用" in d for d in result["duties"])
+        req_by_tag = {}
+        for r in result["requirements"]:
+            req_by_tag.setdefault(r["tag"], []).append(r["text"])
+        assert any("Python" in t for t in req_by_tag.get("required", []))
+        assert any("高并发" in t for t in req_by_tag.get("preferred", []))
+
     def test_resume_preview_workflow_normal(self, monkeypatch):
         """简历预览重新匹配"""
         from app.workflows.job_analysis_flow import run_resume_preview_workflow

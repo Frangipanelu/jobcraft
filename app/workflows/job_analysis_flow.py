@@ -5,6 +5,7 @@
 - run_step2_workflow: 缺口分析 + 润色建议（GapPolishAgent + 本地融合）
 - run_job_analysis_workflow: 旧版完整分析（JdAtsAgent → ScoreMatchAgent → 融合 → SugAgent）
 - run_analyze_ats_workflow: 仅 ATS 解析（JdAtsAgent）
+- run_structured_ats_workflow: 结构化前端分析（用户已分好 duties/requirements）
 - run_resume_preview_workflow: 简历预览重新匹配（JdAtsAgent → ScoreMatchAgent → 融合）
 """
 
@@ -15,10 +16,15 @@ from langgraph.graph import END, START, StateGraph
 
 from app.agents.ats_recommend_agent import AtsRecommendAgent
 from app.agents.gap_polish_agent import GapPolishAgent
-from app.agents.jd_ats_agent import JdAtsAgent
+from app.agents.jd_ats_agent import JdAtsAgent, analyze_structured_jd
 from app.agents.score_match_agent import ScoreMatchAgent
 from app.agents.sug_agent import SugAgent
-from app.schemas.jobcraft import ATSProfile, JobAnalysisResult, SuggestionsResult
+from app.schemas.jobcraft import (
+    ATSProfile,
+    JobAnalysisResult,
+    StructuredRequirementItem,
+    SuggestionsResult,
+)
 from app.tools import db_tools, jobcraft_analyze
 
 logger = logging.getLogger(__name__)
@@ -382,3 +388,66 @@ def run_resume_preview_workflow(
     }
     result = app.invoke(initial_state)
     return result.get("result", {})
+
+
+# ============================================================
+#  结构化 JD 分析（前端已分好 duties/requirements + 标签）
+# ============================================================
+
+
+def run_structured_ats_workflow(
+    company: str,
+    position: str,
+    duties: List[str],
+    requirements: List[StructuredRequirementItem],
+) -> Dict[str, Any]:
+    """结构化 JD 分析：用户标签已确定 required/preferred，LLM 只分析细节。
+
+    :param company: 公司名称。
+    :param position: 岗位名称（优先采用，空则回落 ATS 岗位名）。
+    :param duties: 岗位职责逐条。
+    :param requirements: 任职要求逐条（含标签）。
+    :return: {"ats_profile": ATSProfile dict, "raw": ..., "company": str, "position": str}。
+    """
+    out = analyze_structured_jd(duties=duties, requirements=requirements)
+    return {
+        "ats_profile": out["ats"],
+        "raw": out["raw"],
+        "company": company,
+        "position": position or out["ats"].get("job_title", ""),
+    }
+
+
+def run_structured_ats_split(jd_text: str) -> Dict[str, Any]:
+    """把粘贴的原始 JD 文本拆分为结构化块，供前端表单预填。
+
+    duties ← 职责区块；requirements ← 任职要求区块（含"优先/加分/尤佳"
+    标记的进 preferred 标签；从官方语料看硬性要求常直接出现在任职要求中，
+    此处保留原文不拆，由结构化标签在分析时区分）。
+
+    :param jd_text: 从招聘网站复制的原始 JD 全文。
+    :return: {"duties": [str], "requirements": [{"text": str, "tag": str}]}。
+    """
+    from app.pipeline.jd_extractor import _PREF_TAIL_RE
+    from app.pipeline.jd_structurer import SectionKind, structure_jd
+
+    doc = structure_jd(jd_text)
+    duties: List[str] = []
+    requirements: List[str] = []
+    preferred: List[str] = []
+    for item in doc.items:
+        text = (item.text or "").strip()
+        if not text:
+            continue
+        if item.section is SectionKind.RESPONSIBILITIES:
+            duties.append(text)
+        elif item.section is SectionKind.REQUIREMENTS:
+            if _PREF_TAIL_RE.search(text):
+                preferred.append(text)
+            else:
+                requirements.append(text)
+        elif item.section is SectionKind.PREFERRED:
+            preferred.append(text)
+    req_out = [{"text": t, "tag": "required"} for t in requirements]
+    req_out += [{"text": t, "tag": "preferred"} for t in preferred]
+    return {"duties": duties, "requirements": req_out}

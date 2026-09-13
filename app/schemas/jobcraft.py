@@ -223,9 +223,7 @@ class AmbiguousDecision(BaseModel):
     """LLM 对算法不确定条目的歧义裁决（v0.5 §八 UNKNOWN→LLM fallback）。"""
 
     item_id: str = Field(description="对应传入条目 id")
-    label: str = Field(
-        description="required | preferred | responsibility | soft_skill"
-    )
+    label: str = Field(description="required | preferred | responsibility | soft_skill")
     reason: str = Field("", description="裁决理由")
 
 
@@ -241,6 +239,29 @@ class AtsInference(BaseModel):
     dimension_requirements: List[DimensionRequirement] = Field(default_factory=list)
     subtext_decoded: List[SubtextDecode] = Field(default_factory=list)
     ambiguous: List[AmbiguousDecision] = Field(default_factory=list)
+
+
+class StructuredRequirementItem(BaseModel):
+    """前端结构化 JD 的任职要求条目（用户在前端已分好类）"""
+
+    text: str = Field(..., description="要求原文")
+    tag: str = Field(
+        "required",
+        description="hard(硬性门槛/学历年限) | required(必选) | preferred(加分)",
+    )
+
+
+class StructuredJDAnalyzePayload(BaseModel):
+    """前端结构化 JD 分析请求（不再需要整段原文让 L1 猜区块）"""
+
+    company: str = Field("", description="公司名称")
+    position: str = Field("", description="岗位名称")
+    duties: List[str] = Field(
+        default_factory=list, description="岗位职责逐条（前端已分好类）"
+    )
+    requirements: List[StructuredRequirementItem] = Field(
+        default_factory=list, description="任职要求逐条（用户已打标签）"
+    )
 
 
 class ATSProfile(BaseModel):

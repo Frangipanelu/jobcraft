@@ -15,6 +15,8 @@ JD ATS 解析 Agent
 """
 
 import json
+import re
+from itertools import count
 from typing import Any, Dict, Sequence
 
 from app.agents.base_agent import BaseAgent
@@ -27,13 +29,19 @@ from app.agents.evidence import (
 from app.core.llm import model
 from app.core.prompts import load_prompt
 from app.pipeline.evidence_builder import build_source_evidence
-from app.pipeline.jd_classifier import ClassifiedItem, classify_jd
+from app.pipeline.jd_classifier import ClassLabel, ClassifiedItem, classify_jd
 from app.pipeline.jd_extractor import JDExtraction, extract_jd
-from app.pipeline.jd_structurer import StructuredJD, structure_jd
+from app.pipeline.jd_structurer import (
+    SectionItem,
+    SectionKind,
+    StructuredJD,
+    structure_jd,
+)
 from app.schemas.jobcraft import (
     ATSProfile,
     AtsInference,
     EvidenceItem,
+    StructuredRequirementItem,
 )
 from app.tools.llm_json import invoke_structured
 
@@ -62,6 +70,13 @@ _LABEL_TO_FIELD = {
 
 # 低置信阈值：低于此值或 UNKNOWN 的条目交由 LLM 复核
 _REVIEW_CONFIDENCE = 0.6
+
+# 格式/薪资 stub 判据：markdown 标题行（`##Al Builder - 产品`），或
+# 全粗体薪资 stub（如「欣旺达**生产经理****17-22k**」）。这类文本不是需求，
+# L1 无法归类（UNKNOWN），也不应被 LLM 裁决成 required。
+_REQUIREMENT_STUB_RE = re.compile(
+    r"(?:^\s*#{1,6}\s*\S|\*{2}[^*]*\d+\s*[-~]\s*\d+\s*[kKwW万]?[^*]*\*{2})"
+)
 
 
 def _build_ats_prompt(jd_text: str, *, version: str = "v1") -> str:
@@ -131,9 +146,151 @@ def _build_v4_prompt(
         "jd_ats_analysis",
         version=4,
         dims=dims,
-        structured_summary=_build_structured_summary(structured, classified, extraction),
+        structured_summary=_build_structured_summary(
+            structured, classified, extraction
+        ),
         jd_text=jd_text[:3000],
     )
+
+
+# 结构化路径：用户标签 → ClassLabel（取代 L1 区块检测与 required/preferred 猜测）
+_STRUCT_TAG_TO_SECTION = {
+    "hard": SectionKind.REQUIREMENTS,
+    "required": SectionKind.REQUIREMENTS,
+    "preferred": SectionKind.PREFERRED,
+}
+_STRUCT_TAG_TO_LABEL = {
+    "hard": ClassLabel.REQUIRED,
+    "required": ClassLabel.REQUIRED,
+    "preferred": ClassLabel.PREFERRED,
+}
+
+
+def _build_structured_from_input(
+    duties: Sequence[str],
+    requirements: Sequence[StructuredRequirementItem],
+) -> tuple[StructuredJD, list[ClassifiedItem]]:
+    """把前端已分好类的 duties/requirements 转成 L1 管线输入。
+
+    - 每条 duty → ``responsibilities`` 区块 + ``RESPONSIBILITY`` 标签。
+    - 每条 requirement 按用户标签（hard/required/preferred）直接给出
+      section 与 label，确定性分流，不再依赖区块检测或 LLM 猜 preferred。
+    - ``unknown`` 条目不存在：用户没打标签的诉求由前端兜底补标签，
+      后端绝不把硬门槛/加分项误判进 required（此前 preferred 召回差的根因）。
+
+    :param duties: 岗位职责逐条文本。
+    :param requirements: 任职要求逐条（含用户标签）。
+    :return: (结构化输入, 确定性分类结果)。
+    """
+    doc = StructuredJD(source="")
+    classified: list[ClassifiedItem] = []
+    seq = count(1)
+    for text in duties:
+        item_id = f"resp_{next(seq):03d}"
+        raw = text if text.endswith(("\n", "、", "。", ";", "；")) else text + "。"
+        item = SectionItem(
+            item_id=item_id,
+            section=SectionKind.RESPONSIBILITIES,
+            text=text,
+            raw=raw,
+            start=0,
+            end=len(text),
+        )
+        doc.items.append(item)
+        classified.append(
+            ClassifiedItem(
+                item_id=item_id,
+                section=SectionKind.RESPONSIBILITIES,
+                text=text,
+                start=0,
+                end=len(text),
+                label=ClassLabel.RESPONSIBILITY,
+                confidence=1.0,
+                rule="structured:duty",
+            )
+        )
+    for req in requirements:
+        text = (req.text or "").strip()
+        if not text:
+            continue
+        tag = req.tag or "required"
+        section = _STRUCT_TAG_TO_SECTION.get(tag, SectionKind.REQUIREMENTS)
+        label = _STRUCT_TAG_TO_LABEL.get(tag, ClassLabel.REQUIRED)
+        item_id = f"{'req' if section is SectionKind.REQUIREMENTS else 'pref'}_{next(seq):03d}"
+        item = SectionItem(
+            item_id=item_id,
+            section=section,
+            text=text,
+            raw=text,
+            start=0,
+            end=len(text),
+        )
+        doc.items.append(item)
+        classified.append(
+            ClassifiedItem(
+                item_id=item_id,
+                section=section,
+                text=text,
+                start=0,
+                end=len(text),
+                label=label,
+                confidence=1.0,
+                rule=f"structured:{tag}",
+            )
+        )
+    return doc, classified
+
+
+def _structured_to_text(
+    duties: Sequence[str], requirements: Sequence[StructuredRequirementItem]
+) -> str:
+    """把两条结构化块拼回可读文本，供 LLM 细节分析（地址/薪资不传入）。"""
+    lines: list[str] = []
+    if duties:
+        lines.extend(["【岗位职责】", *duties])
+    if requirements:
+        lines.append("【任职要求】")
+        for r in requirements:
+            head = {
+                "hard": "（硬性门槛）",
+                "required": "（必选）",
+                "preferred": "（加分项）",
+            }.get(r.tag, "")
+            lines.append(f"{head}{r.text.strip()}")
+    return "\n".join(lines)
+
+
+def analyze_structured_jd(
+    duties: Sequence[str],
+    requirements: Sequence[StructuredRequirementItem],
+) -> Dict[str, Any]:
+    """结构化 JD 分析入口：L1 确定性 + LLM 细节（文化词/D1-D8/潜台词）一次调用。
+
+    与 ``v4`` 分层路径区别：不需要 ``structure_jd`` 区块检测，
+    也不需要 classifier 猜 required/preferred——用户标签即事实。
+    L1 仍负责 学历/年限/指标/技能token/经验证据 的确定性抽取。
+
+    :param duties: 岗位职责逐条。
+    :param requirements: 任职要求逐条（用户已打 hard/required/preferred 标签）。
+    :return: {"ats": ATSProfile dict, "raw": AtsInference dict}。
+    """
+    structured, classified = _build_structured_from_input(duties, requirements)
+    if not classified:
+        raise ValueError("岗位职责与任职要求不能同时为空")
+    extraction = extract_jd(structured, classified)
+    jd_text = _structured_to_text(duties, requirements)
+
+    inference = invoke_structured(
+        model,
+        AtsInference,
+        _build_v4_prompt(jd_text, structured, classified, extraction),
+        debug_label="jd_ats_v4_structured",
+    )
+    merged = merge_ats(extraction, classified, inference, jd_text)
+    return {
+        "ats": merged.model_dump(),
+        "raw": inference.model_dump(),
+    }
 
 
 def merge_ats(
@@ -151,6 +308,7 @@ def merge_ats(
     :return: 合并后的 ATSProfile。
     """
     text_by_id = {c.item_id: c.text for c in classified}
+    label_by_id = {c.item_id: c.label for c in classified}
     bucket = {
         "required_skills": list(extraction.required_skills),
         "preferred_skills": list(extraction.preferred_skills),
@@ -160,7 +318,12 @@ def merge_ats(
     for decision in inference.ambiguous:
         field = _LABEL_TO_FIELD.get(decision.label)
         text = text_by_id.get(decision.item_id)
-        if not field or not text:
+        # LLM 只裁决 L1 未定论（UNKNOWN）的条目：L1 已确定性归类时不覆盖，
+        # 防止缓存远期 raw 的陈旧裁决在重建时污染 L1 核心结果。
+        if label_by_id.get(decision.item_id) is not ClassLabel.UNKNOWN:
+            continue
+        # 纯格式/薪资 stub 不是需求，LLM 也不应收编（如「**17-22k**」）。
+        if not field or not text or _REQUIREMENT_STUB_RE.search(text):
             continue
         existing = {normalize(v) for v in bucket[field]}
         if normalize(text) not in existing:
