@@ -591,7 +591,8 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
       loadDashboard(userId),
       loadExperiences(userId),
       loadInterviews(userId),
-      loadJdAnalyses(userId)
+      loadJdAnalyses(userId),
+      loadHistoricalResumes(userId)
     ])
   }
 
@@ -700,6 +701,30 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
       setExperiences(cards.map(cardToExperience))
     } catch (error) {
       console.error('Load experiences failed:', error)
+    }
+  }
+
+  const loadHistoricalResumes = async (userId: number) => {
+    try {
+      const records = await jobApi.listBaseResumes()
+      const list = records.map((r) => {
+        const format = (r.format === 'pdf' ? 'pdf' : 'docx') as HistoricalResume['format']
+        const formatTags = r.tags && r.tags.length > 0 ? r.tags : (r.parsed_count > 0 ? ['已解析', 'AI 结构化'] : ['已上传'])
+        return {
+          id: 'hr-' + r.id,
+          serverId: r.id,
+          name: r.name || '上传简历',
+          uploadDate: (r.created_at || '').replace('T', ' ').substring(0, 16),
+          fileSize: r.file_size || '',
+          isDefault: !!r.is_default,
+          parsedExperiencesCount: r.parsed_count || 0,
+          format,
+          tags: formatTags
+        }
+      })
+      setHistoricalResumes(list)
+    } catch (error) {
+      console.error('Load historical resumes failed:', error)
     }
   }
 
@@ -852,6 +877,23 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
       uploadDate: new Date().toISOString().replace('T', ' ').substring(0, 16)
     };
 
+    // 持久化到后端（刷新后可通过历史版本列表恢复）
+    jobApi.createBaseResume({
+      name: resumeData.name,
+      file_size: resumeData.fileSize,
+      format: resumeData.format,
+      parsed_count: resumeData.parsedExperiencesCount,
+      tags: resumeData.tags
+    }).then((record) => {
+      setHistoricalResumes((prev) =>
+        prev.map((r) =>
+          r.id === newResume.id ? { ...r, serverId: record.id } : r
+        )
+      );
+    }).catch((error) => {
+      console.error('Persist base resume failed:', error);
+    });
+
     setHistoricalResumes((prev) => [newResume, ...prev]);
     showToast({
       type: 'success',
@@ -875,6 +917,11 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
   const deleteHistoricalResume = (id: string) => {
     const target = historicalResumes.find((r) => r.id === id);
     setHistoricalResumes((prev) => prev.filter((r) => r.id !== id));
+    if (target?.serverId) {
+      jobApi.deleteBaseResume(target.serverId).catch((error) => {
+        console.error('Delete base resume failed:', error);
+      });
+    }
     showToast({
       type: 'info',
       title: '历史简历已删除',
@@ -883,12 +930,18 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
   };
 
   const setDefaultHistoricalResume = (id: string) => {
+    const target = historicalResumes.find((r) => r.id === id);
     setHistoricalResumes((prev) =>
       prev.map((r) => ({
         ...r,
         isDefault: r.id === id
       }))
     );
+    if (target?.serverId) {
+      jobApi.setDefaultBaseResume(target.serverId).catch((error) => {
+        console.error('Set default base resume failed:', error);
+      });
+    }
     showToast({
       type: 'success',
       title: '默认底座简历已设置',

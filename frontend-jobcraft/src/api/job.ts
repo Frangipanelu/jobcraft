@@ -222,6 +222,52 @@ export async function saveResume(payload: {
   })
 }
 
+// 底座简历历史版本（持久化）
+
+export interface BaseResumeRecord {
+  id: number
+  user_id: number
+  name: string
+  file_size: string
+  format: string
+  parsed_count: number
+  tags: string[]
+  is_default: boolean
+  created_at: string | null
+  updated_at: string | null
+}
+
+export async function createBaseResume(payload: {
+  name: string
+  file_size: string
+  format: string
+  parsed_count: number
+  tags: string[]
+}): Promise<BaseResumeRecord> {
+  return request<BaseResumeRecord>('/api/jobcraft/experience/base-resumes', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function listBaseResumes(): Promise<BaseResumeRecord[]> {
+  return request<BaseResumeRecord[]>('/api/jobcraft/experience/base-resumes', {
+    method: 'GET',
+  })
+}
+
+export async function setDefaultBaseResume(resumeId: number): Promise<BaseResumeRecord> {
+  return request<BaseResumeRecord>(`/api/jobcraft/experience/base-resumes/${resumeId}/default`, {
+    method: 'PATCH',
+  })
+}
+
+export async function deleteBaseResume(resumeId: number): Promise<{ ok: boolean }> {
+  return request<{ ok: boolean }>(`/api/jobcraft/experience/base-resumes/${resumeId}`, {
+    method: 'DELETE',
+  })
+}
+
 export function getResumeDownloadUrl(path: string): string {
   return `/api/jobcraft/resume/download?path=${encodeURIComponent(path)}`
 }

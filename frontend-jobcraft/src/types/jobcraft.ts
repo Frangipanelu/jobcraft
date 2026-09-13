@@ -39,6 +39,7 @@ export interface UserProfile {
 
 export interface HistoricalResume {
   id: string;
+  serverId?: number;
   name: string;
   uploadDate: string;
   fileSize: string;
