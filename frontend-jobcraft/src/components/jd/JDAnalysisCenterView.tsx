@@ -325,13 +325,31 @@ export const JDAnalysisCenterView: React.FC = () => {
                   </button>
                 )}
               </div>
+
+              {/* 标签打点说明 */}
+              <div className="mt-3 p-3 rounded-lg bg-page border border-edge text-[11px] leading-relaxed text-muted">
+                <div className="font-bold text-ink mb-1">三档标签怎么区分？核心一问：不满足这条，招聘方会不会直接刷掉？</div>
+                <ul className="space-y-1 list-none">
+                  <li>
+                    <span className="font-semibold text-error">硬性门槛</span>：一眼就刷的真门槛——纯年限（如 5 年以上
+                    工作经验）、学历（统招本科）、硬性证书（PMP/注会）。这类你通常投递前已筛掉，表单里基本不出现。
+                  </li>
+                  <li>
+                    <span className="font-semibold text-ink">必选</span>：岗位核心能力，面试重点考察深浅——如「熟练使用
+                    Python」「3 年以上 AI 产品经验」（️⚠️ 这种「N 年 + 某领域」是能力型年限，算必选，不是硬性门槛）。
+                  </li>
+                  <li>
+                    <span className="font-semibold text-info">加分项</span>：锦上添花，没有也录用——如「熟悉 XX 者优先」「有多模态经验加分」。
+                  </li>
+                </ul>
+              </div>
             </div>
 
             {/* Submit Action Bar */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-4 border-t border-edge">
               <div className="flex items-center gap-2 text-xs text-muted">
                 <CheckCircle2 className="w-4 h-4 text-sage" />
-                <span>仅分析职责与要求：ATS 关键词、学历/年限门槛、招聘暗话、D1-D8 维度；地址与薪资不纳入</span>
+                <span>仅分析职责与要求：ATS 关键词、招聘暗话、D1-D8 维度；学历/年限/薪资/地址不纳入（门槛已由标签表达）</span>
               </div>
 
               <button
