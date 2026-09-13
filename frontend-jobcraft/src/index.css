@@ -22,6 +22,8 @@
   --color-error-bg: #F8ECEA;
   --color-info: #58718A;
   --color-info-bg: #EDF2F5;
+  --color-violet: #6B5B8A;
+  --color-violet-soft: #EFEBF5;
 
   /* Legacy compatibility aliases */
   --color-terra: #A86A35;
@@ -37,6 +39,8 @@
   --color-error-bg: #F8ECEA;
   --color-info: #58718A;
   --color-info-bg: #EDF2F5;
+  --color-violet: #6B5B8A;
+  --color-violet-soft: #EFEBF5;
 }
 
 @layer base {

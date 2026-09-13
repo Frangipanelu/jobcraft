@@ -4,6 +4,7 @@ import {
   UserProfile,
   Experience,
   Job,
+  JobStatus,
   JDAnalysis,
   ResumeVersion,
   Interview,
@@ -182,7 +183,8 @@ interface JobCraftContextType {
   
   // Job actions
   createJob: (jobData: { company: string; role: string; department?: string; salaryRange?: string; status?: Job['status'] }) => string;
-  updateJobStatus: (jobId: string, status: Job['status']) => void;
+  terminateJob: (jobId: string) => void;
+  resumeJob: (jobId: string) => void;
   deleteJob: (jobId: string) => void;
 
   // JD Analysis actions
@@ -368,13 +370,16 @@ function analysisToJD(result: JobAnalysisResult, jobId?: string): JDAnalysis {
  * 将后端 Submission 转换为前端 Job
  */
 function submissionToJob(sub: DashboardItem): Job {
-  const statusMap: Record<string, Job['status']> = {
-    APPLIED: 'delivered',
-    INVITED: 'interviewing',
-    ROUND_1: 'interviewing',
-    ROUND_2: 'interviewing',
-    OFFER: 'finished',
-    CLOSED: 'finished',
+  const terminated = sub.status === 'OFFER' || sub.status === 'CLOSED'
+  const steps: Job['steps'] = {
+    jdAnalysis: sub.has_analysis,
+    expMatched: sub.card_count > 0,
+    customResume: sub.has_resume,
+    applied: true,
+    prepStage:
+      sub.prep_count > sub.review_count ? 'in_progress' : sub.prep_count > 0 ? 'done' : 'pending',
+    reviewStage: sub.review_count > 0 ? 'done' : 'pending',
+    terminated,
   }
 
   return {
@@ -382,24 +387,29 @@ function submissionToJob(sub: DashboardItem): Job {
     company: sub.company,
     role: sub.position,
     salaryRange: '面议',
-    status: statusMap[sub.status] || 'pending',
+    status: deriveJobStatus(steps),
     matchScore: 0,
     applyDate: sub.created_at?.split('T')[0] || new Date().toISOString().split('T')[0],
     lastUpdated: sub.updated_at || '刚刚',
     currentStage: SUBMISSION_STATUS_CN[sub.status] || '待处理',
     nextAction: '',
-    steps: {
-      jdAnalysis: sub.has_analysis,
-      expMatched: sub.card_count > 0,
-      customResume: sub.has_resume,
-      applied: true,
-      prepStage: sub.prep_count > 0 ? 'done' : 'pending',
-      reviewStage: sub.review_count > 0 ? 'done' : 'pending'
-    },
+    steps,
     jdAnalysisId: sub.job_analysis_id ? String(sub.job_analysis_id) : undefined,
     resumeId: String(sub.id),
     interviewIds: []
   }
+}
+
+/**
+ * 由 steps 派生岗位状态（单一事实源，流程只更新 steps，不手动写 status）。
+ * 优先级从高到低：已结束 → 待面试 → 已复盘 → 待投递 → 待处理。
+ */
+function deriveJobStatus(steps: Job['steps']): JobStatus {
+  if (steps.terminated) return 'finished';
+  if (steps.prepStage === 'in_progress') return 'interviewing';
+  if (steps.reviewStage === 'done') return 'reviewed';
+  if (steps.jdAnalysis) return 'delivered';
+  return 'pending';
 }
 
 function mapRoundType(t: string): Interview['roundType'] {
@@ -983,29 +993,29 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
     role: string;
     department?: string;
     salaryRange?: string;
-    status?: Job['status'];
   }) => {
     const newId = 'job-' + Date.now();
+    const steps: Job['steps'] = {
+      jdAnalysis: false,
+      expMatched: false,
+      customResume: false,
+      applied: false,
+      prepStage: 'pending',
+      reviewStage: 'pending'
+    };
     const newJob: Job = {
       id: newId,
       company: jobData.company,
       role: jobData.role,
       department: jobData.department || '核心业务线',
       salaryRange: jobData.salaryRange || '面议',
-      status: jobData.status || 'pending',
+      status: deriveJobStatus(steps),
       matchScore: 0,
       applyDate: new Date().toISOString().split('T')[0],
       lastUpdated: '刚刚',
       currentStage: '待分析 JD',
       nextAction: '开始进行该岗位的 JD 深度解析',
-      steps: {
-        jdAnalysis: false,
-        expMatched: false,
-        customResume: false,
-        applied: false,
-        prepStage: 'pending',
-        reviewStage: 'pending'
-      },
+      steps,
       interviewIds: []
     };
 
@@ -1045,27 +1055,41 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
     return newId;
   };
 
-  const updateJobStatus = (jobId: string, status: Job['status']) => {
+  const terminateJob = (jobId: string) => {
     setJobs((prev) =>
-      prev.map((j) => {
-        if (j.id === jobId) {
-          return {
-            ...j,
-            status,
-            lastUpdated: '刚刚',
-            steps: {
-              ...j.steps,
-              applied: status === 'delivered' || status === 'interviewing' || status === 'finished'
+      prev.map((j) =>
+        j.id === jobId
+          ? {
+              ...j,
+              lastUpdated: '刚刚',
+              steps: { ...j.steps, terminated: true, applied: true }
             }
-          };
-        }
-        return j;
-      })
+          : j
+      )
     );
     showToast({
       type: 'info',
-      title: '状态已更新',
-      message: `岗位推进状态已切换为「${status === 'interviewing' ? '面试中' : status === 'delivered' ? '已投递' : status === 'finished' ? '已结束' : '待处理'}」。`
+      title: '流程已结束',
+      message: '该岗位流程已标记为「已结束」，可随时恢复处理。'
+    });
+  };
+
+  const resumeJob = (jobId: string) => {
+    setJobs((prev) =>
+      prev.map((j) =>
+        j.id === jobId
+          ? {
+              ...j,
+              lastUpdated: '刚刚',
+              steps: { ...j.steps, terminated: false }
+            }
+          : j
+      )
+    );
+    showToast({
+      type: 'success',
+      title: '岗位已恢复',
+      message: '该岗位已重新进入推进列表，状态按实际进度自动展示。'
     });
   };
 
@@ -1095,26 +1119,27 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
         targetJobId = existing.id;
       } else {
         targetJobId = 'job-' + Date.now();
+        const stepsDefine: Job['steps'] = {
+          jdAnalysis: true,
+          expMatched: true,
+          customResume: false,
+          applied: false,
+          prepStage: 'pending',
+          reviewStage: 'pending'
+        };
         const autoJob: Job = {
           id: targetJobId,
           company: data.company,
           role: data.role,
           department: '核心业务线',
           salaryRange: '面议',
-          status: 'interviewing',
+          status: deriveJobStatus(stepsDefine),
           matchScore: 0,
           applyDate: new Date().toISOString().split('T')[0],
           lastUpdated: '刚刚',
-          currentStage: '准备面试 · 待安排',
-          nextAction: '已完成 JD 深度分析，可开始制定面试攻防策略',
-          steps: {
-            jdAnalysis: true,
-            expMatched: true,
-            customResume: false,
-            applied: true,
-            prepStage: 'in_progress',
-            reviewStage: 'pending'
-          },
+          currentStage: '已完成 JD 分析 · 待投递',
+          nextAction: '已完成 JD 深度分析，可开始定制简历并投递',
+          steps: stepsDefine,
           jdAnalysisId: newId,
           interviewIds: []
         };
@@ -1181,26 +1206,27 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
         targetJobId = existing.id;
       } else {
         targetJobId = 'job-' + Date.now();
+        const autoSteps: Job['steps'] = {
+          jdAnalysis: true,
+          expMatched: true,
+          customResume: false,
+          applied: false,
+          prepStage: 'pending',
+          reviewStage: 'pending'
+        };
         const autoJob: Job = {
           id: targetJobId,
           company: data.company,
           role: data.role,
           department: '核心业务线',
           salaryRange: '面议',
-          status: 'interviewing',
+          status: deriveJobStatus(autoSteps),
           matchScore: 0,
           applyDate: new Date().toISOString().split('T')[0],
           lastUpdated: '刚刚',
-          currentStage: '准备面试 · 待安排',
-          nextAction: '已完成结构化 JD 分析，可开始制定面试攻防策略',
-          steps: {
-            jdAnalysis: true,
-            expMatched: true,
-            customResume: false,
-            applied: true,
-            prepStage: 'in_progress',
-            reviewStage: 'pending'
-          },
+          currentStage: '已完成结构化 JD 分析 · 待投递',
+          nextAction: '已完成结构化 JD 分析，可开始定制简历并投递',
+          steps: autoSteps,
           jdAnalysisId: newId,
           interviewIds: []
         };
@@ -1671,7 +1697,6 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
           j.id === data.jobId
             ? {
                 ...j,
-                status: 'interviewing',
                 interviewIds: [...j.interviewIds, newId],
                 currentStage: data.roundName,
                 nextAction: `准备${data.roundName}（${data.time}）`,
@@ -1877,7 +1902,7 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
           j.id === targetInterview.jobId
             ? {
                 ...j,
-                steps: { ...j.steps, reviewStage: 'done' }
+                steps: { ...j.steps, reviewStage: 'done', prepStage: 'done' }
               }
             : j
         )
@@ -2249,7 +2274,8 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
         showToast,
         dismissToast,
         createJob,
-        updateJobStatus,
+        terminateJob,
+        resumeJob,
         deleteJob,
         createJDAnalysis,
         createStructuredJDAnalysis,

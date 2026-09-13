@@ -18,7 +18,7 @@ interface JobsListViewProps {
 }
 
 export const JobsListView: React.FC<JobsListViewProps> = ({ onOpenNewJob }) => {
-  const { jobs, navigateTo, updateJobStatus } = useJobCraft();
+  const { jobs, navigateTo, terminateJob, resumeJob } = useJobCraft();
   const [activeFilter, setActiveFilter] = useState<'all' | JobStatus>('all');
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -34,9 +34,11 @@ export const JobsListView: React.FC<JobsListViewProps> = ({ onOpenNewJob }) => {
   const getStatusBadge = (status: JobStatus) => {
     switch (status) {
       case 'interviewing':
-        return <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-sage-soft text-sage border border-sage/20">面试中</span>;
+        return <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-sage-soft text-sage border border-sage/20">待面试</span>;
+      case 'reviewed':
+        return <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-violet-soft text-violet border border-violet/20">已复盘</span>;
       case 'delivered':
-        return <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-info-bg text-info border border-info/20">已投递</span>;
+        return <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-info-bg text-info border border-info/20">待投递</span>;
       case 'pending':
         return <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-warning-bg text-warning border border-warning/20">待处理</span>;
       case 'finished':
@@ -95,7 +97,7 @@ export const JobsListView: React.FC<JobsListViewProps> = ({ onOpenNewJob }) => {
                 : 'text-muted hover:bg-page'
             }`}
           >
-            已投递 ({jobs.filter((j) => j.status === 'delivered').length})
+            待投递 ({jobs.filter((j) => j.status === 'delivered').length})
           </button>
           <button
             onClick={() => setActiveFilter('interviewing')}
@@ -105,7 +107,17 @@ export const JobsListView: React.FC<JobsListViewProps> = ({ onOpenNewJob }) => {
                 : 'text-muted hover:bg-page'
             }`}
           >
-            面试中 ({jobs.filter((j) => j.status === 'interviewing').length})
+            待面试 ({jobs.filter((j) => j.status === 'interviewing').length})
+          </button>
+          <button
+            onClick={() => setActiveFilter('reviewed')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+              activeFilter === 'reviewed'
+                ? 'bg-ink text-white'
+                : 'text-muted hover:bg-page'
+            }`}
+          >
+            已复盘 ({jobs.filter((j) => j.status === 'reviewed').length})
           </button>
           <button
             onClick={() => setActiveFilter('finished')}
@@ -171,16 +183,21 @@ export const JobsListView: React.FC<JobsListViewProps> = ({ onOpenNewJob }) => {
 
             {/* Right: Actions */}
             <div className="flex items-center gap-2.5 shrink-0">
-              <select
-                value={job.status}
-                onChange={(e) => updateJobStatus(job.id, e.target.value as JobStatus)}
-                className="px-2.5 py-1.5 text-xs rounded-lg border border-edge text-ink bg-page focus:outline-none"
-              >
-                <option value="pending">状态: 待处理</option>
-                <option value="delivered">状态: 已投递</option>
-                <option value="interviewing">状态: 面试中</option>
-                <option value="finished">状态: 已结束</option>
-              </select>
+              {job.status === 'finished' ? (
+                <button
+                  onClick={() => resumeJob(job.id)}
+                  className="px-3 py-1.5 text-xs rounded-lg border border-edge text-ink bg-page hover:bg-page-dim transition"
+                >
+                  恢复处理
+                </button>
+              ) : (
+                <button
+                  onClick={() => terminateJob(job.id)}
+                  className="px-3 py-1.5 text-xs rounded-lg border border-error/20 text-error hover:bg-error-bg transition"
+                >
+                  标记已结束
+                </button>
+              )}
 
               <button
                 onClick={() => navigateTo('job_workspace', { jobId: job.id })}

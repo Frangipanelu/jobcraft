@@ -129,7 +129,6 @@ export const NewInterviewPrep: React.FC<Props> = ({ jobId, mode = 'standalone' }
     const newJobId = createJob({
       company: newJobCompany.trim(),
       role: newJobRole.trim(),
-      status: 'pending'
     });
 
     createJDAnalysis({

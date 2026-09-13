@@ -29,10 +29,13 @@ export const WorkbenchView: React.FC<WorkbenchViewProps> = ({
 
   // Metrics derived from real jobs data (dashboard → submissionToJob)
   const deliveredCount = jobs.filter(
-    (j) => j.status !== 'pending'
+    (j) => j.status === 'delivered'
   ).length;
   const interviewingCount = jobs.filter(
     (j) => j.status === 'interviewing'
+  ).length;
+  const reviewedCount = jobs.filter(
+    (j) => j.status === 'reviewed'
   ).length;
   const pendingCount = jobs.filter(
     (j) => j.status === 'pending'
@@ -85,20 +88,22 @@ export const WorkbenchView: React.FC<WorkbenchViewProps> = ({
   };
 
   const STATUS_BADGE: Record<Job['status'], { text: string; className: string }> = {
-    interviewing: { text: '面试中', className: 'bg-warning-bg text-warning border border-warning/20' },
-    delivered: { text: '已投递', className: 'bg-sage-soft text-sage border border-sage/20' },
-    finished: { text: '已完成', className: 'bg-page text-muted border border-edge' },
-    pending: { text: '待处理', className: 'bg-info-bg text-info border border-info/20' }
+    interviewing: { text: '待面试', className: 'bg-sage-soft text-sage border border-sage/20' },
+    reviewed: { text: '已复盘', className: 'bg-violet-soft text-violet border border-violet/20' },
+    delivered: { text: '待投递', className: 'bg-info-bg text-info border border-info/20' },
+    finished: { text: '已结束', className: 'bg-page text-muted border border-edge' },
+    pending: { text: '待处理', className: 'bg-warning-bg text-warning border border-warning/20' }
   };
 
   const getStatusBadge = (job: Job) =>
     STATUS_BADGE[job.status] || STATUS_BADGE.pending;
 
   const NEXT_STEP_TEXT: Record<Job['status'], string> = {
-    interviewing: '准备下一轮面试',
-    delivered: '等待面试通知',
-    pending: '查看 JD 分析结果',
-    finished: '复盘已完成'
+    interviewing: '参加面试 · 记录问答',
+    reviewed: '复盘已完成 · 沉淀经历',
+    delivered: '定制简历 · 准备投递',
+    finished: '流程已结束',
+    pending: '查看 JD 分析结果'
   };
 
   const getNextStepText = (job: Job) => NEXT_STEP_TEXT[job.status];
@@ -111,7 +116,8 @@ export const WorkbenchView: React.FC<WorkbenchViewProps> = ({
         interviewing: 0,
         delivered: 1,
         pending: 2,
-        finished: 3
+        reviewed: 3,
+        finished: 4
       };
       return order[a.status] - order[b.status];
     })
@@ -137,10 +143,12 @@ export const WorkbenchView: React.FC<WorkbenchViewProps> = ({
       company: j.company || '未命名岗位',
       action:
         j.status === 'interviewing'
-          ? '进入面试准备阶段'
-          : j.status === 'finished'
+          ? '准备面试阶段'
+          : j.status === 'reviewed'
           ? '面试复盘完成'
-          : '已投递',
+          : j.status === 'finished'
+          ? '流程已结束'
+          : '待投递',
       time: formatRelativeTime(j.applyDate || j.lastUpdated)
     }))
     .slice(0, 4);
@@ -185,7 +193,7 @@ export const WorkbenchView: React.FC<WorkbenchViewProps> = ({
             {deliveredCount}
           </div>
           <div className="text-xs sm:text-[13px] font-bold text-ink">
-            已投递岗位
+            待投递岗位
           </div>
           <div>
             <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-0.5 rounded-md bg-sage-soft text-sage border border-sage/20">
@@ -204,11 +212,11 @@ export const WorkbenchView: React.FC<WorkbenchViewProps> = ({
             {interviewingCount}
           </div>
           <div className="text-xs sm:text-[13px] font-bold text-ink">
-            面试中
+            待面试
           </div>
           <div>
-            <span className="inline-block text-[11px] font-semibold px-2.5 py-0.5 rounded-md bg-warning-bg text-warning border border-warning/20">
-              重点推进
+            <span className="inline-block text-[11px] font-semibold px-2.5 py-0.5 rounded-md bg-sage-soft text-sage border border-sage/20">
+              面试准备中
             </span>
           </div>
         </div>
@@ -237,13 +245,13 @@ export const WorkbenchView: React.FC<WorkbenchViewProps> = ({
           className="bg-white rounded-2xl border border-edge p-5 shadow-xs hover:border-sage/40 transition-all duration-200 cursor-pointer space-y-1.5"
         >
           <div className="text-3xl sm:text-[34px] font-black text-ink tracking-tight leading-none">
-            {finishedCount}
+            {reviewedCount}
           </div>
           <div className="text-xs sm:text-[13px] font-bold text-ink">
-            已完成复盘
+            已复盘
           </div>
           <div>
-            <span className="inline-block text-[11px] font-semibold px-2.5 py-0.5 rounded-md bg-page text-muted border border-edge">
+            <span className="inline-block text-[11px] font-semibold px-2.5 py-0.5 rounded-md bg-violet-soft text-violet border border-violet/20">
               经验已沉淀
             </span>
           </div>
@@ -396,7 +404,7 @@ export const WorkbenchView: React.FC<WorkbenchViewProps> = ({
                     {job.company || '未命名岗位'} · {getNextStepText(job)}
                   </div>
                   <div className="text-xs text-muted">
-                    {job.status === 'interviewing' ? '面试准备阶段' : job.status === 'pending' ? 'JD 分析待完成' : '等待反馈'}
+                    {job.status === 'interviewing' ? '面试准备阶段' : job.status === 'pending' ? 'JD 分析待完成' : job.status === 'reviewed' ? '已完成复盘' : '待投递'}
                   </div>
                   <button
                     onClick={() => navigateTo('job_workspace', { jobId: job.id })}

@@ -224,7 +224,6 @@ export const NewInterviewModal: React.FC<Props> = ({ isOpen, jobId, mode, onClos
     const newJobId = createJob({
       company: newJobCompany.trim(),
       role: newJobRole.trim(),
-      status: 'pending'
     });
     
     // Create JD analysis record

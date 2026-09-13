@@ -107,7 +107,6 @@ export const NewReview: React.FC = () => {
     const newJobId = createJob({
       company: newJobCompany.trim(),
       role: newJobRole.trim(),
-      status: 'pending'
     });
 
     createJDAnalysis({

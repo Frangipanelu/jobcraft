@@ -77,6 +77,8 @@ export const JobWorkspaceView: React.FC<JobWorkspaceViewProps> = ({
                 className={`text-xs px-2.5 py-0.5 rounded-full font-semibold ${
                   currentJob.status === 'interviewing'
                     ? 'bg-sage-soft text-sage border border-sage/20'
+                    : currentJob.status === 'reviewed'
+                    ? 'bg-violet-soft text-violet border border-violet/20'
                     : currentJob.status === 'delivered'
                     ? 'bg-info-bg text-info border border-info/20'
                     : currentJob.status === 'finished'
@@ -85,9 +87,11 @@ export const JobWorkspaceView: React.FC<JobWorkspaceViewProps> = ({
                 }`}
               >
                 {currentJob.status === 'interviewing'
-                  ? '面试推进中'
+                  ? '待面试'
+                  : currentJob.status === 'reviewed'
+                  ? '已复盘'
                   : currentJob.status === 'delivered'
-                  ? '已投递'
+                  ? '待投递'
                   : currentJob.status === 'finished'
                   ? '已结束'
                   : '待处理'}

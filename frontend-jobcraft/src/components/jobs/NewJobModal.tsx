@@ -13,7 +13,6 @@ export const NewJobModal: React.FC<NewJobModalProps> = ({ isOpen, onClose }) => 
   const [role, setRole] = useState('');
   const [department, setDepartment] = useState('');
   const [salaryRange, setSalaryRange] = useState('40K–60K · 16薪');
-  const [status, setStatus] = useState<'pending' | 'delivered' | 'interviewing'>('pending');
 
   if (!isOpen) return null;
 
@@ -25,8 +24,7 @@ export const NewJobModal: React.FC<NewJobModalProps> = ({ isOpen, onClose }) => 
       company: company.trim(),
       role: role.trim(),
       department: department.trim() || 'AI 创新业务部',
-      salaryRange,
-      status
+      salaryRange
     });
 
     onClose();
@@ -145,47 +143,6 @@ export const NewJobModal: React.FC<NewJobModalProps> = ({ isOpen, onClose }) => 
                 onChange={(e) => setSalaryRange(e.target.value)}
                 className="w-full px-3 py-2 rounded-lg border border-edge focus:outline-none focus:border-sage text-xs text-ink"
               />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-ink mb-1">
-              初始推进状态
-            </label>
-            <div className="grid grid-cols-3 gap-2">
-              <button
-                type="button"
-                onClick={() => setStatus('pending')}
-                className={`py-2 text-xs rounded-lg font-medium border text-center transition cursor-pointer ${
-                  status === 'pending'
-                    ? 'border-warning/40 bg-warning-bg text-warning font-semibold'
-                    : 'border-edge text-muted hover:bg-page'
-                }`}
-              >
-                待处理
-              </button>
-              <button
-                type="button"
-                onClick={() => setStatus('delivered')}
-                className={`py-2 text-xs rounded-lg font-medium border text-center transition cursor-pointer ${
-                  status === 'delivered'
-                    ? 'border-info/40 bg-info-bg text-info font-semibold'
-                    : 'border-edge text-muted hover:bg-page'
-                }`}
-              >
-                已投递
-              </button>
-              <button
-                type="button"
-                onClick={() => setStatus('interviewing')}
-                className={`py-2 text-xs rounded-lg font-medium border text-center transition cursor-pointer ${
-                  status === 'interviewing'
-                    ? 'border-sage/40 bg-sage-soft text-sage font-semibold'
-                    : 'border-edge text-muted hover:bg-page'
-                }`}
-              >
-                面试中
-              </button>
             </div>
           </div>
 

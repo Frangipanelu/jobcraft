@@ -16,7 +16,7 @@ export type NavigationTab =
   | 'user_profile'
   | 'settings';
 
-export type JobStatus = 'pending' | 'delivered' | 'interviewing' | 'finished';
+export type JobStatus = 'pending' | 'delivered' | 'interviewing' | 'reviewed' | 'finished';
 export type ExperienceCategory = 'all' | 'work' | 'project' | 'education' | 'other' | 'internship' | 'competition' | 'paper';
 
 export type InterviewRoundType = 'business' | 'tech' | 'product' | 'hr' | 'comprehensive' | 'other';
@@ -384,6 +384,7 @@ export interface Job {
     applied: boolean;
     prepStage: 'done' | 'in_progress' | 'pending';
     reviewStage: 'done' | 'in_progress' | 'pending';
+    terminated?: boolean;
   };
   jdAnalysisId?: string;
   resumeId?: string;
