@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -27,7 +28,11 @@ from app.agents.evidence import (
     reclassify_claims,
     split_ontology_claims,
 )
-from app.agents.jd_ats_agent import JdAtsAgent
+from app.agents.jd_ats_agent import JdAtsAgent, merge_ats
+from app.pipeline.jd_classifier import classify_jd
+from app.pipeline.jd_extractor import extract_jd
+from app.pipeline.jd_structurer import structure_jd
+from app.schemas.jobcraft import AtsInference
 from app.tools.llm_json import register_usage_observer
 from evaluation.datasets import DEFAULT_DATASET
 from evaluation.jd_metrics import (
@@ -48,9 +53,9 @@ REPORT_PATH = Path(__file__).parent / "reports" / "jd_extraction_report.md"
 # 单条 LLM 调用超时（秒）。高于底层 HTTP 超时（llm.py 默认 180s），
 # 让请求先自断而非仅被弃线程；超时即放弃本轮，留待下次续跑重试。
 _LLM_CALL_TIMEOUT_S = 200.0
-# 账号级 429 限流（code 1302）的退避重试参数
-_RATE_LIMIT_BACKOFF_S = 60.0
-_RATE_LIMIT_MAX_RETRIES = 3
+# 账号级 429 限流（code 1302）与模型流量受限（code 1305）的退避重试参数
+_RATE_LIMIT_BACKOFF_S = 30.0
+_RATE_LIMIT_MAX_RETRIES = 4
 
 
 def _run_agent_with_timeout(
@@ -85,8 +90,9 @@ def _run_agent_with_retry(
 ) -> Dict[str, Any]:
     """带超时与 429 退避重试调用 JdAtsAgent（评测专用）。
 
-    账号级限流（code 1302 / HTTP 429）时按 60s×N 退避重试最多
-    ``_RATE_LIMIT_MAX_RETRIES`` 次，避免一次 429 把整轮打成假失败。
+    账号级限流（code 1302 / HTTP 429）或模型流量受限（code 1305）时按
+    60s×N 退避重试最多 ``_RATE_LIMIT_MAX_RETRIES`` 次，避免一次限流把整轮
+    打成假失败。
 
     :param jd_text: JD 文本
     :param prompt_version: prompt 版本
@@ -100,11 +106,13 @@ def _run_agent_with_retry(
             return _run_agent_with_timeout(jd_text, prompt_version, timeout_s)
         except Exception as exc:  # noqa: BLE001 - 429 需从任意异常中识别
             msg = str(exc)
-            if ("429" in msg or "1302" in msg) and attempt < _RATE_LIMIT_MAX_RETRIES:
+            if (
+                "429" in msg or "1302" in msg or "1305" in msg
+            ) and attempt < _RATE_LIMIT_MAX_RETRIES:
                 attempt += 1
                 wait = _RATE_LIMIT_BACKOFF_S * attempt
                 print(
-                    f"[jd_eval] 429 限流退避 {wait}s（第 {attempt} 次重试）...",
+                    f"[jd_eval] 429/1305 限流退避 {wait}s（第 {attempt} 次重试）...",
                     flush=True,
                 )
                 time.sleep(wait)
@@ -173,7 +181,7 @@ def observed_generate_ats(
 
     :param gold_cases: gold case 列表
     :param pred_file: 预测输出 jsonl 路径（兼作续跑缓存）
-    :param prompt_version: prompt 版本（"v1" / "v3"）
+    :param prompt_version: prompt 版本（"v1" / "v2" / "v3" / "v4"）
     :param pace_sec: 每次未命中缓存的 LLM 调用后的强制间隔（防触发账号级 429 限频；默认 0 表示不节流）
     :return: (ats 预测列表, usage snapshot)
     """
@@ -192,6 +200,20 @@ def observed_generate_ats(
                         reclassify_claims(split_ontology_claims(cached["raw"]))
                     ),
                 }
+            elif prompt_version == "v4" and cached.get("raw") and cached.get("jd_text"):
+                # L1 管道变更后，缓存 ats 已过期：用当前确定性管道 + 存储的 raw 推理重建
+                inf = AtsInference(**cached["raw"])
+                st = structure_jd(cached["jd_text"])
+                cl = classify_jd(st)
+                ex = extract_jd(st, cl)
+                cached = {
+                    **cached,
+                    "ats": merge_ats(ex, cl, inf, cached["jd_text"]).model_dump(),
+                }
+            if prompt_version in ("v3", "v4"):
+                # 重建结果写回预测文件（latest-wins），保证 spot/compare 读到新 L1
+                with pred_file.open("a", encoding="utf-8") as fh:
+                    fh.write(json.dumps(cached, ensure_ascii=False) + "\n")
             ats_preds.append(cached)
             continue
         before = collector.snapshot()
@@ -200,6 +222,8 @@ def observed_generate_ats(
             entry = {"case_id": case["case_id"], "ats": out["ats"]}
             if "raw" in out:
                 entry["raw"] = out["raw"]
+            if prompt_version == "v4":
+                entry["jd_text"] = case["jd_text"]
         except Exception as exc:  # noqa: BLE001 - 单 case 失败不中断整体
             print(f"[jd_eval] {case['case_id']} JdAtsAgent 失败: {exc}", flush=True)
             entry = {"case_id": case["case_id"], "ats": {"raw_summary": str(exc)}}
@@ -247,7 +271,7 @@ def run_benchmark(
 
     :param gold_path: gold 数据集路径
     :param outdir: 预测输出目录
-    :param prompt_version: prompt 版本（"v1" / "v3"）
+    :param prompt_version: prompt 版本（"v1" / "v2" / "v3" / "v4"）
     :param pace_sec: 每次未命中缓存的 LLM 调用后的强制间隔（防 429 限频）
     :return: 汇总 dict {case_results, usage, pred_files, prompt_version}
     """
@@ -435,8 +459,11 @@ def _add_prompt_comparison(lines: list[str], result: Dict[str, Any]) -> None:
     if ver == "v3" and current_raw and current_raw != current:
         groups.append(("Prompt C (v3) raw", current_raw))
     v3_recon = _cr("v3", rebuild_pipeline=True)
-    if baseline and v3_recon:
+    # 无 v1 基线（如真实语料只跑 v3/v4）时也保留 v3 列，供 v4 对比
+    if (baseline or ver == "v4") and v3_recon:
         groups.append(("Prompt C (v3) 证据校验", v3_recon))
+    if ver == "v4" and current:
+        groups.append(("Prompt D (v4) 分层收窄", current))
     if not groups:
         return
 
@@ -474,6 +501,32 @@ def _add_prompt_comparison(lines: list[str], result: Dict[str, Any]) -> None:
             cells.append(str(val))
         lines.append(f"| {label} | " + " | ".join(cells) + " |")
     lines.append("")
+
+    # Token / 成本对比（各版本缓存条目的 usage 汇总；未调用过返回空）
+    used_versions = []
+    for name, _ in groups:
+        m = re.search(r"\((v\d)\)", name)
+        if m and m.group(1) not in used_versions:
+            used_versions.append(m.group(1))
+    if len(used_versions) > 1:
+        usage_rows = [
+            (v, _sum_usages(_load_version_preds_latest(outdir, v)))
+            for v in used_versions
+        ]
+        if any(r["llm_calls"] for _, r in usage_rows):
+            lines += [
+                "**Token / 成本（各版本独立调用缓存汇总）**",
+                "",
+                "| 版本 | LLM calls | prompt | completion | total | 成本($) |",
+                "|---|---:|---:|---:|---:|---:|",
+            ]
+            for ver, u in usage_rows:
+                lines.append(
+                    f"| {ver} | {u['llm_calls']} | {u['prompt_tokens']} | "
+                    f"{u['completion_tokens']} | {u['total_tokens']} | "
+                    f"{u['estimated_cost_usd']:.4f} |"
+                )
+            lines.append("")
 
     # 总结论（数据驱动，随可用分组动态生成）
     summaries = [(name, _criterion_summary(cr)) for name, cr in groups]
@@ -513,22 +566,55 @@ def _add_prompt_comparison(lines: list[str], result: Dict[str, Any]) -> None:
         )
         kw_min = min(c.get("culture_keywords", 0.0) for _, c in summaries)
         kw_max = max(c.get("culture_keywords", 0.0) for _, c in summaries)
-        lines += [
-            "**总结论（A/B/C）**：基于 40 条中文合成 JD，对比三种提示词设计。",
-            "",
-            safe_line,
-            "- **召回**：evidence-first + 软校验后字段 F1 不再全线下行"
-            + f"（Required F1 {summaries[0][1].get('required_skills', 0.0):.3f} → "
-            + f"{c_s.get('required_skills', 0.0):.3f}），标量回填显著"
-            + f"（Salary {c_s.get('salary', '0/0')}）；确定性后处理（教育/年限归位、"
-            + "职责/技能句首判定）分别压低 E2 与 E3（MISCLASSIFIED）。注意校验列的"
-            + f"职责 F1 仍有下降（{resp_raw:.3f} → {resp_chk:.3f}），REJECT 档过严"
-            + "会继续吃职责召回，属 REVIEW 宽度升级的待办。",
-            "- **维度全线偏弱**：三版本 Dimension Accuracy 均低于 0.36，D1-D8 等级出数与校验都不可靠 → 建议回归直接模型输出 + 单独约束，勿叠加证据校验放大损失。",
-            "- **Keywords 召回很低**："
-            + f"三版本仅 {kw_min:.2f}–{kw_max:.2f}，文化类关键词基本抓不住 → 需单独提示词或独立任务。",
-            "",
-        ]
+        if ver == "v4":
+            v3_s = by_name.get("Prompt C (v3) 证据校验")
+            v4_s = by_name.get("Prompt D (v4) 分层收窄") or c_s
+            v3_cri = v3_s.get("critical", 0.0) if v3_s else 0.0
+            v4_cri = v4_s.get("critical", 0.0)
+            resp_3 = v3_s.get("responsibilities", 0.0) if v3_s else 0.0
+            resp_4 = v4_s.get("responsibilities", 0.0)
+            req_3 = v3_s.get("required_skills", 0.0) if v3_s else 0.0
+            req_4 = v4_s.get("required_skills", 0.0)
+            f1_bullet = (
+                f"- **F1 对比（v3 → v4）**：Required Skills F1 "
+                f"{'优于' if req_4 > req_3 else '接近'}v3（{req_3:.3f} → {req_4:.3f}），"
+                f"Responsibilities F1 {'改善' if resp_4 > resp_3 else '基本持平'}"
+                f"（{resp_3:.3f} → {resp_4:.3f}），"
+                f"Critical Error Rate {'下降' if v4_cri <= v3_cri else '略增'}"
+                f"（{v3_cri:.2%} → {v4_cri:.2%}）。"
+            )
+            lines += [
+                "**总结论（A/C/D）**：基于真实 JD 语料，对比 v1 基线、v3（evidence-first+软校验）与 v4（分层收窄）。",
+                "",
+                safe_line,
+            ]
+            if v3_s:
+                lines.append(f1_bullet)
+            lines += [
+                "- **UNKNOWN 裁决流向**：v4 把 L1 管道无法归类的 UNKNOWN/低置信条目交 LLM 复核，"
+                + "文化词与职责的覆盖由 LLM 收窄补全（见 Token/成本表，v4 prompt token 集中在截断摘要 + 3000 字 JD）。",
+                "- **维度全线偏弱**：各版本 Dimension Accuracy 均很低 → D1-D8 等级需后续单独校准，"
+                + "不应仅依赖 prompts 或 LLM 推理。",
+                f"- **Keywords 召回**：仅 {kw_min:.2f}–{kw_max:.2f}，文化类关键词抓不住 → 需单独提示词或独立任务。",
+                "",
+            ]
+        else:
+            lines += [
+                "**总结论（A/B/C）**：基于 40 条中文合成 JD，对比三种提示词设计。",
+                "",
+                safe_line,
+                "- **召回**：evidence-first + 软校验后字段 F1 不再全线下行"
+                + f"（Required F1 {summaries[0][1].get('required_skills', 0.0):.3f} → "
+                + f"{c_s.get('required_skills', 0.0):.3f}），标量回填显著"
+                + f"（Salary {c_s.get('salary', '0/0')}）；确定性后处理（教育/年限归位、"
+                + "职责/技能句首判定）分别压低 E2 与 E3（MISCLASSIFIED）。注意校验列的"
+                + f"职责 F1 仍有下降（{resp_raw:.3f} → {resp_chk:.3f}），REJECT 档过严"
+                + "会继续吃职责召回，属 REVIEW 宽度升级的待办。",
+                "- **维度全线偏弱**：三版本 Dimension Accuracy 均低于 0.36，D1-D8 等级出数与校验都不可靠 → 建议回归直接模型输出 + 单独约束，勿叠加证据校验放大损失。",
+                "- **Keywords 召回很低**："
+                + f"三版本仅 {kw_min:.2f}–{kw_max:.2f}，文化类关键词基本抓不住 → 需单独提示词或独立任务。",
+                "",
+            ]
 
     # 证据校验统计（仅单次调用的确定性效果，无额外 LLM 成本）
     v3_rows = [
@@ -572,7 +658,7 @@ def build_report(result: Dict[str, Any], report_path: Path) -> None:
         "",
         "## Status",
         "",
-        f"**v0.4 — JD Extraction 回测完成（{len(gold_cases)} 条中文合成 JD，2026-09）。**",
+        f"**v0.4 — JD Extraction 回测完成（{len(gold_cases)} 条 JD，2026-09）。**",
         "",
         "模型: `glm-4.7-flash`（用户已切换）。链路: JD 原文 → `JdAtsAgent` → `ATSProfile`。",
         "重点：**AI 是否正确抽取岗位要求**（Required/Preferred Skills、Responsibilities、Keywords、Dimension、Salary/Location、Hidden Requirement）。",
@@ -580,7 +666,8 @@ def build_report(result: Dict[str, Any], report_path: Path) -> None:
         "**Prompt A/B/C 对比**。",
         "",
         f"- Prompt 版本: `{prompt_version}`"
-        + ("（evidence-first，含 raw/校验两态对比）" if prompt_version == "v3" else ""),
+        + ("（evidence-first，含 raw/校验两态对比）" if prompt_version == "v3" else "")
+        + ("（分层收窄：L1 管道 + LLM 收窄推理）" if prompt_version == "v4" else ""),
         f"- LLM 调用: {usage['llm_calls']}（缓存命中 {usage['llm_calls_cached']}）",
         f"- Token 用量: prompt {usage['prompt_tokens']} / completion {usage['completion_tokens']} / total {usage['total_tokens']}",
         f"- 估算成本（$0.06/1M in + $0.4/1M out）: ${usage['estimated_cost_usd']:.4f}",
@@ -713,9 +800,9 @@ def main() -> None:
     parser.add_argument("--report", type=Path, default=REPORT_PATH)
     parser.add_argument(
         "--prompt-version",
-        choices=["v1", "v2", "v3"],
+        choices=["v1", "v2", "v3", "v4"],
         default="v1",
-        help="ATS 解析 prompt 版本（v1 基础 / v2 显式规则 / v3 evidence-first）",
+        help="ATS 解析 prompt 版本（v1 基础 / v2 显式规则 / v3 evidence-first / v4 分层收窄）",
     )
     parser.add_argument(
         "--pace-sec",

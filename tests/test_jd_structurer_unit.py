@@ -110,3 +110,75 @@ def test_leading_overview_section():
     jd = "我们是做 AI 招聘的产品团队，正在寻找一位后端工程师。任职要求：精通Python。"
     doc = structure_jd(jd)
     assert _kinds(doc)[0] is SectionKind.JOB_OVERVIEW
+
+
+def test_numbered_markers_split_items():
+    jd = "任职要求：\n1、精通Python；\n2、有大数据经验。\n加分项：\n3、熟悉Flink。"
+    doc = structure_jd(jd)
+    req = next(s for s in doc.sections if s.kind is SectionKind.REQUIREMENTS)
+    assert [i.text for i in req.items] == ["精通Python", "有大数据经验"]
+    pref = next(s for s in doc.sections if s.kind is SectionKind.PREFERRED)
+    assert [i.text for i in pref.items] == ["熟悉Flink"]
+    for item in doc.items:
+        assert jd[item.start : item.end] == item.text, item.item_id
+
+
+def test_zhi_ze_miao_shu_as_heading():
+    jd = "职责描述：\n1. 负责产品规划；\n2. 推动跨团队落地。\n任职要求：精通Python。"
+    doc = structure_jd(jd)
+    resp = next(s for s in doc.sections if s.kind is SectionKind.RESPONSIBILITIES)
+    texts = [i.text for i in resp.items]
+    assert "负责产品规划" in texts
+    assert "推动跨团队落地" in texts
+
+
+def test_bare_youxian_in_body_not_heading():
+    # 「优先考虑」已从标题词典移除：正文中的「者优先考虑」不再幻生 PREFERRED 区块，
+    # 优先标记保留在原条目内（供 classifier 识别为 PREFERRED）。
+    jd = (
+        "岗位要求：\n"
+        "1、有互联网大厂经验者优先考虑。\n"
+        "2、本科及以上学历。\n"
+        "我们提供免费三餐。"
+    )
+    doc = structure_jd(jd)
+    assert _kinds(doc).count(SectionKind.PREFERRED) == 0
+    req = next(s for s in doc.sections if s.kind is SectionKind.REQUIREMENTS)
+    assert any("优先考虑" in i.text for i in req.items)
+
+
+def test_version_and_decimal_numbers_not_items():
+    jd = "任职要求：熟悉 Python 3.9 与 Vue 3.0；有 1.8 倍性能提升经验者优先。"
+    doc = structure_jd(jd)
+    req = next(s for s in doc.sections if s.kind is SectionKind.REQUIREMENTS)
+    texts = [i.text for i in req.items]
+    assert any("Python 3.9" in t for t in texts)
+    assert any("Vue 3.0" in t for t in texts)
+
+
+def test_bracket_wrapped_headings_detected():
+    # 「【岗位职责】/【任职要求】/【加分项】」：标题被方括号包裹时仍要正确切区块
+    jd = (
+        "【岗位职责】\n1.负责产品规划；\n2.推动跨团队落地。\n"
+        "【任职要求】\n1.精通Python；\n2.有大数据经验。\n"
+        "【加分项】\n1.熟悉Docker。"
+    )
+    doc = structure_jd(jd)
+    resp = next(s for s in doc.sections if s.kind is SectionKind.RESPONSIBILITIES)
+    req = next(s for s in doc.sections if s.kind is SectionKind.REQUIREMENTS)
+    pref = next(s for s in doc.sections if s.kind is SectionKind.PREFERRED)
+    assert [i.text for i in resp.items] == ["负责产品规划", "推动跨团队落地"]
+    assert [i.text for i in req.items] == ["精通Python", "有大数据经验"]
+    assert [i.text for i in pref.items] == ["熟悉Docker"]
+    for item in doc.items:
+        assert jd[item.start : item.end] == item.text, item.item_id
+
+
+def test_bracket_heading_inline_keeps_section():
+    # 分隔符内嵌【岗位职责】（如「工作地…SEA等【岗位职责】\n1、…」）同样生效
+    jd = "公司简介：某科技公司。\n工作地：上海等【岗位职责】\n1、负责业务对接；\n2、推动产品落地。"
+    doc = structure_jd(jd)
+    resp = next(s for s in doc.sections if s.kind is SectionKind.RESPONSIBILITIES)
+    texts = [i.text for i in resp.items]
+    assert "负责业务对接" in texts
+    assert "推动产品落地" in texts

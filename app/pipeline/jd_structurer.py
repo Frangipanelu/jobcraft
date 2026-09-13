@@ -92,6 +92,7 @@ _LEXICON: dict[SectionKind, tuple[str, ...]] = {
         "你将负责",
         "职位描述",
         "岗位描述",
+        "职责描述",
         "职责",
     ),
     SectionKind.REQUIREMENTS: (
@@ -121,7 +122,6 @@ _LEXICON: dict[SectionKind, tuple[str, ...]] = {
         "加分项",
         "加分条件",
         "优先条件",
-        "优先考虑",
         "有以下经验者优先",
         "具备以下条件尤佳",
     ),
@@ -179,6 +179,12 @@ _HEADING_FOLLOW = ("：", ":", "\n", "\r", " ", "\t", "")
 # 区块内 item 的分隔符
 _SPLIT_RE = re.compile(r"[；;\n\r。]+")
 
+# 序号列表标记作为新条目的起点（如「 3、」「\n2.」「（1）」）。
+# 要求前面是空白，避免把版本号（Python 3.9、Vue 3.0）或小数误当列表起点。
+_NUMBERED_ITEM_RE = re.compile(
+    r"(?<=\s)(?:[（(]\s*\d+\s*[)）]|[①-⑩]|\d+[、．)）]|\d+\.(?!\d))"
+)
+
 # 列表标记：数字/中文字/括号/项目符号
 _MARKER_RE = re.compile(
     r"(?:\d+[.、．)）]\s*|[（(]\s*\d+\s*[)）]\s*"
@@ -196,24 +202,35 @@ def _is_heading(text: str, end: int) -> bool:
     return nxt in _HEADING_FOLLOW
 
 
+def _iter_heading_spans(text: str, lex: str) -> list[tuple[int, int]]:
+    """返回 lexeme 的候选标题 span：裸词 + 方括号包裹（【…】/[…]）两种写法。"""
+    flags = re.IGNORECASE if lex.isascii() else 0
+    spans: list[tuple[int, int]] = []
+    for m in re.compile(re.escape(lex), flags).finditer(text):
+        spans.append((m.start(), m.end()))
+    for open_, close_ in (("【", "】"), ("[", "]")):
+        for m in re.compile(re.escape(open_ + lex + close_), flags).finditer(text):
+            spans.append((m.start(), m.end()))
+    return spans
+
+
 def _detect_headings(text: str) -> list[tuple[int, int, SectionKind, str]]:
     """定位 JD 中的所有标题命中，返回 ``(start, end, kind, lexeme)``。
 
     规则：重叠命中只保留「起始位置相同的最长命中 + 不重叠的后续命中」，
     保证「任职要求」不会同时把「要求」也当成一个标题。
+    标题支持裸词与「【…】/[…]」包裹两种写法（如「【岗位职责】」）。
     """
     candidates: list[tuple[int, int, SectionKind, str]] = []
     for kind, lexemes in _LEXICON.items():
         for lex in lexemes:
-            flags = re.IGNORECASE if lex.isascii() else 0
-            pattern = re.compile(re.escape(lex), flags)
-            for m in pattern.finditer(text):
+            for start, end in _iter_heading_spans(text, lex):
                 # 特例：「坐标」常以「坐标北京」省略冒号紧随城市名（评测语料即此格式）
                 if lex == "坐标":
-                    candidates.append((m.start(), m.end(), kind, lex))
+                    candidates.append((start, end, kind, lex))
                     continue
-                if _is_heading(text, m.end()):
-                    candidates.append((m.start(), m.end(), kind, lex))
+                if _is_heading(text, end):
+                    candidates.append((start, end, kind, lex))
     if not candidates:
         return []
     candidates.sort(key=lambda c: (c[0], c[1] - c[0]))
@@ -236,14 +253,21 @@ def _content_start(text: str, heading_end: int) -> int:
 
 
 def _split_raw_items(text: str) -> list[tuple[int, int, str]]:
-    """按分隔符把区块切成 ``(start, end, raw)`` 原始切片，保留偏移。"""
+    """按分隔符与序号列表标记把区块切成 ``(start, end, raw)`` 原始切片。"""
+    boundaries: set[int] = set()
+    for m in _SPLIT_RE.finditer(text):
+        boundaries.add(m.end())
+    for m in _NUMBERED_ITEM_RE.finditer(text):
+        boundaries.add(m.start())
     out: list[tuple[int, int, str]] = []
     pos = 0
-    for m in _SPLIT_RE.finditer(text):
-        seg = text[pos : m.start()]
+    for b in sorted(boundaries):
+        if b <= pos:
+            continue
+        seg = text[pos:b]
         if seg.strip():
-            out.append((pos, m.start(), seg))
-        pos = m.end()
+            out.append((pos, b, seg))
+        pos = b
     tail = text[pos:]
     if tail.strip():
         out.append((pos, len(text), tail))

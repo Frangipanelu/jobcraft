@@ -91,6 +91,39 @@ class TestSkills:
         assert out.required_skills == ["Python"]
         assert out.preferred_skills == ["Flink"]
 
+    def test_preferred_certificate_holders(self):
+        items = [_item("持有 CPA / CMA / 高级会计师 者优先", ClassLabel.PREFERRED)]
+        out = extract_jd(structure_jd(""), items)
+        assert {"CPA", "CMA", "高级会计师"} <= set(out.preferred_skills)
+
+    def test_preferred_multi_tech_split(self):
+        items = [_item("熟悉 React、Vue 优先", ClassLabel.PREFERRED)]
+        out = extract_jd(structure_jd(""), items)
+        assert {"React", "Vue"} <= set(out.preferred_skills)
+
+    def test_preferred_team_management_experience(self):
+        items = [_item("具有团队管理经验者优先", ClassLabel.PREFERRED)]
+        out = extract_jd(structure_jd(""), items)
+        assert "团队管理经验" in out.preferred_skills
+
+    def test_preferred_multimodal_ai(self):
+        items = [
+            _item(
+                "熟悉多模态AI技术、大模型API，有全栈开发能力者优先",
+                ClassLabel.PREFERRED,
+            )
+        ]
+        out = extract_jd(structure_jd(""), items)
+        assert any("多模态AI" in s for s in out.preferred_skills)
+
+    def test_preferred_noise_and_gate_dropped(self):
+        items = [
+            _item("3年以上相关经验者优先", ClassLabel.PREFERRED),
+            _item("沟通能力强、抗压能力强者优先", ClassLabel.PREFERRED),
+        ]
+        out = extract_jd(structure_jd(""), items)
+        assert out.preferred_skills == []
+
     def test_unseen_skill_falls_back_to_phrase(self):
         out = extract_jd(
             structure_jd(""), [_item("精通数据链路设计", ClassLabel.REQUIRED)]

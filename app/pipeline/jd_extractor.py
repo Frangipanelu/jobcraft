@@ -159,6 +159,65 @@ def _soft_keyword(text: str) -> str | None:
     return None
 
 
+# 优先项条目尾部噪声（者优先/优先考虑/加分项/尤佳等）与「等…工具」括串
+_PREF_TAIL_RE = re.compile(r"(?:者之?)?优先(?:考虑)?|加分项?$|尤佳$|持证者$|持证$")
+_PREF_JUNK_RE = re.compile(r"[（(][^）()]*[）)]|等[^，。；、,/]{0,12}$")
+
+# preferred 兜底额外接受的动词（除 _MILD_VERBS 外）
+_PREF_LEAD_VERBS = (
+    "熟练掌握",
+    "精通",
+    "熟悉",
+    "掌握",
+    "熟练",
+    "了解",
+    "具备",
+    "拥有",
+    "理解",
+    "持有",
+    "具有",
+    "有",
+)
+
+
+def _preferred_candidate_parts(text: str) -> list[str]:
+    """从 PREFERRED 条目生成非词典技能候选（规则级兜底）。
+
+    处理「熟悉 X、Y 者优先」「持有 CPA / CMA 者优先考虑」「…等领域；3、」
+    等写法：先剥尾部状语/括注/「等…」括串，再去动词，最后按标点拆原子项，
+    并过滤软词/学历/年限门槛（这些不是技能候选）。
+    """
+    t = text.strip()
+    for _ in range(3):
+        t2 = _PREF_JUNK_RE.sub("", t)
+        t2 = _PREF_TAIL_RE.sub("", t2)
+        if t2 == t:
+            break
+        t = t2
+    for v in _PREF_LEAD_VERBS:
+        if t.startswith(v):
+            t = t[len(v) :]
+            break
+    parts: list[str] = []
+    for seg in re.split(r"[，。、；、,/：:]+", t):
+        seg = seg.strip()
+        seg = (
+            seg.removeprefix("和")
+            .removeprefix("与")
+            .removeprefix("及")
+            .removeprefix("以及")
+        )
+        seg = seg.rstrip("是")
+        if len(seg) < 2:
+            continue
+        if _soft_keyword(seg) is not None:
+            continue
+        if any(p.search(seg) for p in _EDU_PATTERNS) or _YEARS_RE.search(seg):
+            continue
+        parts.append(seg)
+    return parts
+
+
 def _extract_skills(items: Sequence[str]) -> list[str]:
     """从条目桶中抽 token 级技能（技术词典）+ 能力短语兜底。"""
     result: list[str] = []
@@ -170,6 +229,19 @@ def _extract_skills(items: Sequence[str]) -> list[str]:
         for token in tokens:
             key = normalize(token)
             if key not in seen:
+                seen.add(key)
+                result.append(token)
+    return result
+
+
+def _extract_preferred_skills(items: Sequence[str]) -> list[str]:
+    """从 PREFERRED 桶抽技能：词典 token + 非词典原子候选兜底（并集去重）。"""
+    result: list[str] = []
+    seen: set[str] = set()
+    for item in items:
+        for token in [*_find_tech_tokens(item), *_preferred_candidate_parts(item)]:
+            key = normalize(token)
+            if key and key not in seen:
                 seen.add(key)
                 result.append(token)
     return result
@@ -314,7 +386,7 @@ def extract_jd(
         location=(structured.meta.get("location") or [None])[0],
         # 职责里出现的技能同样算核心要求（gold 亦如此标注）
         required_skills=_extract_skills(req_items + resp_items),
-        preferred_skills=_extract_skills(pref_items),
+        preferred_skills=_extract_preferred_skills(pref_items),
         responsibilities=list(dict.fromkeys(resp_items)),
         soft_skills=list(dict.fromkeys(soft_items)),
         key_metrics=_extract_metrics(req_items + resp_items),
