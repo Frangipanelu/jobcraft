@@ -124,8 +124,7 @@ def main() -> None:
     s3, s4 = _summary(crs["v3"]), _summary(crs["v4"])
     aggregate = {"v3": s3, "v4": s4}
     aggregate["delta"] = {
-        f: s4.get(f, 0.0) - s3.get(f, 0.0)
-        for f in SUMMARY_FIELDS + ("critical",)
+        f: s4.get(f, 0.0) - s3.get(f, 0.0) for f in SUMMARY_FIELDS + ("critical",)
     }
 
     # §17 逐 JD diff

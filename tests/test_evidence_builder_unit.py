@@ -7,6 +7,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from app.pipeline.evidence_builder import (
     EvidenceRelation,
     build_source_evidence,
@@ -98,3 +100,8 @@ def test_grade_entity_picks_best_span():
     worst = grade_entity("Java", spans)
     assert worst.relation is EvidenceRelation.UNSUPPORTED
     assert worst.verdict == "reject"
+
+
+def test_grade_entity_empty_spans_raises():
+    with pytest.raises(ValueError):
+        grade_entity("Redis", [])

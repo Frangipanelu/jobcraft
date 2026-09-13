@@ -146,6 +146,8 @@ def build_source_evidence(
 
 def grade_entity(entity: str, spans: Sequence[str]) -> EntityVerdict:
     """在若干 span 中为实体选最佳关系（高优先级者胜，同优先级取首个）。"""
+    if not spans:
+        raise ValueError(f"缺少可评分的 span（entity={entity!r}）")
     best: EntityVerdict | None = None
     for span in spans:
         rel = grade_relation(entity, span)
@@ -153,5 +155,4 @@ def grade_entity(entity: str, spans: Sequence[str]) -> EntityVerdict:
             best = EntityVerdict(
                 entity=entity, relation=rel, span=span, verdict=to_verdict(rel)
             )
-    assert best is not None
     return best
