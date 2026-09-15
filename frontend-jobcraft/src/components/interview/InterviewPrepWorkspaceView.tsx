@@ -74,7 +74,7 @@ export const InterviewPrepWorkspaceView: React.FC<InterviewPrepWorkspaceViewProp
 }) => {
   const { interviews, navigateTo, showToast } = useJobCraft();
 
-  const currentInterview = interviews.find((i) => i.id === interviewId) || interviews[0];
+  const currentInterview = interviews.find((i) => i.id === interviewId);
   const src = currentInterview?.prepSource;
   const prep = currentInterview?.preparation;
   const cr = (src?.company_research || {}) as Record<string, any>;
@@ -116,7 +116,7 @@ export const InterviewPrepWorkspaceView: React.FC<InterviewPrepWorkspaceViewProp
     position: currentInterview?.role || src?.position || '目标岗位',
     round: currentInterview?.roundName || src?.round_type || '面试准备',
     time: currentInterview?.time || src?.created_at || '',
-    readiness: currentInterview?.readinessPercent || 40
+    readiness: currentInterview?.readinessPercent || 0
   };
 
   const handleSaveAnswer = () => {

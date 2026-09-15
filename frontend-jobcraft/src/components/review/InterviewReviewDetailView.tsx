@@ -20,11 +20,11 @@ interface InterviewReviewDetailViewProps {
 }
 
 export const InterviewReviewDetailView: React.FC<InterviewReviewDetailViewProps> = ({
-  interviewId = 'int-byte-1'
+  interviewId
 }) => {
   const { interviews, applyReviewFeedback, navigateTo, showToast } = useJobCraft();
 
-  const currentInterview = interviews.find((i) => i.id === interviewId) || interviews[0];
+  const currentInterview = interviews.find((i) => i.id === interviewId);
   const review = currentInterview?.review;
 
   const [selectedQAIndex, setSelectedQAIndex] = useState<number>(0);
@@ -62,44 +62,28 @@ export const InterviewReviewDetailView: React.FC<InterviewReviewDetailViewProps>
     return 'text-warning bg-warning-bg border-warning/20';
   };
 
-  // Metric cards fallback computation
-  const metricCards = selectedQA?.metricCards || {
-    clarityScore: selectedQA?.answerAnalysis?.structure || 85,
-    clarityDesc: 'STAR 结构完整，逻辑层次清晰',
-    impactScore: selectedQA?.answerAnalysis?.persuasiveness || 80,
-    impactDesc: '引用了具体指标，但可以更精确',
-    decisionScore: selectedQA?.answerAnalysis?.completeness || 75,
-    decisionDesc: '提及了 trade-off，但深度略浅',
-    fluencyScore: selectedQA?.answerAnalysis?.jobRelevance || 82,
-    fluencyDesc: '表达清晰，偶有停顿'
-  };
+  // 仅渲染真实评估数据，缺失时展示空值而非伪造打分
+  const metricCards = selectedQA?.metricCards ?? ({} as NonNullable<InterviewQA['metricCards']>);
 
   // Intent items fallback
-  const intentItems = selectedQA?.interviewerIntent?.intentItems || [
-    {
-      title: '产品完整性',
-      stars: selectedQA?.interviewerIntent?.importanceStars || 5,
-      desc: selectedQA?.interviewerIntent?.mainPoints?.[0] || '考察候选人是否有从 0 到 1 的完整产品经验'
-    },
-    {
-      title: '数据意识',
-      stars: selectedQA?.interviewerIntent?.productAbilityStars || 4,
-      desc: selectedQA?.interviewerIntent?.mainPoints?.[1] || '是否能用数据量化 Impact 并做取舍'
-    },
-    {
-      title: '推动力',
-      stars: selectedQA?.interviewerIntent?.techDepthStars || 3,
-      desc: selectedQA?.interviewerIntent?.mainPoints?.[2] || '是否能在不确定中持续推进产品落地'
-    }
-  ];
+  const interviewerIntent = selectedQA?.interviewerIntent;
+  const intentStars = [interviewerIntent?.importanceStars, interviewerIntent?.productAbilityStars, interviewerIntent?.techDepthStars] as const;
+  const intentItems = (interviewerIntent?.mainPoints || []).map((point, idx) => ({
+    title: `考察点 ${idx + 1}`,
+    stars: intentStars[idx] ?? 0,
+    desc: point
+  }));
 
   // Analysis progress bars
-  const analysisBars = [
-    { label: '结构清晰度', score: selectedQA?.answerAnalysis?.clarity || metricCards.clarityScore || 92 },
-    { label: '量化 Impact', score: selectedQA?.answerAnalysis?.impact || metricCards.impactScore || 85 },
-    { label: '关键决策', score: selectedQA?.answerAnalysis?.decision || metricCards.decisionScore || 80 },
-    { label: '语言流畅度', score: selectedQA?.answerAnalysis?.fluency || metricCards.fluencyScore || 88 }
-  ];
+  const answerAnalysis = selectedQA?.answerAnalysis;
+  const analysisBars = answerAnalysis
+    ? [
+        { label: '结构清晰度', score: answerAnalysis.structure ?? answerAnalysis.clarity ?? 0 },
+        { label: '量化 Impact', score: answerAnalysis.impact ?? answerAnalysis.persuasiveness ?? 0 },
+        { label: '关键决策', score: answerAnalysis.decision ?? answerAnalysis.completeness ?? 0 },
+        { label: '语言流畅度', score: answerAnalysis.fluency ?? answerAnalysis.jobRelevance ?? 0 }
+      ]
+    : [];
 
   // Find if current QA has related feedback
   const relatedFeedback = review.experienceFeedbacks?.find(
@@ -125,7 +109,7 @@ export const InterviewReviewDetailView: React.FC<InterviewReviewDetailViewProps>
           </div>
 
           <div className="text-xs text-faint">
-            {review.reviewDate} · {review.duration || '共 54 分钟'} · 识别 {qaList.length || 12} 组 QA
+            {review.reviewDate} · 识别 {qaList.length} 组 QA
           </div>
         </div>
 
@@ -141,12 +125,7 @@ export const InterviewReviewDetailView: React.FC<InterviewReviewDetailViewProps>
 
           {/* 4 Dimension Progress Bars */}
           <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-xs min-w-[240px]">
-            {(review.competencies || [
-              { name: '岗位匹配', score: 86 },
-              { name: '专业深度', score: 78 },
-              { name: '回答结构', score: 72 },
-              { name: '表达清晰', score: 74 }
-            ]).map((comp, idx) => (
+            {(review.competencies || []).map((comp, idx) => (
               <div key={idx} className="flex items-center gap-2">
                 <span className="text-[11px] text-muted font-medium w-14 shrink-0">{comp.name}</span>
                 <div className="flex-1 h-1.5 bg-edge rounded-full overflow-hidden w-16">
@@ -163,24 +142,22 @@ export const InterviewReviewDetailView: React.FC<InterviewReviewDetailViewProps>
       </div>
 
       {/* 2. Core Problems Alert Banner (本场核心问题) */}
-      <div className="bg-warning-bg border border-warning/20 rounded-xl px-4 py-3 flex flex-col md:flex-row md:items-center gap-3 text-xs shadow-2xs">
-        <div className="flex items-center gap-1.5 shrink-0">
-          <span className="font-bold text-warning bg-warning-bg px-2.5 py-0.5 rounded-md text-[11px] border border-warning/20">
-            本场核心问题
-          </span>
-        </div>
-        <div className="text-muted leading-relaxed flex-1 flex flex-col lg:flex-row lg:items-center gap-2 lg:gap-4">
-          {(review.coreProblems || [
-            '① 产品决策依据表达不足，面试官追问时缺少方案选择背景',
-            '② 技术理解回答不够深入，停留在现象描述而非原理层',
-            '③ 项目结果缺少量化数据，导致说服力偏弱'
-          ]).map((prob, idx) => (
-            <span key={idx} className="inline-block">
-              {prob}
+      {review.coreProblems && review.coreProblems.length > 0 && (
+        <div className="bg-warning-bg border border-warning/20 rounded-xl px-4 py-3 flex flex-col md:flex-row md:items-center gap-3 text-xs shadow-2xs">
+          <div className="flex items-center gap-1.5 shrink-0">
+            <span className="font-bold text-warning bg-warning-bg px-2.5 py-0.5 rounded-md text-[11px] border border-warning/20">
+              本场核心问题
             </span>
-          ))}
+          </div>
+          <div className="text-muted leading-relaxed flex-1 flex flex-col lg:flex-row lg:items-center gap-2 lg:gap-4">
+            {review.coreProblems.map((prob, idx) => (
+              <span key={idx} className="inline-block">
+                {prob}
+              </span>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* 3. Three-Column Workspace Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
@@ -194,7 +171,7 @@ export const InterviewReviewDetailView: React.FC<InterviewReviewDetailViewProps>
           <div className="space-y-1.5 max-h-[700px] overflow-y-auto custom-scrollbar pr-1">
             {qaList.map((qa, index) => {
               const isSelected = index === selectedQAIndex;
-              const qScore = qa.score || qa.answerAnalysis?.completeness || 75;
+              const qScore = qa.score || qa.answerAnalysis?.completeness || 0;
 
               return (
                 <button
@@ -224,13 +201,13 @@ export const InterviewReviewDetailView: React.FC<InterviewReviewDetailViewProps>
                   </div>
 
                   <div className="flex items-center justify-between mt-2.5 pt-1.5 border-t border-edge/60 text-[11px]">
-                    <span className="text-faint font-mono">{qa.duration || '3:15'}</span>
+                    <span className="text-faint font-mono">{qa.duration || '—'}</span>
                     <span
                       className={`px-2 py-0.2 rounded-md font-bold text-[10px] border ${getScoreBadgeClass(
                         qScore
                       )}`}
                     >
-                      {qScore}
+                      {qScore === 0 ? '—' : qScore}
                     </span>
                   </div>
                 </button>
@@ -255,7 +232,7 @@ export const InterviewReviewDetailView: React.FC<InterviewReviewDetailViewProps>
                 </div>
               </div>
               <span className="text-xs font-mono text-faint shrink-0 mt-1 bg-page px-2 py-1 rounded-md">
-                时长 {selectedQA?.duration || '4:32'}
+                时长 {selectedQA?.duration || '—'}
               </span>
             </div>
 
@@ -279,10 +256,10 @@ export const InterviewReviewDetailView: React.FC<InterviewReviewDetailViewProps>
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-semibold text-muted">结构清晰度</span>
                     <span className="text-lg font-extrabold text-ink">
-                      {metricCards.clarityScore}
+                      {metricCards.clarityScore ?? '—'}
                     </span>
                   </div>
-                  <p className="text-[11px] text-ink leading-relaxed">{metricCards.clarityDesc}</p>
+                  <p className="text-[11px] text-ink leading-relaxed">{metricCards.clarityDesc || '暂无该维度评估数据'}</p>
                 </div>
 
                 {/* 2. 量化 Impact */}
@@ -290,10 +267,10 @@ export const InterviewReviewDetailView: React.FC<InterviewReviewDetailViewProps>
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-semibold text-muted">量化 Impact</span>
                     <span className="text-lg font-extrabold text-ink">
-                      {metricCards.impactScore}
+                      {metricCards.impactScore ?? '—'}
                     </span>
                   </div>
-                  <p className="text-[11px] text-ink leading-relaxed">{metricCards.impactDesc}</p>
+                  <p className="text-[11px] text-ink leading-relaxed">{metricCards.impactDesc || '暂无该维度评估数据'}</p>
                 </div>
 
                 {/* 3. 关键决策 */}
@@ -301,10 +278,10 @@ export const InterviewReviewDetailView: React.FC<InterviewReviewDetailViewProps>
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-semibold text-muted">关键决策</span>
                     <span className="text-lg font-extrabold text-ink">
-                      {metricCards.decisionScore}
+                      {metricCards.decisionScore ?? '—'}
                     </span>
                   </div>
-                  <p className="text-[11px] text-ink leading-relaxed">{metricCards.decisionDesc}</p>
+                  <p className="text-[11px] text-ink leading-relaxed">{metricCards.decisionDesc || '暂无该维度评估数据'}</p>
                 </div>
 
                 {/* 4. 语言流畅度 */}
@@ -312,10 +289,10 @@ export const InterviewReviewDetailView: React.FC<InterviewReviewDetailViewProps>
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-semibold text-muted">语言流畅度</span>
                     <span className="text-lg font-extrabold text-ink">
-                      {metricCards.fluencyScore}
+                      {metricCards.fluencyScore ?? '—'}
                     </span>
                   </div>
-                  <p className="text-[11px] text-ink leading-relaxed">{metricCards.fluencyDesc}</p>
+                  <p className="text-[11px] text-ink leading-relaxed">{metricCards.fluencyDesc || '暂无该维度评估数据'}</p>
                 </div>
               </div>
             </div>
@@ -327,8 +304,8 @@ export const InterviewReviewDetailView: React.FC<InterviewReviewDetailViewProps>
                 <span>下一轮优化建议与话术示范</span>
               </div>
               <p className="text-xs text-sage leading-relaxed">
-                {selectedQA?.suggestionAdvice ||
-                  '建议在 1 分钟内补充双模型交叉判别机制，说明如何用 5% 金标抽检确保评测一致性达到 94.1%。'}
+{selectedQA?.suggestionAdvice ||
+                    '暂无建议数据，可完成本题 AI 复盘后生成优化建议。'}
               </p>
             </div>
           </div>
@@ -375,26 +352,30 @@ export const InterviewReviewDetailView: React.FC<InterviewReviewDetailViewProps>
             </div>
 
             <div className="space-y-3">
-              {intentItems.map((item, idx) => (
-                <div key={idx} className="space-y-1">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-ink">{item.title}</span>
-                    <div className="flex items-center gap-0.5">
-                      {[1, 2, 3, 4, 5].map((starVal) => (
-                        <Star
-                          key={starVal}
-                          className={`w-3 h-3 ${
-                            starVal <= item.stars
-                              ? 'fill-terra text-terra'
-                              : 'fill-transparent text-edge-deep'
-                          }`}
-                        />
-                      ))}
+              {intentItems.length > 0 ? (
+                intentItems.map((item, idx) => (
+                  <div key={idx} className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-ink">{item.title}</span>
+                      <div className="flex items-center gap-0.5">
+                        {[1, 2, 3, 4, 5].map((starVal) => (
+                          <Star
+                            key={starVal}
+                            className={`w-3 h-3 ${
+                              starVal <= item.stars
+                                ? 'fill-terra text-terra'
+                                : 'fill-transparent text-edge-deep'
+                            }`}
+                          />
+                        ))}
+                      </div>
                     </div>
+                    <p className="text-[11px] text-muted leading-snug">{item.desc}</p>
                   </div>
-                  <p className="text-[11px] text-muted leading-snug">{item.desc}</p>
-                </div>
-              ))}
+                ))
+              ) : (
+                <p className="text-[11px] text-muted">暂无面试官意图分析，可完成本题 AI 复盘后查看。</p>
+              )}
             </div>
           </div>
 
@@ -406,20 +387,24 @@ export const InterviewReviewDetailView: React.FC<InterviewReviewDetailViewProps>
             </div>
 
             <div className="space-y-2.5">
-              {analysisBars.map((bar, idx) => (
-                <div key={idx} className="space-y-1">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-muted font-medium">{bar.label}</span>
-                    <span className="font-bold text-ink">{bar.score}</span>
+              {analysisBars.length > 0 ? (
+                analysisBars.map((bar, idx) => (
+                  <div key={idx} className="space-y-1">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-muted font-medium">{bar.label}</span>
+                      <span className="font-bold text-ink">{bar.score}</span>
+                    </div>
+                    <div className="h-1.5 bg-edge rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-ink rounded-full transition-all duration-500"
+                        style={{ width: `${bar.score}%` }}
+                      />
+                    </div>
                   </div>
-                  <div className="h-1.5 bg-edge rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-ink rounded-full transition-all duration-500"
-                      style={{ width: `${bar.score}%` }}
-                    />
-                  </div>
-                </div>
-              ))}
+                ))
+              ) : (
+                <p className="text-[11px] text-muted">暂无四维分析数据，可完成本题 AI 复盘后查看。</p>
+              )}
             </div>
           </div>
 
@@ -430,7 +415,10 @@ export const InterviewReviewDetailView: React.FC<InterviewReviewDetailViewProps>
               <span>本题失分防范</span>
             </div>
             <ul className="space-y-1 text-muted text-[11px] list-disc list-inside">
-              {(selectedQA?.identifiedIssues || ['方案选型对比展开略浅', '可进一步补充如何解决大模型自身评测偏差']).map(
+              {(selectedQA?.identifiedIssues && selectedQA.identifiedIssues.length > 0
+                ? selectedQA.identifiedIssues
+                : ['暂无命中失分点']
+              ).map(
                 (issue, iIdx) => (
                   <li key={iIdx}>{issue}</li>
                 )

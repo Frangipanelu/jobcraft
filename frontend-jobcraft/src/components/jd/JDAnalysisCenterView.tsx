@@ -59,25 +59,23 @@ export const JDAnalysisCenterView: React.FC = () => {
     }
   };
 
-  const handleUsePreset = () => {
+  const handleUsePreset = async () => {
     setCompany('某头部科技公司');
     setRole('AI 产品经理（端侧与 Agent 方向）');
     setPastedRaw(sampleJD);
-    const lines = sampleJD.split('\n').map((l) => l.trim()).filter(Boolean);
-    const dutyLines: string[] = [];
-    const reqLines: string[] = [];
-    let section: 'duty' | 'req' | null = null;
-    for (const line of lines) {
-      if (line.includes('岗位职责')) { section = 'duty'; continue; }
-      if (line.includes('任职要求')) { section = 'req'; continue; }
-      const clean = line.replace(/^[\d①-⑩）.)、.\s]+/, '');
-      if (!clean) continue;
-      if (section === 'duty') dutyLines.push(clean);
-      else if (section === 'req') reqLines.push(clean);
+    setIsSplitting(true);
+    try {
+      const result = await splitJd(sampleJD);
+      setDutyText(result.duties.join('\n'));
+      setRequirements((result.requirements || []).map((r) => ({
+        text: r.text,
+        tag: (r.tag === 'hard' || r.tag === 'required' || r.tag === 'preferred') ? r.tag : 'required'
+      })));
+    } catch (e) {
+      console.error('JD 拆分失败:', e);
+    } finally {
+      setIsSplitting(false);
     }
-    setDutyText(dutyLines.join('\n'));
-    setRequirements(reqLines.map((t) => ({ text: t, tag: /优先|加分|尤佳/.test(t) ? 'preferred' : 'required' as 'required' })));
-    setPastedRaw('');
   };
 
   const handleStartAnalysis = (e: React.FormEvent) => {

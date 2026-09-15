@@ -122,7 +122,7 @@ export const JobWorkspaceView: React.FC<JobWorkspaceViewProps> = ({
             {/* Header Action Buttons */}
             <div className="flex items-center gap-2.5 shrink-0">
               <button
-                onClick={() => onOpenMockInterview(jobInterviews[0]?.id || 'int-byte-2')}
+                onClick={() => jobInterviews[0]?.id && onOpenMockInterview(jobInterviews[0].id)}
                 className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-sage-soft hover:bg-edge-deep text-sage border border-sage-soft text-xs font-semibold transition"
               >
                 <Sparkles className="w-3.5 h-3.5 text-sage" />

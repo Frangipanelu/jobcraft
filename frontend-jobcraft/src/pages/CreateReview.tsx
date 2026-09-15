@@ -29,11 +29,6 @@ const analysisSteps = [
   '复盘报告生成中...'
 ];
 
-const demoTranscriptText = `【面试官】：你好，请简要介绍一下你在快知智能主导的 AI 搜索评测体系项目，当初是如何衡量模型质量好坏的？
-【候选人】：你好，在快知智能，我从 0 到 1 搭建了面向 15 个垂类的高质量 Eval 评测集与自动化 LLM-as-a-Judge 评测管线。我们主要从三大维度衡量：首先是忠实度（Faithfulness），杜绝检索幻觉；其次是答案相关性；最后是端到端搜索质量指标 NDCG@5。通过双模型裁判交叉判别与 5% 金标抽检，评测周期由 2 周缩短至 4 小时以内，模型幻觉率下降了 34.2%。
-【面试官】：追问一下，当双模型裁判（比如 GPT-4 和 Claude）打分出现分歧时，你们是怎么裁决的？
-【候选人】：我们设计了自动化仲裁兜底机制。如果两个模型打分差异超过 1 分（5 分制），系统会自动触发第三模型或分流至资深人工标注员金标仲裁池，并将该 Bad Case 沉淀到黄金仲裁案例库中。`;
-
 export const CreateReview: React.FC = () => {
   const {
     jobs,
@@ -78,7 +73,7 @@ export const CreateReview: React.FC = () => {
 
   // Step 2 - Upload
   const [uploadMode, setUploadMode] = useState<'paste' | 'file'>('paste');
-  const [pasteText, setPasteText] = useState(demoTranscriptText);
+  const [pasteText, setPasteText] = useState('');
   const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 

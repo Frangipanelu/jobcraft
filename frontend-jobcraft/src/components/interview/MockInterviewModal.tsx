@@ -31,7 +31,7 @@ export const MockInterviewModal: React.FC<MockInterviewModalProps> = ({
   interviewId
 }) => {
   const { interviews, navigateTo, showToast } = useJobCraft();
-  const currentInterview = interviews.find((i) => i.id === interviewId) || interviews[0];
+  const currentInterview = interviews.find((i) => i.id === interviewId);
 
   const [messages, setMessages] = useState<ChatMsg[]>([]);
   const [candidateInput, setCandidateInput] = useState('');
