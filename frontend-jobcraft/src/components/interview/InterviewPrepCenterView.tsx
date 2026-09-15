@@ -222,7 +222,7 @@ export const InterviewPrepCenterView: React.FC<InterviewPrepCenterViewProps> = (
                         <div className="text-right">
                           <button
                             onClick={() =>
-                              navigateTo('interview_review', {
+                              navigateTo('interview_review_detail', {
                                 interviewId: interview.id
                               })
                             }

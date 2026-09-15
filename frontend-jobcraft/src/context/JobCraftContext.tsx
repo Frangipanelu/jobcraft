@@ -235,7 +235,7 @@ interface JobCraftContextType {
   createReviewFromTranscript: (data: {
     interviewId: string;
     transcript: string;
-  }) => void;
+  }) => Promise<string | undefined>;
   commitExperienceDiff: (
     experienceId: string,
     proposedVersion: string,
@@ -1811,21 +1811,22 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
   };
 
   // Review & Experience Feedback
-  const createReviewFromTranscript = (data: {
+  const createReviewFromTranscript = async (data: {
     interviewId: string;
     transcript: string;
-  }) => {
+  }): Promise<string | undefined> => {
     const targetInterview = interviews.find((i) => i.id === data.interviewId);
     if (!targetInterview) return;
 
     // 调用后端 API 创建复盘记录，再触发真实 AI 分析，使用返回结果填充 review（无伪造评分）
-    interviewApi.createInterviewReview({
-      user_id: currentUserId,
-      company: targetInterview.company,
-      position: targetInterview.role,
-      round_type: targetInterview.roundType,
-      raw_text: data.transcript
-    }).then(async (result) => {
+    try {
+      const result = await interviewApi.createInterviewReview({
+        user_id: currentUserId,
+        company: targetInterview.company,
+        position: targetInterview.role,
+        round_type: targetInterview.roundType,
+        raw_text: data.transcript
+      });
       let analysis: InterviewReviewResult | null = null;
       try {
         const sequences = (result.qa_pairs || []).map((p) => p.sequence);
@@ -1846,19 +1847,16 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
         : { overallScore: Math.round((result.qa_pair_count || 4) * 10), totalQACount: result.qa_pair_count || 0 };
 
       addInterviewReview(targetInterview.id, patch);
-      showToast({
-        type: 'success',
-        title: '面试复盘分析完成',
-        message: `已解析问答记录，综合评分 ${patch.overallScore} 分。`
-      });
-    }).catch(error => {
-      console.error('Interview review failed:', error)
+      return targetInterview.id;
+    } catch (error) {
+      console.error('Interview review failed:', error);
       showToast({
         type: 'error',
         title: '面试复盘失败',
-        message: error.message || '请稍后重试'
+        message: (error as Error).message || '请稍后重试'
       });
-    })
+      return undefined;
+    }
   };
 
   const addInterviewReview = (

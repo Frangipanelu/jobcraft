@@ -133,6 +133,9 @@ const MainLayout: React.FC = () => {
       case 'user_profile':
         return <UserProfileView />;
 
+      case 'settings':
+        return <UserProfileView />;
+
       default:
         return (
           <WorkbenchView

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useJobCraft } from '../../context/JobCraftContext';
-import { InterviewRoundType, InterviewFormat } from '../../types/jobcraft';
+import { InterviewRoundType, InterviewFormat, InterviewDraft } from '../../types/jobcraft';
 import {
   X,
   CheckCircle2,
@@ -17,21 +17,6 @@ interface Props {
   jobId?: string;
   mode: 'standalone' | 'from-job';
   onClose: () => void;
-}
-
-interface InterviewDraft {
-  selectedJobId?: string;
-  roundNumber?: number;
-  roundName?: string;
-  roundType?: InterviewRoundType;
-  interviewTime?: string;
-  interviewFormat?: InterviewFormat;
-  platform?: string;
-  interviewer?: string;
-  resumeMode?: 'existing' | 'upload' | 'none';
-  selectedResumeId?: string;
-  supplementNotes?: string;
-  remindUpload?: boolean;
 }
 
 const DRAFT_KEY = 'interviewDraft';
@@ -79,7 +64,7 @@ export const NewInterviewModal: React.FC<Props> = ({ isOpen, jobId, mode, onClos
   };
 
   // Restore from localStorage draft
-  const [draft] = useState<InterviewDraft | null>(() => {
+  const [draft] = useState<Partial<InterviewDraft> | null>(() => {
     try {
       const saved = localStorage.getItem(DRAFT_KEY);
       if (saved) {
@@ -151,7 +136,7 @@ export const NewInterviewModal: React.FC<Props> = ({ isOpen, jobId, mode, onClos
 
   // Save draft
   const saveDraft = useCallback(() => {
-    const draftData: InterviewDraft = {
+    const draftData: Partial<InterviewDraft> = {
       selectedJobId,
       roundNumber,
       roundName,

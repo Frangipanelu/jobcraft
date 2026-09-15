@@ -169,6 +169,15 @@ export const CreateReview: React.FC = () => {
       });
       return;
     }
+    if (!selectedInterviewId) {
+      showToast({
+        type: 'warning',
+        title: '请先关联面试',
+        message: '复盘需要挂载到一场已存在的面试记录上，请返回上一步选择面试。'
+      });
+      setStep(1);
+      return;
+    }
     setIsAnalyzing(true);
     setAnalyzeStep(0);
   };
@@ -183,27 +192,23 @@ export const CreateReview: React.FC = () => {
       }, 650);
       return () => clearTimeout(timer);
     } else {
-      const timer = setTimeout(() => {
-        const interview = interviews.find((i) => i.id === selectedInterviewId);
-        const companyName = selectedJob?.company || manualForm.company || '字节跳动';
-        const roleName = selectedJob?.role || manualForm.role || 'AI 产品经理';
-        const roundNameStr = interview?.roundName || manualForm.roundName;
-
-        const newRevId = createReviewFromTranscript({
-          jobId: selectedJobId || undefined,
-          interviewId: selectedInterviewId || undefined,
-          company: companyName,
-          role: roleName,
-          roundName: roundNameStr,
-          transcriptText: pasteText
+      const timer = setTimeout(async () => {
+        const targetInterviewId = await createReviewFromTranscript({
+          interviewId: selectedInterviewId,
+          transcript: pasteText
         });
 
-        showToast({
-          type: 'success',
-          title: '面试复盘已生成',
-          message: `已完成「${companyName} ${roundNameStr}」的深度逐题诊断与经历库反哺。`
-        });
-        navigateTo('interview_review_detail', { reviewId: newRevId });
+        if (targetInterviewId) {
+          showToast({
+            type: 'success',
+            title: '面试复盘已生成',
+            message: `已完成「${selectedJob?.company || manualForm.company || '字节跳动'} ${manualForm.roundName}」的深度逐题诊断与经历库反哺。`
+          });
+          navigateTo('interview_review_detail', { interviewId: targetInterviewId });
+        } else {
+          setIsAnalyzing(false);
+          navigateTo('interview_review_center');
+        }
       }, 500);
       return () => clearTimeout(timer);
     }

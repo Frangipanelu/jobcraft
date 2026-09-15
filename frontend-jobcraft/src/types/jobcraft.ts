@@ -440,5 +440,7 @@ export interface InterviewDraft {
   supplementNotes: string;
   remindUpload: boolean;
   resumeVersion: 'ai' | 'general';
+  resumeMode?: 'existing' | 'upload' | 'none';
+  selectedResumeId?: string;
   coverLetter: string;
 }
