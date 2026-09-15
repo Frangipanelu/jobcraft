@@ -244,13 +244,49 @@ def update_submission(
 
 
 def delete_submission(submission_id: int, user_id: Optional[int] = None) -> bool:
+    """删除投递记录（同时清理关联的 prep / 面试复盘记录，防孤儿数据）"""
+    from app.tools.db_interview import (
+        _ensure_interview_preps_table,
+        _ensure_interview_qa_pairs_table,
+        _ensure_interview_records_table,
+    )
+
     _ensure_resume_submission_table()
-    sql = "DELETE FROM resume_submission WHERE id=%s"
-    params: List[Any] = [submission_id]
-    if user_id is not None:
-        sql += " AND user_id=%s"
-        params.append(user_id)
-    return execute(sql, tuple(params)) > 0
+    _ensure_interview_preps_table()
+    _ensure_interview_records_table()
+    _ensure_interview_qa_pairs_table()
+
+    with connection() as conn:
+        conn.autocommit = False
+        with conn.cursor() as cur:
+            # 清理该投递下的面试复盘记录及其 QA 对
+            cur.execute(
+                "SELECT id FROM interview_records WHERE submission_id=%s",
+                (submission_id,),
+            )
+            record_ids = [row[0] for row in cur.fetchall()]
+            for rid in record_ids:
+                cur.execute("DELETE FROM interview_qa_pairs WHERE record_id=%s", (rid,))
+            if record_ids:
+                placeholders = ", ".join(["%s"] * len(record_ids))
+                cur.execute(
+                    f"DELETE FROM interview_records WHERE id IN ({placeholders})",
+                    tuple(record_ids),
+                )
+            cur.execute(
+                "DELETE FROM interview_preps WHERE submission_id=%s",
+                (submission_id,),
+            )
+
+            sql = "DELETE FROM resume_submission WHERE id=%s"
+            params: List[Any] = [submission_id]
+            if user_id is not None:
+                sql += " AND user_id=%s"
+                params.append(user_id)
+            cur.execute(sql, tuple(params))
+            affected = cur.rowcount
+            conn.commit()
+            return affected > 0
 
 
 def get_submission_prep_count(submission_id: int) -> int:

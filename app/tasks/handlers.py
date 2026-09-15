@@ -39,6 +39,8 @@ def execute_resume_generate(params: Dict[str, Any]) -> Dict[str, Any]:
 
     task_id = params.get("task_id")
     user_id = params.get("user_id", 1)
+    company = params.get("company", "")
+    position = params.get("position", "")
     jd_text = params.get("jd_text", "")
     card_ids = params.get("card_ids", [])
 
@@ -52,6 +54,8 @@ def execute_resume_generate(params: Dict[str, Any]) -> Dict[str, Any]:
         # 执行工作流
         result = run_job_analysis_workflow(
             user_id=user_id,
+            company=company,
+            position=position,
             jd_text=jd_text,
             card_ids=card_ids,
         )
@@ -128,7 +132,11 @@ def execute_export_pdf(params: Dict[str, Any]) -> Dict[str, Any]:
 
     task_id = params.get("task_id")
     user_id = params.get("user_id", 1)
-    card_ids = params.get("card_ids", [])
+    job_analysis_id = params.get("job_analysis_id")
+    selected_card_ids = params.get("selected_card_ids") or params.get("card_ids", [])
+
+    if not job_analysis_id:
+        raise ValueError("job_analysis_id 缺失，无法导出简历")
 
     logger.info(f"开始执行PDF导出任务: {task_id}")
 
@@ -138,8 +146,9 @@ def execute_export_pdf(params: Dict[str, Any]) -> Dict[str, Any]:
 
         # 生成简历内容
         resume_content = jobcraft_resume.generate_resume(
+            job_analysis_id=job_analysis_id,
+            selected_card_ids=selected_card_ids,
             user_id=user_id,
-            card_ids=card_ids,
         )
 
         # TODO: 将内容转换为PDF并保存到文件

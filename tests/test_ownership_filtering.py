@@ -70,6 +70,9 @@ class _FakeConn:
     def cursor(self, dictionary=False):
         return self._cursor
 
+    def commit(self):
+        return None
+
 
 def _capture(cursor_holder):
     def fake_connect(**kwargs):

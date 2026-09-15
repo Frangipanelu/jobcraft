@@ -97,9 +97,33 @@ def list_job_analyses(user_id: int, limit: int = 20) -> List[Dict[str, Any]]:
 
 
 def delete_job_analysis(job_id: int, user_id: Optional[int] = None) -> bool:
-    """删除岗位分析记录（同时清理关联的 mapping 与 prep 记录；可选按 user_id 过滤所有权）"""
+    """删除岗位分析记录（同时清理关联的 mapping / prep / 面试复盘记录；可选按 user_id 过滤所有权）"""
+    from app.tools.db_interview import (
+        _ensure_interview_qa_pairs_table,
+        _ensure_interview_records_table,
+    )
+
+    _ensure_interview_records_table()
+    _ensure_interview_qa_pairs_table()
+
     with connection() as conn:
+        conn.autocommit = False
         with conn.cursor() as cur:
+            # 清理关联的面试复盘记录及其 QA 对（防孤儿数据）
+            cur.execute(
+                "SELECT id FROM interview_records WHERE job_analysis_id=%s",
+                (job_id,),
+            )
+            record_ids = [row[0] for row in cur.fetchall()]
+            for rid in record_ids:
+                cur.execute("DELETE FROM interview_qa_pairs WHERE record_id=%s", (rid,))
+            if record_ids:
+                placeholders = ", ".join(["%s"] * len(record_ids))
+                cur.execute(
+                    f"DELETE FROM interview_records WHERE id IN ({placeholders})",
+                    tuple(record_ids),
+                )
+
             cur.execute(
                 "DELETE FROM experience_job_mapping WHERE job_analysis_id=%s",
                 (job_id,),
@@ -113,7 +137,9 @@ def delete_job_analysis(job_id: int, user_id: Optional[int] = None) -> bool:
                 sql += " AND user_id=%s"
                 params.append(user_id)
             cur.execute(sql, tuple(params))
-            return cur.rowcount > 0
+            affected = cur.rowcount
+            conn.commit()
+            return affected > 0
 
 
 def upsert_job_mapping(job_id: int, experience_id: int) -> None:

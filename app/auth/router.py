@@ -46,6 +46,7 @@ class TokenResponse(BaseModel):
 class UserInfo(BaseModel):
     """用户信息"""
 
+    id: int
     user_id: int
     username: str
     email: Optional[str] = None
@@ -151,5 +152,8 @@ async def get_me(user_id: int = Depends(get_current_user)):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="用户不存在")
 
     return UserInfo(
-        user_id=user["id"], username=user["username"], email=user.get("email")
+        id=user["id"],
+        user_id=user["id"],
+        username=user["username"],
+        email=user.get("email"),
     )

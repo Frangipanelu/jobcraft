@@ -9,7 +9,6 @@ from pydantic import BaseModel
 
 from app.api.context import set_session_context, reset_session_context
 from app.auth.dependencies import get_current_user
-from app.core.prompts import load_prompt
 from app.tools import db_tools
 from app.tools.upload_file_read_tool import read_file_content
 
@@ -365,39 +364,19 @@ def jobcraft_mock_chat(
     current_user: int = Depends(get_current_user),
 ):
     """模拟面试实时对话端点 - 替代前端直连 Gemini"""
-    from openai import OpenAI
-    import os
-
-    client = OpenAI(
-        api_key=os.getenv("OPENAI_API_KEY"),
-        base_url=os.getenv("OPENAI_BASE_URL"),
-    )
-
-    system_prompt = load_prompt(
-        "interview",
-        "mock_interview_chat",
-        round_type=payload.round_type,
-        company=payload.company or "某科技公司",
-        position=payload.position or "技术岗位",
-        candidate_background=(
-            f"候选人背景：{payload.experience_context}"
-            if payload.experience_context
-            else ""
-        ),
-    )
-
-    messages = [{"role": "system", "content": system_prompt}]
-    messages.extend(payload.messages)
+    from app.tools.mock_chat import mock_interview_chat
 
     try:
-        response = client.chat.completions.create(
-            model=os.getenv("LLM_model", "glm-4-flash"),
-            messages=messages,
-            max_tokens=500,
-            temperature=0.7,
+        reply = mock_interview_chat(
+            round_type=payload.round_type,
+            company=payload.company or "",
+            position=payload.position or "",
+            experience_context=payload.experience_context or "",
+            messages=payload.messages,
         )
-        reply = response.choices[0].message.content
         return {"reply": reply, "role": "interviewer"}
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=f"模拟面试对话失败: {e}")
     except Exception as e:
         logger.exception("模拟面试对话失败")
         raise HTTPException(status_code=500, detail=f"模拟面试对话失败: {e}")

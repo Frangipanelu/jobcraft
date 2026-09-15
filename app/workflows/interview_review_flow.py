@@ -202,7 +202,11 @@ def _assemble_result(state: Dict[str, Any]) -> Dict[str, Any]:
     strengths = []
     weaknesses = []
     action_items = []
-    for a in analysis_by_seq.values():
+    for seq_key, a in analysis_by_seq.items():
+        score = a.get("score") or 0
+        dim = a.get("dimension", "")
+        if score >= 80 and dim:
+            strengths.append(f"{dim} 回答表现良好（{score}分）")
         if a.get("feedback"):
             weaknesses.extend(a["feedback"][:1])
         if a.get("suggestions"):

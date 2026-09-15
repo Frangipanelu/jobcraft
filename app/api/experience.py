@@ -226,11 +226,28 @@ async def jobcraft_experience_upload_confirm(
 ):
     """确认保存预览中选中的经历条目。"""
     created_cards = []
+    seen: set = set()
     try:
         for item in payload.items:
             if not item.get("selected", True):
                 continue
             raw_text = item.get("raw_text") or payload.raw_text or ""
+            company = (item.get("company") or "").strip()
+            role = (item.get("role") or "").strip()
+            dedup_key = f"{company}::{role}"
+
+            # 按 company+role 去重（与 upload 端点对齐）
+            if dedup_key in seen:
+                continue
+            if company and role:
+                existing = db_tools.find_card_by_company_role(
+                    current_user, company, role
+                )
+                if existing:
+                    seen.add(dedup_key)
+                    continue
+            seen.add(dedup_key)
+
             card_data = {
                 "user_id": current_user,
                 "title": item.get("title") or "未命名经历",
@@ -891,33 +908,17 @@ def jobcraft_experience_polish(
     if not raw_text or len(raw_text.strip()) < 10:
         raise HTTPException(status_code=400, detail="经历内容过短，请补充后再试")
 
-    from app.core.llm import model
-
-    prompt = f"""你是一位资深简历优化专家。请对以下工作经历进行深度润色，要求：
-
-1. 保持原始事实不变，不编造数据
-2. 强化 STAR 结构（情境-任务-行动-结果）
-3. 量化成果（如百分比、金额、人数等尽可能保留或合理推算）
-4. 使用专业、有力的动词开头（如"主导"、"构建"、"推动"）
-5. 精简冗余描述，提升信息密度
-6. 保持中文输出
-
-公司：{payload.company or "未知"}
-岗位：{payload.role or "未知"}
-
-原始经历：
-{raw_text}
-
-请直接输出润色后的经历文本，不要添加任何解释或前缀："""
+    from app.tools.experience_polish import polish_experience
 
     try:
-        resp = model.invoke(prompt)
-        polished = resp.content.strip()
-        if not polished:
-            raise HTTPException(status_code=500, detail="AI 返回内容为空")
+        polished = polish_experience(
+            raw_text=raw_text,
+            company=payload.company or "",
+            role=payload.role or "",
+        )
         return {"polished_text": polished, "original_text": raw_text}
-    except HTTPException:
-        raise
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=f"AI 润色失败: {e}")
     except Exception as e:
         logger.exception("AI 润色失败")
         raise HTTPException(status_code=500, detail=f"AI 润色失败: {e}")

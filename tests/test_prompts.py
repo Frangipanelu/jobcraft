@@ -7,6 +7,7 @@ _REQUIRED_FIELDS = {
     ("experience", "extract_structured"): {"raw_text"},
     ("experience", "parse_resume_entries"): {"resume_text"},
     ("experience", "recommend_tags"): {"raw_text"},
+    ("experience", "polish"): {"company", "role", "raw_text"},
     ("jd", "jd_ats_analysis"): {"dims", "jd_text"},
     ("jd", "ats_recommend"): {"jd_text", "cards_section"},
     ("jd", "score_match"): {

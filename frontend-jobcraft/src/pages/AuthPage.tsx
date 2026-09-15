@@ -30,8 +30,11 @@ export const AuthPage: React.FC = () => {
       setError('请输入用户名和密码');
       return;
     }
-    if (mode === 'register' && password.length < 8) {
-      setError('密码长度至少 8 位');
+    if (
+      mode === 'register' &&
+      (password.length < 8 || !/[A-Za-z]/.test(password) || !/\d/.test(password))
+    ) {
+      setError('密码长度至少 8 位，且必须同时包含字母和数字');
       return;
     }
 

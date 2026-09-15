@@ -641,6 +641,7 @@ class TestDbJob:
 
         mock_cursor = MagicMock()
         mock_cursor.rowcount = 0
+        mock_cursor.fetchall.return_value = []
         mock_conn = _make_mock_conn(mock_cursor)
 
         with patch("app.tools.db_conn.connect", return_value=mock_conn):
