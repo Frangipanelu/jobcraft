@@ -6,6 +6,7 @@ JobCraft 求职助手 — FastAPI 接口层
 
 import logging
 import os
+import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -104,24 +105,61 @@ app.add_middleware(
 )
 
 
+def _error_code_for_status(status: int) -> str:
+    """把 HTTP 状态码映射到统一语义错误码（JOBCRAFT_API_SPEC §1.7）"""
+    mapping = {
+        400: "VALIDATION_ERROR",
+        401: "UNAUTHORIZED",
+        403: "FORBIDDEN",
+        404: "NOT_FOUND",
+        409: "CONFLICT",
+        422: "VALIDATION_ERROR",
+        429: "RATE_LIMITED",
+        503: "DEPENDENCY_NOT_READY",
+    }
+    return mapping.get(status, "INTERNAL_ERROR")
+
+
 class APIResponse:
-    """统一 API 响应结构: {code, msg, data}"""
+    """统一 API 响应结构（错误契约）: {error: {code, message, details, requestId}}"""
 
     @staticmethod
     def success(data: Optional[dict] = None, msg: str = "success") -> dict:
         return {"code": 0, "msg": msg, "data": data or {}}
 
     @staticmethod
-    def error(code: int, msg: str, data: Optional[dict] = None) -> dict:
-        return {"code": code, "msg": msg, "data": data or {}}
+    def error(
+        code: int,
+        msg: str,
+        data: Optional[dict] = None,
+        *,
+        error_code: Optional[str] = None,
+        request_id: Optional[str] = None,
+    ) -> dict:
+        return {
+            "error": {
+                "code": error_code or _error_code_for_status(code),
+                "message": msg,
+                "details": data or {},
+                "requestId": request_id or f"req_{uuid.uuid4().hex[:12]}",
+            }
+        }
 
 
 @app.exception_handler(HTTPException)
 async def http_exception_handler(_request: Request, exc: HTTPException) -> JSONResponse:
-    """统一处理 FastAPI HTTPException，返回 {code, msg, data}"""
+    """统一处理 FastAPI HTTPException，返回 {error: {code, message, details, requestId}}"""
+    error_code = None
+    if exc.headers and exc.headers.get("x-error-code"):
+        error_code = exc.headers.get("x-error-code")
     return JSONResponse(
         status_code=exc.status_code,
-        content=APIResponse.error(code=exc.status_code, msg=exc.detail),
+        content=APIResponse.error(
+            code=exc.status_code,
+            msg=str(exc.detail),
+            error_code=error_code,
+        ),
+        headers=({"x-error-code": error_code} if error_code else None),
     )
 
 
@@ -129,14 +167,19 @@ async def http_exception_handler(_request: Request, exc: HTTPException) -> JSONR
 async def validation_exception_handler(
     _request: Request, exc: RequestValidationError
 ) -> JSONResponse:
-    """统一处理请求参数校验失败（422），返回 {code, msg, data}"""
+    """统一处理请求参数校验失败（422），返回统一错误契约"""
     errors = exc.errors()
     first = errors[0] if errors else {}
     loc = " -> ".join(str(x) for x in first.get("loc", []))
     msg = f"参数校验失败 [{loc}]: {first.get('msg', '未知错误')}"
     return JSONResponse(
         status_code=422,
-        content=APIResponse.error(code=422, msg=msg, data={"errors": errors}),
+        content=APIResponse.error(
+            code=422,
+            msg=msg,
+            data={"errors": errors},
+            error_code="VALIDATION_ERROR",
+        ),
     )
 
 
@@ -146,7 +189,11 @@ async def general_exception_handler(_request: Request, exc: Exception) -> JSONRe
     logger.exception("未捕获的服务器异常")
     return JSONResponse(
         status_code=500,
-        content=APIResponse.error(code=500, msg="服务器内部错误，请稍后重试"),
+        content=APIResponse.error(
+            code=500,
+            msg="服务器内部错误，请稍后重试",
+            error_code="INTERNAL_ERROR",
+        ),
     )
 
 

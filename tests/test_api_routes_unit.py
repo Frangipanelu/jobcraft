@@ -117,7 +117,7 @@ class TestExperienceCards:
         resp = client.get("/api/jobcraft/experience/cards")
         assert resp.status_code == 500
         body = resp.json()
-        assert body["code"] == 500
+        assert body["error"]["code"] == "INTERNAL_ERROR"
 
 
 class TestExperienceSearch:
@@ -559,7 +559,7 @@ class TestJobAnalyze:
             json={"position": "P", "jd_text": "J", "card_ids": [1]},
         )
         assert resp.status_code == 400
-        assert "公司名" in resp.json()["msg"]
+        assert "公司名" in resp.json()["error"]["message"]
 
     def test_analyze_missing_position_returns_422(self):
         resp = client.post(
@@ -574,7 +574,7 @@ class TestJobAnalyze:
             json={"company": "C", "position": "P", "card_ids": [1], "jd_text": ""},
         )
         assert resp.status_code == 400
-        assert "JD" in resp.json()["msg"]
+        assert "JD" in resp.json()["error"]["message"]
 
     def test_analyze_empty_card_ids_returns_400(self):
         resp = client.post(
@@ -582,7 +582,7 @@ class TestJobAnalyze:
             json={"company": "C", "position": "P", "jd_text": "J", "card_ids": []},
         )
         assert resp.status_code == 400
-        assert "经历卡" in resp.json()["msg"]
+        assert "经历卡" in resp.json()["error"]["message"]
 
     def test_analyze_normal(self, monkeypatch):
         monkeypatch.setattr(
@@ -616,7 +616,7 @@ class TestJobAnalyze:
             },
         )
         assert resp.status_code == 400
-        assert "invalid input" in resp.json()["msg"]
+        assert "invalid input" in resp.json()["error"]["message"]
 
 
 class TestJobList:
@@ -993,7 +993,7 @@ class TestSubmissionUpdate:
         )
         resp = client.patch("/api/jobcraft/submission/1", json={"status": "OFFER"})
         assert resp.status_code == 400
-        assert "非法状态流转" in resp.json()["msg"]
+        assert "非法状态流转" in resp.json()["error"]["message"]
 
 
 class TestSubmissionDelete:
@@ -1005,7 +1005,7 @@ class TestSubmissionDelete:
         )
         resp = client.delete("/api/jobcraft/submission/999")
         assert resp.status_code == 500
-        assert "投递记录不存在" in resp.json()["msg"]
+        assert "投递记录不存在" in resp.json()["error"]["message"]
 
     def test_delete_normal(self, monkeypatch):
         monkeypatch.setattr(
@@ -1055,7 +1055,7 @@ class TestInterviewPrep:
             json={"card_ids": [], "round_type": "技术面"},
         )
         assert resp.status_code == 400
-        assert "经历卡" in resp.json()["msg"]
+        assert "经历卡" in resp.json()["error"]["message"]
 
     def test_prep_normal(self, monkeypatch):
         monkeypatch.setattr(
@@ -1103,7 +1103,7 @@ class TestInterviewPrep:
             json={"card_ids": [1], "round_type": "技术面"},
         )
         assert resp.status_code == 400
-        assert "missing data" in resp.json()["msg"]
+        assert "missing data" in resp.json()["error"]["message"]
 
 
 class TestSelectedCards:
@@ -1168,7 +1168,7 @@ class TestInterviewReviewCreate:
             json={"raw_text": ""},
         )
         assert resp.status_code == 400
-        assert "不能为空" in resp.json()["msg"]
+        assert "不能为空" in resp.json()["error"]["message"]
 
     def test_create_normal(self, monkeypatch):
         monkeypatch.setattr(
@@ -1307,7 +1307,7 @@ class TestInterviewReviewAnalyze:
             json={"selected_sequences": []},
         )
         assert resp.status_code == 400
-        assert "至少选择" in resp.json()["msg"]
+        assert "至少选择" in resp.json()["error"]["message"]
 
     def test_analyze_too_many_sequences_returns_400(self):
         resp = client.post(
@@ -1315,7 +1315,7 @@ class TestInterviewReviewAnalyze:
             json={"selected_sequences": list(range(1, 10))},
         )
         assert resp.status_code == 400
-        assert "最多" in resp.json()["msg"]
+        assert "最多" in resp.json()["error"]["message"]
 
     def test_analyze_normal(self, monkeypatch):
         monkeypatch.setattr(
@@ -1381,7 +1381,7 @@ class TestInterviewReviewUpload:
             data={"position": ""},
         )
         assert resp.status_code == 400
-        assert "岗位名称" in resp.json()["msg"]
+        assert "岗位名称" in resp.json()["error"]["message"]
 
     def test_upload_unsupported_ext_returns_400(self):
         import io
@@ -1394,4 +1394,4 @@ class TestInterviewReviewUpload:
             data={"position": "SWE"},
         )
         assert resp.status_code == 400
-        assert "不支持" in resp.json()["msg"]
+        assert "不支持" in resp.json()["error"]["message"]

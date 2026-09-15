@@ -232,7 +232,7 @@ def test_register_weak_password_rejected(monkeypatch):
         "/api/auth/register", json={"username": "alice", "password": "short1"}
     )
     assert resp.status_code == 400
-    assert "密码" in resp.json()["msg"]
+    assert "密码" in resp.json()["error"]["message"]
 
 
 def test_register_password_without_digit_rejected(monkeypatch):
@@ -250,7 +250,7 @@ def test_register_invalid_email_rejected(monkeypatch):
         json={"username": "alice", "password": "Secret123", "email": "not-an-email"},
     )
     assert resp.status_code == 400
-    assert "邮箱" in resp.json()["msg"]
+    assert "邮箱" in resp.json()["error"]["message"]
 
 
 def test_register_duplicate_username_rejected(monkeypatch):
@@ -260,7 +260,7 @@ def test_register_duplicate_username_rejected(monkeypatch):
         json={"username": "bob", "password": "Secret123"},
     )
     assert resp.status_code == 400
-    assert "用户名已存在" in resp.json()["msg"]
+    assert "用户名已存在" in resp.json()["error"]["message"]
 
 
 def test_register_duplicate_email_rejected(monkeypatch):
@@ -274,7 +274,7 @@ def test_register_duplicate_email_rejected(monkeypatch):
         json={"username": "new", "password": "Secret123", "email": "a@b.com"},
     )
     assert resp.status_code == 400
-    assert "邮箱已被使用" in resp.json()["msg"]
+    assert "邮箱已被使用" in resp.json()["error"]["message"]
 
 
 def test_register_success_returns_token(monkeypatch):
@@ -304,7 +304,7 @@ def test_login_wrong_password_returns_401(monkeypatch):
         "/api/auth/login", json={"username": "alice", "password": "wrongpass9"}
     )
     assert resp.status_code == 401
-    assert "用户名或密码错误" in resp.json()["msg"]
+    assert "用户名或密码错误" in resp.json()["error"]["message"]
 
 
 def test_login_success_returns_token(monkeypatch):
