@@ -27,6 +27,12 @@ interface UnifiedErrorBody {
   code?: number
   msg?: string
   data?: unknown
+  error?: {
+    code?: string
+    message?: string
+    details?: unknown
+    requestId?: string
+  }
 }
 
 async function parseUnifiedError(res: Response, fallback: string): Promise<Error> {
@@ -44,8 +50,13 @@ function parseErrorMessage(body: UnifiedErrorBody | string, fallback: string): s
   if (typeof body === 'string') {
     return body || fallback
   }
-  if (body && typeof body === 'object' && body.msg) {
-    return body.msg
+  if (body && typeof body === 'object') {
+    if (body.error && typeof body.error.message === 'string' && body.error.message) {
+      return body.error.message
+    }
+    if (body.msg) {
+      return body.msg
+    }
   }
   return fallback
 }
