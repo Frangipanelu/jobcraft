@@ -113,8 +113,12 @@ def jobcraft_job_get_selected_cards(
     job_id: int, current_user: int = Depends(get_current_user)
 ):
     try:
+        if not db_tools.get_job_analysis(job_id, current_user):
+            raise HTTPException(status_code=404, detail="岗位分析不存在")
         card_ids = db_tools.get_selected_card_ids_by_job(job_id)
         return {"card_ids": card_ids}
+    except HTTPException:
+        raise
     except Exception as e:
         logger.exception("获取选中卡片失败")
         raise HTTPException(status_code=500, detail=f"获取选中卡片失败: {e}")

@@ -1111,12 +1111,24 @@ class TestSelectedCards:
 
     def test_selected_cards_normal(self, monkeypatch):
         monkeypatch.setattr(
+            "app.api.interview_prep.db_tools.get_job_analysis",
+            lambda *a: {"id": 1},
+        )
+        monkeypatch.setattr(
             "app.api.interview_prep.db_tools.get_selected_card_ids_by_job",
             lambda *a: [1, 2, 3],
         )
         resp = client.get("/api/jobcraft/job/1/selected-cards")
         assert resp.status_code == 200
         assert resp.json()["card_ids"] == [1, 2, 3]
+
+    def test_selected_cards_unknown_job_returns_404(self, monkeypatch):
+        monkeypatch.setattr(
+            "app.api.interview_prep.db_tools.get_job_analysis",
+            lambda *a: None,
+        )
+        resp = client.get("/api/jobcraft/job/999/selected-cards")
+        assert resp.status_code == 404
 
 
 class TestGetInterviewPrep:
