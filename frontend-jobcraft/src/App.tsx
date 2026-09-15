@@ -21,8 +21,6 @@ import { UserProfileView } from './components/user/UserProfileView';
 // Pages
 import { CreateInterview } from './pages/CreateInterview';
 import { CreateReview } from './pages/CreateReview';
-import { NewInterviewPrep } from './pages/NewInterviewPrep';
-import { NewReview } from './pages/NewReview';
 import { AuthPage } from './pages/AuthPage';
 
 // Modals
