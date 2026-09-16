@@ -76,6 +76,21 @@ _BUSINESS_ENDPOINTS = [
     ("POST", "/api/jobcraft/job/analyze-ats", {"jd_text": "J"}),
     (
         "POST",
+        "/api/jobcraft/job/analyze-ats-structured",
+        {
+            "company": "C",
+            "position": "P",
+            "duties": ["d"],
+            "requirements": [{"text": "r", "tag": "required"}],
+        },
+    ),
+    (
+        "POST",
+        "/api/jobcraft/experience/cards/1/polish",
+        {"raw_text": "经历文本", "company": "C", "role": "P"},
+    ),
+    (
+        "POST",
         "/api/jobcraft/job/save-resume",
         {"job_analysis_id": 1, "selected_card_ids": [1]},
     ),
