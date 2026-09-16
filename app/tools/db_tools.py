@@ -5,13 +5,13 @@ MySQL 数据库工具模块（兼容层）
 db_interview 模块，本文件保留通用辅助函数与向后兼容的 re-export。
 """
 
-import json
 import os
 from typing import Any, Dict, Optional
 
 from dotenv import load_dotenv
 
 from app.tools.db_conn import (  # noqa: F401  # 供复用方与测试 import
+    _parse_json,
     connect,
     execute,
     execute_lastrowid,
@@ -65,23 +65,6 @@ def get_db_config(overrides: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
 def _jc_config() -> Dict[str, Any]:
     """返回统一使用的 jobcraft 库连接配置"""
     return get_db_config({"database": JOBCRAFT_DB})
-
-
-def _parse_json(value: Any) -> Any:
-    """
-    数据库 JSON 字段读取时统一解析,容错处理 NULL/字符串/已解析对象
-
-    MySQL JSON 列在 mysql-connector 中可能以 dict/list 形式返回,
-    也可能因字符集以 str 返回,因此统一做一次 json.loads 兜底
-    """
-    if value is None or value == "":
-        return None
-    if isinstance(value, (dict, list)):
-        return value
-    try:
-        return json.loads(value)
-    except (TypeError, ValueError):
-        return value
 
 
 # ============================================================

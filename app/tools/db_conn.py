@@ -17,6 +17,7 @@ db_interview / db_ai）的 `connect(**config) + cursor().execute()` 样板收敛
 - operation/table 通过 SQL 启发式推断，仅用于观测，不保证语义完备。
 """
 
+import json
 import logging
 import re
 import time
@@ -37,6 +38,28 @@ logger = logging.getLogger("jobcraft.db.conn")
 def _jc_config() -> Dict[str, Any]:
     """返回统一使用的 jobcraft 库连接配置。"""
     return get_db_config({"database": JOBCRAFT_DB})
+
+
+def _parse_json(value: Any) -> Any:
+    """
+    数据库 JSON 字段读取时统一解析，容错处理 NULL/字符串/已解析对象
+
+    MySQL JSON 列在 mysql-connector 中可能以 dict/list 形式返回，
+    也可能因字符集以 str 返回，因此统一做一次 json.loads 兜底。
+
+    原定义于 db_tools（TASK-REF-DB-002）——db_tools 模块级 re-export 全部
+    业务 db_* 模块，各 db_* 却从 db_tools 取本辅助，形成模块级循环引用
+    （直接 `import app.tools.db_experience` 等必 ImportError）。本函数因此
+    下沉到本叶子模块，db_tools 保留 re-export 以向后兼容。
+    """
+    if value is None or value == "":
+        return None
+    if isinstance(value, (dict, list)):
+        return value
+    try:
+        return json.loads(value)
+    except (TypeError, ValueError):
+        return value
 
 
 # 运行时 DDL 引导状态（TASK-P1-10）：

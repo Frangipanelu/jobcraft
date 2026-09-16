@@ -12,7 +12,7 @@ from app.tools.db_conn import (
     query_all,
     query_one,
 )
-from app.tools.db_tools import _parse_json
+from app.tools.db_conn import _parse_json
 
 logger = logging.getLogger("jobcraft.db.job")
 
