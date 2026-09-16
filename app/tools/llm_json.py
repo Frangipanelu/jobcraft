@@ -261,7 +261,8 @@ def invoke_structured(
             prompt_hash=db_ai.sha256_hex(prompt),
             input_hash=input_hash,
         )
-    except Exception:
+    except Exception as exc:
+        logger.debug("AI 审计任务行创建失败，继续无审计路径: %s", exc)
         _task_id = None
 
     _start = time.perf_counter()

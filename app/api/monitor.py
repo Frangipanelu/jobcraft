@@ -73,8 +73,10 @@ class ToolMonitor:
         if hasattr(builtins, "runtime") and hasattr(builtins.runtime, "stream_writer"):
             try:
                 builtins.runtime.stream_writer(payload)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug(
+                    "[Monitor] stream_writer 推送失败（脚本调试场景忽略）: %s", exc
+                )
 
         # 控制台保底输出，便于无前端场景下观察执行过程
         logger.info("[Monitor:%s] %s", event_type, message)

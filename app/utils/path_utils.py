@@ -5,9 +5,12 @@
 后续文件读取、Markdown 生成和 PDF 转换工具都可以复用这里的解析规则
 """
 
+import logging
 import os
 from pathlib import Path
 from typing import Optional
+
+logger = logging.getLogger("jobcraft.utils.path_utils")
 
 
 def resolve_path(filename: str, session_dir: Optional[str] = None) -> str:
@@ -52,8 +55,8 @@ def resolve_path(filename: str, session_dir: Optional[str] = None) -> str:
         try:
             if session_path in full_path.parents or full_path == session_path:
                 return _fix_nested_session_path(full_path, session_path, session_name)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("会话目录归属校验失败，按原路径返回: %s", exc)
 
         # 真实绝对路径且不在 session_dir 中时保持原样，避免误改外部资源路径
         return str(full_path)

@@ -39,7 +39,8 @@ def _get_previous_review_summary(
         if analysis.get("action_items"):
             parts.append(f"改进项：{'、'.join(analysis['action_items'][:3])}")
         return "\n".join(parts) if parts else None
-    except Exception:
+    except Exception as exc:
+        logger.warning("读取上一轮复盘摘要失败，返回空: %s", exc)
         return None
 
 

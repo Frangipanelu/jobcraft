@@ -5,11 +5,14 @@
 """
 
 import json
+import logging
 from typing import Any, Dict, List, Optional
 
 from app.core.prompts import load_prompt
 from app.schemas.jobcraft import DimensionQuestion, InterviewPrepResult
 from app.tools import db_tools
+
+logger = logging.getLogger("jobcraft.tools.interview_pre")
 
 # 8 维能力说明
 DIMENSION_DESCRIPTIONS = {
@@ -76,8 +79,8 @@ def _build_interview_prompt(
                 f"{cr}\n"
                 "---\n\n"
             )
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("公司调研段落序列化失败，跳过该段落: %s", exc)
 
     # 已投简历段落
     resume_section = ""

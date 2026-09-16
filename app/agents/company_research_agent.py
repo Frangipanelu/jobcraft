@@ -6,6 +6,7 @@
 """
 
 import json
+import logging
 from typing import Any, Dict, Optional
 
 from app.agents.base_agent import BaseAgent
@@ -13,6 +14,8 @@ from app.core.llm import model
 from app.core.prompts import load_prompt
 from app.schemas.jobcraft import CompanyResearchInfo
 from app.tools.llm_json import invoke_structured
+
+logger = logging.getLogger("jobcraft.agents.company_research")
 
 
 def _build_company_prompt(company: str, search_data: Dict[str, Any]) -> str:
@@ -81,7 +84,8 @@ def get_or_search_company(
                 {"query": q, "max_results": 3, "include_raw_content": False}
             )
             results.append({"query": q, "result": r})
-        except Exception:
+        except Exception as exc:
+            logger.warning("公司调研搜索「%s」失败，跳过该查询: %s", q, exc)
             continue
     search_data = {"search_results": results}
 

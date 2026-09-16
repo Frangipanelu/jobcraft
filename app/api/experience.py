@@ -640,6 +640,7 @@ def jobcraft_experience_batch(
                         )
                 except Exception as e:
                     results["failed"].append({"card_id": card_id, "reason": str(e)})
+                    logger.warning("批量操作失败 card_id=%s: %s", card_id, e)
 
         elif action == "restore":
             for card_id in card_ids:
@@ -655,6 +656,7 @@ def jobcraft_experience_batch(
                         )
                 except Exception as e:
                     results["failed"].append({"card_id": card_id, "reason": str(e)})
+                    logger.warning("批量操作失败 card_id=%s: %s", card_id, e)
 
         elif action == "delete":
             for card_id in card_ids:
@@ -668,6 +670,7 @@ def jobcraft_experience_batch(
                         )
                 except Exception as e:
                     results["failed"].append({"card_id": card_id, "reason": str(e)})
+                    logger.warning("批量操作失败 card_id=%s: %s", card_id, e)
 
         elif action == "tag":
             tags_to_add = params.get("tags", [])
@@ -695,6 +698,7 @@ def jobcraft_experience_batch(
                         )
                 except Exception as e:
                     results["failed"].append({"card_id": card_id, "reason": str(e)})
+                    logger.warning("批量操作失败 card_id=%s: %s", card_id, e)
 
         else:
             raise HTTPException(

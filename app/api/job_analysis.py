@@ -369,7 +369,8 @@ def jobcraft_resume_download(path: str, current_user: int = Depends(get_current_
         output_abs = output_dir.resolve()
         if not abs_path.is_relative_to(output_abs):
             return {"error": "拒绝访问: 只能下载 output 目录下的文件"}
-    except Exception:
+    except Exception as exc:
+        logger.warning("简历下载路径参数校验失败: %s", exc)
         return {"error": "无效的路径参数"}
     if not abs_path.exists():
         return {"error": "文件不存在"}
