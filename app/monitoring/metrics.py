@@ -71,38 +71,6 @@ api_request_duration_seconds = Histogram(
 )
 
 # ============================================================
-#  业务相关指标
-# ============================================================
-
-# 经历卡数量
-experience_cards_total = Gauge(
-    "jobcraft_experience_cards_total",
-    "Total number of experience cards",
-    ["user_id"],
-)
-
-# 投递记录数量
-submissions_total = Gauge(
-    "jobcraft_submissions_total",
-    "Total number of submissions",
-    ["user_id", "status"],
-)
-
-# 面试准备生成次数
-interview_prep_total = Counter(
-    "jobcraft_interview_prep_total",
-    "Total number of interview prep generated",
-    ["round_type"],
-)
-
-# 面试复盘次数
-interview_review_total = Counter(
-    "jobcraft_interview_review_total",
-    "Total number of interview reviews",
-    ["round_type"],
-)
-
-# ============================================================
 #  系统信息
 # ============================================================
 
