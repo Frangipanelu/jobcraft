@@ -2,18 +2,18 @@
 问题表意图识别 Agent
 
 为已解析的 QA 对生成轻量意图识别（intent/dimension/level），单次 LLM 调用。
-prompt 构建由 interview_review._build_question_table_prompt 纯函数负责。
+prompt 构建由 question_table._build_question_table_prompt 纯函数负责。
 """
 
 from typing import Any, Dict
 
 from app.agents.base_agent import BaseAgent
 from app.core.llm import model
-from app.tools.interview_review import (
+from app.tools.llm_json import invoke_structured
+from app.tools.question_table import (
     _QuestionTableOut,
     _build_question_table_prompt,
 )
-from app.tools.llm_json import invoke_structured
 
 
 class QuestionTableAgent(BaseAgent):

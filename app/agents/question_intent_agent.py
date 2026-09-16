@@ -9,11 +9,11 @@ from typing import Any, Dict
 
 from app.agents.base_agent import BaseAgent
 from app.core.llm import model
-from app.tools.interview_review import (
+from app.tools.llm_json import invoke_structured
+from app.tools.question_table import (
     _QuestionTableOut,
     _build_question_table_prompt,
 )
-from app.tools.llm_json import invoke_structured
 
 
 class QuestionIntentAgent(BaseAgent):
