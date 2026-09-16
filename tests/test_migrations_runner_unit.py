@@ -166,6 +166,25 @@ def test_fk_migration_declares_expected_constraints():
     assert "DELETE FROM card_versions" in sql
 
 
+def test_v0002_and_v0004_are_idempotent():
+    """DB-02：V0002/V0004 应使用 information_schema 探测 + PREPARE/EXECUTE，重复执行安全。"""
+    for fname in ["V0002__foreign_keys.sql", "V0004__ai_cache.sql"]:
+        path = os.path.join(runner.MIGRATIONS_DIR, fname)
+        assert os.path.exists(path)
+        with open(path, encoding="utf-8") as fh:
+            sql = fh.read()
+        assert "information_schema" in sql, f"{fname} 缺少 information_schema 探测"
+        assert "PREPARE" in sql and "EXECUTE" in sql, (
+            f"{fname} 缺少 PREPARE/EXECUTE 动态执行"
+        )
+        # 每个语句块都以 SPLIT 结尾，保证可被 runner 逐条执行
+        for stmt in sql.split(";--SPLIT--"):
+            stmt = stmt.strip()
+            assert stmt == "" or not stmt.endswith(";"), (
+                f"{fname} 语句块含尾分号: {stmt[:50]}"
+            )
+
+
 def _normalize_ddl(sql: str) -> str:
     """规整 DDL：去反引号、折叠空白，用于迁移文件与运行时 DDL 对比。"""
     import re

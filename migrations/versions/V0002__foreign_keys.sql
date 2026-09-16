@@ -11,6 +11,9 @@
 --   interview_qa_pairs.record_id        → interview_records.id   ON DELETE CASCADE
 --   card_versions.card_id               → experience_card.id     ON DELETE CASCADE
 --
+-- 幂等性（DB-02）：MySQL 8 无 ADD CONSTRAINT IF NOT EXISTS，采用
+-- information_schema 探测 + PREPARE/EXECUTE 动态执行，重复执行安全。
+--
 -- 语句分隔：多条语句间用 SPLIT 标记（分号加短横线 SPLIT 短横线）。
 
 -- 0. 清理孤儿数据（父表已不存在的引用行）
@@ -38,36 +41,86 @@ WHERE NOT EXISTS (SELECT 1 FROM experience_card ec WHERE ec.id = card_versions.c
 ;--SPLIT--
 
 -- 1. resume_submission → job_analysis
-ALTER TABLE resume_submission
-    ADD CONSTRAINT fk_submission_job_analysis
-    FOREIGN KEY (job_analysis_id) REFERENCES job_analysis (id)
-    ON DELETE SET NULL ON UPDATE CASCADE
+SET @cnt = (SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS
+            WHERE CONSTRAINT_SCHEMA = DATABASE()
+              AND CONSTRAINT_NAME = 'fk_submission_job_analysis'
+              AND CONSTRAINT_TYPE = 'FOREIGN KEY')
+;--SPLIT--
+SET @ddl = IF(@cnt = 0,
+              'ALTER TABLE resume_submission ADD CONSTRAINT fk_submission_job_analysis FOREIGN KEY (job_analysis_id) REFERENCES job_analysis (id) ON DELETE SET NULL ON UPDATE CASCADE',
+              'SET @noop = 1')
+;--SPLIT--
+PREPARE _mig_stmt_1 FROM @ddl
+;--SPLIT--
+EXECUTE _mig_stmt_1
+;--SPLIT--
+DEALLOCATE PREPARE _mig_stmt_1
 ;--SPLIT--
 
 -- 2. interview_preps → job_analysis
-ALTER TABLE interview_preps
-    ADD CONSTRAINT fk_preps_job_analysis
-    FOREIGN KEY (job_analysis_id) REFERENCES job_analysis (id)
-    ON DELETE CASCADE ON UPDATE CASCADE
+SET @cnt = (SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS
+            WHERE CONSTRAINT_SCHEMA = DATABASE()
+              AND CONSTRAINT_NAME = 'fk_preps_job_analysis'
+              AND CONSTRAINT_TYPE = 'FOREIGN KEY')
+;--SPLIT--
+SET @ddl = IF(@cnt = 0,
+              'ALTER TABLE interview_preps ADD CONSTRAINT fk_preps_job_analysis FOREIGN KEY (job_analysis_id) REFERENCES job_analysis (id) ON DELETE CASCADE ON UPDATE CASCADE',
+              'SET @noop = 1')
+;--SPLIT--
+PREPARE _mig_stmt_2 FROM @ddl
+;--SPLIT--
+EXECUTE _mig_stmt_2
+;--SPLIT--
+DEALLOCATE PREPARE _mig_stmt_2
 ;--SPLIT--
 
 -- 3. interview_preps → resume_submission（submission 可空）
-ALTER TABLE interview_preps
-    ADD CONSTRAINT fk_preps_submission
-    FOREIGN KEY (submission_id) REFERENCES resume_submission (id)
-    ON DELETE SET NULL ON UPDATE CASCADE
+SET @cnt = (SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS
+            WHERE CONSTRAINT_SCHEMA = DATABASE()
+              AND CONSTRAINT_NAME = 'fk_preps_submission'
+              AND CONSTRAINT_TYPE = 'FOREIGN KEY')
+;--SPLIT--
+SET @ddl = IF(@cnt = 0,
+              'ALTER TABLE interview_preps ADD CONSTRAINT fk_preps_submission FOREIGN KEY (submission_id) REFERENCES resume_submission (id) ON DELETE SET NULL ON UPDATE CASCADE',
+              'SET @noop = 1')
+;--SPLIT--
+PREPARE _mig_stmt_3 FROM @ddl
+;--SPLIT--
+EXECUTE _mig_stmt_3
+;--SPLIT--
+DEALLOCATE PREPARE _mig_stmt_3
 ;--SPLIT--
 
 -- 4. interview_qa_pairs → interview_records
-ALTER TABLE interview_qa_pairs
-    ADD CONSTRAINT fk_qa_record
-    FOREIGN KEY (record_id) REFERENCES interview_records (id)
-    ON DELETE CASCADE ON UPDATE CASCADE
+SET @cnt = (SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS
+            WHERE CONSTRAINT_SCHEMA = DATABASE()
+              AND CONSTRAINT_NAME = 'fk_qa_record'
+              AND CONSTRAINT_TYPE = 'FOREIGN KEY')
+;--SPLIT--
+SET @ddl = IF(@cnt = 0,
+              'ALTER TABLE interview_qa_pairs ADD CONSTRAINT fk_qa_record FOREIGN KEY (record_id) REFERENCES interview_records (id) ON DELETE CASCADE ON UPDATE CASCADE',
+              'SET @noop = 1')
+;--SPLIT--
+PREPARE _mig_stmt_4 FROM @ddl
+;--SPLIT--
+EXECUTE _mig_stmt_4
+;--SPLIT--
+DEALLOCATE PREPARE _mig_stmt_4
 ;--SPLIT--
 
 -- 5. card_versions → experience_card
-ALTER TABLE card_versions
-    ADD CONSTRAINT fk_card_versions_card
-    FOREIGN KEY (card_id) REFERENCES experience_card (id)
-    ON DELETE CASCADE ON UPDATE CASCADE
+SET @cnt = (SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS
+            WHERE CONSTRAINT_SCHEMA = DATABASE()
+              AND CONSTRAINT_NAME = 'fk_card_versions_card'
+              AND CONSTRAINT_TYPE = 'FOREIGN KEY')
+;--SPLIT--
+SET @ddl = IF(@cnt = 0,
+              'ALTER TABLE card_versions ADD CONSTRAINT fk_card_versions_card FOREIGN KEY (card_id) REFERENCES experience_card (id) ON DELETE CASCADE ON UPDATE CASCADE',
+              'SET @noop = 1')
+;--SPLIT--
+PREPARE _mig_stmt_5 FROM @ddl
+;--SPLIT--
+EXECUTE _mig_stmt_5
+;--SPLIT--
+DEALLOCATE PREPARE _mig_stmt_5
 ;--SPLIT--
