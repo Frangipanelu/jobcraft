@@ -315,6 +315,10 @@ def run_worker(sleep_interval: float = 2.0, max_idle: int = -1) -> None:
     :param sleep_interval: 队列为空时的等待间隔（秒）
     :param max_idle: 连续空转多少次后退出（-1 表示永不退出）
     """
+    # 启动时一次性执行运行时 DDL 引导（TASK-P1-10），handler 前置的 _ensure_* 随之短路
+    from app.tools.db_bootstrap import run_schema_bootstrap
+
+    run_schema_bootstrap()
     manager = get_task_manager()
     idle_rounds = 0
     logger.info("任务 worker 启动，监听队列 %s", manager._queue_key)

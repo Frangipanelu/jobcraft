@@ -38,3 +38,13 @@ def server_available() -> bool:
         except requests.ConnectionError:
             continue
     return False
+
+
+@pytest.fixture(autouse=True)
+def _reset_schema_bootstrap_state():
+    """每个测试前后重置运行时 DDL 引导标志，隔离 db_conn 全局状态。"""
+    from app.tools import db_conn
+
+    db_conn.reset_schema_ready()
+    yield
+    db_conn.reset_schema_ready()

@@ -3,13 +3,15 @@
 import logging
 from typing import Any, Dict, Optional
 
-from app.tools.db_conn import execute, execute_lastrowid, query_one
+from app.tools.db_conn import execute, execute_lastrowid, is_schema_ready, query_one
 
 logger = logging.getLogger("jobcraft.db.user")
 
 
 def _ensure_users_table() -> None:
-    """确保 users 表存在"""
+    """确保 users 表存在（schema 已由启动引导保证时短路）"""
+    if is_schema_ready():
+        return
     execute(
         """
         CREATE TABLE IF NOT EXISTS users (

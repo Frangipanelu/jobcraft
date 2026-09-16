@@ -8,6 +8,7 @@ from app.tools.db_conn import (
     connection,
     execute,
     execute_lastrowid,
+    is_schema_ready,
     query_all,
     query_one,
 )
@@ -17,7 +18,9 @@ logger = logging.getLogger("jobcraft.db.job")
 
 
 def _ensure_job_analysis_columns() -> None:
-    """为 job_analysis 表增加 dimension_requirements 字段（兼容旧库）"""
+    """为 job_analysis 表增加 dimension_requirements 字段（schema 已由启动引导保证时短路）"""
+    if is_schema_ready():
+        return
     with connection() as conn:
         with conn.cursor() as cur:
             cur.execute("SHOW COLUMNS FROM job_analysis")

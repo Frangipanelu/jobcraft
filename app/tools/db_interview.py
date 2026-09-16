@@ -8,6 +8,7 @@ from app.tools.db_conn import (
     connection,
     execute,
     execute_lastrowid,
+    is_schema_ready,
     query_all,
     query_one,
 )
@@ -17,7 +18,9 @@ logger = logging.getLogger("jobcraft.db.interview")
 
 
 def _ensure_interview_preps_table() -> None:
-    """确保 interview_preps 表存在"""
+    """确保 interview_preps 表存在（schema 已由启动引导保证时短路）"""
+    if is_schema_ready():
+        return
     with connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -162,7 +165,9 @@ def list_interview_preps(user_id: int) -> List[Dict[str, Any]]:
 
 
 def _ensure_interview_records_table() -> None:
-    """确保 interview_records 表存在"""
+    """确保 interview_records 表存在（schema 已由启动引导保证时短路）"""
+    if is_schema_ready():
+        return
     with connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -187,7 +192,9 @@ def _ensure_interview_records_table() -> None:
 
 
 def _ensure_interview_qa_pairs_table() -> None:
-    """确保 interview_qa_pairs 表存在"""
+    """确保 interview_qa_pairs 表存在（schema 已由启动引导保证时短路）"""
+    if is_schema_ready():
+        return
     with connection() as conn:
         with conn.cursor() as cur:
             cur.execute(

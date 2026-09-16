@@ -30,6 +30,10 @@ from app.monitoring import setup_monitoring
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
+    # 启动时一次性执行运行时 DDL 引导（TASK-P1-10）：成功后请求路径 _ensure_* 短路
+    from app.tools.db_bootstrap import run_schema_bootstrap
+
+    run_schema_bootstrap()
     yield
 
 

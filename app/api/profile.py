@@ -32,25 +32,10 @@ class UserProfileUpdate(BaseModel):
 
 
 def _ensure_table() -> None:
-    """确保 user_profiles 表存在（幂等）"""
-    db_conn.execute(
-        """CREATE TABLE IF NOT EXISTS user_profiles (
-            user_id INT NOT NULL PRIMARY KEY,
-            display_name VARCHAR(100) DEFAULT '',
-            role VARCHAR(100) DEFAULT '求职者',
-            target_salary VARCHAR(50) DEFAULT '',
-            years_of_exp INT DEFAULT 0,
-            city VARCHAR(100) DEFAULT '',
-            phone VARCHAR(30) DEFAULT '',
-            summary TEXT,
-            target_cities JSON,
-            target_companies JSON,
-            target_roles JSON,
-            avatar_url VARCHAR(500) DEFAULT '',
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-        )"""
-    )
+    """确保 user_profiles 表存在（幂等；DDL 下沉至 tools 层，schema 就绪后短路）"""
+    from app.tools.db_profile import _ensure_user_profiles_table
+
+    _ensure_user_profiles_table()
 
 
 def _row_to_dict(row: Any) -> Dict[str, Any]:

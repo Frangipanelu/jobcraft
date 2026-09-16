@@ -39,6 +39,33 @@ def _jc_config() -> Dict[str, Any]:
     return get_db_config({"database": JOBCRAFT_DB})
 
 
+# 运行时 DDL 引导状态（TASK-P1-10）：
+#   进程启动时由 app.tools.db_bootstrap.run_schema_bootstrap() 一次性执行全部
+#   db_* 模块的 _ensure_* 建表/ALTER DDL，成功后置位本标志；此后请求路径中的
+#   _ensure_* 调用全部短路为空操作，消除逐请求 SHOW COLUMNS/ALTER 的并发竞态。
+_schema_ready = False
+
+
+def is_schema_ready() -> bool:
+    """返回运行时 DDL 引导是否已完成。
+
+    :return: True 时请求路径的 _ensure_* 调用应直接短路（schema 已由启动引导保证）
+    """
+    return _schema_ready
+
+
+def mark_schema_ready() -> None:
+    """标记运行时 DDL 引导完成（仅供 db_bootstrap 成功收尾时调用）。"""
+    global _schema_ready
+    _schema_ready = True
+
+
+def reset_schema_ready() -> None:
+    """重置引导状态（测试隔离用；业务代码不应调用）。"""
+    global _schema_ready
+    _schema_ready = False
+
+
 # SQL 操作/表启发式推断（仅用于观测标签，低基数、有界）
 _TABLE_START_RE = re.compile(
     r"^\s*(?:insert|replace)\s+into\s+`?(\w+)`?", re.IGNORECASE

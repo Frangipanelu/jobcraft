@@ -9,6 +9,7 @@ from app.tools.db_conn import (
     connection,
     execute,
     execute_lastrowid,
+    is_schema_ready,
     query_all,
     query_one,
     query_scalar,
@@ -27,7 +28,9 @@ def _normalize_or_raw(value: Any) -> Any:
 
 
 def _ensure_resume_submission_table() -> None:
-    """确保 resume_submission 表存在"""
+    """确保 resume_submission 表存在（schema 已由启动引导保证时短路）"""
+    if is_schema_ready():
+        return
     with connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -55,7 +58,9 @@ def _ensure_resume_submission_table() -> None:
 
 
 def _ensure_interview_submission_columns() -> None:
-    """为 interview_preps 和 interview_records 表加 submission_id 字段"""
+    """为 interview_preps 和 interview_records 表加 submission_id 字段（schema 已由启动引导保证时短路）"""
+    if is_schema_ready():
+        return
     with connection() as conn:
         with conn.cursor() as cur:
             cur.execute("SHOW COLUMNS FROM interview_preps")

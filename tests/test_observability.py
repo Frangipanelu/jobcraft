@@ -90,12 +90,17 @@ def test_record_llm_observability_never_raises(monkeypatch):
     llm_json._record_llm_observability("x", "success", 1.0, None)
 
 
-def test_api_metrics_middleware_records_request():
+def test_api_metrics_middleware_records_request(monkeypatch):
     """集成：对 /health 的请求应增加 api_requests_total。"""
     import prometheus_client
     from fastapi.testclient import TestClient
 
     from app.api.server import app
+
+    # lifespan 内的 schema 引导只测 API 指标用不到，短路掉避免测试触碰真实 DB
+    import app.tools.db_bootstrap as db_bootstrap
+
+    monkeypatch.setattr(db_bootstrap, "run_schema_bootstrap", lambda: True)
 
     label = {
         "method": "GET",

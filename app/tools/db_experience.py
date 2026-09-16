@@ -10,6 +10,7 @@ from app.tools.db_conn import (
     connection,
     execute,
     execute_lastrowid,
+    is_schema_ready,
     query_all,
     query_one,
     query_scalar,
@@ -20,7 +21,9 @@ logger = logging.getLogger("jobcraft.db.experience")
 
 
 def _ensure_experience_card_columns() -> None:
-    """确保 experience_card 表有新架构字段（兼容旧库）"""
+    """确保 experience_card 表有新架构字段（schema 已由启动引导保证时短路）"""
+    if is_schema_ready():
+        return
     # 先确保旧字段存在（兼容尚未迁移的库）
     old_columns = [
         ("company", "VARCHAR(200)"),
@@ -584,7 +587,9 @@ def upsert_company_research(company: str, info: Dict[str, Any]) -> None:
 
 
 def _ensure_card_versions_table() -> None:
-    """确保 card_versions 表存在"""
+    """确保 card_versions 表存在（schema 已由启动引导保证时短路）"""
+    if is_schema_ready():
+        return
     with connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
