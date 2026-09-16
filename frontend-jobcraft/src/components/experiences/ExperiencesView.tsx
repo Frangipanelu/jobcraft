@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useJobCraft } from '../../context/JobCraftContext';
 import { Experience, ExperienceCategory, ExperienceVersionRecord } from '../../types/jobcraft';
 import * as jobApi from '../../api/job';
+import * as tasksApi from '../../api/tasks';
 import {
   Layers,
   Plus,
@@ -120,11 +121,16 @@ export const ExperiencesView: React.FC<ExperiencesViewProps> = () => {
 
     try {
       showToast({ type: 'info', title: 'AI 润色中...', message: '正在调用大模型优化经历表述' });
-      const result = await jobApi.polishExperience(
-        parseInt(exp.id.replace('exp-', '')),
-        originalText,
-        exp.company,
-        exp.role
+      const result = await tasksApi.runTaskOrSync(
+        'experience_polish',
+        { raw_text: originalText, company: exp.company, role: exp.role },
+        () => jobApi.polishExperience(
+          parseInt(exp.id.replace('exp-', '')),
+          originalText,
+          exp.company,
+          exp.role
+        ),
+        { timeout: 120_000 }
       );
 
       // 将润色结果拆分为 actions

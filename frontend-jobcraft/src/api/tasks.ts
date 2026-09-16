@@ -49,6 +49,29 @@ export async function listTasks(
   )
 }
 
+/**
+ * 提交异步任务并轮询到完成；任务系统不可用（Redis/worker 未就绪）时
+ * 降级为同步端点调用，保证功能可用。
+ */
+export async function runTaskOrSync<T>(
+  taskType: string,
+  params: Record<string, unknown>,
+  fallback: () => Promise<T>,
+  options: PollTaskOptions = {}
+): Promise<T> {
+  try {
+    const submit = await submitTask({ task_type: taskType, params })
+    const polled = await pollTaskUntilDone(submit.task_id, {
+      interval: options.interval ?? 1500,
+      timeout: options.timeout ?? 180_000,
+      onProgress: options.onProgress,
+    })
+    return polled.result as unknown as T
+  } catch (err) {
+    return fallback()
+  }
+}
+
 export interface PollTaskOptions {
   interval?: number
   timeout?: number

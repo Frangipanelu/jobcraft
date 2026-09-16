@@ -1147,13 +1147,24 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
       }
     }
 
-    // 调用后端 API 进行 JD 分析
-    jobApi.analyzeJob({
-      position: data.role,
-      company: data.company,
-      jd_text: data.rawText,
-      card_ids: experiences.map(e => parseInt(e.id)).filter(id => !isNaN(id))
-    }).then(result => {
+    // 调用后端 API 进行 JD 分析（优先异步任务，任务系统不可用时降级同步端点）
+    tasksApi.runTaskOrSync<JobAnalysisResult>(
+      'resume_generate',
+      {
+        user_id: currentUserId,
+        company: data.company,
+        position: data.role,
+        jd_text: data.rawText,
+        card_ids: experiences.map(e => parseInt(e.id)).filter(id => !isNaN(id))
+      },
+      () => jobApi.analyzeJob({
+        position: data.role,
+        company: data.company,
+        jd_text: data.rawText,
+        card_ids: experiences.map(e => parseInt(e.id)).filter(id => !isNaN(id))
+      }),
+      { timeout: 180_000 }
+    ).then(result => {
       const newAnalysis = analysisToJD(result, targetJobId)
       setJdAnalyses((prev) => [newAnalysis, ...prev])
 
@@ -1234,12 +1245,24 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
       }
     }
 
-    jobApi.analyzeStructuredJd({
-      company: data.company,
-      position: data.role,
-      duties: data.duties,
-      requirements: data.requirements
-    }).then(result => {
+    type StructuredJdResult = Awaited<ReturnType<typeof jobApi.analyzeStructuredJd>>;
+    tasksApi.runTaskOrSync<StructuredJdResult>(
+      'jd_analyze_structured',
+      {
+        user_id: currentUserId,
+        company: data.company,
+        position: data.role,
+        duties: data.duties,
+        requirements: data.requirements
+      },
+      () => jobApi.analyzeStructuredJd({
+        company: data.company,
+        position: data.role,
+        duties: data.duties,
+        requirements: data.requirements
+      }),
+      { timeout: 120_000 }
+    ).then(result => {
       const newAnalysis: JDAnalysis = {
         id: newId,
         jobId: targetJobId,
@@ -1831,10 +1854,15 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
       try {
         const sequences = (result.qa_pairs || []).map((p) => p.sequence);
         if (result.record_id && sequences.length > 0) {
-          analysis = await interviewApi.analyzeInterviewReview(
-            result.record_id,
-            sequences,
-            currentUserId
+          analysis = await tasksApi.runTaskOrSync<InterviewReviewResult>(
+            'interview_review_analyze',
+            {
+              user_id: currentUserId,
+              record_id: result.record_id,
+              selected_sequences: sequences
+            },
+            () => interviewApi.analyzeInterviewReview(result.record_id, sequences, currentUserId),
+            { timeout: 180_000 }
           );
         }
       } catch (e) {
