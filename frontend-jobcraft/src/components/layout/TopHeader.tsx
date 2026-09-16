@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useJobCraft } from '../../context/JobCraftContext';
+import { useProfileQuery, EMPTY_PROFILE } from '../../features/profile/hooks';
 import {
   ChevronRight,
   Sparkles,
@@ -29,10 +30,12 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
     selectedInterviewId,
     jobs,
     interviews,
-    user,
     logout,
     showToast
   } = useJobCraft();
+
+  const { data: profile } = useProfileQuery();
+  const user = profile ?? EMPTY_PROFILE;
 
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);

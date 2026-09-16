@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useJobCraft } from '../../context/JobCraftContext';
+import type { UserProfile } from '../../types/jobcraft';
+import { useProfileQuery, useUpdateProfileMutation, EMPTY_PROFILE } from '../../features/profile/hooks';
 import * as jobApi from '../../api/job';
 import * as authApi from '../../api/auth';
 import {
@@ -30,8 +32,6 @@ import {
 
 export const UserProfileView: React.FC = () => {
   const {
-    user,
-    updateUserProfile,
     historicalResumes,
     addHistoricalResume,
     deleteHistoricalResume,
@@ -44,6 +44,17 @@ export const UserProfileView: React.FC = () => {
     showToast,
     currentUserId
   } = useJobCraft();
+
+  const { data: profile } = useProfileQuery();
+  const updateProfileMutation = useUpdateProfileMutation();
+  const user = profile ?? EMPTY_PROFILE;
+
+  const saveProfile = (updates: Partial<UserProfile>) => {
+    updateProfileMutation.mutate(updates, {
+      onSuccess: () => showToast({ type: 'success', title: '个人资料已更新', message: '个人求职信息与偏好设置已成功保存。' }),
+      onError: () => showToast({ type: 'error', title: '保存失败', message: '请检查网络后重试。' }),
+    });
+  };
 
   const [activeTab, setActiveTab] = useState<'resumes' | 'profile' | 'preferences' | 'settings'>(userProfileTab || 'resumes');
 
@@ -133,35 +144,35 @@ export const UserProfileView: React.FC = () => {
 
   const handleSaveProfile = (e: React.FormEvent) => {
     e.preventDefault();
-    updateUserProfile(profileForm);
+    saveProfile(profileForm);
   };
 
   const handleAddRole = () => {
     if (!newRoleInput.trim()) return;
     const updated = [...targetRoles, newRoleInput.trim()];
     setTargetRoles(updated);
-    updateUserProfile({ targetRoles: updated });
+    saveProfile({ targetRoles: updated });
     setNewRoleInput('');
   };
 
   const handleRemoveRole = (role: string) => {
     const updated = targetRoles.filter((r) => r !== role);
     setTargetRoles(updated);
-    updateUserProfile({ targetRoles: updated });
+    saveProfile({ targetRoles: updated });
   };
 
   const handleAddCompany = () => {
     if (!newCompanyInput.trim()) return;
     const updated = [...targetCompanies, newCompanyInput.trim()];
     setTargetCompanies(updated);
-    updateUserProfile({ targetCompanies: updated });
+    saveProfile({ targetCompanies: updated });
     setNewCompanyInput('');
   };
 
   const handleRemoveCompany = (comp: string) => {
     const updated = targetCompanies.filter((c) => c !== comp);
     setTargetCompanies(updated);
-    updateUserProfile({ targetCompanies: updated });
+    saveProfile({ targetCompanies: updated });
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
