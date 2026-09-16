@@ -195,7 +195,7 @@ export const NewInterviewModal: React.FC<Props> = ({ isOpen, jobId, mode, onClos
   const [showNewJobForm, setShowNewJobForm] = useState(false);
 
   // Handle create job - directly create in modal
-  const handleCreateJob = () => {
+  const handleCreateJob = async () => {
     if (!newJobCompany.trim() || !newJobRole.trim()) {
       showToast({
         type: 'warning',
@@ -206,7 +206,7 @@ export const NewInterviewModal: React.FC<Props> = ({ isOpen, jobId, mode, onClos
     }
     
     // Create job directly
-    const newJobId = createJob({
+    const newJobId = await createJob({
       company: newJobCompany.trim(),
       role: newJobRole.trim(),
     });

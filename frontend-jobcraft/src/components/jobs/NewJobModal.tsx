@@ -16,11 +16,11 @@ export const NewJobModal: React.FC<NewJobModalProps> = ({ isOpen, onClose }) => 
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!company.trim() || !role.trim()) return;
 
-    const newJobId = createJob({
+    const newJobId = await createJob({
       company: company.trim(),
       role: role.trim(),
       department: department.trim() || 'AI 创新业务部',

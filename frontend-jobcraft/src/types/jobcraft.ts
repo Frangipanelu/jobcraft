@@ -53,7 +53,7 @@ export interface ExperienceVersionRecord {
   version: string;
   date: string;
   reason: string;
-  source: 'manual' | 'interview_review' | 'jd_alignment';
+  source: 'manual' | 'interview_review' | 'jd_alignment' | 'ai_optimization';
   changes: { field: string; from: string; to: string }[];
 }
 

@@ -144,6 +144,7 @@ interface JobCraftContextType {
   experiences: Experience[];
   jdAnalyses: JDAnalysis[];
   resumes: Record<string, ResumeVersion>;
+  setResumes: React.Dispatch<React.SetStateAction<Record<string, ResumeVersion>>>;
   interviews: Interview[];
   nextActions: NextActionItem[];
   activities: ActivityLog[];
@@ -182,7 +183,7 @@ interface JobCraftContextType {
   setDefaultHistoricalResume: (id: string) => void;
   
   // Job actions
-  createJob: (jobData: { company: string; role: string; department?: string; salaryRange?: string; status?: Job['status'] }) => string;
+  createJob: (jobData: { company: string; role: string; department?: string; salaryRange?: string; status?: Job['status'] }) => Promise<string>;
   terminateJob: (jobId: string) => void;
   resumeJob: (jobId: string) => void;
   deleteJob: (jobId: string) => void;
@@ -243,7 +244,7 @@ interface JobCraftContextType {
   ) => void;
 
   // Experience Library actions
-  createExperience: (exp: Partial<Experience>) => string;
+  createExperience: (exp: Partial<Experience>) => Promise<string>;
   updateExperience: (id: string, updates: Partial<Experience>) => void;
   deleteExperience: (id: string) => void;
   addExperienceVersion: (
@@ -2281,6 +2282,7 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
         experiences,
         jdAnalyses,
         resumes,
+        setResumes,
         activeResumeId,
         setActiveResumeId,
         interviews,

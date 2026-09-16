@@ -76,7 +76,7 @@ export const ResumeEditorView: React.FC<ResumeEditorViewProps> = ({
         <p className="text-xs text-muted/70">在「JD 深度分析」页面点击「定制简历」按钮，AI 将根据您的经历卡和岗位要求自动生成匹配简历。</p>
         {jobId ? (
           <button
-            onClick={() => navigateTo('job_workspace', jobId)}
+            onClick={() => navigateTo('job_workspace', { jobId })}
             className="px-4 py-2 rounded-lg bg-sage hover:bg-sage-dim text-white text-xs font-semibold shadow-xs transition cursor-pointer"
           >
             返回岗位工作台

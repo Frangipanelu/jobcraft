@@ -691,7 +691,7 @@ export const JDReportDetailView: React.FC<JDReportDetailViewProps> = ({
                 <div className="flex gap-2 pt-2 border-t border-[#F0F2EE]">
                   <button
                     type="button"
-                    onClick={() => navigateTo('experiences', { initialExpId: exp.id })}
+                    onClick={() => navigateTo('experiences', { expId: exp.id })}
                     className="flex-1 py-1.5 text-xs font-bold text-[#1E4D3C] border border-[#CCD8D1] rounded-lg bg-[#FAFBF9] hover:bg-[#1E4D3C] hover:text-white transition cursor-pointer text-center"
                   >
                     查看经历
