@@ -164,3 +164,68 @@ def test_fk_migration_declares_expected_constraints():
     # 每个 ADD CONSTRAINT 之前都应先清理对应孤儿数据，避免 FK 创建失败
     assert "DELETE FROM resume_submission" in sql
     assert "DELETE FROM card_versions" in sql
+
+
+def _normalize_ddl(sql: str) -> str:
+    """规整 DDL：去反引号、折叠空白，用于迁移文件与运行时 DDL 对比。"""
+    import re
+
+    return re.sub(r"\s+", " ", sql.replace("`", "")).strip()
+
+
+def _runtime_create_sql(fn) -> str:
+    """捕获 _ensure_* 函数实际执行的 CREATE TABLE 语句。"""
+    executed: list[tuple[str, str]] = []
+
+    class Cursor:
+        def execute(self, sql, params=None):
+            executed.append((sql.strip(), params))
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    class Conn:
+        def cursor(self, *a, **k):
+            return Cursor()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    import app.tools.db_base_resume as mod
+
+    original_ready = mod.is_schema_ready
+    original_conn = mod.connection
+    try:
+        mod.is_schema_ready = lambda: False
+        mod.connection = lambda: Conn()
+        fn()
+    finally:
+        mod.is_schema_ready = original_ready
+        mod.connection = original_conn
+    messages = [
+        sql for sql, _ in executed if sql.startswith("CREATE TABLE IF NOT EXISTS")
+    ]
+    assert messages, "未捕获到 CREATE TABLE 语句"
+    return messages[0]
+
+
+def test_v0005_base_resume_matches_runtime_ddl():
+    """DB-01：V0005 中 base_resume 建表语句应与运行时 _ensure_base_resume_table 一致，防止漂移。"""
+    v0005 = os.path.join(runner.MIGRATIONS_DIR, "V0005__runtime_tables.sql")
+    assert os.path.exists(v0005)
+    with open(v0005, encoding="utf-8") as fh:
+        sql = fh.read()
+    start = sql.index("CREATE TABLE IF NOT EXISTS base_resume")
+    end = sql.index(";--SPLIT--", start)
+    migration_ddl = _normalize_ddl(sql[start:end])
+
+    from app.tools.db_base_resume import _ensure_base_resume_table
+
+    runtime_ddl = _normalize_ddl(_runtime_create_sql(_ensure_base_resume_table))
+    assert migration_ddl == runtime_ddl, "V0005 与运行时 base_resume DDL 漂移"
