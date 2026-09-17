@@ -22,3 +22,10 @@ repos:
         language: system
         types_or: [python, pyi]
         require_serial: true
+
+      - id: check-encoding
+        name: check encoding (CJK corruption / non-UTF-8)
+        entry: python scripts/check_encoding.py
+        language: system
+        pass_filenames: false
+        always_run: true
