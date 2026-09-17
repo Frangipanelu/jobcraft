@@ -15,9 +15,16 @@
 - `components/layout/TopHeader.tsx`
 - `components/user/UserProfileView.tsx`
 
-## 路由映射
+## 路由映射（FE-ROUTE-01）
 
-- `/profile` → `ProfilePage`（真实路由，经 `AppShell` 渲染，FE-ROUTE-01，尚未实施）
+- `/profile` → `ProfilePage`（真实路由，经 `AppShell` 渲染，不再经过 `LegacyPageWrapper`）。
+- `ProfilePage` 解析 `?tab={resumes,profile,preferences,settings}` 作为 `UserProfileView` 的 `initialTab`（URL 为挂载时单一来源）。
+- TopHeader 头像下拉四个子项改为 `navigate('/profile?tab=...')`（router 驱动）。
+- `AppShell`（`src/app/AppShell.tsx`）与遗留 `MainLayout` 并行存在，Fallback 留待 FE-CONTEXT-REMOVE。
+
+## 已解决
+
+- `/profile` 已从 `LegacyPageWrapper` 迁移为真实路由 + AppShell 壳（commit `f0b8151`）。
 
 ## 已知留白
 
