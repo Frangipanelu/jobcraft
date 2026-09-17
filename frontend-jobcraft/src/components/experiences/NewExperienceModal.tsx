@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useJobCraft } from '../../context/JobCraftContext';
+import { useCreateExperienceMutation } from '../../features/experiences/hooks';
 import { ExperienceCategory } from '../../types/jobcraft';
 import {
   X,
@@ -17,7 +18,8 @@ interface NewExperienceModalProps {
 }
 
 export const NewExperienceModal: React.FC<NewExperienceModalProps> = ({ isOpen, onClose }) => {
-  const { createExperience, showToast } = useJobCraft();
+  const { showToast, syncExperiences } = useJobCraft();
+  const createExperience = useCreateExperienceMutation({ onSync: syncExperiences });
 
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState<ExperienceCategory>('project');
@@ -64,7 +66,7 @@ export const NewExperienceModal: React.FC<NewExperienceModalProps> = ({ isOpen, 
       ? resultsInput.split(/[\n;；]/).map((r) => r.trim()).filter(Boolean)
       : [resultsInput || '达成预期业务收益'];
 
-    createExperience({
+    createExperience.mutate({
       title: title.trim(),
       category,
       company: company.trim() || '自主研发',

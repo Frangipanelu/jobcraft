@@ -32,6 +32,12 @@ import {
   Undo2,
   Target
 } from 'lucide-react';
+import {
+  useExperiencesQuery,
+  useUpdateExperienceMutation,
+  useDeleteExperienceMutation,
+  useAddExperienceVersionMutation
+} from '../../features/experiences/hooks';
 import { NewExperienceModal } from './NewExperienceModal';
 
 interface ExperiencesViewProps {
@@ -39,14 +45,12 @@ interface ExperiencesViewProps {
 }
 
 export const ExperiencesView: React.FC<ExperiencesViewProps> = () => {
-  const {
-    experiences,
-    deleteExperience,
-    updateExperience,
-    addExperienceVersion,
-    navigateTo,
-    showToast
-  } = useJobCraft();
+  const { navigateTo, showToast, syncExperiences } = useJobCraft();
+  const { data: experiencesData } = useExperiencesQuery();
+  const updateExperience = useUpdateExperienceMutation({ onSync: syncExperiences });
+  const deleteExperience = useDeleteExperienceMutation({ onSync: syncExperiences });
+  const addExperienceVersion = useAddExperienceVersionMutation({ onSync: syncExperiences });
+  const experiences = experiencesData ?? [];
 
   const [activeCategory, setActiveCategory] = useState<'all' | ExperienceCategory>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -139,17 +143,17 @@ export const ExperiencesView: React.FC<ExperiencesViewProps> = () => {
         .map(l => l.replace(/^[-·•]\s*/, '').trim())
         .filter(l => l.length > 5);
 
-      addExperienceVersion(
-        exp.id,
-        nextVer,
-        'AI 深度润色：强化量化指标与专业表述',
-        {
+      addExperienceVersion.mutate({
+        expId: exp.id,
+        version: nextVer,
+        reason: 'AI 深度润色：强化量化指标与专业表述',
+        updatedFields: {
           background: exp.background,
           responsibility: exp.responsibility,
           actions: polishedLines.length > 0 ? polishedLines : exp.actions,
           results: exp.results || []
         }
-      );
+      });
 
       showToast({
         type: 'success',
@@ -179,7 +183,7 @@ export const ExperiencesView: React.FC<ExperiencesViewProps> = () => {
       }
     });
 
-    updateExperience(exp.id, updated);
+    updateExperience.mutate({ id: exp.id, updates: updated });
     showToast({
       type: 'info',
       title: `已激活版本 ${versionRecord.version}`,
@@ -389,7 +393,8 @@ export const ExperiencesView: React.FC<ExperiencesViewProps> = () => {
                   <button
                     onClick={() => {
                       if (confirm(`确定要删除经历资产「${exp.title}」吗？`)) {
-                        deleteExperience(exp.id);
+                        deleteExperience.mutate(exp.id);
+                        showToast({ type: 'info', title: '经历已移除' });
                       }
                     }}
                     className="p-1.5 text-faint hover:text-error hover:bg-error-bg rounded-lg border border-transparent hover:border-error/20 transition cursor-pointer"
@@ -688,7 +693,8 @@ const EditExperienceModal: React.FC<EditExperienceModalProps> = ({
   isOpen,
   onClose
 }) => {
-  const { updateExperience, showToast } = useJobCraft();
+  const { showToast, syncExperiences } = useJobCraft();
+  const updateExperience = useUpdateExperienceMutation({ onSync: syncExperiences });
 
   const [title, setTitle] = useState(experience.title);
   const [category, setCategory] = useState<ExperienceCategory>(experience.category || 'project');
@@ -725,18 +731,21 @@ const EditExperienceModal: React.FC<EditExperienceModalProps> = ({
       .map((t) => t.trim())
       .filter(Boolean);
 
-    updateExperience(experience.id, {
-      title: title.trim(),
-      category,
-      company: company.trim(),
-      role: role.trim(),
-      period: period.trim(),
-      background: background.trim(),
-      responsibility: responsibility.trim(),
-      actions,
-      results,
-      metrics,
-      capabilityTags
+    updateExperience.mutate({
+      id: experience.id,
+      updates: {
+        title: title.trim(),
+        category,
+        company: company.trim(),
+        role: role.trim(),
+        period: period.trim(),
+        background: background.trim(),
+        responsibility: responsibility.trim(),
+        actions,
+        results,
+        metrics,
+        capabilityTags
+      }
     });
 
     showToast({

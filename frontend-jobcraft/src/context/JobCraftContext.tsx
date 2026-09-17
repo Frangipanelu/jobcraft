@@ -25,8 +25,9 @@ import * as experienceApi from '../api/experience'
 import * as jobApi from '../api/job'
 import * as interviewApi from '../api/interview'
 import * as tasksApi from '../api/tasks'
-import type { ExperienceCard, JobAnalysisResult, Submission, InterviewPrepResult, InterviewPrepRecord as ApiInterviewPrepRecord, InterviewReviewResult } from '../api/types'
+import type { JobAnalysisResult, Submission, InterviewPrepResult, InterviewPrepRecord as ApiInterviewPrepRecord, InterviewReviewResult } from '../api/types'
 import { JOBS_QUERY_KEY, submissionToJob, deriveJobStatus } from '../features/jobs/mappers'
+import { EXPERIENCES_QUERY_KEY, cardToExperience } from '../features/experiences/mappers'
 
 export interface ToastMessage {
   id: string;
@@ -255,36 +256,11 @@ interface JobCraftContextType {
     reason: string,
     updatedFields: Partial<Experience>
   ) => void;
+  /** 过渡期镜像写入（FE-EXPERIENCES-01）：react-query experiences mutations 调此函数同步 context.experiences（FE-CONTEXT-REMOVE 移除）。 */
+  syncExperiences: (next: Experience[]) => void;
 }
 
 const JobCraftContext = createContext<JobCraftContextType | undefined>(undefined);
-
-/**
- * 将后端 ExperienceCard 转换为前端 Experience
- */
-function cardToExperience(card: ExperienceCard): Experience {
-  const structured = card.ai_structured
-  const achievements = structured?.achievements || []
-  
-  return {
-    id: String(card.id),
-    title: card.title,
-    company: card.company || '',
-    role: card.role || '',
-    period: card.period || '',
-    background: card.raw_text,
-    responsibility: structured?.summary || card.summary || card.raw_text,
-    actions: achievements.map(a => a.action?.main || '').filter(Boolean),
-    results: achievements.map(a => a.result || '').filter(Boolean),
-    metrics: [],
-    capabilityTags: card.tags,
-    targetJobs: [],
-    jdMatches: [],
-    resumeVersionsUsed: [],
-    currentVersion: `V${card.version}`,
-    versionHistory: []
-  }
-}
 
 function dutiesText(duties: string[]): string {
   return duties.map((d, i) => `${i + 1}. ${d}`).join('\n');
@@ -674,7 +650,9 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
   const loadExperiences = async (userId: number) => {
     try {
       const cards = await experienceApi.listCards(userId)
-      setExperiences(cards.map(cardToExperience))
+      const list = cards.map(cardToExperience)
+      setExperiences(list)
+      queryClient.setQueryData([...EXPERIENCES_QUERY_KEY], list)
     } catch (error) {
       console.error('Load experiences failed:', error)
     }
@@ -2111,6 +2089,8 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
   };
 
   // Experience Library CRUD
+  // 过渡期 legacy 经历写入方（FE-EXPERIENCES-01）：视图已迁 hooks，此处保留给 context 内部流程，
+  // 每个写入点同步 query cache 防镜像漂移（FE-CONTEXT-REMOVE 移除）。
   const createExperience = async (exp: Partial<Experience>) => {
     try {
       const card = await experienceApi.createCard({
@@ -2145,6 +2125,10 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
       }
 
       setExperiences((prev) => [newExp, ...prev]);
+      queryClient.setQueryData(
+        [...EXPERIENCES_QUERY_KEY],
+        (prev: Experience[] | undefined) => [newExp, ...(prev || [])]
+      );
       showToast({
         type: 'success',
         title: '已添加经历资产',
@@ -2178,6 +2162,11 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
       setExperiences((prev) =>
         prev.map((exp) => (exp.id === id ? { ...exp, ...updates } : exp))
       );
+      queryClient.setQueryData(
+        [...EXPERIENCES_QUERY_KEY],
+        (prev: Experience[] | undefined) =>
+          (prev || []).map((exp) => (exp.id === id ? { ...exp, ...updates } : exp))
+      );
       showToast({
         type: 'info',
         title: '经历已更新'
@@ -2199,6 +2188,10 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
       }
 
       setExperiences((prev) => prev.filter((exp) => exp.id !== id));
+      queryClient.setQueryData(
+        [...EXPERIENCES_QUERY_KEY],
+        (prev: Experience[] | undefined) => (prev || []).filter((exp) => exp.id !== id)
+      );
       showToast({
         type: 'info',
         title: '经历已移除'
@@ -2218,27 +2211,30 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
     reason: string,
     updatedFields: Partial<Experience>
   ) => {
-    setExperiences((prev) =>
-      prev.map((exp) => {
-        if (exp.id !== expId) return exp;
-        const newVersionRecord = {
-          version,
-          date: new Date().toISOString().split('T')[0],
-          reason,
-          source: 'ai_optimization' as const,
-          changes: Object.keys(updatedFields).map((key) => ({
-            field: key,
-            from: '原版内容',
-            to: String((updatedFields as Record<string, unknown>)[key])
-          }))
-        };
-        return {
-          ...exp,
-          ...updatedFields,
-          currentVersion: version,
-          versionHistory: [newVersionRecord, ...(exp.versionHistory || [])]
-        };
-      })
+    const applyVersion = (exp: Experience) => {
+      if (exp.id !== expId) return exp;
+      const newVersionRecord = {
+        version,
+        date: new Date().toISOString().split('T')[0],
+        reason,
+        source: 'ai_optimization' as const,
+        changes: Object.keys(updatedFields).map((key) => ({
+          field: key,
+          from: '原版内容',
+          to: String((updatedFields as Record<string, unknown>)[key])
+        }))
+      };
+      return {
+        ...exp,
+        ...updatedFields,
+        currentVersion: version,
+        versionHistory: [newVersionRecord, ...(exp.versionHistory || [])]
+      };
+    };
+    setExperiences((prev) => prev.map(applyVersion));
+    queryClient.setQueryData(
+      [...EXPERIENCES_QUERY_KEY],
+      (prev: Experience[] | undefined) => (prev || []).map(applyVersion)
     );
     showToast({
       type: 'success',
@@ -2250,6 +2246,11 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
   // 过渡期镜像写入（FE-JOBS-01）：react-query jobs mutations 调此函数同步 context.jobs（FE-CONTEXT-REMOVE 移除）。
   const syncJobs = (next: Job[]) => {
     setJobs(next);
+  };
+
+  // 过渡期镜像写入（FE-EXPERIENCES-01）：react-query experiences mutations 调此函数同步 context.experiences（FE-CONTEXT-REMOVE 移除）。
+  const syncExperiences = (next: Experience[]) => {
+    setExperiences(next);
   };
 
   return (
@@ -2273,6 +2274,7 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
         jobs,
         syncJobs,
         experiences,
+        syncExperiences,
         jdAnalyses,
         resumes,
         setResumes,
