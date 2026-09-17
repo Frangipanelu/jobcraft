@@ -119,3 +119,23 @@ AppRouter:
 ## Expected Commit
 
 `feat(router): complete tab routes and converge navigation to react-router (FE-ROUTE-03)`
+
+## Implementation Result（2026-09-17，commit `1201afa`）
+
+- **交付**：`src/router/tabPaths.ts`（`tabToPath` + `useTabNavigate`）；`AppRouter` 路由表补全（4 个新 AppShell 页面 + 6 个 legacy URL + `*` 重定向）；4 个新页面 `features/{experiences,interview,review,jd}/pages/*.tsx`；10 个组件导航收敛；`ExperiencesView.initialSelectedExpId` 接线；`src/router/README.md`；`src/test/routes-03.test.tsx`。
+- **验证**：`npm test` **15 文件 / 63 测试全绿**（+1 文件 / +15 测试）；`npm run lint`（tsc）、`npm run build` 通过；`tsc --noEmit` 0 error。18 文件 / +384 −54。
+- **验收对照**：所有 `NavigationTab` 均有可解析 URL ✓；`/jd-analysis`、`/prep`、`/review`、`/resume`、`/interview/new`、`/review/new` 直连可渲染 ✓；AppShell 内 `待面试`/`查看建议` 跳转生效 ✓；详情路由直连按 URL 参数渲染 ✓；未知路径重定向 `/workbench` ✓。
+
+### Deviations（偏差说明）
+
+1. **`/review` 与 `/prep` 断言文案调整**：`面试复盘中心` 同时是 Sidebar navItem 标签，`findByText` 命中多个（`Found multiple elements`），改用页面独有文案 `已沉淀 0 场复盘`；`/prep` 断言 `面试准备中心`（Sidebar 标签为 `面试准备`，无冲突）保留。
+2. **`router.test.tsx` 未新增用例**：spec Test Plan 中「router.test.tsx 补 `/experiences`、`/prep/:id`、`/review/:id`」与 `routes-03.test.tsx` 覆盖面重复，为避免双份维护，统一收敛到 `routes-03.test.tsx`（含 tabToPath 单元 + 全路由渲染 + 跳转生效 + 重定向）。
+3. **`/jd-report/:jdId` 断言为加载态**：测试环境 fetch 默认禁用 → `useJdAnalysesQuery` 无数据，`JDReportDetailView` 停留在「正在生成 JD 分析报告...」（legacy `isLoading || 空列表` 分支），故断言加载态而非报告内容。
+4. **`InterviewPrepPage` 的 `onOpenNewInterview` 包装**：`AppShellOutletContext.onOpenNewInterview(mode?, jobId?)` 与视图 props `(jobId?: string) => void` 签名不兼容，页面内包一层 `() => onOpenNewInterview('standalone')`（该 prop 在当前视图中未被解构使用）。
+5. **工程注意（非本任务引入）**：本轮编辑中曾用 PowerShell `Get-Content | Set-Content` 重写 `WorkbenchView.tsx`，触发已知的 CJK/编码损坏风险，已 `git checkout` 还原并全程改用 Edit 工具；同样的问题在给 spec 追加内容时再次出现（文件自我追加 + 乱码），已还原。**后续禁止用 PowerShell 文本 cmdlet 写含 CJK 的源文件。**
+
+### Follow-ups
+
+- legacy 中心 / 创建 / 简历编辑视图内部 `navigateTo` 未收敛（R4 留白，URL 滞后），待各域拆真实路由页（`FE-RESUME-01` / `FE-INTERVIEW-01` / `FE-REVIEW-01`）时一并处理。
+- `currentTab` / `LegacyPageWrapper` / `MainLayout` / context `navigateTo` 保留，待 `FE-CONTEXT-REMOVE`。
+- 手工 E2E（登录 → 上下文跳转 → 刷新详情 URL）尚未在真实后端跑；逻辑已由 `routes-03.test.tsx` 覆盖，建议后续补一次 Playwright 验证。
