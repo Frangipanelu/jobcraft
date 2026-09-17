@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useJobCraft } from '../../context/JobCraftContext';
+import { useCreateJobMutation } from '../../features/jobs/hooks';
 import { X, Briefcase, Sparkles, Building2, Layers } from 'lucide-react';
 
 interface NewJobModalProps {
@@ -8,7 +9,8 @@ interface NewJobModalProps {
 }
 
 export const NewJobModal: React.FC<NewJobModalProps> = ({ isOpen, onClose }) => {
-  const { createJob, navigateTo } = useJobCraft();
+  const { syncJobs, navigateTo, showToast } = useJobCraft();
+  const createJob = useCreateJobMutation({ onSync: syncJobs });
   const [company, setCompany] = useState('');
   const [role, setRole] = useState('');
   const [department, setDepartment] = useState('');
@@ -20,16 +22,21 @@ export const NewJobModal: React.FC<NewJobModalProps> = ({ isOpen, onClose }) => 
     e.preventDefault();
     if (!company.trim() || !role.trim()) return;
 
-    const newJobId = await createJob({
+    const newJob = await createJob.mutateAsync({
       company: company.trim(),
       role: role.trim(),
       department: department.trim() || 'AI 创新业务部',
       salaryRange
     });
 
+    showToast({
+      type: 'success',
+      title: '岗位创建成功',
+      message: `已添加「${company.trim()} · ${role.trim()}」到您的求职推进中。`
+    });
     onClose();
     // Navigate straight to Job Workspace
-    navigateTo('job_workspace', { jobId: newJobId, workspaceTab: 'jd' });
+    navigateTo('job_workspace', { jobId: newJob.id, workspaceTab: 'jd' });
   };
 
   const handleQuickPreset = (pCompany: string, pRole: string, pDept: string, pSalary: string) => {

@@ -1,5 +1,6 @@
 import React from 'react';
 import { useJobCraft } from '../../context/JobCraftContext';
+import { useJobsQuery } from '../../features/jobs/hooks';
 import type { Job } from '../../types/jobcraft';
 import {
   Plus,
@@ -23,9 +24,10 @@ export const WorkbenchView: React.FC<WorkbenchViewProps> = ({
 }) => {
   const {
     user,
-    jobs,
     navigateTo
   } = useJobCraft();
+  const { data: jobsData, isLoading } = useJobsQuery();
+  const jobs = jobsData || [];
 
   // Metrics derived from real jobs data (dashboard → submissionToJob)
   const deliveredCount = jobs.filter(
@@ -159,6 +161,17 @@ export const WorkbenchView: React.FC<WorkbenchViewProps> = ({
     : jobs.length === 0
     ? '尚未开始跟踪任何岗位，识别目标 JD 后即可获得定制化的求职推进建议。'
     : '所有在推进的岗位状态正常，保持投递节奏并针对反馈持续优化经历描述。';
+
+  if (isLoading && !jobsData) {
+    return (
+      <div className="flex h-[60vh] items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-8 h-8 border-2 border-sage border-t-transparent rounded-full animate-spin" />
+          <p className="text-sm text-muted">正在加载岗位数据…</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 md:p-8 max-w-7xl mx-auto space-y-6 animate-in fade-in duration-300">

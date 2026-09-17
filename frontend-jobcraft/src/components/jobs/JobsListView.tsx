@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useJobCraft } from '../../context/JobCraftContext';
+import { useJobsQuery, useTerminateJobMutation, useResumeJobMutation } from '../../features/jobs/hooks';
 import { JobStatus } from '../../types/jobcraft';
 import {
   Briefcase,
@@ -18,9 +19,31 @@ interface JobsListViewProps {
 }
 
 export const JobsListView: React.FC<JobsListViewProps> = ({ onOpenNewJob }) => {
-  const { jobs, navigateTo, terminateJob, resumeJob } = useJobCraft();
+  const { syncJobs, navigateTo, showToast } = useJobCraft();
+  const { data: jobsData, isLoading } = useJobsQuery();
+  const jobs = jobsData || [];
+  const terminateJob = useTerminateJobMutation({ onSync: syncJobs });
+  const resumeJob = useResumeJobMutation({ onSync: syncJobs });
   const [activeFilter, setActiveFilter] = useState<'all' | JobStatus>('all');
   const [searchQuery, setSearchQuery] = useState('');
+
+  const handleTerminate = (jobId: string) => {
+    terminateJob.mutate(jobId);
+    showToast({
+      type: 'info',
+      title: '流程已结束',
+      message: '该岗位流程已标记为「已结束」，可随时恢复处理。'
+    });
+  };
+
+  const handleResume = (jobId: string) => {
+    resumeJob.mutate(jobId);
+    showToast({
+      type: 'success',
+      title: '岗位已恢复',
+      message: '该岗位已重新进入推进列表，状态按实际进度自动展示。'
+    });
+  };
 
   const filteredJobs = jobs.filter((job) => {
     const matchesFilter = activeFilter === 'all' || job.status === activeFilter;
@@ -45,6 +68,17 @@ export const JobsListView: React.FC<JobsListViewProps> = ({ onOpenNewJob }) => {
         return <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-error-bg text-error border border-error/20">已结束</span>;
     }
   };
+
+  if (isLoading && jobs.length === 0) {
+    return (
+      <div className="flex h-[60vh] items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-8 h-8 border-2 border-sage border-t-transparent rounded-full animate-spin" />
+          <p className="text-sm text-muted">正在加载岗位列表…</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-8 max-w-7xl mx-auto space-y-6 animate-in fade-in duration-300">
@@ -185,14 +219,14 @@ export const JobsListView: React.FC<JobsListViewProps> = ({ onOpenNewJob }) => {
             <div className="flex items-center gap-2.5 shrink-0">
               {job.status === 'finished' ? (
                 <button
-                  onClick={() => resumeJob(job.id)}
+                  onClick={() => handleResume(job.id)}
                   className="px-3 py-1.5 text-xs rounded-lg border border-edge text-ink bg-page hover:bg-page-dim transition"
                 >
                   恢复处理
                 </button>
               ) : (
                 <button
-                  onClick={() => terminateJob(job.id)}
+                  onClick={() => handleTerminate(job.id)}
                   className="px-3 py-1.5 text-xs rounded-lg border border-error/20 text-error hover:bg-error-bg transition"
                 >
                   标记已结束

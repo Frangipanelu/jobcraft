@@ -1,10 +1,10 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   NavigationTab,
   UserProfile,
   Experience,
   Job,
-  JobStatus,
   JDAnalysis,
   ResumeVersion,
   Interview,
@@ -25,8 +25,8 @@ import * as experienceApi from '../api/experience'
 import * as jobApi from '../api/job'
 import * as interviewApi from '../api/interview'
 import * as tasksApi from '../api/tasks'
-import { SUBMISSION_STATUS_CN } from '../api/types'
-import type { ExperienceCard, JobAnalysisResult, Submission, DashboardItem, InterviewPrepResult, InterviewPrepRecord as ApiInterviewPrepRecord, InterviewReviewResult } from '../api/types'
+import type { ExperienceCard, JobAnalysisResult, Submission, InterviewPrepResult, InterviewPrepRecord as ApiInterviewPrepRecord, InterviewReviewResult } from '../api/types'
+import { JOBS_QUERY_KEY, submissionToJob, deriveJobStatus } from '../features/jobs/mappers'
 
 export interface ToastMessage {
   id: string;
@@ -141,6 +141,8 @@ interface JobCraftContextType {
   // Data
   user: UserProfile;
   jobs: Job[];
+  /** 过渡期镜像写入（FE-JOBS-01）：react-query jobs mutations 更新 cache 后同步到此，供未迁移视图读取。FE-CONTEXT-REMOVE 移除。 */
+  syncJobs: (jobs: Job[]) => void;
   experiences: Experience[];
   jdAnalyses: JDAnalysis[];
   resumes: Record<string, ResumeVersion>;
@@ -368,50 +370,10 @@ function analysisToJD(result: JobAnalysisResult, jobId?: string): JDAnalysis {
 }
 
 /**
- * 将后端 Submission 转换为前端 Job
+ * 将后端 Submission/DashboardItem 映射为前端 Job、由 steps 派生岗位状态：
+ * 实现已移入 features/jobs/mappers.ts（submissionToJob / deriveJobStatus），
+ * 此处与 hooks 共享同一实现，避免双份映射漂移。
  */
-function submissionToJob(sub: DashboardItem): Job {
-  const terminated = sub.status === 'OFFER' || sub.status === 'CLOSED'
-  const steps: Job['steps'] = {
-    jdAnalysis: sub.has_analysis,
-    expMatched: sub.card_count > 0,
-    customResume: sub.has_resume,
-    applied: true,
-    prepStage:
-      sub.prep_count > sub.review_count ? 'in_progress' : sub.prep_count > 0 ? 'done' : 'pending',
-    reviewStage: sub.review_count > 0 ? 'done' : 'pending',
-    terminated,
-  }
-
-  return {
-    id: String(sub.id),
-    company: sub.company,
-    role: sub.position,
-    salaryRange: '面议',
-    status: deriveJobStatus(steps),
-    matchScore: 0,
-    applyDate: sub.created_at?.split('T')[0] || new Date().toISOString().split('T')[0],
-    lastUpdated: sub.updated_at || '刚刚',
-    currentStage: SUBMISSION_STATUS_CN[sub.status] || '待处理',
-    nextAction: '',
-    steps,
-    jdAnalysisId: sub.job_analysis_id ? String(sub.job_analysis_id) : undefined,
-    resumeId: String(sub.id),
-    interviewIds: []
-  }
-}
-
-/**
- * 由 steps 派生岗位状态（单一事实源，流程只更新 steps，不手动写 status）。
- * 优先级从高到低：已结束 → 待面试 → 已复盘 → 待投递 → 待处理。
- */
-function deriveJobStatus(steps: Job['steps']): JobStatus {
-  if (steps.terminated) return 'finished';
-  if (steps.prepStage === 'in_progress') return 'interviewing';
-  if (steps.reviewStage === 'done') return 'reviewed';
-  if (steps.jdAnalysis) return 'delivered';
-  return 'pending';
-}
 
 function mapRoundType(t: string): Interview['roundType'] {
   const r = (t || '').toLowerCase()
@@ -529,6 +491,7 @@ function roundTypeToCn(roundType: Interview['roundType']): string {
 }
 
 export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+  const queryClient = useQueryClient();
   const [currentTab, setCurrentTab] = useState<NavigationTab>('workbench');
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const [selectedInterviewId, setSelectedInterviewId] = useState<string | null>(null);
@@ -677,6 +640,8 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
       const submissions = data.submissions || []
       const dashboardJobs = submissions.map(submissionToJob)
       setJobs(dashboardJobs)
+      // 过渡期双写（FE-JOBS-01）：react-query cache 与 context 镜像同一份数据，FE-CONTEXT-REMOVE 移除。
+      queryClient.setQueryData([...JOBS_QUERY_KEY], dashboardJobs)
 
       // 同步填充简历编辑数据：为每个带简历的投递站解析 resume_markdown -> ResumeVersion
       const resumeEntries = await Promise.all(
@@ -1033,6 +998,8 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
     }
 
     setJobs((prev) => [newJob, ...prev]);
+    // 过渡期双写（FE-JOBS-01）：legacy writer 产物同步进 query cache，供已迁移视图读取。
+    queryClient.setQueryData([...JOBS_QUERY_KEY], (prev: Job[] | undefined) => [newJob, ...(prev || [])]);
     showToast({
       type: 'success',
       title: '岗位创建成功',
@@ -1068,6 +1035,14 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
           : j
       )
     );
+    // 过渡期双写（FE-JOBS-01）
+    queryClient.setQueryData([...JOBS_QUERY_KEY], (prev: Job[] | undefined) =>
+      (prev || []).map((j) =>
+        j.id === jobId
+          ? { ...j, lastUpdated: '刚刚', steps: { ...j.steps, terminated: true, applied: true } }
+          : j
+      )
+    );
     showToast({
       type: 'info',
       title: '流程已结束',
@@ -1087,6 +1062,14 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
           : j
       )
     );
+    // 过渡期双写（FE-JOBS-01）
+    queryClient.setQueryData([...JOBS_QUERY_KEY], (prev: Job[] | undefined) =>
+      (prev || []).map((j) =>
+        j.id === jobId
+          ? { ...j, lastUpdated: '刚刚', steps: { ...j.steps, terminated: false } }
+          : j
+      )
+    );
     showToast({
       type: 'success',
       title: '岗位已恢复',
@@ -1096,6 +1079,10 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
 
   const deleteJob = (jobId: string) => {
     setJobs((prev) => prev.filter((j) => j.id !== jobId));
+    // 过渡期双写（FE-JOBS-01）
+    queryClient.setQueryData([...JOBS_QUERY_KEY], (prev: Job[] | undefined) =>
+      (prev || []).filter((j) => j.id !== jobId)
+    );
     showToast({
       type: 'info',
       title: '岗位已移除',
@@ -2260,6 +2247,11 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
     });
   };
 
+  // 过渡期镜像写入（FE-JOBS-01）：react-query jobs mutations 调此函数同步 context.jobs（FE-CONTEXT-REMOVE 移除）。
+  const syncJobs = (next: Job[]) => {
+    setJobs(next);
+  };
+
   return (
     <JobCraftContext.Provider
       value={{
@@ -2279,6 +2271,7 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
         user,
         updateUserProfile,
         jobs,
+        syncJobs,
         experiences,
         jdAnalyses,
         resumes,

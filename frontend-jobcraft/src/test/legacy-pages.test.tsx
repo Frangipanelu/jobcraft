@@ -6,14 +6,14 @@ import { ExperiencesView } from '../components/experiences/ExperiencesView';
 import { UserProfileView } from '../components/user/UserProfileView';
 
 describe('遗留视图可独立渲染', () => {
-  it('WorkbenchView 渲染', () => {
+  it('WorkbenchView 渲染', async () => {
     const ui = renderWithProviders(<WorkbenchView onOpenNewJob={() => {}} />);
-    expect(ui.getByText('正在推进')).toBeInTheDocument();
+    expect(await ui.findByText('正在推进')).toBeInTheDocument();
   });
 
-  it('JobsListView 渲染', () => {
+  it('JobsListView 渲染', async () => {
     const ui = renderWithProviders(<JobsListView onOpenNewJob={() => {}} />);
-    expect(ui.getByText('我的岗位申请')).toBeInTheDocument();
+    expect(await ui.findByText('我的岗位申请')).toBeInTheDocument();
   });
 
   it('ExperiencesView 渲染', () => {
