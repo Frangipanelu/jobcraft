@@ -100,3 +100,13 @@ submissionToJob / deriveJobStatus 定义于 JobCraftContext.tsx（私有函数�
 ## Expected Commit
 
 `feat(jobs): add jobs query layer and migrate job views (FE-JOBS-01)`
+
+## Implementation Result（2026-09-17，commit `e29df4c`）
+
+- [x] mappers + hooks + 三视图迁移 + context 镜像 + 双向双写，如 Design Decision（JD1–JD6）落地
+- [x] **偏差 1（修复真实回归）**：`JobCraftProvider` 需 `useQueryClient`，原 `App.tsx` 未包 `QueryClientProvider` → 应用挂载即崩（`app.test.tsx` 捕获）。`App.tsx` 已包 `QueryClientProvider`
+- [x] **偏差 2（修复最佳实现）**：`useLocalJobPatchMutation` 初始仅更新 steps 不重算 status → terminate/resume 后徽标与按钮状态不翻转；补 `status: deriveJobStatus(steps)`
+- [x] **偏差 3（测试稳定性）**：`legacy-pages.test.tsx` 两用例对 WorkbenchView/JobsListView 改 `findByText`（query loading 态下 spinner 抢占）
+- [x] **偏差 4（JD5 细化）**：`useCreateJobMutation` 的 `onSync` 在 `onSuccess` 触发（非 mutate 同步）；toast/activity 细节 —— 活动列表新增项为迁移后小偏差（接受），成功 toast 保留
+- [x] 验证：`npm run lint`（tsc）✓；`npm test` **9 文件 / 29 测试全绿**（含 mappers 5 + jobs-query 4）✓；`npm run build` ✓
+- [x] 文档：`src/features/jobs/README.md`（数据流/hooks API/迁移清单）；`PROGRESS.md` 记录 commit
