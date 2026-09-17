@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useJobCraft } from '../../context/JobCraftContext';
 import { NavigationTab } from '../../types/jobcraft';
 import {
@@ -23,6 +24,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onOpenNewJob
 }) => {
   const { currentTab, navigateTo, jobs, interviews } = useJobCraft();
+  const navigate = useNavigate();
   const [isCollapsed, setIsCollapsed] = useState(false);
 
   const interviewingJobsCount = jobs.filter((j) => j.status === 'interviewing').length;
@@ -167,7 +169,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 return (
                   <button
                     key={item.id}
-                    onClick={() => navigateTo(item.id)}
+                    onClick={() => {
+                      if (item.id === 'workbench') navigate('/workbench');
+                      else if (item.id === 'jobs') navigate('/jobs');
+                      else navigateTo(item.id);
+                    }}
                     title={isCollapsed ? item.label : undefined}
                     className={`flex items-center ${
                       isCollapsed

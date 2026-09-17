@@ -1,11 +1,20 @@
 import React, { useState } from 'react';
-import { Outlet } from 'react-router-dom';
+import { Outlet, useOutletContext } from 'react-router-dom';
 import { Sidebar } from '../components/layout/Sidebar';
 import { TopHeader } from '../components/layout/TopHeader';
 import { ToastContainer } from '../components/common/Toast';
 import { NewJobModal } from '../components/jobs/NewJobModal';
 import { MockInterviewModal } from '../components/interview/MockInterviewModal';
 import { NewInterviewModal } from '../components/interview/NewInterviewModal';
+
+/** AppShell 通过 <Outlet context> 下发给子页面的 modal openers（FE-ROUTE-02）。 */
+export interface AppShellOutletContext {
+  onOpenNewJob: () => void;
+  onOpenMockInterview: (interviewId: string) => void;
+  onOpenNewInterview: (mode?: 'standalone' | 'from-job', jobId?: string) => void;
+}
+
+export const useAppShellOutlet = () => useOutletContext<AppShellOutletContext>();
 
 /**
  * 应用壳（迁移后真实路由页的统一宿主）。
@@ -19,6 +28,31 @@ export const AppShell: React.FC = () => {
   const [newInterviewModalMode, setNewInterviewModalMode] = useState<'standalone' | 'from-job'>('standalone');
   const [newInterviewModalJobId, setNewInterviewModalJobId] = useState<string | undefined>(undefined);
 
+  const handleOpenMockInterview = (interviewId: string) => {
+    setMockInterviewId(interviewId);
+  };
+
+  const handleCloseMockInterview = () => {
+    setMockInterviewId(null);
+  };
+
+  const handleOpenNewInterview = (mode: 'standalone' | 'from-job' = 'standalone', jobId?: string) => {
+    setNewInterviewModalMode(mode);
+    setNewInterviewModalJobId(jobId);
+    setIsNewInterviewModalOpen(true);
+  };
+
+  const handleCloseNewInterview = () => {
+    setIsNewInterviewModalOpen(false);
+    setNewInterviewModalJobId(undefined);
+  };
+
+  const outletContext: AppShellOutletContext = {
+    onOpenNewJob: () => setIsNewJobModalOpen(true),
+    onOpenMockInterview: handleOpenMockInterview,
+    onOpenNewInterview: handleOpenNewInterview,
+  };
+
   return (
     <div className="flex h-screen bg-page font-sans text-ink antialiased overflow-hidden selection:bg-sage-soft selection:text-sage">
       <Sidebar
@@ -31,7 +65,7 @@ export const AppShell: React.FC = () => {
         />
 
         <main className="flex-1 overflow-y-auto custom-scrollbar">
-          <Outlet />
+          <Outlet context={outletContext} />
         </main>
       </div>
 
@@ -42,13 +76,13 @@ export const AppShell: React.FC = () => {
 
       <MockInterviewModal
         isOpen={!!mockInterviewId}
-        onClose={() => setMockInterviewId(null)}
+        onClose={handleCloseMockInterview}
         interviewId={mockInterviewId || undefined}
       />
 
       <NewInterviewModal
         isOpen={isNewInterviewModalOpen}
-        onClose={() => setIsNewInterviewModalOpen(false)}
+        onClose={handleCloseNewInterview}
         mode={newInterviewModalMode}
         jobId={newInterviewModalJobId}
       />

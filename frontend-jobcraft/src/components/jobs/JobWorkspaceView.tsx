@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useJobCraft } from '../../context/JobCraftContext';
 import {
   Briefcase,
@@ -17,12 +18,18 @@ import {
 import { JDReportDetailView } from '../jd/JDReportDetailView';
 import { ResumeEditorView } from '../resume/ResumeEditorView';
 
+type JobSubTab = 'jd' | 'resume' | 'interview';
+
 interface JobWorkspaceViewProps {
+  jobId?: string;
+  initialSubTab?: JobSubTab;
   onOpenMockInterview: (interviewId: string) => void;
   onOpenNewInterview: (jobId?: string) => void;
 }
 
 export const JobWorkspaceView: React.FC<JobWorkspaceViewProps> = ({
+  jobId,
+  initialSubTab,
   onOpenMockInterview,
   onOpenNewInterview
 }) => {
@@ -31,13 +38,18 @@ export const JobWorkspaceView: React.FC<JobWorkspaceViewProps> = ({
     jobs,
     interviews,
     jdAnalyses,
-    navigateTo,
     jobWorkspaceSubTab
   } = useJobCraft();
+  const navigate = useNavigate();
 
-  const [activeTab, setActiveTab] = useState<'jd' | 'resume' | 'interview'>(jobWorkspaceSubTab || 'jd');
+  const [activeTab, setActiveTab] = useState<JobSubTab>(initialSubTab || jobWorkspaceSubTab || 'jd');
 
-  const currentJob = jobs.find((j) => j.id === selectedJobId) || jobs[0];
+  // FE-ROUTE-02：进入/切换岗位时重置到首个子 tab（jd），覆盖上一岗位的残留状态。
+  useEffect(() => {
+    setActiveTab(initialSubTab || 'jd');
+  }, [jobId, initialSubTab]);
+
+  const currentJob = jobs.find((j) => j.id === (jobId || selectedJobId)) || jobs[0];
   const jobInterviews = interviews.filter((i) => i.jobId === currentJob?.id);
   const currentJD = jdAnalyses.find((a) => a.id === currentJob?.jdAnalysisId || a.jobId === currentJob?.id);
 
@@ -46,7 +58,7 @@ export const JobWorkspaceView: React.FC<JobWorkspaceViewProps> = ({
       <div className="p-8 text-center">
         <p className="text-sm text-muted">未找到岗位信息</p>
         <button
-          onClick={() => navigateTo('jobs')}
+          onClick={() => navigate('/jobs')}
           className="mt-2 px-4 py-1.5 bg-sage hover:bg-sage-dim text-white rounded-lg text-xs font-semibold transition cursor-pointer"
         >
           返回岗位列表
@@ -63,7 +75,7 @@ export const JobWorkspaceView: React.FC<JobWorkspaceViewProps> = ({
           {/* Breadcrumb Back */}
           <div className="flex items-center justify-between">
             <button
-              onClick={() => navigateTo('jobs')}
+              onClick={() => navigate('/jobs')}
               className="inline-flex items-center gap-1.5 text-xs text-muted hover:text-sage font-medium transition cursor-pointer"
             >
               <ArrowLeft className="w-3.5 h-3.5" />
@@ -296,10 +308,7 @@ export const JobWorkspaceView: React.FC<JobWorkspaceViewProps> = ({
                         {isCompleted && interview.review && (
                           <button
                             onClick={() =>
-                              navigateTo('interview_review_detail', {
-                                jobId: currentJob.id,
-                                interviewId: interview.id
-                              })
+                              navigate(`/review/${interview.id}`)
                             }
                             className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-white hover:bg-page text-ink text-xs font-semibold border border-edge transition cursor-pointer"
                           >
@@ -310,10 +319,7 @@ export const JobWorkspaceView: React.FC<JobWorkspaceViewProps> = ({
 
                         <button
                           onClick={() =>
-                            navigateTo('interview_prep_workspace', {
-                              jobId: currentJob.id,
-                              interviewId: interview.id
-                            })
+                            navigate(`/prep/${interview.id}`)
                           }
                           className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-sage hover:bg-sage-dim text-white text-xs font-semibold shadow-xs transition cursor-pointer"
                         >

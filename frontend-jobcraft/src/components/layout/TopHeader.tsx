@@ -77,7 +77,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
       {/* Breadcrumb path */}
       <div className="flex items-center gap-2 text-xs text-muted font-medium overflow-hidden">
         <button
-          onClick={() => navigateTo('workbench')}
+          onClick={() => navigate('/workbench')}
           className="hover:text-sage transition font-medium flex items-center gap-1 text-ink"
         >
           工作台
@@ -94,7 +94,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
           <>
             <ChevronRight className="w-3.5 h-3.5 text-faint shrink-0" />
             <button
-              onClick={() => navigateTo('jobs')}
+              onClick={() => navigate('/jobs')}
               className="hover:text-sage transition text-muted"
             >
               我的岗位
@@ -135,7 +135,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
             {currentJob && (
               <>
                 <button
-                  onClick={() => navigateTo('job_workspace', { jobId: currentJob.id })}
+                  onClick={() => navigate(`/jobs/${currentJob.id}`)}
                   className="hover:text-sage transition text-muted"
                 >
                   {currentJob.company}

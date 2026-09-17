@@ -1,4 +1,5 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useJobCraft } from '../../context/JobCraftContext';
 import { useJobsQuery } from '../../features/jobs/hooks';
 import type { Job } from '../../types/jobcraft';
@@ -26,6 +27,7 @@ export const WorkbenchView: React.FC<WorkbenchViewProps> = ({
     user,
     navigateTo
   } = useJobCraft();
+  const navigate = useNavigate();
   const { data: jobsData, isLoading } = useJobsQuery();
   const jobs = jobsData || [];
 
@@ -199,7 +201,7 @@ export const WorkbenchView: React.FC<WorkbenchViewProps> = ({
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {/* Card 1: 已投递岗位 (Image 4) */}
         <div
-          onClick={() => navigateTo('jobs')}
+          onClick={() => navigate('/jobs')}
           className="bg-white rounded-2xl border border-edge p-5 shadow-xs hover:border-sage/40 transition-all duration-200 cursor-pointer space-y-1.5"
         >
           <div className="text-3xl sm:text-[34px] font-black text-ink tracking-tight leading-none">
@@ -278,7 +280,7 @@ export const WorkbenchView: React.FC<WorkbenchViewProps> = ({
           <div className="flex items-center justify-between">
             <h2 className="text-[15px] font-bold text-[#111814]">正在推进</h2>
             <button
-              onClick={() => navigateTo('jobs')}
+              onClick={() => navigate('/jobs')}
               className="text-xs text-[#6B7280] hover:text-[#111814] transition font-medium cursor-pointer"
             >
               查看全部 &gt;
@@ -377,7 +379,7 @@ export const WorkbenchView: React.FC<WorkbenchViewProps> = ({
                     </div>
 
                     <button
-                      onClick={() => navigateTo('job_workspace', { jobId: job.id })}
+                      onClick={() => navigate(`/jobs/${job.id}`)}
                       className="text-xs text-[#234937] hover:underline font-semibold flex items-center gap-0.5 cursor-pointer"
                     >
                       <span>进入岗位</span>
@@ -420,7 +422,7 @@ export const WorkbenchView: React.FC<WorkbenchViewProps> = ({
                     {job.status === 'interviewing' ? '面试准备阶段' : job.status === 'pending' ? 'JD 分析待完成' : job.status === 'reviewed' ? '已完成复盘' : '待投递'}
                   </div>
                   <button
-                    onClick={() => navigateTo('job_workspace', { jobId: job.id })}
+                    onClick={() => navigate(`/jobs/${job.id}`)}
                     className="px-3.5 py-1.5 rounded-lg bg-sage hover:bg-sage-dim text-white text-xs font-semibold shadow-2xs transition cursor-pointer"
                   >
                     {job.status === 'pending' ? '去分析' : '进入岗位'}
@@ -431,7 +433,7 @@ export const WorkbenchView: React.FC<WorkbenchViewProps> = ({
 
             <div className="border-t border-[#EDF1EE] pt-2.5">
               <button
-                onClick={() => navigateTo('jobs')}
+                onClick={() => navigate('/jobs')}
                 className="text-xs text-muted hover:text-ink font-medium flex items-center justify-between w-full cursor-pointer transition"
               >
                 <span>查看全部 &gt;</span>
@@ -469,7 +471,7 @@ export const WorkbenchView: React.FC<WorkbenchViewProps> = ({
 
             <div className="border-t border-[#F3F4F6] pt-2">
               <button
-                onClick={() => navigateTo('jobs')}
+                onClick={() => navigate('/jobs')}
                 className="text-xs text-[#6B7280] hover:text-[#111814] font-medium flex items-center justify-between w-full cursor-pointer"
               >
                 <span>查看全部 &gt;</span>

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useJobCraft } from '../../context/JobCraftContext';
 import { useCreateJobMutation } from '../../features/jobs/hooks';
 import { X, Briefcase, Sparkles, Building2, Layers } from 'lucide-react';
@@ -9,7 +10,8 @@ interface NewJobModalProps {
 }
 
 export const NewJobModal: React.FC<NewJobModalProps> = ({ isOpen, onClose }) => {
-  const { syncJobs, navigateTo, showToast } = useJobCraft();
+  const { syncJobs, showToast } = useJobCraft();
+  const navigate = useNavigate();
   const createJob = useCreateJobMutation({ onSync: syncJobs });
   const [company, setCompany] = useState('');
   const [role, setRole] = useState('');
@@ -35,8 +37,8 @@ export const NewJobModal: React.FC<NewJobModalProps> = ({ isOpen, onClose }) => 
       message: `已添加「${company.trim()} · ${role.trim()}」到您的求职推进中。`
     });
     onClose();
-    // Navigate straight to Job Workspace
-    navigateTo('job_workspace', { jobId: newJob.id, workspaceTab: 'jd' });
+    // FE-ROUTE-02：创建后经真实路由进入岗位空间（?tab=jd 作为子 tab 初值）
+    navigate(`/jobs/${newJob.id}?tab=jd`);
   };
 
   const handleQuickPreset = (pCompany: string, pRole: string, pDept: string, pSalary: string) => {

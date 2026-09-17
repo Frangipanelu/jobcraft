@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useJobCraft } from '../../context/JobCraftContext';
 import { useJobsQuery, useTerminateJobMutation, useResumeJobMutation } from '../../features/jobs/hooks';
 import { JobStatus } from '../../types/jobcraft';
@@ -19,7 +20,8 @@ interface JobsListViewProps {
 }
 
 export const JobsListView: React.FC<JobsListViewProps> = ({ onOpenNewJob }) => {
-  const { syncJobs, navigateTo, showToast } = useJobCraft();
+  const { syncJobs, showToast } = useJobCraft();
+  const navigate = useNavigate();
   const { data: jobsData, isLoading } = useJobsQuery();
   const jobs = jobsData || [];
   const terminateJob = useTerminateJobMutation({ onSync: syncJobs });
@@ -234,7 +236,7 @@ export const JobsListView: React.FC<JobsListViewProps> = ({ onOpenNewJob }) => {
               )}
 
               <button
-                onClick={() => navigateTo('job_workspace', { jobId: job.id })}
+                onClick={() => navigate(`/jobs/${job.id}`)}
                 className="flex items-center gap-1 px-4 py-1.5 rounded-lg bg-sage hover:bg-sage-dim text-white text-xs font-semibold shadow-xs transition"
               >
                 <span>进入岗位空间</span>
