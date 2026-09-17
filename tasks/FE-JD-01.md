@@ -111,3 +111,30 @@ analysisToJD 定义于 JobCraftContext.tsx（私有）；load 内联映射与之
 ## Expected Commit
 
 `feat(jd): add jd analyses query layer and migrate jd views (FE-JD-01)`
+
+## Implementation Result（2026-09-17，commit `3d777f7`）
+
+**交付**
+
+- `src/features/jd/mappers.ts`：`JD_ANALYSES_QUERY_KEY`、`analysisToJD`（自 context 移出）、`analysisDetailToJD`（自 `loadJdAnalyses` 内联映射提取）。
+- `src/features/jd/hooks.ts`：`useJdAnalysesQuery`、`useDeleteJdAnalysisMutation`（`onSync` 可选注入）。
+- `JobCraftContext.tsx`：接口/provider 增 `syncJdAnalyses`；`loadJdAnalyses` 改调 `analysisDetailToJD` 并双写 cache；create×2 / delete 单点双写 cache；删除本地 `analysisToJD` 定义改 import。
+- 视图：`JDAnalysisCenterView`（列表/搜索/计数读 query，删除 mutation + 视图层 toast）、`JDReportDetailView`（按 id 读 query，`isLoading` 取 query）。
+- 文档：`src/features/jd/README.md`；`features/jd-analysis/README.md` 改为指向 `features/jd`。
+- 测试：`features/jd/mappers.test.ts`（4）+ `src/test/jd-query.test.tsx`（4）。
+
+**验证结果**
+
+- `npm test`：**14 文件 / 48 测试全绿**（原 12/40 + 新增 8）。
+- `npm run lint`（tsc --noEmit）✓、`npm run build` ✓。
+- grep 证实：两视图无 context `jdAnalyses` / `deleteJDAnalysis` 读取；`analysisToJD` 仅存在于 mappers。
+
+**设计偏差（3 项）**
+
+1. `analysisDetailToJD` 新增 `salaryRange: ''`：legacy 内联映射未设 `salaryRange`（靠 `as JDAnalysis[]` 断言绕过类型），运行时为 `undefined`。为满足类型单源，显式设 `''`；`JDAnalysisCenterView` 以 `{analysis.salaryRange && …}` 守卫渲染，故 UI 无变化。
+2. `analysisToJD` 移出时删除了 legacy 中未被使用的 `companyCtx`（`result.company_context || {}`）死变量，无行为影响。
+3. delete 的 info toast 由 context 迁至 `JDAnalysisCenterView` 视图层（`useDeleteJdAnalysisMutation` 不内置 toast），保持原提示一次、不重复。
+
+**范围确认**：create 编排（`createJDAnalysis` / `createStructuredJDAnalysis`）与 `NewInterviewModal` / `JobWorkspaceView` / `MainLayout` 未迁移，按 spec Non-goals 保持 legacy / 镜像读。
+
+**未推送**：commit `3d777f7` 留在本地 main。
