@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useJobCraft } from '../../context/JobCraftContext';
+import { useTabNavigate } from '../../router/tabPaths';
 import {
   X,
   Sparkles,
@@ -30,7 +31,8 @@ export const MockInterviewModal: React.FC<MockInterviewModalProps> = ({
   onClose,
   interviewId
 }) => {
-  const { interviews, navigateTo, showToast } = useJobCraft();
+  const { interviews, showToast } = useJobCraft();
+  const go = useTabNavigate();
   const currentInterview = interviews.find((i) => i.id === interviewId);
 
   const [messages, setMessages] = useState<ChatMsg[]>([]);
@@ -124,7 +126,7 @@ export const MockInterviewModal: React.FC<MockInterviewModalProps> = ({
         message: result.qa_pair_count ? `已生成 ${result.qa_pair_count} 条问答复盘。` : '已生成复盘记录。'
       });
       onClose();
-      navigateTo('interview_review_center');
+      go('interview_review_center');
     } catch (err) {
       showToast({
         type: 'error',

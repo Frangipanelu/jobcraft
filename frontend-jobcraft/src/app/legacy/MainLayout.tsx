@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useJobCraft } from '../../context/JobCraftContext';
+import { useTabNavigate } from '../../router/tabPaths';
 import { Sidebar } from '../../components/layout/Sidebar';
 import { TopHeader } from '../../components/layout/TopHeader';
 import { ToastContainer } from '../../components/common/Toast';
@@ -35,9 +36,9 @@ export const MainLayout: React.FC = () => {
     selectedJobId,
     selectedInterviewId,
     selectedJDId,
-    selectedExperienceId,
-    navigateTo
+    selectedExperienceId
   } = useJobCraft();
+  const go = useTabNavigate();
 
   // Modals state
   const [isNewJobModalOpen, setIsNewJobModalOpen] = useState(false);
@@ -102,7 +103,7 @@ export const MainLayout: React.FC = () => {
         return (
           <InterviewPrepCenterView
             onOpenMockInterview={handleOpenMockInterview}
-            onOpenNewInterview={() => navigateTo('create_interview')}
+            onOpenNewInterview={() => go('create_interview')}
           />
         );
 
@@ -111,7 +112,7 @@ export const MainLayout: React.FC = () => {
           <InterviewPrepWorkspaceView
             interviewId={selectedInterviewId}
             onOpenMockInterview={handleOpenMockInterview}
-            onOpenNewInterview={() => navigateTo('create_interview')}
+            onOpenNewInterview={() => go('create_interview')}
           />
         );
 

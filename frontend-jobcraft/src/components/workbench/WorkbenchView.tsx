@@ -2,6 +2,7 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useJobCraft } from '../../context/JobCraftContext';
 import { useJobsQuery } from '../../features/jobs/hooks';
+import { useTabNavigate } from '../../router/tabPaths';
 import type { Job } from '../../types/jobcraft';
 import {
   Plus,
@@ -24,10 +25,10 @@ export const WorkbenchView: React.FC<WorkbenchViewProps> = ({
   onOpenNewJob
 }) => {
   const {
-    user,
-    navigateTo
+    user
   } = useJobCraft();
   const navigate = useNavigate();
+  const go = useTabNavigate();
   const { data: jobsData, isLoading } = useJobsQuery();
   const jobs = jobsData || [];
 
@@ -220,7 +221,7 @@ export const WorkbenchView: React.FC<WorkbenchViewProps> = ({
 
         {/* Card 2: 面试中 (Image 5) */}
         <div
-          onClick={() => navigateTo('interview_prep_center')}
+          onClick={() => go('interview_prep_center')}
           className="bg-white rounded-2xl border border-edge p-5 shadow-xs hover:border-sage/40 transition-all duration-200 cursor-pointer space-y-1.5"
         >
           <div className="text-3xl sm:text-[34px] font-black text-ink tracking-tight leading-none">
@@ -238,7 +239,7 @@ export const WorkbenchView: React.FC<WorkbenchViewProps> = ({
 
         {/* Card 3: 待处理分析 (Image 3) */}
         <div
-          onClick={() => navigateTo('jd_analysis')}
+          onClick={() => go('jd_analysis')}
           className="bg-white rounded-2xl border border-edge p-5 shadow-xs hover:border-sage/40 transition-all duration-200 cursor-pointer space-y-1.5"
         >
           <div className="text-3xl sm:text-[34px] font-black text-ink tracking-tight leading-none">
@@ -256,7 +257,7 @@ export const WorkbenchView: React.FC<WorkbenchViewProps> = ({
 
         {/* Card 4: 已完成复盘 (Image 6) */}
         <div
-          onClick={() => navigateTo('interview_review_center')}
+          onClick={() => go('interview_review_center')}
           className="bg-white rounded-2xl border border-edge p-5 shadow-xs hover:border-sage/40 transition-all duration-200 cursor-pointer space-y-1.5"
         >
           <div className="text-3xl sm:text-[34px] font-black text-ink tracking-tight leading-none">
@@ -489,7 +490,7 @@ export const WorkbenchView: React.FC<WorkbenchViewProps> = ({
               {aiSuggestion}
             </p>
             <button
-              onClick={() => navigateTo('experiences')}
+              onClick={() => go('experiences')}
               className="text-xs font-semibold text-[#234937] hover:underline flex items-center gap-0.5 cursor-pointer pt-1"
             >
               <span>查看建议 &gt;</span>

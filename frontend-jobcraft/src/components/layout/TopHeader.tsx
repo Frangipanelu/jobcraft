@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useJobCraft } from '../../context/JobCraftContext';
+import { useTabNavigate } from '../../router/tabPaths';
 import { useProfileQuery, EMPTY_PROFILE } from '../../features/profile/hooks';
 import {
   ChevronRight,
@@ -26,7 +27,6 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
 }) => {
   const {
     currentTab,
-    navigateTo,
     selectedJobId,
     selectedInterviewId,
     jobs,
@@ -56,6 +56,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
   }, []);
 
   const navigate = useNavigate();
+  const go = useTabNavigate();
 
   const handleMenuClick = (profileTab: 'resumes' | 'profile' | 'preferences' | 'settings') => {
     setIsDropdownOpen(false);
@@ -117,7 +118,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
           <>
             <ChevronRight className="w-3.5 h-3.5 text-faint shrink-0" />
             <button
-              onClick={() => navigateTo('jd_analysis')}
+              onClick={() => go('jd_analysis')}
               className="hover:text-sage transition text-muted"
             >
               JD 分析中心
@@ -158,7 +159,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
           <>
             <ChevronRight className="w-3.5 h-3.5 text-faint shrink-0" />
             <button
-              onClick={() => navigateTo('interview_prep_center')}
+              onClick={() => go('interview_prep_center')}
               className="hover:text-sage transition text-muted"
             >
               面试准备
@@ -181,7 +182,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
           <>
             <ChevronRight className="w-3.5 h-3.5 text-faint shrink-0" />
             <button
-              onClick={() => navigateTo('interview_review_center')}
+              onClick={() => go('interview_review_center')}
               className="hover:text-sage transition text-muted"
             >
               面试复盘

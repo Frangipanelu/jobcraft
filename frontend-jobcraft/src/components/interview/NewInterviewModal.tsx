@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useJobCraft } from '../../context/JobCraftContext';
+import { useTabNavigate } from '../../router/tabPaths';
 import { InterviewRoundType, InterviewFormat, InterviewDraft } from '../../types/jobcraft';
 import {
   X,
@@ -48,9 +49,9 @@ export const NewInterviewModal: React.FC<Props> = ({ isOpen, jobId, mode, onClos
     createInterview,
     createJob,
     createJDAnalysis,
-    navigateTo,
     showToast
   } = useJobCraft();
+  const go = useTabNavigate();
 
   if (!isOpen) return null;
 
@@ -60,7 +61,7 @@ export const NewInterviewModal: React.FC<Props> = ({ isOpen, jobId, mode, onClos
   // Handle open JD analysis page
   const handleOpenJDAnalysis = () => {
     saveDraft();
-    navigateTo('jd_analysis');
+    go('jd_analysis');
   };
 
   // Restore from localStorage draft
@@ -271,7 +272,7 @@ export const NewInterviewModal: React.FC<Props> = ({ isOpen, jobId, mode, onClos
             message: 'AI 已生成个性化准备方案'
           });
           onClose();
-          navigateTo('interview_prep_workspace', {
+          go('interview_prep_workspace', {
             jobId: selectedJobId || undefined,
             interviewId: newId
           });

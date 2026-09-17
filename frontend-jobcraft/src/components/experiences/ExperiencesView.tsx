@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useJobCraft } from '../../context/JobCraftContext';
+import { useTabNavigate } from '../../router/tabPaths';
 import { Experience, ExperienceCategory, ExperienceVersionRecord } from '../../types/jobcraft';
 import * as jobApi from '../../api/job';
 import * as tasksApi from '../../api/tasks';
@@ -44,8 +45,9 @@ interface ExperiencesViewProps {
   initialSelectedExpId?: string;
 }
 
-export const ExperiencesView: React.FC<ExperiencesViewProps> = () => {
-  const { navigateTo, showToast, syncExperiences } = useJobCraft();
+export const ExperiencesView: React.FC<ExperiencesViewProps> = ({ initialSelectedExpId }) => {
+  const { showToast, syncExperiences } = useJobCraft();
+  const go = useTabNavigate();
   const { data: experiencesData } = useExperiencesQuery();
   const updateExperience = useUpdateExperienceMutation({ onSync: syncExperiences });
   const deleteExperience = useDeleteExperienceMutation({ onSync: syncExperiences });
@@ -57,6 +59,17 @@ export const ExperiencesView: React.FC<ExperiencesViewProps> = () => {
   const [isNewModalOpen, setIsNewModalOpen] = useState(false);
   const [editingExp, setEditingExp] = useState<Experience | null>(null);
   const [expandedVersionExpIds, setExpandedVersionExpIds] = useState<Record<string, boolean>>({});
+  const [autoOpenedExpId, setAutoOpenedExpId] = useState<string | null>(null);
+
+  // Deep link /experiences/:experienceId → 自动打开对应经历的编辑弹窗（FE-ROUTE-03）
+  useEffect(() => {
+    if (!initialSelectedExpId || autoOpenedExpId === initialSelectedExpId) return;
+    const target = experiences.find((exp) => exp.id === initialSelectedExpId);
+    if (target) {
+      setEditingExp(target);
+      setAutoOpenedExpId(initialSelectedExpId);
+    }
+  }, [initialSelectedExpId, experiences, autoOpenedExpId]);
 
   const toggleVersionHistory = (expId: string) => {
     setExpandedVersionExpIds((prev) => ({
@@ -375,7 +388,7 @@ export const ExperiencesView: React.FC<ExperiencesViewProps> = () => {
                   </button>
 
                   <button
-                    onClick={() => navigateTo('resume_editor', { jobId: 'job-1' })}
+                    onClick={() => go('resume_editor', { jobId: 'job-1' })}
                     className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-sage hover:bg-sage-dim text-white text-xs font-bold shadow-xs transition cursor-pointer"
                   >
                     <span>定制简历</span>

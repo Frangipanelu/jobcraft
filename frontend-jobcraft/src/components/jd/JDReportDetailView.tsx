@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useJobCraft } from '../../context/JobCraftContext';
+import { useTabNavigate } from '../../router/tabPaths';
 import type { Experience } from '../../types/jobcraft';
 import { saveResume } from '../../api/job';
 import { useJdAnalysesQuery } from '../../features/jd/hooks';
@@ -62,9 +63,9 @@ export const JDReportDetailView: React.FC<JDReportDetailViewProps> = ({
     setResumes,
     jdAnalysisReturnTarget,
     setJdAnalysisReturnTarget,
-    navigateTo,
     showToast
   } = useJobCraft();
+  const go = useTabNavigate();
 
   const { data: jdAnalyses = [], isLoading } = useJdAnalysesQuery();
 
@@ -199,7 +200,7 @@ export const JDReportDetailView: React.FC<JDReportDetailViewProps> = ({
           </p>
           <button
             type="button"
-            onClick={() => navigateTo('jd_analysis_center')}
+            onClick={() => go('jd_analysis_center')}
             className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#1E4D3C] hover:bg-[#153B2E] text-white text-xs font-bold shadow-2xs transition cursor-pointer"
           >
             <ArrowLeft className="w-4 h-4" />
@@ -234,16 +235,16 @@ export const JDReportDetailView: React.FC<JDReportDetailViewProps> = ({
         title: '已带入岗位并返回',
         message: `已自动关联「${data.company} · ${data.position}」进入新建面试。`
       });
-      navigateTo('create_interview');
+      go('create_interview');
     } else if (target === 'create_review') {
       showToast({
         type: 'success',
         title: '已带入岗位并返回',
         message: `已自动关联「${data.company} · ${data.position}」进入新建复盘。`
       });
-      navigateTo('create_review');
+      go('create_review');
     } else {
-      navigateTo('jd_analysis_center');
+      go('jd_analysis_center');
     }
   };
 
@@ -288,9 +289,9 @@ export const JDReportDetailView: React.FC<JDReportDetailViewProps> = ({
       if (targetJobId) {
         setSelectedJobId(targetJobId);
       }
-      navigateTo('resume_editor', { jobId: targetJobId });
+      go('resume_editor', { jobId: targetJobId });
     } else {
-      navigateTo('resume_editor');
+      go('resume_editor');
     }
   };
 
@@ -692,7 +693,7 @@ export const JDReportDetailView: React.FC<JDReportDetailViewProps> = ({
                 <div className="flex gap-2 pt-2 border-t border-[#F0F2EE]">
                   <button
                     type="button"
-                    onClick={() => navigateTo('experiences', { expId: exp.id })}
+                    onClick={() => go('experiences', { expId: exp.id })}
                     className="flex-1 py-1.5 text-xs font-bold text-[#1E4D3C] border border-[#CCD8D1] rounded-lg bg-[#FAFBF9] hover:bg-[#1E4D3C] hover:text-white transition cursor-pointer text-center"
                   >
                     查看经历

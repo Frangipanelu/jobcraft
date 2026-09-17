@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useJobCraft } from '../../context/JobCraftContext';
+import { useTabNavigate } from '../../router/tabPaths';
 import {
   ArrowLeft,
   Star,
@@ -22,7 +23,8 @@ interface InterviewReviewDetailViewProps {
 export const InterviewReviewDetailView: React.FC<InterviewReviewDetailViewProps> = ({
   interviewId
 }) => {
-  const { interviews, applyReviewFeedback, navigateTo, showToast } = useJobCraft();
+  const { interviews, applyReviewFeedback, showToast } = useJobCraft();
+  const go = useTabNavigate();
 
   const currentInterview = interviews.find((i) => i.id === interviewId);
   const review = currentInterview?.review;
@@ -34,7 +36,7 @@ export const InterviewReviewDetailView: React.FC<InterviewReviewDetailViewProps>
       <div className="max-w-4xl mx-auto p-12 text-center space-y-4">
         <div className="text-base text-muted">暂无本场面试的复盘报告</div>
         <button
-          onClick={() => navigateTo('interview_review_center')}
+          onClick={() => go('interview_review_center')}
           className="px-4 py-2 rounded-lg bg-sage text-white text-xs font-semibold cursor-pointer"
         >
           返回复盘中心

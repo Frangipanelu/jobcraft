@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useJobCraft } from '../../context/JobCraftContext';
+import { useTabNavigate } from '../../router/tabPaths';
 import {
   ArrowLeft,
   Sparkles,
@@ -72,7 +73,8 @@ export const InterviewPrepWorkspaceView: React.FC<InterviewPrepWorkspaceViewProp
   interviewId,
   onOpenMockInterview
 }) => {
-  const { interviews, navigateTo, showToast } = useJobCraft();
+  const { interviews, showToast } = useJobCraft();
+  const go = useTabNavigate();
 
   const currentInterview = interviews.find((i) => i.id === interviewId);
   const src = currentInterview?.prepSource;
@@ -549,7 +551,7 @@ export const InterviewPrepWorkspaceView: React.FC<InterviewPrepWorkspaceViewProp
           <div className="flex items-center gap-2 mb-3">
             <button
               type="button"
-              onClick={() => navigateTo('interview_prep_center')}
+              onClick={() => go('interview_prep_center')}
               className="inline-flex items-center gap-1 text-xs font-bold text-[#526058] hover:text-[#111814] transition cursor-pointer"
             >
               <ArrowLeft className="w-3.5 h-3.5" />
