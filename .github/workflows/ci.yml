@@ -25,6 +25,9 @@ jobs:
       - name: Install dependencies
         run: uv sync --dev
 
+      - name: Check file encoding (no CJK corruption / non-UTF-8)
+        run: python scripts/check_encoding.py
+
       - name: Run linting
         run: uv run ruff check .
 
