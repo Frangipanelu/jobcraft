@@ -83,7 +83,7 @@ cd frontend-jobcraft
 npm run build
 ```
 
-若上述命令失败，禁止提交。
+若上述命令失败，禁止提交。CI 已配置强制执行（`.github/workflows/ci.yml`）。
 
 ## 问题记录
 
