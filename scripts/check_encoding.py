@@ -1,4 +1,4 @@
-"""扫描仓库中的文件编码问题（CJK 损坏 / 非 UTF-8 / mojibake）。
+"""扫描仓库中的文件编码问题（非 UTF-8 / U+FFFD）。
 
 背景：Windows PowerShell 5.1 的 ``Set-Content`` / ``Out-File`` / ``>`` / ``Add-Content``
 默认按 ANSI（中文系统为 GBK）写入，会把 UTF-8 源码里的中文写成乱码；而 mojibake 往往仍能
@@ -8,9 +8,11 @@
 
 1. 无法按 UTF-8 解码（``UnicodeDecodeError``）——源文件被 ANSI/GBK 重写。
 2. 含替换字符 ``U+FFFD``——解码失败的残留。
-3. 含常见 mojibake 片段（如 ``锟斤拷`` / ``ï¿½`` / ``â€`` / ``Ã©``）。
 
 退出码：0 全部通过；1 存在错误级问题。
+
+注意：mojibake 启发式检测（如 ``锟斤拷``/``ï¿½``/``â€``/``Ã©`` 等）已移除，
+因为它无法区分"文档里讨论 mojibake"和"真的被损坏了"，误报率太高。
 
 用法::
 
@@ -109,25 +111,6 @@ BOM_CHECK_EXTENSIONS = {
 
 REPLACEMENT_CHAR = "\ufffd"
 
-# 注意：本脚本自身包含这些片段，故在 SKIP_RELATIVE_PATHS 中排除自身，否则会自我误报。
-MOJIBAKE_MARKERS = (
-    "锟斤拷",
-    "ï¿½",
-    "â€",
-    "Ã©",
-    "Ã¨",
-    "Ã¤",
-    "Ã¶",
-    "Ã¼",
-    "Ã§",
-    "Ã±",
-    "Ã¥",
-    "Ã¦",
-    "Ã¸",
-    "Ã¢",
-    "Â·",
-)
-
 
 class Finding:
     """单条编码问题记录。"""
@@ -152,8 +135,26 @@ class Finding:
         return f"[{self.level}] {location}: {self.reason}"
 
 
+def _get_tracked_files() -> set[Path] | None:
+    """返回 git 已追踪的文件集合；git 不可用时返回 None。"""
+    try:
+        import subprocess
+
+        result = subprocess.run(
+            ["git", "ls-files", "--cached"],
+            capture_output=True,
+            text=True,
+            cwd=REPO_ROOT,
+            check=True,
+        )
+        return {REPO_ROOT / line for line in result.stdout.splitlines() if line}
+    except Exception:
+        return None
+
+
 def iter_candidate_files() -> list[Path]:
-    """枚举需要检查的文本文件。"""
+    """枚举需要检查的文本文件。当 git 可用时仅扫描已追踪文件，避免 gitignored 文件的误报。"""
+    tracked = _get_tracked_files()
     files: list[Path] = []
     for path in REPO_ROOT.rglob("*"):
         if not path.is_file():
@@ -166,6 +167,8 @@ def iter_candidate_files() -> list[Path]:
         if path.name in SKIP_FILENAMES:
             continue
         if path.suffix.lower() not in CHECK_EXTENSIONS:
+            continue
+        if tracked is not None and path not in tracked:
             continue
         files.append(path)
     return files
@@ -217,21 +220,15 @@ def check_file(path: Path) -> list[Finding]:
             )
         )
 
-    for marker in MOJIBAKE_MARKERS:
-        if marker in text:
-            findings.append(
-                Finding(
-                    relative,
-                    first_line_with(text, marker),
-                    f"疑似 mojibake 片段 {marker!r}（UTF-8/ANSI 双重编码）",
-                )
-            )
-
     return findings
 
 
 def main() -> int:
     """执行全仓扫描并打印结果。"""
+    # Windows 中文环境下默认控制台编码为 GBK，输出 UTF-8 路径时可能报错，统一用 replace 兜底。
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(errors="replace")  # type: ignore[union-attr]
+
     files = iter_candidate_files()
     findings: list[Finding] = []
     for path in files:
