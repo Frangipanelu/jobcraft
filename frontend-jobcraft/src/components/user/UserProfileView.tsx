@@ -63,6 +63,14 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({ initialTab }) 
 
   const [activeTab, setActiveTab] = useState<'resumes' | 'profile' | 'preferences' | 'settings'>(initialTab || userProfileTab || 'resumes');
 
+  // 路由页面（/profile?tab=）SPA 内跳转时同路由元素不重挂载，initialTab 变化需同步子 tab。
+  // 遗留路径（MainLayout 渲染）不传 initialTab，该 effect 为空操作，维持局域网内点击行为。
+  useEffect(() => {
+    if (initialTab) {
+      setActiveTab(initialTab);
+    }
+  }, [initialTab]);
+
   // Form states for profile
   const [profileForm, setProfileForm] = useState({
     name: user.name || '',
