@@ -106,3 +106,15 @@ cardToExperience 定义于 JobCraftContext.tsx（私有函数）
 ## Expected Commit
 
 `feat(experiences): add experiences query layer and migrate experiences views (FE-EXPERIENCES-01)`
+
+## Implementation Result（2026-09-17，实现 commit `ffbc9b1`）
+
+- [x] `features/experiences/mappers.ts`：`cardToExperience` + `EXPERIENCES_QUERY_KEY`（context 改为 import，映射单源）
+- [x] `features/experiences/hooks.ts`：`useExperiencesQuery` / `useCreateExperienceMutation` / `useUpdateExperienceMutation` / `useDeleteExperienceMutation` / `useAddExperienceVersionMutation`（本地纯缓存演进）
+- [x] `JobCraftContext`：新增 `syncExperiences` 镜像；`loadExperiences`/create/update/delete/addVersion 全部双写 query cache；`cardToExperience` 本地实现删除
+- [x] `ExperiencesView`（含行内 EditExperienceModal）+ `NewExperienceModal` 读写切 hooks（UI 零变化）
+- [x] **偏差 1（toast 归位）**：legacy context 动作自带 toast，视图亦 toast → 迁移后改为 hook 静默、**视图单次 toast**（删除在新视图补 `经历已移除`），消除双重 toast
+- [x] **偏差 2（测试时序）**：delete/update 走 `onSuccess`（异步），断言须先 `await` 渲染变化再验 API 调用；`UpdateHarness` 与镜像同文本 → 用 testid 断言
+- [x] **偏差 3（listCards 双调用）**：context `loadExperiences`（登录期）与 `useExperiencesQuery` 都会拉取 → 版本演进测试改为断言「已调用 + updateCard 未调用」
+- [x] 验证：`npm run lint`（tsc）✓；`npm test` **12 文件 / 40 测试全绿**（mappers 3 + experiences-query 5）✓；`npm run build` ✓
+- [x] 文档：`src/features/experiences/README.md`（数据流/hooks API/镜像过渡）；PROGRESS.md / TODO.md 记录 commit
