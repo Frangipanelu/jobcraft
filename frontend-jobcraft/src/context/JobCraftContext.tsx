@@ -28,6 +28,7 @@ import * as tasksApi from '../api/tasks'
 import type { JobAnalysisResult, Submission, InterviewPrepResult, InterviewPrepRecord as ApiInterviewPrepRecord, InterviewReviewResult } from '../api/types'
 import { JOBS_QUERY_KEY, submissionToJob, deriveJobStatus } from '../features/jobs/mappers'
 import { EXPERIENCES_QUERY_KEY, cardToExperience } from '../features/experiences/mappers'
+import { JD_ANALYSES_QUERY_KEY, analysisToJD, analysisDetailToJD } from '../features/jd/mappers'
 
 export interface ToastMessage {
   id: string;
@@ -258,6 +259,8 @@ interface JobCraftContextType {
   ) => void;
   /** 过渡期镜像写入（FE-EXPERIENCES-01）：react-query experiences mutations 调此函数同步 context.experiences（FE-CONTEXT-REMOVE 移除）。 */
   syncExperiences: (next: Experience[]) => void;
+  /** 过渡期镜像写入（FE-JD-01）：react-query jd mutations 调此函数同步 context.jdAnalyses（FE-CONTEXT-REMOVE 移除）。 */
+  syncJdAnalyses: (next: JDAnalysis[]) => void;
 }
 
 const JobCraftContext = createContext<JobCraftContextType | undefined>(undefined);
@@ -274,76 +277,10 @@ function requirementsText(requirements: { text: string; tag: string }[]): string
 }
 
 /**
- * 将后端 JobAnalysisResult 转换为前端 JDAnalysis
+ * 将后端 JobAnalysisResult 转换为前端 JDAnalysis。
+ * 实现已移入 features/jd/mappers.ts（analysisToJD / analysisDetailToJD），
+ * 此处与 hooks 共享同一实现，避免双份映射漂移。
  */
-function analysisToJD(result: JobAnalysisResult, jobId?: string): JDAnalysis {
-  const ats = result.ats_profile
-  const companyCtx = result.company_context || {}
-  
-  return {
-    id: String(result.job_analysis_id),
-    jobId: jobId,
-    company: result.company,
-    role: result.position,
-    salaryRange: ats?.salary || '面议',
-    rawText: result.jd_text,
-    createdAt: result.created_at || new Date().toISOString().split('T')[0],
-    matchScore: result.match_score || 0,
-    recommendationStars: Math.round((result.match_score || 0) / 20),
-    verdictSummary: result.gap_analysis || '分析完成',
-    whyMatch: result.match_level || '',
-    keyRisks: '',
-    resumeAdvice: result.suggestions?.map(s => s.message) || [],
-    coreRequirements: [
-      {
-        category: '核心职责',
-        items: ats?.responsibilities || []
-      },
-      {
-        category: '任职资格',
-        items: [...(ats?.required_skills || []), ...(ats?.preferred_skills || [])]
-      }
-    ],
-    atsKeywords: {
-      hardSkills: ats?.required_skills || [],
-      softSkills: ats?.preferred_skills || [],
-      expKeywords: ats?.key_metrics || [],
-      coveragePercent: Math.round(result.match_score || 0)
-    },
-    subtextAnalysis: [],
-    skillGaps: (() => {
-      // 从 jd_requirements 获取所有技能要求
-      const allSkills = [
-        ...(result.jd_requirements?.hard_skills || []),
-        ...(result.jd_requirements?.soft_skills || []),
-        ...(result.jd_requirements?.keywords || [])
-      ];
-      // 从 per_card_scores 获取已匹配的技能
-      const matchedSkills = new Set<string>();
-      (result.per_card_scores || []).forEach(ps => {
-        (ps.matched || []).forEach(s => matchedSkills.add(s));
-      });
-      // 构建能力匹配列表
-      return allSkills.map((skill, idx) => {
-        const isMatched = matchedSkills.has(skill);
-        return {
-          id: `skill-${idx}`,
-          capability: skill,
-          userEvidence: isMatched ? '经历卡已覆盖' : '',
-          requirement: skill,
-          gap: isMatched ? '已匹配' : '待补充',
-          recommendation: isMatched ? '' : '建议补充相关经历或调整表述'
-        };
-      });
-    })(),
-    recommendedExperiences: result.per_card_scores?.map(ps => ({
-      experienceId: String(ps.card_id),
-      matchScore: ps.score,
-      matchingJDReq: ps.matched?.join(', ') || '',
-      reason: ps.missing?.join(', ') || ''
-    })) || []
-  }
-}
 
 /**
  * 将后端 Submission/DashboardItem 映射为前端 Job、由 steps 派生岗位状态：
@@ -688,69 +625,19 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
       const summaries = data.analyses || []
       // 为每个分析获取完整数据
       const fullAnalyses = await Promise.all(
-        summaries.map(async (s: Record<string, unknown>) => {
+        summaries.map(async (s) => {
           try {
-            const detail = await jobApi.getJobAnalysis(Number(s.id || s.job_analysis_id))
-            const jdReq = (detail.jd_requirements || {}) as Record<string, unknown>
-            const hardSkills = (jdReq.hard_skills as string[]) || []
-            const softSkills = (jdReq.soft_skills as string[]) || []
-            const responsibilities = (jdReq.responsibilities as string[]) || []
-            const dimReqs = (detail.dimension_requirements || []) as Array<{ dimension: string; level: number; evidence: string }>
-
-            // 从 dimension_requirements 构建能力匹配数据
-            const allSkills = [...hardSkills, ...softSkills]
-            const skillGaps = allSkills.map((skill: string, idx: number) => {
-              // 尝试从 dimension_requirements 匹配证据
-              const matchedDim = dimReqs.find(d => d.evidence && d.evidence.includes(skill))
-              return {
-                id: `skill-${idx}`,
-                capability: skill,
-                userEvidence: matchedDim?.evidence || '',
-                requirement: skill,
-                gap: matchedDim && matchedDim.level >= 3 ? '已匹配' : '待补充',
-                recommendation: ''
-              }
-            })
-
-            // 从 dimension_requirements 构建岗位目标
-            const goalText = dimReqs.length > 0
-              ? dimReqs.map(d => d.evidence).filter(Boolean).join('；')
-              : (detail.gap_analysis as string) || '待分析'
-
-            return {
-              id: String(detail.job_analysis_id),
-              company: detail.company || '',
-              role: detail.position || '',
-              rawText: detail.jd_text || '',
-              matchScore: detail.match_score || 0,
-              recommendationStars: Math.round((detail.match_score || 0) / 20),
-              verdictSummary: Array.isArray(detail.gap_analysis) ? (detail.gap_analysis as string[]).join(' ') : (detail.gap_analysis || ''),
-              whyMatch: '',
-              keyRisks: '',
-              resumeAdvice: [],
-              coreRequirements: [
-                { category: '核心职责', items: responsibilities },
-                { category: '任职资格', items: allSkills }
-              ],
-              atsKeywords: {
-                hardSkills,
-                softSkills,
-                expKeywords: (jdReq.keywords as string[]) || [],
-                coveragePercent: Math.round(detail.match_score || 0)
-              },
-              subtextAnalysis: [],
-              skillGaps,
-              goal: goalText,
-              recommendedExperiences: [],
-              createdAt: detail.created_at || '',
-              jobId: undefined
-            }
+            const summary = s as { id?: number; job_analysis_id?: number }
+            const detail = await jobApi.getJobAnalysis(Number(summary.id || summary.job_analysis_id))
+            return analysisDetailToJD(detail)
           } catch {
             return null
           }
         })
       )
-      setJdAnalyses(fullAnalyses.filter(Boolean) as JDAnalysis[])
+      const mapped = fullAnalyses.filter(Boolean) as JDAnalysis[]
+      setJdAnalyses(mapped)
+      queryClient.setQueryData([...JD_ANALYSES_QUERY_KEY], mapped)
     } catch (error) {
       console.error('Load JD analyses failed:', error)
     }
@@ -1133,6 +1020,10 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
     ).then(result => {
       const newAnalysis = analysisToJD(result, targetJobId)
       setJdAnalyses((prev) => [newAnalysis, ...prev])
+      queryClient.setQueryData(
+        [...JD_ANALYSES_QUERY_KEY],
+        (prev: JDAnalysis[] | undefined) => [newAnalysis, ...(prev || [])]
+      )
 
       // If linked to job, update job steps
       if (targetJobId) {
@@ -1269,6 +1160,10 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
         recommendedExperiences: []
       };
       setJdAnalyses((prev) => [newAnalysis, ...prev]);
+      queryClient.setQueryData(
+        [...JD_ANALYSES_QUERY_KEY],
+        (prev: JDAnalysis[] | undefined) => [newAnalysis, ...(prev || [])]
+      );
       if (targetJobId) {
         setJobs((prev) =>
           prev.map((j) =>
@@ -1298,6 +1193,10 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
   const deleteJDAnalysis = async (id: string) => {
     // 从本地状态移除
     setJdAnalyses((prev) => prev.filter((a) => a.id !== id));
+    queryClient.setQueryData(
+      [...JD_ANALYSES_QUERY_KEY],
+      (prev: JDAnalysis[] | undefined) => (prev || []).filter((a) => a.id !== id)
+    );
     // 尝试删除后端 submission（id 格式为 "sub-{number}"）
     const match = id.match(/^sub-(\d+)$/);
     if (match) {
@@ -2253,6 +2152,11 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
     setExperiences(next);
   };
 
+  // 过渡期镜像写入（FE-JD-01）：react-query jd mutations 调此函数同步 context.jdAnalyses（FE-CONTEXT-REMOVE 移除）。
+  const syncJdAnalyses = (next: JDAnalysis[]) => {
+    setJdAnalyses(next);
+  };
+
   return (
     <JobCraftContext.Provider
       value={{
@@ -2275,6 +2179,7 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
         syncJobs,
         experiences,
         syncExperiences,
+        syncJdAnalyses,
         jdAnalyses,
         resumes,
         setResumes,

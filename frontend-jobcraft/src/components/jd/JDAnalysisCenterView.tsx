@@ -11,9 +11,13 @@ import {
   Wand2
 } from 'lucide-react';
 import { splitJd } from '../../api/job';
+import { useJdAnalysesQuery, useDeleteJdAnalysisMutation } from '../../features/jd/hooks';
 
 export const JDAnalysisCenterView: React.FC = () => {
-  const { jdAnalyses, createStructuredJDAnalysis, deleteJDAnalysis, navigateTo, interviewDraft } = useJobCraft();
+  const { createStructuredJDAnalysis, navigateTo, interviewDraft, showToast, syncJdAnalyses } = useJobCraft();
+
+  const { data: jdAnalyses = [] } = useJdAnalysesQuery();
+  const deleteAnalysis = useDeleteJdAnalysisMutation({ onSync: syncJdAnalyses });
 
   const [activeTab, setActiveTab] = useState<'create' | 'history'>('create');
   const [company, setCompany] = useState('');
@@ -456,7 +460,11 @@ export const JDAnalysisCenterView: React.FC = () => {
                             定制简历
                           </button>
                           <button
-                            onClick={() => deleteJDAnalysis(analysis.id)}
+                            onClick={() => {
+                              deleteAnalysis.mutate(analysis.id, {
+                                onSuccess: () => showToast({ type: 'info', title: 'JD 分析已删除' }),
+                              });
+                            }}
                             className="p-1.5 rounded-lg text-muted hover:text-error hover:bg-error-bg transition cursor-pointer"
                             title="删除记录"
                           >

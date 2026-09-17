@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useJobCraft } from '../../context/JobCraftContext';
 import type { Experience } from '../../types/jobcraft';
 import { saveResume } from '../../api/job';
+import { useJdAnalysesQuery } from '../../features/jd/hooks';
 import {
   ArrowLeft,
   ArrowRight,
@@ -53,11 +54,9 @@ export const JDReportDetailView: React.FC<JDReportDetailViewProps> = ({
   embedded = false
 }) => {
   const {
-    jdAnalyses,
     jobs,
     experiences,
     resumes,
-    isLoading,
     setSelectedJobId,
     setSelectedJDId,
     setResumes,
@@ -66,6 +65,8 @@ export const JDReportDetailView: React.FC<JDReportDetailViewProps> = ({
     navigateTo,
     showToast
   } = useJobCraft();
+
+  const { data: jdAnalyses = [], isLoading } = useJdAnalysesQuery();
 
   const [isReanalyzing, setIsReanalyzing] = useState(false);
 
