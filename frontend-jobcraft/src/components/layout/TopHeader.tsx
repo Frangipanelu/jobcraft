@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useJobCraft } from '../../context/JobCraftContext';
 import { useProfileQuery, EMPTY_PROFILE } from '../../features/profile/hooks';
 import {
@@ -54,9 +55,11 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  const navigate = useNavigate();
+
   const handleMenuClick = (profileTab: 'resumes' | 'profile' | 'preferences' | 'settings') => {
     setIsDropdownOpen(false);
-    navigateTo('user_profile', { profileTab });
+    navigate(`/profile?tab=${profileTab}`);
   };
 
   const handleSignOut = () => {

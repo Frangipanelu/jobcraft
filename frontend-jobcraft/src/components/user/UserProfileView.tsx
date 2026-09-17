@@ -30,7 +30,12 @@ import {
   Layers
 } from 'lucide-react';
 
-export const UserProfileView: React.FC = () => {
+interface UserProfileViewProps {
+  /** 路由页面（/profile?tab=）传入的初始子 tab；未传时回退到遗留 userProfileTab。 */
+  initialTab?: 'resumes' | 'profile' | 'preferences' | 'settings';
+}
+
+export const UserProfileView: React.FC<UserProfileViewProps> = ({ initialTab }) => {
   const {
     historicalResumes,
     addHistoricalResume,
@@ -56,7 +61,7 @@ export const UserProfileView: React.FC = () => {
     });
   };
 
-  const [activeTab, setActiveTab] = useState<'resumes' | 'profile' | 'preferences' | 'settings'>(userProfileTab || 'resumes');
+  const [activeTab, setActiveTab] = useState<'resumes' | 'profile' | 'preferences' | 'settings'>(initialTab || userProfileTab || 'resumes');
 
   // Form states for profile
   const [profileForm, setProfileForm] = useState({
