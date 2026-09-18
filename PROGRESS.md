@@ -4,6 +4,17 @@
 
 ## 已完成事项
 
+### FE-RESUME-01 简历编辑域迁移（2026-09-19，commit 待填）
+
+- [x] **`features/resume/mappers.ts`**：`RESUMES_QUERY_KEY = ['resumes']`（`Record<submissionId, ResumeVersion>` 键控对象）
+- [x] **`features/resume/hooks.ts`**：`useResumesQuery`（getCurrentUser → getDashboard → has_resume 逐条 getSubmission → markdownToResume，单条失败容忍、无 console）；9 个 mutation——AI 建议 apply/reject/applyAll、bullet 编辑（updateText/add/delete）为**纯 cache 操作**；`useSaveResumeMutation`（合法 id → updateSubmission；NaN id → `{saved:false,reason:'local'}` 供视图 warning）；`useUpsertResumeMutation`（纯 cache 写，替换 `setResumes`）；React Query v5 下 7 个纯 mutation 全部 async
+- [x] **视图迁移**：`ResumeEditorView`（读 `useJobsQuery`/`useResumesQuery`/`useExperiencesQuery`，`activeResumeId` 改局部 state，apply/reject/applyAll/edit/delete 走 mutation，save 按 `result.saved` 分支 toast）；`JDReportDetailView`（删死 `resumes` 解构，改 `useUpsertResumeMutation`）
+- [x] **context 清理（本域零消费者 → 无 onSync 镜像）**：删除 `Submission`/`ResumeVersion`/`resumeParser` 导入、interface `resumes`/`setResumes` + resume actions 块、state 声明、loadDashboard 内联简历水合（含 `console.error('Load resume failed...')`）、L697–971 方法块、provider value 11 个 key；grep 验证残留 "resumes" 仅 tab 名
+- [x] **测试**：`src/test/resume-query.test.tsx`（9：空态/水合渲染/应用单条/忽略/全部应用/编辑要点/删除要点/保存草稿/upsert）；修复建议注入标题精确匹配（渲染为带序号前缀，改正则）；全量 **20 文件 / 107 测试全绿**，`npm run lint`（tsc）、`npm run build`、`python scripts/check_encoding.py` 通过
+- [x] **文档**：重写 `features/resume/README.md`（数据流/hooks API/边界）
+- [x] 已提交（commit 待填）；已 push
+- [ ] 留白：历史简历域（`UserProfileView`/`CreateInterview` 读 `historicalResumes`）规划 FE-HISTORICAL-RESUMES-01；补 FE-RESUME-01 完成后收尾 FE-CONTEXT-REMOVE（删 syncJobs/syncExperiences/syncJdAnalyses/syncInterviews 镜像与双写）
+
 ### FE-REVIEW-01 面试复盘域写入迁移（2026-09-19，commit `a1d1d8a`）
 
 - [x] **`features/review/mappers.ts`**：6 个纯映射 helper（`buildReviewPatchFromAnalysis` / `buildReviewFromPatch` / `nextExperienceVersion` / `applyProposedChanges` / `applyFeedbackSuggestions` / `buildVersionRecord`），score 一律来自真实分析数据，无伪造评分
