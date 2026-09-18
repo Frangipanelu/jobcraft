@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useJobCraft } from '../../context/JobCraftContext';
 import { useTabNavigate } from '../../router/tabPaths';
+import { useCreateInterviewMutation } from '../../features/interview/hooks';
 import { InterviewRoundType, InterviewFormat, InterviewDraft } from '../../types/jobcraft';
 import {
   X,
@@ -46,11 +47,13 @@ const aiGenerateItems = [
 export const NewInterviewModal: React.FC<Props> = ({ isOpen, jobId, mode, onClose }) => {
   const {
     jobs,
-    createInterview,
     createJob,
     createJDAnalysis,
-    showToast
+    showToast,
+    syncInterviews,
+    syncJobs
   } = useJobCraft();
+  const createInterview = useCreateInterviewMutation({ onSync: syncInterviews, onSyncJobs: syncJobs });
   const go = useTabNavigate();
 
   if (!isOpen) return null;
@@ -253,7 +256,7 @@ export const NewInterviewModal: React.FC<Props> = ({ isOpen, jobId, mode, onClos
       // All done, create interview (real backend generation) and close
       const timer = setTimeout(async () => {
         try {
-          const newId = await createInterview({
+          const newInterview = await createInterview.mutateAsync({
             jobId: selectedJobId || undefined,
             company: currentJob?.company || '待填写公司',
             role: currentJob?.role || '待填写岗位',
@@ -274,7 +277,7 @@ export const NewInterviewModal: React.FC<Props> = ({ isOpen, jobId, mode, onClos
           onClose();
           go('interview_prep_workspace', {
             jobId: selectedJobId || undefined,
-            interviewId: newId
+            interviewId: newInterview.id
           });
         } catch (err) {
           setIsGenerating(false);

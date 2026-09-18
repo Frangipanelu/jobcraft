@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useJobCraft } from '../../context/JobCraftContext';
 import { useTabNavigate } from '../../router/tabPaths';
+import { useInterviewsQuery } from '../../features/interview/hooks';
 import {
   ArrowLeft,
   Sparkles,
@@ -73,8 +74,10 @@ export const InterviewPrepWorkspaceView: React.FC<InterviewPrepWorkspaceViewProp
   interviewId,
   onOpenMockInterview
 }) => {
-  const { interviews, showToast } = useJobCraft();
+  const { showToast } = useJobCraft();
   const go = useTabNavigate();
+  const { data: interviewData } = useInterviewsQuery();
+  const interviews = interviewData || [];
 
   const currentInterview = interviews.find((i) => i.id === interviewId);
   const src = currentInterview?.prepSource;

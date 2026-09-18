@@ -16,7 +16,6 @@ import {
   InterviewPreparation,
   HistoricalResume,
   InterviewDraft,
-  InterviewPrepRecord,
   InterviewQA
 } from '../types/jobcraft';
 import { markdownToResume, resumeToMarkdown } from '../utils/resumeParser';
@@ -25,10 +24,11 @@ import * as experienceApi from '../api/experience'
 import * as jobApi from '../api/job'
 import * as interviewApi from '../api/interview'
 import * as tasksApi from '../api/tasks'
-import type { JobAnalysisResult, Submission, InterviewPrepResult, InterviewPrepRecord as ApiInterviewPrepRecord, InterviewReviewResult } from '../api/types'
+import type { JobAnalysisResult, Submission, InterviewReviewResult } from '../api/types'
 import { JOBS_QUERY_KEY, submissionToJob, deriveJobStatus } from '../features/jobs/mappers'
 import { EXPERIENCES_QUERY_KEY, cardToExperience } from '../features/experiences/mappers'
 import { JD_ANALYSES_QUERY_KEY, analysisToJD, analysisDetailToJD } from '../features/jd/mappers'
+import { INTERVIEWS_QUERY_KEY, prepRecordToInterview } from '../features/interview/mappers'
 
 export interface ToastMessage {
   id: string;
@@ -215,18 +215,6 @@ interface JobCraftContextType {
   saveResume: (id: string) => Promise<void>;
 
   // Interview actions
-  createInterview: (data: {
-    jobId?: string;
-    company: string;
-    role: string;
-    roundNumber: number;
-    roundName: string;
-    roundType: Interview['roundType'];
-    time: string;
-    format: Interview['format'];
-    interviewer?: string;
-    supplementNotes?: string;
-  }) => Promise<string>;
   updateQuestionAnswer: (interviewId: string, questionId: string, answer: Partial<PreparedAnswer>, isPrepared?: boolean) => void;
   addCustomQuestion: (interviewId: string, questionText: string, focusText: string) => void;
 
@@ -261,6 +249,8 @@ interface JobCraftContextType {
   syncExperiences: (next: Experience[]) => void;
   /** 过渡期镜像写入（FE-JD-01）：react-query jd mutations 调此函数同步 context.jdAnalyses（FE-CONTEXT-REMOVE 移除）。 */
   syncJdAnalyses: (next: JDAnalysis[]) => void;
+  /** 过渡期镜像写入（FE-INTERVIEW-01）：react-query interviews mutations 调此函数同步 context.interviews（FE-CONTEXT-REMOVE 移除）。 */
+  syncInterviews: (next: Interview[]) => void;
 }
 
 const JobCraftContext = createContext<JobCraftContextType | undefined>(undefined);
@@ -288,120 +278,11 @@ function requirementsText(requirements: { text: string; tag: string }[]): string
  * 此处与 hooks 共享同一实现，避免双份映射漂移。
  */
 
-function mapRoundType(t: string): Interview['roundType'] {
-  const r = (t || '').toLowerCase()
-  if (r.includes('技术') || r.includes('tech')) return 'tech'
-  if (r.includes('业务') || r.includes('product')) return 'product'
-  if (r.includes('hr')) return 'hr'
-  if (r.includes('总监') || r.includes('终') || r.includes('综合')) return 'comprehensive'
-  if (r.includes('业务')) return 'business'
-  return 'other'
-}
-
-function prepRecordToInterview(rec: InterviewPrepRecord): Interview {
-  return buildInterviewFromPrep(
-    {
-      round_type: rec.round_type,
-      dimension_questions: rec.dimension_questions || [],
-      company_research: rec.company_research,
-      created_at: rec.created_at
-    },
-    {
-      id: `prep-${rec.id}`,
-      jobId: rec.job_analysis_id ? String(rec.job_analysis_id) : undefined,
-      company: rec.company || '',
-      role: rec.position || '',
-      prepSource: rec
-    }
-  )
-}
-
-function buildInterviewFromPrep(
-  prep: {
-    round_type: string
-    dimension_questions: {
-      dimension: string
-      question: string
-      answer_points: string[]
-      card_ids: number[]
-    }[]
-    company_research?: Record<string, unknown> | null
-    created_at?: string | null
-  },
-  meta: { id: string; jobId?: string; company: string; role: string; prepSource?: InterviewPrepRecord }
-): Interview {
-  const roundName = prep.round_type ? `面试准备 · ${prep.round_type}` : '面试准备'
-  const cr = (prep.company_research || {}) as Record<string, any>
-  const highFreqQuestions: InterviewPreparation['highFreqQuestions'] = (
-    prep.dimension_questions || []
-  ).map((dq, idx) => ({
-    id: `${meta.id}-q-${idx}`,
-    question: dq.question,
-    probabilityStars: 4,
-    evaluationFocus: dq.dimension || '',
-    recommendedExperienceId: (dq.card_ids && dq.card_ids[0]) ? String(dq.card_ids[0]) : '',
-    isPrepared: false,
-    preparedAnswer: {
-      mode: 'logic',
-      logicFlow: dq.answer_points || [],
-      keywords: dq.answer_points && dq.answer_points[0] ? [dq.answer_points[0]] : [],
-      aiReference: dq.answer_points?.join('\n') || '',
-      inScript: false
-    }
-  }))
-  return {
-    id: meta.id,
-    jobId: meta.jobId,
-    company: meta.company,
-    role: meta.role,
-    roundNumber: 1,
-    roundName: roundName,
-    roundType: mapRoundType(prep.round_type),
-    time: prep.created_at ? prep.created_at.split('T')[0] + ' ' + (prep.created_at.split('T')[1]?.slice(0, 5) || '') : '',
-    format: 'video',
-    readinessPercent: 40,
-    status: 'preparing',
-    preparation: {
-      readinessPercent: 40,
-      companyResearch: {
-        background: cr?.basic?.description || `${meta.company}核心业务线`,
-        coreBusiness: cr?.business?.main_business || '',
-        keyProducts: cr?.business?.product_names || [],
-        relevantBusiness: cr?.basic?.industry || '',
-        recentNews: (cr?.news || []).slice(0, 3).map((n: any) => n?.title).filter(Boolean) || [],
-        aiHiringIntent: cr?.ai_hiring || ''
-      },
-      aiStrategy: {
-        roundTypeDesc: prep.round_type ? `${prep.round_type}面试准备` : '面试准备',
-        keyFocusAreas: (prep.dimension_questions || []).map((dq) => ({
-          name: dq.dimension,
-          importance: '★★★★★',
-          desc: dq.question
-        }))
-      },
-      recommendedExperiences: (prep.dimension_questions || [])
-        .filter((dq) => dq.card_ids && dq.card_ids.length > 0)
-        .map((dq) => ({
-          experienceId: String(dq.card_ids[0]),
-          recommendScore: 90,
-          proves: dq.answer_points ? dq.answer_points.slice(0, 2) : []
-        })),
-      highFreqQuestions
-    },
-    prepSource: meta.prepSource
-  }
-}
-
-function roundTypeToCn(roundType: Interview['roundType']): string {
-  switch (roundType) {
-    case 'tech': return '技术面'
-    case 'product': return '产品面'
-    case 'business': return '业务面'
-    case 'hr': return 'HR面'
-    case 'comprehensive': return '综合面'
-    default: return '技术面'
-  }
-}
+/**
+ * 将后端面试准备记录（InterviewPrepRecord / InterviewPrepResult）映射为前端 Interview：
+ * 实现已移入 features/interview/mappers.ts（prepRecordToInterview / buildInterviewFromPrep /
+ * roundTypeToCn / mapRoundType），此处与 hooks 共享同一实现，避免双份映射漂移。
+ */
 
 export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const queryClient = useQueryClient();
@@ -650,7 +531,10 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
       setInterviews((prev) => {
         // 保留内存中尚未持久化的面试，避免刷新时覆盖本地操作
         const existing = prev.filter((i) => !i.id.startsWith('prep-'))
-        return [...mapped, ...existing]
+        const next = [...mapped, ...existing]
+        // 过渡期双写（FE-INTERVIEW-01）：react-query cache 与 context 镜像同一份数据，FE-CONTEXT-REMOVE 移除。
+        queryClient.setQueryData([...INTERVIEWS_QUERY_KEY], next)
+        return next
       })
     } catch (error) {
       console.error('Load interviews failed:', error)
@@ -1483,141 +1367,7 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
     }
   };
 
-  // Interview Creation
-  const createInterview = async (data: {
-    jobId?: string;
-    company: string;
-    role: string;
-    roundNumber: number;
-    roundName: string;
-    roundType: Interview['roundType'];
-    time: string;
-    format: Interview['format'];
-    interviewer?: string;
-    supplementNotes?: string;
-  }): Promise<string> => {
-    // 解析岗位分析 id（job_analysis_id），这是后端真实生成的前提
-    let jobAnalysisId: number | null = null;
-    if (data.jobId) {
-      const job = jobs.find((j) => j.id === data.jobId);
-      if (job?.jdAnalysisId) {
-        const parsed = Number(job.jdAnalysisId);
-        if (!Number.isNaN(parsed)) jobAnalysisId = parsed;
-      }
-    }
-    if (!jobAnalysisId) {
-      throw new Error('该岗位尚未完成 AI 岗位分析，请先到「岗位分析」页生成分析之后再准备面试。');
-    }
-
-    // 首选：通过异步任务系统提交面试准备（长 LLM 调用），底层 Redis 不可用时降级为同步调用
-    const taskParams = {
-      user_id: currentUserId,
-      job_analysis_id: jobAnalysisId,
-      round_type: roundTypeToCn(data.roundType),
-      card_ids: []
-    };
-
-    let result: InterviewPrepResult;
-    try {
-      const submit = await tasksApi.submitTask({
-        task_type: 'interview_prep',
-        params: taskParams
-      });
-      const polled = await tasksApi.pollTaskUntilDone(submit.task_id, {
-        interval: 1500,
-        timeout: 180_000
-      });
-      result = polled.result as unknown as InterviewPrepResult;
-    } catch (err) {
-      // 任务服务不可用（Redis 未就绪 / 提交失败）时降级为原有同步 POST，保证功能可用
-      result = await interviewApi.generateInterviewPrep(jobAnalysisId, {
-        round_type: roundTypeToCn(data.roundType),
-        card_ids: []
-      });
-    }
-
-    const newId = result.id ? `prep-${result.id}` : 'prep-' + Date.now();
-    const baseInterview = buildInterviewFromPrep(
-      {
-        round_type: result.round_type,
-        dimension_questions: result.dimension_questions || [],
-        company_research: result.company_research,
-        created_at: result.created_at
-      },
-      {
-        id: newId,
-        jobId: data.jobId,
-        company: data.company,
-        role: data.role,
-        prepSource: {
-          id: result.id || -Date.now(),
-          job_analysis_id: jobAnalysisId,
-          company: data.company,
-          position: data.role,
-          submission_id: null,
-          round_type: result.round_type,
-          duration: result.duration,
-          elevator_pitch: result.elevator_pitch || '',
-          dimension_questions: result.dimension_questions || [],
-          full_version: result.full_version || '',
-          html_content: result.html_content || '',
-          created_at: result.created_at,
-          company_research: result.company_research
-        }
-      }
-    );
-    const newInterview: Interview = {
-      ...baseInterview,
-      roundNumber: data.roundNumber,
-      roundName: data.roundName || baseInterview.roundName,
-      roundType: data.roundType,
-      time: data.time || baseInterview.time,
-      format: data.format,
-      interviewer: data.interviewer || '面试官',
-      supplementNotes: data.supplementNotes
-    };
-
-    setInterviews((prev) => [newInterview, ...prev]);
-
-    if (data.jobId) {
-      setJobs((prev) =>
-        prev.map((j) =>
-          j.id === data.jobId
-            ? {
-                ...j,
-                interviewIds: [...j.interviewIds, newId],
-                currentStage: data.roundName,
-                nextAction: `准备${data.roundName}（${data.time}）`,
-                steps: { ...j.steps, prepStage: 'in_progress' }
-              }
-            : j
-        )
-      );
-    }
-
-    setNextActions((prev) => [
-      {
-        id: 'act-int-' + Date.now(),
-        jobId: data.jobId || 'job-custom',
-        company: data.company,
-        role: data.role,
-        actionTitle: `准备「${data.company} · ${data.roundName}」高频问答`,
-        dueDate: data.time,
-        priority: 'high',
-        targetTab: 'interview_prep_workspace',
-        targetId: newId
-      },
-      ...prev
-    ]);
-
-    showToast({
-      type: 'success',
-      title: '面试准备方案已生成',
-      message: `已为「${data.company} · ${data.roundName}」制定专属高频题库与公司研判。`
-    });
-
-    return newId;
-  };
+  // Interview Creation（FE-INTERVIEW-01：已迁移至 features/interview/hooks.ts useCreateInterviewMutation）
 
   const updateQuestionAnswer = (
     interviewId: string,
@@ -1781,11 +1531,14 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
       experienceFeedbacks: customReview?.experienceFeedbacks || []
     };
 
-    setInterviews((prev) =>
-      prev.map((i) =>
+    setInterviews((prev) => {
+      const next = prev.map((i): Interview =>
         i.id === targetInterview.id ? { ...i, status: 'completed', review: newReview } : i
       )
-    );
+      // 过渡期双写（FE-INTERVIEW-01）：复盘写入需要同步 interviews cache，供已迁移视图读取。
+      queryClient.setQueryData([...INTERVIEWS_QUERY_KEY], next)
+      return next
+    });
 
     if (targetInterview.jobId) {
       setJobs((prev) =>
@@ -1869,8 +1622,8 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
     );
 
     // Update the review feedback applied flag
-    setInterviews((prev) =>
-      prev.map((int) => {
+    setInterviews((prev) => {
+      const next = prev.map((int): Interview => {
         if (!int.review) return int;
         return {
           ...int,
@@ -1882,7 +1635,10 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
           }
         };
       })
-    );
+      // 过渡期双写（FE-INTERVIEW-01）：复盘写入需要同步 interviews cache，供已迁移视图读取。
+      queryClient.setQueryData([...INTERVIEWS_QUERY_KEY], next)
+      return next
+    });
 
     showToast({
       type: 'success',
@@ -1957,8 +1713,8 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
     );
 
     // 2. Mark this feedback as applied in the interview's review
-    setInterviews((prev) =>
-      prev.map((int) => {
+    setInterviews((prev) => {
+      const next = prev.map((int): Interview => {
         if (int.id !== interviewId || !int.review) return int;
         const updatedFeedbacks = (int.review.experienceFeedbacks || []).map((fb, idx) =>
           idx === feedbackIndex ? { ...fb, applied: true } : fb
@@ -1971,7 +1727,10 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
           }
         };
       })
-    );
+      // 过渡期双写（FE-INTERVIEW-01）：复盘写入需要同步 interviews cache，供已迁移视图读取。
+      queryClient.setQueryData([...INTERVIEWS_QUERY_KEY], next)
+      return next
+    });
 
     // 3. Log activity
     setActivities((prev) => [
@@ -2157,6 +1916,11 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
     setJdAnalyses(next);
   };
 
+  // 过渡期镜像写入（FE-INTERVIEW-01）：react-query interviews mutations 调此函数同步 context.interviews（FE-CONTEXT-REMOVE 移除）。
+  const syncInterviews = (next: Interview[]) => {
+    setInterviews(next);
+  };
+
   return (
     <JobCraftContext.Provider
       value={{
@@ -2186,6 +1950,7 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
         activeResumeId,
         setActiveResumeId,
         interviews,
+        syncInterviews,
         nextActions,
         activities,
         aiSuggestions,
@@ -2215,7 +1980,6 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
         addResumeBullet,
         deleteResumeBullet,
         saveResume,
-        createInterview,
         updateQuestionAnswer,
         addCustomQuestion,
         addInterviewReview,

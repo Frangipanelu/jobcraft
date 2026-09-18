@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useJobCraft } from '../context/JobCraftContext';
+import { useCreateInterviewMutation } from '../features/interview/hooks';
 import { InterviewRoundType, InterviewFormat } from '../types/jobcraft';
 import {
   ArrowLeft,
@@ -34,14 +35,16 @@ export const CreateInterview: React.FC = () => {
     selectedJobId: contextSelectedJobId,
     historicalResumes,
     addHistoricalResume,
-    createInterview,
     navigateTo,
     interviewDraft,
     saveInterviewDraft,
     clearInterviewDraft,
     setJdAnalysisReturnTarget,
-    showToast
+    showToast,
+    syncInterviews,
+    syncJobs
   } = useJobCraft();
+  const createInterview = useCreateInterviewMutation({ onSync: syncInterviews, onSyncJobs: syncJobs });
 
   // Filter jobs in "interview prep" stage
   const prepStageJobs = jobs.filter(
@@ -243,7 +246,7 @@ export const CreateInterview: React.FC = () => {
       const timer = setTimeout(async () => {
         const fullTime = `${interviewDate} ${interviewTimeHour}`;
         try {
-          const newIntId = await createInterview({
+          const newInterview = await createInterview.mutateAsync({
             jobId: selectedJobId || undefined,
             company: selectedJob?.company || '目标企业',
             role: selectedJob?.role || '目标岗位',
@@ -262,7 +265,7 @@ export const CreateInterview: React.FC = () => {
             title: '面试准备方案已生成',
             message: `已为「${selectedJob?.company || '目标企业'} ${roundName}」生成攻防策略与高频题库。`
           });
-          navigateTo('interview_prep_workspace', { interviewId: newIntId });
+          navigateTo('interview_prep_workspace', { interviewId: newInterview.id });
         } catch (err) {
           setIsGenerating(false);
           setCurrentAiStep(0);

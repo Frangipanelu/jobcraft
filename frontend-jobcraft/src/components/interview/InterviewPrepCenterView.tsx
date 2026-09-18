@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useJobCraft } from '../../context/JobCraftContext';
+import { useInterviewsQuery } from '../../features/interview/hooks';
 import {
   BookOpenCheck,
   Plus,
@@ -25,7 +26,9 @@ export const InterviewPrepCenterView: React.FC<InterviewPrepCenterViewProps> = (
   onOpenMockInterview,
   onOpenNewInterview
 }) => {
-  const { interviews, navigateTo } = useJobCraft();
+  const { navigateTo } = useJobCraft();
+  const { data: interviewData } = useInterviewsQuery();
+  const interviews = interviewData || [];
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'upcoming' | 'completed'>('all');
 
