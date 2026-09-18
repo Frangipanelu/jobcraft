@@ -1,11 +1,17 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { fireEvent, screen } from '@testing-library/react';
+import { useState } from 'react';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { renderWithProviders } from './test-utils';
 import { useJobCraft } from '../context/JobCraftContext';
 import { JDAnalysisCenterView } from '../components/jd/JDAnalysisCenterView';
 import { JDReportDetailView } from '../components/jd/JDReportDetailView';
-import { useDeleteJdAnalysisMutation } from '../features/jd/hooks';
-import type { JobAnalysisResult } from '../api/types';
+import {
+  useCreateJdAnalysisMutation,
+  useCreateStructuredJdAnalysisMutation,
+  useDeleteJdAnalysisMutation,
+} from '../features/jd/hooks';
+import type { DashboardItem, JobAnalysisResult, ATSProfile } from '../api/types';
+import type { JDAnalysis } from '../types/jobcraft';
 
 const auth = vi.hoisted(() => ({
   autoLogin: vi.fn(),
@@ -36,8 +42,13 @@ const job = vi.hoisted(() => ({
   setDefaultBaseResume: vi.fn(),
 }));
 
+const tasks = vi.hoisted(() => ({
+  runTaskOrSync: vi.fn(),
+}));
+
 vi.mock('../api/auth', () => ({ ...auth }));
 vi.mock('../api/job', () => ({ ...job }));
+vi.mock('../api/tasks', () => ({ ...tasks }));
 
 const AUTH_USER = {
   id: 1,
@@ -86,15 +97,122 @@ const DETAIL_B = buildResult({
   match_score: 55,
 });
 
+const DASH_JOB: DashboardItem = {
+  id: 1,
+  position: 'AI 产品经理',
+  company: '字节跳动',
+  status: 'APPLIED',
+  job_analysis_id: 12,
+  has_analysis: true,
+  card_count: 1,
+  card_version_count: 1,
+  has_resume: true,
+  is_manual: false,
+  prep_count: 0,
+  review_count: 0,
+  created_at: '2026-09-18',
+  updated_at: '2026-09-18',
+};
+
+const STRUCTURED_ATS: ATSProfile = {
+  job_title: 'AI 产品经理',
+  department: null,
+  location: null,
+  salary: '面议',
+  years_of_experience: null,
+  education: null,
+  required_skills: ['数据分析'],
+  preferred_skills: ['英语'],
+  responsibilities: ['负责策略制定'],
+  key_metrics: ['转化率'],
+  culture_keywords: [],
+  dimension_requirements: [],
+  raw_summary: '',
+};
+
+function buildStructuredResult() {
+  return {
+    ats_profile: {
+      ...STRUCTURED_ATS,
+      subtext_decoded: [{ surface_requirement: '强自驱', hidden_meaning: '能主动推进', key_ability: '结果导向' }],
+    } as unknown as ATSProfile,
+    raw: {},
+    company: '字节跳动',
+    position: 'AI 产品经理',
+  };
+}
+
 const MirrorCount = () => {
   const { jdAnalyses } = useJobCraft();
   return <span data-testid="jd-mirror-count">{jdAnalyses.length}</span>;
+};
+
+const JobsMirrorState = () => {
+  const { jobs } = useJobCraft();
+  const detail = jobs[0]
+    ? `${jobs.length}|${jobs[0].jdAnalysisId}|${jobs[0].matchScore}`
+    : '0|';
+  return <span data-testid="jobs-mirror-state">{detail}</span>;
 };
 
 const DeleteHarness = () => {
   const { syncJdAnalyses } = useJobCraft();
   const del = useDeleteJdAnalysisMutation({ onSync: syncJdAnalyses });
   return <button onClick={() => del.mutate('sub-55')}>删除 sub</button>;
+};
+
+const StructuredCreateHarness = ({ jobId }: { jobId?: string }) => {
+  const { syncJobs, syncJdAnalyses } = useJobCraft();
+  const create = useCreateStructuredJdAnalysisMutation({ onSync: syncJdAnalyses, onSyncJobs: syncJobs });
+  const [result, setResult] = useState('');
+  const [error, setError] = useState('');
+  return (
+    <div>
+      <button
+        onClick={async () => {
+          setResult('');
+          setError('');
+          try {
+            const a = await create.mutateAsync({
+              company: '字节跳动',
+              role: 'AI 产品经理',
+              duties: ['负责策略制定'],
+              requirements: [{ text: '3年经验', tag: 'required' }],
+              jobId,
+            });
+            setResult(`${a.id}|${a.matchScore}|${a.verdictSummary}|${a.subtextAnalysis.length}`);
+          } catch (e) {
+            setError((e as Error).message);
+          }
+        }}
+      >
+        发起结构化分析
+      </button>
+      <span data-testid="structured-result">{result}</span>
+      <span data-testid="structured-error">{error}</span>
+    </div>
+  );
+};
+
+const UnstructuredCreateHarness = ({ jobId }: { jobId?: string }) => {
+  const { syncJobs, syncJdAnalyses } = useJobCraft();
+  const create = useCreateJdAnalysisMutation({ onSync: syncJdAnalyses, onSyncJobs: syncJobs });
+  const [id, setId] = useState('');
+  return (
+    <div>
+      <button
+        onClick={() => {
+          create.mutate(
+            { company: '字节跳动', role: 'AI 产品经理', rawText: '待补充JD内容', jobId },
+            { onSuccess: (a: JDAnalysis) => setId(a.id) },
+          );
+        }}
+      >
+        发起原始文本分析
+      </button>
+      <span data-testid="unstructured-id">{id}</span>
+    </div>
+  );
 };
 
 beforeEach(() => {
@@ -114,6 +232,9 @@ beforeEach(() => {
   });
   job.getJobAnalysis.mockImplementation(async (id: number) => (id === 13 ? DETAIL_B : DETAIL_A));
   job.deleteSubmission.mockResolvedValue(undefined);
+  job.analyzeStructuredJd.mockResolvedValue(buildStructuredResult());
+  job.analyzeJob.mockResolvedValue(buildResult());
+  tasks.runTaskOrSync.mockImplementation(async (_t: string, _p: unknown, fallback: () => unknown) => fallback());
 });
 
 afterEach(() => {
@@ -200,5 +321,99 @@ describe('JDReportDetailView 迁移读路径', () => {
     expect(await screen.findByText('策略产品经理')).toBeInTheDocument();
     expect(screen.getByText('腾讯')).toBeInTheDocument();
     expect(screen.queryByText('字节跳动')).not.toBeInTheDocument();
+  });
+});
+
+describe('JD create 迁移（features/jd/hooks）', () => {
+  it('结构化分析：无 jobId 时自动创建岗位，runTaskOrSync 降级 analyzeStructuredJd，双写 jd + jobs 镜像', async () => {
+    renderWithProviders(
+      <>
+        <StructuredCreateHarness />
+        <MirrorCount />
+        <JobsMirrorState />
+      </>,
+    );
+
+    fireEvent.click(await screen.findByText('发起结构化分析'));
+
+    await waitFor(() => expect(screen.getByTestId('structured-result').textContent).toMatch(/^jd-\d+\|0\|结构化分析完成\|1$/));
+
+    expect(tasks.runTaskOrSync).toHaveBeenCalledWith(
+      'jd_analyze_structured',
+      expect.objectContaining({ user_id: 1, duties: ['负责策略制定'] }),
+      expect.any(Function),
+      expect.objectContaining({ timeout: 120_000 }),
+    );
+    expect(job.analyzeStructuredJd).toHaveBeenCalledWith({
+      company: '字节跳动',
+      position: 'AI 产品经理',
+      duties: ['负责策略制定'],
+      requirements: [{ text: '3年经验', tag: 'required' }],
+    });
+
+    expect(screen.getByTestId('jd-mirror-count').textContent).toBe('3');
+    expect(screen.getByTestId('jobs-mirror-state').textContent).toMatch(/^1\|jd-\d+\|0$/);
+  });
+
+  it('结构化分析：提供 jobId 时复用已有岗位并回填 jdAnalysisId（合成 id）', async () => {
+    job.getDashboard.mockResolvedValue({ submissions: [DASH_JOB] });
+
+    renderWithProviders(
+      <>
+        <StructuredCreateHarness jobId="1" />
+        <MirrorCount />
+        <JobsMirrorState />
+      </>,
+    );
+
+    await waitFor(() => expect(screen.getByTestId('jobs-mirror-state').textContent).toBe('1|12|0'));
+    fireEvent.click(screen.getByText('发起结构化分析'));
+
+    await waitFor(() => expect(screen.getByTestId('structured-result').textContent).toMatch(/^jd-\d+\|0\|结构化分析完成\|1$/));
+    expect(screen.getByTestId('jobs-mirror-state').textContent).toMatch(/^1\|jd-\d+\|0$/);
+    expect(screen.getByTestId('jd-mirror-count').textContent).toBe('3');
+  });
+
+  it('原始文本分析（NewInterviewModal 路径）：复用已有岗位，回填真实 job_analysis_id 与 matchScore', async () => {
+    job.getDashboard.mockResolvedValue({ submissions: [DASH_JOB] });
+
+    renderWithProviders(
+      <>
+        <UnstructuredCreateHarness jobId="1" />
+        <MirrorCount />
+        <JobsMirrorState />
+      </>,
+    );
+
+    await waitFor(() => expect(screen.getByTestId('jobs-mirror-state').textContent).toBe('1|12|0'));
+    fireEvent.click(screen.getByText('发起原始文本分析'));
+
+    await waitFor(() => expect(screen.getByTestId('unstructured-id').textContent).toBe('12'));
+
+    expect(tasks.runTaskOrSync).toHaveBeenCalledWith(
+      'resume_generate',
+      expect.objectContaining({ user_id: 1, jd_text: '待补充JD内容', card_ids: [] }),
+      expect.any(Function),
+      expect.objectContaining({ timeout: 180_000 }),
+    );
+    expect(job.analyzeJob).toHaveBeenCalledWith({
+      position: 'AI 产品经理',
+      company: '字节跳动',
+      jd_text: '待补充JD内容',
+      card_ids: [],
+    });
+
+    expect(screen.getByTestId('jobs-mirror-state').textContent).toBe('1|12|60');
+    expect(screen.getByTestId('jd-mirror-count').textContent).toBe('3');
+  });
+
+  it('结构化分析失败时 mutateAsync reject（不再 fire-and-forget）', async () => {
+    job.analyzeStructuredJd.mockRejectedValue(new Error('任务超时'));
+
+    renderWithProviders(<StructuredCreateHarness />);
+
+    fireEvent.click(await screen.findByText('发起结构化分析'));
+
+    await waitFor(() => expect(screen.getByTestId('structured-error').textContent).toBe('任务超时'));
   });
 });

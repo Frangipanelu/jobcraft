@@ -11,13 +11,21 @@ import {
   Wand2
 } from 'lucide-react';
 import { splitJd } from '../../api/job';
-import { useJdAnalysesQuery, useDeleteJdAnalysisMutation } from '../../features/jd/hooks';
+import {
+  useCreateStructuredJdAnalysisMutation,
+  useDeleteJdAnalysisMutation,
+  useJdAnalysesQuery,
+} from '../../features/jd/hooks';
 
 export const JDAnalysisCenterView: React.FC = () => {
-  const { createStructuredJDAnalysis, navigateTo, interviewDraft, showToast, syncJdAnalyses } = useJobCraft();
+  const { navigateTo, showToast, syncJobs, syncJdAnalyses } = useJobCraft();
 
   const { data: jdAnalyses = [] } = useJdAnalysesQuery();
   const deleteAnalysis = useDeleteJdAnalysisMutation({ onSync: syncJdAnalyses });
+  const createStructuredAnalysis = useCreateStructuredJdAnalysisMutation({
+    onSync: syncJdAnalyses,
+    onSyncJobs: syncJobs,
+  });
 
   const [activeTab, setActiveTab] = useState<'create' | 'history'>('create');
   const [company, setCompany] = useState('');
@@ -82,30 +90,44 @@ export const JDAnalysisCenterView: React.FC = () => {
     }
   };
 
-  const handleStartAnalysis = (e: React.FormEvent) => {
+  const handleStartAnalysis = async (e: React.FormEvent) => {
     e.preventDefault();
     const duties = dutyText.split('\n').map((d) => d.trim()).filter(Boolean);
     const nonEmptyReqs = requirements.filter((r) => r.text.trim());
     if (!company.trim() || !role.trim() || (duties.length === 0 && nonEmptyReqs.length === 0)) return;
 
     setIsAnalyzing(true);
-    setTimeout(() => {
-      const newAnalysisId = createStructuredJDAnalysis({
+    try {
+      const analysis = await createStructuredAnalysis.mutateAsync({
         company: company.trim(),
         role: role.trim(),
         duties,
         requirements: nonEmptyReqs.map((r) => ({ text: r.text.trim(), tag: r.tag }))
       });
-      setIsAnalyzing(false);
       setCompany('');
       setRole('');
       setDutyText('');
       setRequirements([]);
       setPastedRaw('');
 
+      showToast({
+        type: 'success',
+        title: '结构化 JD 分析完成',
+        message: `已解析「${analysis.company} · ${analysis.role}」的职责与任职要求细节。`
+      });
+
       // Navigate to the full JD report to view results and provide return button
-      navigateTo('jd_report', { jdId: newAnalysisId });
-    }, 800);
+      navigateTo('jd_report', { jdId: analysis.id });
+    } catch (error) {
+      console.error('Structured JD analysis failed:', error);
+      showToast({
+        type: 'error',
+        title: '结构化 JD 分析失败',
+        message: (error as Error).message || '请稍后重试'
+      });
+    } finally {
+      setIsAnalyzing(false);
+    }
   };
 
   const addRequirement = () => setRequirements((prev) => [...prev, { text: '', tag: 'required' }]);

@@ -1,8 +1,88 @@
-import type { JobAnalysisResult } from '../../api/types';
+import type { JobAnalysisResult, ATSProfile } from '../../api/types';
 import type { JDAnalysis } from '../../types/jobcraft';
 
 /** JD 分析查询缓存 key（迁移视图 + context 镜像双写共用）。 */
 export const JD_ANALYSES_QUERY_KEY = ['jdAnalyses'] as const;
+
+/** 将职责列表拼接为 JD 文本块（结构化分析新增路径用）。自 JobCraftContext 移出。 */
+export function dutiesText(duties: string[]): string {
+  return duties.map((d, i) => `${i + 1}. ${d}`).join('\n');
+}
+
+/** 将带标签的任职要求拼接为 JD 文本块（结构化分析新增路径用）。自 JobCraftContext 移出。 */
+export function requirementsText(requirements: { text: string; tag: string }[]): string {
+  return requirements.map((r, i) => {
+    const label = { hard: '（硬性门槛）', required: '（必选）', preferred: '（加分项）' }[r.tag] || '';
+    return `${i + 1}. ${label}${r.text}`;
+  }).join('\n');
+}
+
+/** 结构化 JD 分析映射的元信息（id/关联岗位/原文等由调用方提供）。 */
+export interface StructuredJDAnalysisMeta {
+  id: string;
+  jobId?: string;
+  company: string;
+  role: string;
+  rawText: string;
+}
+
+/**
+ * 将后端结构化 JD 分析结果（analyze-ats-structured）转换为前端 JDAnalysis。
+ *
+ * 自 JobCraftContext.createStructuredJDAnalysis 内联映射移出，作为唯一实现。
+ * 与无结构化文本路径一致地以 cache 前置方式新增记录。
+ */
+export function structuredResultToJD(
+  result: { ats_profile?: ATSProfile | null },
+  meta: StructuredJDAnalysisMeta,
+): JDAnalysis {
+  const ats = result.ats_profile;
+  const subtext = (ats as unknown as { subtext_decoded?: Array<{
+    surface_requirement?: string;
+    hidden_meaning?: string;
+    key_ability?: string;
+  }> })?.subtext_decoded || [];
+
+  return {
+    id: meta.id,
+    jobId: meta.jobId,
+    company: meta.company,
+    role: meta.role,
+    salaryRange: ats?.salary || '面议',
+    rawText: meta.rawText,
+    createdAt: new Date().toISOString().split('T')[0],
+    matchScore: 0,
+    recommendationStars: 0,
+    verdictSummary: '结构化分析完成',
+    whyMatch: '',
+    keyRisks: '',
+    resumeAdvice: ats?.key_metrics || [],
+    coreRequirements: [
+      {
+        category: '核心职责',
+        items: ats?.responsibilities || []
+      },
+      {
+        category: '任职资格',
+        items: [...(ats?.required_skills || []), ...(ats?.preferred_skills || [])]
+      }
+    ],
+    atsKeywords: {
+      hardSkills: ats?.required_skills || [],
+      softSkills: ats?.preferred_skills || [],
+      expKeywords: ats?.key_metrics || [],
+      coveragePercent: 0
+    },
+    subtextAnalysis: subtext.map((s, idx) => ({
+      id: `sub-${idx}`,
+      rawJD: s.surface_requirement || '',
+      literalMeaning: s.hidden_meaning || '',
+      realEvaluation: s.key_ability || ''
+    })),
+    skillGaps: [],
+    recommendedExperiences: []
+  };
+}
 
 /**
  * 将后端 JobAnalysisResult 转换为前端 JDAnalysis（创建/分析回填路径）。

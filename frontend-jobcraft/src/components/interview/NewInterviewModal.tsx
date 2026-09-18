@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useJobCraft } from '../../context/JobCraftContext';
 import { useTabNavigate } from '../../router/tabPaths';
 import { useCreateInterviewMutation } from '../../features/interview/hooks';
+import { useCreateJdAnalysisMutation } from '../../features/jd/hooks';
 import { InterviewRoundType, InterviewFormat, InterviewDraft } from '../../types/jobcraft';
 import {
   X,
@@ -48,12 +49,13 @@ export const NewInterviewModal: React.FC<Props> = ({ isOpen, jobId, mode, onClos
   const {
     jobs,
     createJob,
-    createJDAnalysis,
     showToast,
     syncInterviews,
-    syncJobs
+    syncJobs,
+    syncJdAnalyses
   } = useJobCraft();
   const createInterview = useCreateInterviewMutation({ onSync: syncInterviews, onSyncJobs: syncJobs });
+  const createJdAnalysis = useCreateJdAnalysisMutation({ onSync: syncJdAnalyses, onSyncJobs: syncJobs });
   const go = useTabNavigate();
 
   if (!isOpen) return null;
@@ -215,13 +217,32 @@ export const NewInterviewModal: React.FC<Props> = ({ isOpen, jobId, mode, onClos
       role: newJobRole.trim(),
     });
     
-    // Create JD analysis record
-    createJDAnalysis({
-      company: newJobCompany.trim(),
-      role: newJobRole.trim(),
-      rawText: newJobJD.trim() || '待补充JD内容',
-      jobId: newJobId
-    });
+    // Create JD analysis record (fire-and-forget，完成后回填岗位 jdAnalysisId)
+    createJdAnalysis.mutate(
+      {
+        company: newJobCompany.trim(),
+        role: newJobRole.trim(),
+        rawText: newJobJD.trim() || '待补充JD内容',
+        jobId: newJobId
+      },
+      {
+        onSuccess: (analysis) => {
+          showToast({
+            type: 'success',
+            title: 'JD 分析报告已生成',
+            message: `已解析「${analysis.company} · ${analysis.role}」，匹配度达 ${analysis.matchScore || 0}%。`
+          });
+        },
+        onError: (error) => {
+          console.error('JD analysis failed:', error);
+          showToast({
+            type: 'error',
+            title: 'JD 分析失败',
+            message: (error as Error).message || '请稍后重试'
+          });
+        }
+      }
+    );
     
     // Select the new job
     setSelectedJobId(newJobId);

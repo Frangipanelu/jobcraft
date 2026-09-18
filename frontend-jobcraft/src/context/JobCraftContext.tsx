@@ -24,10 +24,10 @@ import * as experienceApi from '../api/experience'
 import * as jobApi from '../api/job'
 import * as interviewApi from '../api/interview'
 import * as tasksApi from '../api/tasks'
-import type { JobAnalysisResult, Submission, InterviewReviewResult } from '../api/types'
+import type { Submission, InterviewReviewResult } from '../api/types'
 import { JOBS_QUERY_KEY, submissionToJob, deriveJobStatus } from '../features/jobs/mappers'
 import { EXPERIENCES_QUERY_KEY, cardToExperience } from '../features/experiences/mappers'
-import { JD_ANALYSES_QUERY_KEY, analysisToJD, analysisDetailToJD } from '../features/jd/mappers'
+import { JD_ANALYSES_QUERY_KEY, analysisDetailToJD } from '../features/jd/mappers'
 import { INTERVIEWS_QUERY_KEY, prepRecordToInterview } from '../features/interview/mappers'
 
 export interface ToastMessage {
@@ -193,14 +193,6 @@ interface JobCraftContextType {
   deleteJob: (jobId: string) => void;
 
   // JD Analysis actions
-  createJDAnalysis: (data: { company: string; role: string; rawText: string; jobId?: string }) => string;
-  createStructuredJDAnalysis: (data: {
-    company: string;
-    role: string;
-    duties: string[];
-    requirements: { text: string; tag: 'hard' | 'required' | 'preferred' }[];
-    jobId?: string;
-  }) => string;
   deleteJDAnalysis: (id: string) => void;
 
   // Resume actions
@@ -254,23 +246,6 @@ interface JobCraftContextType {
 }
 
 const JobCraftContext = createContext<JobCraftContextType | undefined>(undefined);
-
-function dutiesText(duties: string[]): string {
-  return duties.map((d, i) => `${i + 1}. ${d}`).join('\n');
-}
-
-function requirementsText(requirements: { text: string; tag: string }[]): string {
-  return requirements.map((r, i) => {
-    const label = { hard: '（硬性门槛）', required: '（必选）', preferred: '（加分项）' }[r.tag] || '';
-    return `${i + 1}. ${label}${r.text}`;
-  }).join('\n');
-}
-
-/**
- * 将后端 JobAnalysisResult 转换为前端 JDAnalysis。
- * 实现已移入 features/jd/mappers.ts（analysisToJD / analysisDetailToJD），
- * 此处与 hooks 共享同一实现，避免双份映射漂移。
- */
 
 /**
  * 将后端 Submission/DashboardItem 映射为前端 Job、由 steps 派生岗位状态：
@@ -840,240 +815,6 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
   };
 
   // JD Analysis Creation
-  const createJDAnalysis = (data: {
-    company: string;
-    role: string;
-    rawText: string;
-    jobId?: string;
-  }) => {
-    const newId = 'jd-' + Date.now();
-    let targetJobId = data.jobId;
-
-    if (!targetJobId) {
-      // Find or create job
-      const existing = jobs.find((j) => j.company === data.company && j.role === data.role);
-      if (existing) {
-        targetJobId = existing.id;
-      } else {
-        targetJobId = 'job-' + Date.now();
-        const stepsDefine: Job['steps'] = {
-          jdAnalysis: true,
-          expMatched: true,
-          customResume: false,
-          applied: false,
-          prepStage: 'pending',
-          reviewStage: 'pending'
-        };
-        const autoJob: Job = {
-          id: targetJobId,
-          company: data.company,
-          role: data.role,
-          department: '核心业务线',
-          salaryRange: '面议',
-          status: deriveJobStatus(stepsDefine),
-          matchScore: 0,
-          applyDate: new Date().toISOString().split('T')[0],
-          lastUpdated: '刚刚',
-          currentStage: '已完成 JD 分析 · 待投递',
-          nextAction: '已完成 JD 深度分析，可开始定制简历并投递',
-          steps: stepsDefine,
-          jdAnalysisId: newId,
-          interviewIds: []
-        };
-        setJobs((prev) => [autoJob, ...prev]);
-      }
-    }
-
-    // 调用后端 API 进行 JD 分析（优先异步任务，任务系统不可用时降级同步端点）
-    tasksApi.runTaskOrSync<JobAnalysisResult>(
-      'resume_generate',
-      {
-        user_id: currentUserId,
-        company: data.company,
-        position: data.role,
-        jd_text: data.rawText,
-        card_ids: experiences.map(e => parseInt(e.id)).filter(id => !isNaN(id))
-      },
-      () => jobApi.analyzeJob({
-        position: data.role,
-        company: data.company,
-        jd_text: data.rawText,
-        card_ids: experiences.map(e => parseInt(e.id)).filter(id => !isNaN(id))
-      }),
-      { timeout: 180_000 }
-    ).then(result => {
-      const newAnalysis = analysisToJD(result, targetJobId)
-      setJdAnalyses((prev) => [newAnalysis, ...prev])
-      queryClient.setQueryData(
-        [...JD_ANALYSES_QUERY_KEY],
-        (prev: JDAnalysis[] | undefined) => [newAnalysis, ...(prev || [])]
-      )
-
-      // If linked to job, update job steps
-      if (targetJobId) {
-        setJobs((prev) =>
-          prev.map((j) =>
-            j.id === targetJobId
-              ? {
-                  ...j,
-                  jdAnalysisId: String(result.job_analysis_id),
-                  matchScore: result.match_score || 0,
-                  steps: { ...j.steps, jdAnalysis: true, expMatched: true }
-                }
-              : j
-          )
-        );
-      }
-
-      showToast({
-        type: 'success',
-        title: 'JD 分析报告已生成',
-        message: `已解析「${data.company} · ${data.role}」，匹配度达 ${result.match_score || 0}%。`
-      });
-    }).catch(error => {
-      console.error('JD analysis failed:', error)
-      showToast({
-        type: 'error',
-        title: 'JD 分析失败',
-        message: error.message || '请稍后重试'
-      });
-    })
-
-    return newId;
-  };
-
-  const createStructuredJDAnalysis = (data: {
-    company: string;
-    role: string;
-    duties: string[];
-    requirements: { text: string; tag: 'hard' | 'required' | 'preferred' }[];
-    jobId?: string;
-  }) => {
-    const newId = 'jd-' + Date.now();
-    let targetJobId = data.jobId;
-
-    if (!targetJobId) {
-      const existing = jobs.find((j) => j.company === data.company && j.role === data.role);
-      if (existing) {
-        targetJobId = existing.id;
-      } else {
-        targetJobId = 'job-' + Date.now();
-        const autoSteps: Job['steps'] = {
-          jdAnalysis: true,
-          expMatched: true,
-          customResume: false,
-          applied: false,
-          prepStage: 'pending',
-          reviewStage: 'pending'
-        };
-        const autoJob: Job = {
-          id: targetJobId,
-          company: data.company,
-          role: data.role,
-          department: '核心业务线',
-          salaryRange: '面议',
-          status: deriveJobStatus(autoSteps),
-          matchScore: 0,
-          applyDate: new Date().toISOString().split('T')[0],
-          lastUpdated: '刚刚',
-          currentStage: '已完成结构化 JD 分析 · 待投递',
-          nextAction: '已完成结构化 JD 分析，可开始定制简历并投递',
-          steps: autoSteps,
-          jdAnalysisId: newId,
-          interviewIds: []
-        };
-        setJobs((prev) => [autoJob, ...prev]);
-      }
-    }
-
-    type StructuredJdResult = Awaited<ReturnType<typeof jobApi.analyzeStructuredJd>>;
-    tasksApi.runTaskOrSync<StructuredJdResult>(
-      'jd_analyze_structured',
-      {
-        user_id: currentUserId,
-        company: data.company,
-        position: data.role,
-        duties: data.duties,
-        requirements: data.requirements
-      },
-      () => jobApi.analyzeStructuredJd({
-        company: data.company,
-        position: data.role,
-        duties: data.duties,
-        requirements: data.requirements
-      }),
-      { timeout: 120_000 }
-    ).then(result => {
-      const newAnalysis: JDAnalysis = {
-        id: newId,
-        jobId: targetJobId,
-        company: data.company,
-        role: data.role,
-        salaryRange: result.ats_profile?.salary || '面议',
-        rawText: [dutiesText(data.duties), requirementsText(data.requirements)].join('\n'),
-        createdAt: new Date().toISOString().split('T')[0],
-        matchScore: 0,
-        recommendationStars: 0,
-        verdictSummary: '结构化分析完成',
-        whyMatch: '',
-        keyRisks: '',
-        resumeAdvice: result.ats_profile?.key_metrics || [],
-        coreRequirements: [
-          {
-            category: '核心职责',
-            items: result.ats_profile?.responsibilities || []
-          },
-          {
-            category: '任职资格',
-            items: [...(result.ats_profile?.required_skills || []), ...(result.ats_profile?.preferred_skills || [])]
-          }
-        ],
-        atsKeywords: {
-          hardSkills: result.ats_profile?.required_skills || [],
-          softSkills: result.ats_profile?.preferred_skills || [],
-          expKeywords: result.ats_profile?.key_metrics || [],
-          coveragePercent: 0
-        },
-        subtextAnalysis: (result.ats_profile as any)?.subtext_decoded?.map((s: any, idx: number) => ({
-          id: `sub-${idx}`,
-          rawJD: s.surface_requirement || '',
-          literalMeaning: s.hidden_meaning || '',
-          realEvaluation: s.key_ability || ''
-        })) || [],
-        skillGaps: [],
-        recommendedExperiences: []
-      };
-      setJdAnalyses((prev) => [newAnalysis, ...prev]);
-      queryClient.setQueryData(
-        [...JD_ANALYSES_QUERY_KEY],
-        (prev: JDAnalysis[] | undefined) => [newAnalysis, ...(prev || [])]
-      );
-      if (targetJobId) {
-        setJobs((prev) =>
-          prev.map((j) =>
-            j.id === targetJobId
-              ? { ...j, jdAnalysisId: newId, steps: { ...j.steps, jdAnalysis: true } }
-              : j
-          )
-        );
-      }
-      showToast({
-        type: 'success',
-        title: '结构化 JD 分析完成',
-        message: `已解析「${data.company} · ${data.role}」的职责与任职要求细节。`
-      });
-    }).catch(error => {
-      console.error('Structured JD analysis failed:', error)
-      showToast({
-        type: 'error',
-        title: '结构化 JD 分析失败',
-        message: error.message || '请稍后重试'
-      });
-    });
-
-    return newId;
-  };
-
   const deleteJDAnalysis = async (id: string) => {
     // 从本地状态移除
     setJdAnalyses((prev) => prev.filter((a) => a.id !== id));
@@ -1970,8 +1711,6 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
         terminateJob,
         resumeJob,
         deleteJob,
-        createJDAnalysis,
-        createStructuredJDAnalysis,
         deleteJDAnalysis,
         applyResumeAISuggestion,
         rejectResumeAISuggestion,
