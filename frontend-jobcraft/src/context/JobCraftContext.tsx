@@ -6,7 +6,6 @@ import {
   Experience,
   Job,
   JDAnalysis,
-  ResumeVersion,
   Interview,
   ActivityLog,
   NextActionItem,
@@ -16,12 +15,10 @@ import {
   HistoricalResume,
   InterviewDraft
 } from '../types/jobcraft';
-import { markdownToResume, resumeToMarkdown } from '../utils/resumeParser';
 import * as authApi from '../api/auth'
 import * as experienceApi from '../api/experience'
 import * as jobApi from '../api/job'
 import * as interviewApi from '../api/interview'
-import type { Submission } from '../api/types'
 import { JOBS_QUERY_KEY, submissionToJob, deriveJobStatus } from '../features/jobs/mappers'
 import { EXPERIENCES_QUERY_KEY, cardToExperience } from '../features/experiences/mappers'
 import { JD_ANALYSES_QUERY_KEY, analysisDetailToJD } from '../features/jd/mappers'
@@ -67,8 +64,6 @@ interface JobCraftContextType {
   syncJobs: (jobs: Job[]) => void;
   experiences: Experience[];
   jdAnalyses: JDAnalysis[];
-  resumes: Record<string, ResumeVersion>;
-  setResumes: React.Dispatch<React.SetStateAction<Record<string, ResumeVersion>>>;
   interviews: Interview[];
   nextActions: NextActionItem[];
   activities: ActivityLog[];
@@ -114,17 +109,6 @@ interface JobCraftContextType {
 
   // JD Analysis actions
   deleteJDAnalysis: (id: string) => void;
-
-  // Resume actions
-  activeResumeId: string | null;
-  setActiveResumeId: (id: string | null) => void;
-  applyResumeAISuggestion: (suggestionId: string) => void;
-  rejectResumeAISuggestion: (suggestionId: string) => void;
-  applyAllResumeAISuggestions: () => void;
-  updateResumeBulletText: (sectionId: string, itemId: string, bulletId: string, newText: string) => void;
-  addResumeBullet: (sectionId: string, itemId: string, text: string, experienceId?: string) => void;
-  deleteResumeBullet: (sectionId: string, itemId: string, bulletId: string) => void;
-  saveResume: (id: string) => Promise<void>;
 
   // Interview actions
   updateQuestionAnswer: (interviewId: string, questionId: string, answer: Partial<PreparedAnswer>, isPrepared?: boolean) => void;
@@ -183,8 +167,6 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
   const [jobs, setJobs] = useState<Job[]>([]);
   const [experiences, setExperiences] = useState<Experience[]>([]);
   const [jdAnalyses, setJdAnalyses] = useState<JDAnalysis[]>([]);
-  const [resumes, setResumes] = useState<Record<string, ResumeVersion>>({});
-  const [activeResumeId, setActiveResumeId] = useState<string | null>(null);
   const [interviews, setInterviews] = useState<Interview[]>([]);
   const [nextActions, setNextActions] = useState<NextActionItem[]>([]);
   const [activities, setActivities] = useState<ActivityLog[]>([]);
@@ -314,30 +296,6 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
       setJobs(dashboardJobs)
       // 过渡期双写（FE-JOBS-01）：react-query cache 与 context 镜像同一份数据，FE-CONTEXT-REMOVE 移除。
       queryClient.setQueryData([...JOBS_QUERY_KEY], dashboardJobs)
-
-      // 同步填充简历编辑数据：为每个带简历的投递站解析 resume_markdown -> ResumeVersion
-      const resumeEntries = await Promise.all(
-        submissions.map(async (item) => {
-          if (!item.has_resume) return null
-          try {
-            const detail = await jobApi.getSubmission(item.id)
-            const resume = markdownToResume(detail.resume_markdown, {
-              position: detail.position,
-              company: detail.company,
-              id: String(item.id),
-            })
-            return resume ? ([String(item.id), resume] as const) : null
-          } catch (error) {
-            console.error('Load resume failed for submission', item.id, error)
-            return null
-          }
-        }),
-      )
-      const nextResumes: Record<string, ResumeVersion> = {}
-      for (const entry of resumeEntries) {
-        if (entry) nextResumes[entry[0]] = entry[1]
-      }
-      setResumes(nextResumes)
     } catch (error) {
       console.error('Load dashboard failed:', error)
     }
@@ -736,281 +694,6 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
     });
   };
 
-  // Resume Actions
-  const applyResumeAISuggestion = (suggestionId: string) => {
-    const rid = activeResumeId;
-    if (!rid) {
-      showToast({ type: 'warning', title: '暂无可编辑的简历', message: '请先创建或选择一份投递简历。' });
-      return;
-    }
-    setResumes((prev) => {
-      const activeResume = prev[rid];
-      if (!activeResume) return prev;
-
-      const sug = activeResume.aiSuggestions.find((s) => s.id === suggestionId);
-      if (!sug) return prev;
-
-      let updatedSections = [...activeResume.sections];
-
-      if (sug.targetBulletId) {
-        updatedSections = updatedSections.map((sec) => ({
-          ...sec,
-          items: sec.items.map((item) => ({
-            ...item,
-            bullets: item.bullets.map((b) =>
-              b.id === sug.targetBulletId ? { ...b, text: sug.suggestedText } : b
-            )
-          }))
-        }));
-      }
-
-      const updatedSuggestions = activeResume.aiSuggestions.map((s) =>
-        s.id === suggestionId ? { ...s, applied: true, rejected: false } : s
-      );
-
-      return {
-        ...prev,
-        [rid]: {
-          ...activeResume,
-          aiSuggestions: updatedSuggestions,
-          sections: updatedSections,
-          updatedAt: '刚刚'
-        }
-      };
-    });
-
-    showToast({
-      type: 'success',
-      title: '已应用 AI 优化建议',
-      message: '简历内容与 ATS 关键词已实时更新。'
-    });
-  };
-
-  const rejectResumeAISuggestion = (suggestionId: string) => {
-    const rid = activeResumeId;
-    if (!rid) return;
-    setResumes((prev) => {
-      const activeResume = prev[rid];
-      if (!activeResume) return prev;
-
-      const updatedSuggestions = activeResume.aiSuggestions.map((s) =>
-        s.id === suggestionId ? { ...s, rejected: true, applied: false } : s
-      );
-
-      return {
-        ...prev,
-        [rid]: {
-          ...activeResume,
-          aiSuggestions: updatedSuggestions
-        }
-      };
-    });
-
-    showToast({
-      type: 'info',
-      title: '已忽略此建议'
-    });
-  };
-
-  const applyAllResumeAISuggestions = () => {
-    const rid = activeResumeId;
-    if (!rid) return;
-    setResumes((prev) => {
-      const activeResume = prev[rid];
-      if (!activeResume) return prev;
-
-      let updatedSections = [...activeResume.sections];
-
-      activeResume.aiSuggestions.forEach((sug) => {
-        if (sug.targetBulletId && !sug.rejected) {
-          updatedSections = updatedSections.map((sec) => ({
-            ...sec,
-            items: sec.items.map((item) => ({
-              ...item,
-              bullets: item.bullets.map((b) =>
-                b.id === sug.targetBulletId ? { ...b, text: sug.suggestedText } : b
-              )
-            }))
-          }));
-        }
-      });
-
-      const updatedSuggestions = activeResume.aiSuggestions.map((s) => ({
-        ...s,
-        applied: !s.rejected
-      }));
-
-      return {
-        ...prev,
-        [rid]: {
-          ...activeResume,
-          aiSuggestions: updatedSuggestions,
-          sections: updatedSections,
-          updatedAt: '刚刚'
-        }
-      };
-    });
-
-    showToast({
-      type: 'success',
-      title: '已全部应用 AI 优化',
-      message: '所有待处理建议已同步至简历正文中。'
-    });
-  };
-
-  const updateResumeBulletText = (
-    sectionId: string,
-    itemId: string,
-    bulletId: string,
-    newText: string
-  ) => {
-    const rid = activeResumeId;
-    if (!rid) return;
-    setResumes((prev) => {
-      const activeResume = prev[rid];
-      if (!activeResume) return prev;
-
-      const updatedSections = activeResume.sections.map((sec) => {
-        if (sec.id !== sectionId) return sec;
-        return {
-          ...sec,
-          items: sec.items.map((item) => {
-            if (item.id !== itemId) return item;
-            return {
-              ...item,
-              bullets: item.bullets.map((b) => (b.id === bulletId ? { ...b, text: newText } : b))
-            };
-          })
-        };
-      });
-
-      return {
-        ...prev,
-        [rid]: {
-          ...activeResume,
-          sections: updatedSections,
-          updatedAt: '刚刚'
-        }
-      };
-    });
-  };
-
-  const addResumeBullet = (
-    sectionId: string,
-    itemId: string,
-    text: string,
-    experienceId?: string
-  ) => {
-    const rid = activeResumeId;
-    if (!rid) return;
-    setResumes((prev) => {
-      const activeResume = prev[rid];
-      if (!activeResume) return prev;
-
-      const newBullet = {
-        id: 'bullet-' + Date.now(),
-        text,
-        originalExperienceId: experienceId,
-        jdMatchTag: experienceId ? '来源经历资产 · 关联' : '自定义补充'
-      };
-
-      const updatedSections = activeResume.sections.map((sec) => {
-        if (sec.id !== sectionId) return sec;
-        return {
-          ...sec,
-          items: sec.items.map((item) => {
-            if (item.id !== itemId) return item;
-            return {
-              ...item,
-              bullets: [...item.bullets, newBullet]
-            };
-          })
-        };
-      });
-
-      return {
-        ...prev,
-        [rid]: {
-          ...activeResume,
-          sections: updatedSections,
-          updatedAt: '刚刚'
-        }
-      };
-    });
-
-    showToast({
-      type: 'success',
-      title: '已添加经历要点'
-    });
-  };
-
-  const deleteResumeBullet = (sectionId: string, itemId: string, bulletId: string) => {
-    const rid = activeResumeId;
-    if (!rid) return;
-    setResumes((prev) => {
-      const activeResume = prev[rid];
-      if (!activeResume) return prev;
-
-      const updatedSections = activeResume.sections.map((sec) => {
-        if (sec.id !== sectionId) return sec;
-        return {
-          ...sec,
-          items: sec.items.map((item) => {
-            if (item.id !== itemId) return item;
-            return {
-              ...item,
-              bullets: item.bullets.filter((b) => b.id !== bulletId)
-            };
-          })
-        };
-      });
-
-      return {
-        ...prev,
-        [rid]: {
-          ...activeResume,
-          sections: updatedSections,
-          updatedAt: '刚刚'
-        }
-      };
-    });
-
-    showToast({
-      type: 'info',
-      title: '已删除该要点'
-    });
-  };
-
-  const saveResume = async (id: string) => {
-    const resume = resumes[id];
-    if (!resume) return;
-    const markdown = resumeToMarkdown(resume);
-    try {
-      const submissionId = Number(id);
-      if (Number.isNaN(submissionId)) {
-        showToast({ type: 'warning', title: '该简历为本地示例', message: '暂不支持保存后端。' });
-        return;
-      }
-      await jobApi.updateSubmission(submissionId, { resume_markdown: markdown });
-      setResumes((prev) => ({
-        ...prev,
-        [id]: { ...prev[id]!, updatedAt: '刚刚' },
-      }));
-      showToast({
-        type: 'success',
-        title: '简历已保存',
-        message: '内容已同步到当前投递记录。'
-      });
-    } catch (error) {
-      console.error('Save resume failed:', error);
-      showToast({
-        type: 'error',
-        title: '保存失败',
-        message: (error as Error).message || '请稍后重试'
-      });
-    }
-  };
-
   // Interview Creation（FE-INTERVIEW-01：已迁移至 features/interview/hooks.ts useCreateInterviewMutation）
 
   const updateQuestionAnswer = (
@@ -1291,10 +974,6 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
         syncExperiences,
         syncJdAnalyses,
         jdAnalyses,
-        resumes,
-        setResumes,
-        activeResumeId,
-        setActiveResumeId,
         interviews,
         syncInterviews,
         nextActions,
@@ -1317,13 +996,6 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
         resumeJob,
         deleteJob,
         deleteJDAnalysis,
-        applyResumeAISuggestion,
-        rejectResumeAISuggestion,
-        applyAllResumeAISuggestions,
-        updateResumeBulletText,
-        addResumeBullet,
-        deleteResumeBullet,
-        saveResume,
         updateQuestionAnswer,
         addCustomQuestion,
         createExperience,
