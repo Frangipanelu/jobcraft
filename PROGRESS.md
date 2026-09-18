@@ -1,8 +1,18 @@
-# PROGRESS.md — JobCraft 求职助手 · 状态与进度记忆
+﻿# PROGRESS.md — JobCraft 求职助手 · 状态与进度记忆
 
 > 本文件用于追踪项目整体进度。AI 在每次会话结束或完成子任务时，必须更新本文件的对应板块。
 
 ## 已完成事项
+
+### FE-REVIEW-01 面试复盘域写入迁移（2026-09-19，commit `a1d1d8a`）
+
+- [x] **`features/review/mappers.ts`**：6 个纯映射 helper（`buildReviewPatchFromAnalysis` / `buildReviewFromPatch` / `nextExperienceVersion` / `applyProposedChanges` / `applyFeedbackSuggestions` / `buildVersionRecord`），score 一律来自真实分析数据，无伪造评分
+- [x] **`features/review/hooks.ts`**：`useCreateInterviewReviewMutation`（legacy `createReviewFromTranscript` 等价：cache 解析面试 → `createInterviewReview` 落库 → `runTaskOrSync('interview_review_analyze')` 降级 `analyzeInterviewReview` 180s；分析失败容忍保 base patch；onSuccess 写 INTERVIEWS cache + 跨域 JOBS cache steps done + 双镜像）；`useApplyReviewFeedbackMutation`（legacy `applyReviewFeedback` 等价，**修复漂移 bug**：写 EXPERIENCES cache + 镜像，不再只 setExperiences；不写零消费者 activities）
+- [x] **视图迁移**：`InterviewReviewCenterView`（读 `useInterviewsQuery`）、`InterviewReviewDetailView`（`useApplyReviewFeedbackMutation` + 镜像注入 + await + toast + 按钮 pending 态）、`CreateReview`（`useJobsQuery`/`useInterviewsQuery`/`useCreateInterviewReviewMutation`，await 后 `navigateTo('interview_review_detail')`，失败停留 + toast）
+- [x] **context 清理**：删除 `addInterviewReview` / `applyReviewFeedback` / `syncReviewToExperience` / `createReviewFromTranscript` / `commitExperienceDiff`（接口+实现+provider）与 `buildReviewPatchFromAnalysis`；收敛 import（去 `tasksApi` / `InterviewReviewResult` / `InterviewReview` / `InterviewQA`）
+- [x] **测试**：`features/review/mappers.test.ts`（11）+ `src/test/review-query.test.tsx`（6：create 双写双镜像/分析失败容忍/缺面试抛错、apply 缓存+镜像（漂移修复断言）/suggestions 兜底、Center 读路径过滤）；全量 **19 文件 / 98 测试全绿**，`npm run lint`（tsc）、`npm run build`、`python scripts/check_encoding.py` 通过
+- [x] **文档**：新增 `features/review/README.md`；更新 `features/interview/README.md` / `features/experiences/README.md` 镜像数据流
+- [x] 已提交（commit `a1d1d8a`），已 push
 
 ### FE-ROUTE-03 E2E 路由验证测试（2026-09-18，commit `c94f574`）
 
