@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useJobCraft } from '../../context/JobCraftContext';
+import { useInterviewsQuery } from '../../features/interview/hooks';
 import {
   RotateCcw,
   Plus,
@@ -17,7 +18,8 @@ import {
 interface InterviewReviewCenterViewProps {}
 
 export const InterviewReviewCenterView: React.FC<InterviewReviewCenterViewProps> = () => {
-  const { interviews, navigateTo } = useJobCraft();
+  const { navigateTo } = useJobCraft();
+  const { data: interviews = [] } = useInterviewsQuery();
   const [searchQuery, setSearchQuery] = useState('');
 
   const interviewsWithReviews = interviews.filter((i) => !!i.review);

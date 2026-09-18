@@ -1,5 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useJobCraft } from '../context/JobCraftContext';
+import { useJobsQuery } from '../features/jobs/hooks';
+import { useInterviewsQuery } from '../features/interview/hooks';
+import { useCreateInterviewReviewMutation } from '../features/review/hooks';
 import { InterviewRoundType, InterviewFormat } from '../types/jobcraft';
 import {
   ArrowLeft,
@@ -31,13 +34,18 @@ const analysisSteps = [
 
 export const CreateReview: React.FC = () => {
   const {
-    jobs,
-    interviews,
-    createReviewFromTranscript,
     navigateTo,
     setJdAnalysisReturnTarget,
-    showToast
+    showToast,
+    syncJobs,
+    syncInterviews
   } = useJobCraft();
+  const { data: jobs = [] } = useJobsQuery();
+  const { data: interviews = [] } = useInterviewsQuery();
+  const createReviewMutation = useCreateInterviewReviewMutation({
+    onSync: syncInterviews,
+    onSyncJobs: syncJobs
+  });
 
   const [step, setStep] = useState<0 | 1 | 2>(0);
 
@@ -188,21 +196,25 @@ export const CreateReview: React.FC = () => {
       return () => clearTimeout(timer);
     } else {
       const timer = setTimeout(async () => {
-        const targetInterviewId = await createReviewFromTranscript({
-          interviewId: selectedInterviewId,
-          transcript: pasteText
-        });
+        try {
+          const { interviewId } = await createReviewMutation.mutateAsync({
+            interviewId: selectedInterviewId,
+            transcript: pasteText
+          });
 
-        if (targetInterviewId) {
           showToast({
             type: 'success',
             title: '面试复盘已生成',
             message: `已完成「${selectedJob?.company || manualForm.company || '字节跳动'} ${manualForm.roundName}」的深度逐题诊断与经历库反哺。`
           });
-          navigateTo('interview_review_detail', { interviewId: targetInterviewId });
-        } else {
+          navigateTo('interview_review_detail', { interviewId });
+        } catch (error) {
+          showToast({
+            type: 'error',
+            title: '面试复盘失败',
+            message: (error as Error).message || '请稍后重试'
+          });
           setIsAnalyzing(false);
-          navigateTo('interview_review_center');
         }
       }, 500);
       return () => clearTimeout(timer);

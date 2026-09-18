@@ -5,15 +5,15 @@
 ## 数据流（cache 为权威，context 为过渡镜像）
 
 ```
-interviewApi.listInterviewPreps ──► useInterviewsQuery ──► react-query cache(['interviews']) ──► 已迁移视图（Center / Workspace）
-                                                                │  onSync ──► context.interviews ──► 未迁移视图
-legacy writers（loadInterviews、复盘 writers addInterviewReview / commitExperienceDiff / applyReviewFeedback）
+interviewApi.listInterviewPreps ──► useInterviewsQuery ──► react-query cache(['interviews']) ──► 已迁移视图（Center / Workspace / Review Center / Review Detail / CreateReview）
+                                                                 │  onSync ──► context.interviews ──► 未迁移视图
+review writers（FE-REVIEW-01 useCreateInterviewReviewMutation / useApplyReviewFeedbackMutation）
   ── 写入 cache ───────────────────────────────────────────────┘
 ```
 
 - **已迁移视图只读 cache**；`context.interviews` 仅是给未迁移消费者保留的**只读镜像**。
 - 创建为**跨域写**：`useCreateInterviewMutation` 写 `['interviews']` 后按 `variables.jobId` 补写 `['jobs']`（`interviewIds` / `steps.prepStage`），并分别 `onSync` / `onSyncJobs` 同步两个镜像。
-- 复盘字段（`Interview.review`）后端不加载，仅在写路径于内存构建；复盘 writers 必须双写 `['interviews']` cache，保证镜像与 cache 一致。
+- 复盘字段（`Interview.review`）后端不加载，仅在写路径于内存构建；复盘 writers（`features/review/hooks.ts`）必须双写 `['interviews']` cache，保证镜像与 cache 一致。
 - 两侧共用同一映射实现（`mappers.ts`），杜绝漂移。
 
 ## 模块
@@ -40,7 +40,7 @@ navigateTo('interview_prep_workspace', { interviewId: created.id });
 
 1. 读路径：`useInterviewsQuery()`；`const interviews = data || []`；`isLoading && data === undefined` 时渲染加载态。
 2. 创建路径：`useCreateInterviewMutation({ onSync: syncInterviews, onSyncJobs: syncJobs })`；`mutateAsync(...).id` 导航；删除 `createInterview` context 依赖。
-3. 未迁移写路径（workspace 复盘叠加 `addInterviewReview` 等）保持 context 直写，但必须维持 cache 双写（已有）。
+3. 复盘写路径：`features/review/hooks.ts`（`useCreateInterviewReviewMutation` / `useApplyReviewFeedbackMutation`），见 `features/review/README.md`。
 4. 全部迁移完成后执行 FE-CONTEXT-REMOVE：删除 `syncInterviews`、legacy double-write、`JobCraftContext.interviews` 相关 writers 与无消费者的 `updateQuestionAnswer` / `addCustomQuestion` / `nextActions`。
 
 ## 测试

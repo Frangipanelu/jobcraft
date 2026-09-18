@@ -8,23 +8,20 @@ import {
   JDAnalysis,
   ResumeVersion,
   Interview,
-  InterviewReview,
   ActivityLog,
   NextActionItem,
   AISuggestionCard,
   PreparedAnswer,
   InterviewPreparation,
   HistoricalResume,
-  InterviewDraft,
-  InterviewQA
+  InterviewDraft
 } from '../types/jobcraft';
 import { markdownToResume, resumeToMarkdown } from '../utils/resumeParser';
 import * as authApi from '../api/auth'
 import * as experienceApi from '../api/experience'
 import * as jobApi from '../api/job'
 import * as interviewApi from '../api/interview'
-import * as tasksApi from '../api/tasks'
-import type { Submission, InterviewReviewResult } from '../api/types'
+import type { Submission } from '../api/types'
 import { JOBS_QUERY_KEY, submissionToJob, deriveJobStatus } from '../features/jobs/mappers'
 import { EXPERIENCES_QUERY_KEY, cardToExperience } from '../features/experiences/mappers'
 import { JD_ANALYSES_QUERY_KEY, analysisDetailToJD } from '../features/jd/mappers'
@@ -35,83 +32,6 @@ export interface ToastMessage {
   type: 'success' | 'info' | 'warning' | 'error';
   title: string;
   message?: string;
-}
-
-// 把后端面试复盘分析结果（InterviewReviewResult）映射为前端消费的 InterviewReview 字段。
-// 仅使用真实数据，不引入任何伪造评分。
-function buildReviewPatchFromAnalysis(
-  analysis: InterviewReviewResult,
-  qaCount: number
-): Partial<InterviewReview> {
-  // 每个 ReviewedQuestion 只有单个 score（无四维拆分），故四维诊断沿用真实 score 派生，
-  // 而非随机/硬编码；无题目时不下发 competencies，由详情页兜底渲染文案。
-  let competencies: { name: string; score: number; benchmark: number }[] | undefined;
-  if (analysis.questions && analysis.questions.length > 0) {
-    competencies = [
-      { name: '岗位匹配度', score: analysis.overall_score, benchmark: 80 },
-      { name: '回答结构性', score: analysis.overall_score, benchmark: 78 },
-      { name: '专业技术深度', score: analysis.overall_score, benchmark: 82 },
-      { name: '表达清晰度', score: analysis.overall_score, benchmark: 75 }
-    ];
-  }
-
-  const qaList: InterviewQA[] = (analysis.questions || []).map((q, idx) => {
-    const score = q.score;
-    const derived = {
-      clarity: score,
-      impact: score,
-      decision: score,
-      fluency: score
-    };
-    return {
-      id: `qa-${q.sequence || idx + 1}`,
-      qIndex: idx + 1,
-      question: q.question_text || '未记录题目',
-      score,
-      candidateAnswer: q.my_answer || '',
-      transcript: q.my_answer || undefined,
-      metricCards: {
-        clarityScore: score,
-        clarityDesc: 'AI 综合评估',
-        impactScore: score,
-        impactDesc: 'AI 综合评估',
-        decisionScore: score,
-        decisionDesc: 'AI 综合评估',
-        fluencyScore: score,
-        fluencyDesc: 'AI 综合评估'
-      },
-      interviewerIntent: {
-        mainPoints: [q.intent || q.dimension || ''],
-        importanceStars: Math.max(3, Math.min(5, Math.round(score / 20))),
-        productAbilityStars: Math.max(3, Math.min(5, Math.round(score / 20))),
-        techDepthStars: Math.max(3, Math.min(5, Math.round(score / 20)))
-      },
-      answerAnalysis: {
-        completeness: score,
-        structure: score,
-        persuasiveness: score,
-        jobRelevance: score,
-        clarity: derived.clarity,
-        impact: derived.impact,
-        decision: derived.decision,
-        fluency: derived.fluency
-      },
-      identifiedIssues: q.feedback || [],
-      suggestionAdvice: (q.suggestions || []).join(' ') || ''
-    };
-  });
-
-  return {
-    overallScore: analysis.overall_score,
-    passProbability: analysis.overall_score >= 80 ? '通过概率较高' : '存在差距，建议针对性补强',
-    totalQACount: qaCount,
-    highlights: analysis.strengths || [],
-    drawbacks: analysis.weaknesses || [],
-    competencies,
-    coreProblems: analysis.weaknesses || [],
-    aiDiagnosis: analysis.summary || '',
-    qaList
-  };
 }
 
 interface JobCraftContextType {
@@ -209,23 +129,6 @@ interface JobCraftContextType {
   // Interview actions
   updateQuestionAnswer: (interviewId: string, questionId: string, answer: Partial<PreparedAnswer>, isPrepared?: boolean) => void;
   addCustomQuestion: (interviewId: string, questionText: string, focusText: string) => void;
-
-  // Review & Experience Feedback actions
-  addInterviewReview: (
-    interviewId: string,
-    customReview?: Partial<InterviewReview>
-  ) => void;
-  applyReviewFeedback: (interviewId: string, feedbackIndex: number) => void;
-  syncReviewToExperience: (experienceId: string, feedbackText: string) => void;
-  createReviewFromTranscript: (data: {
-    interviewId: string;
-    transcript: string;
-  }) => Promise<string | undefined>;
-  commitExperienceDiff: (
-    experienceId: string,
-    proposedVersion: string,
-    proposedChanges: { field: string; from: string; to: string }[]
-  ) => void;
 
   // Experience Library actions
   createExperience: (exp: Partial<Experience>) => Promise<string>;
@@ -1189,304 +1092,6 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
     });
   };
 
-  // Review & Experience Feedback
-  const createReviewFromTranscript = async (data: {
-    interviewId: string;
-    transcript: string;
-  }): Promise<string | undefined> => {
-    const targetInterview = interviews.find((i) => i.id === data.interviewId);
-    if (!targetInterview) return;
-
-    // 调用后端 API 创建复盘记录，再触发真实 AI 分析，使用返回结果填充 review（无伪造评分）
-    try {
-      const result = await interviewApi.createInterviewReview({
-        user_id: currentUserId,
-        company: targetInterview.company,
-        position: targetInterview.role,
-        round_type: targetInterview.roundType,
-        raw_text: data.transcript
-      });
-      let analysis: InterviewReviewResult | null = null;
-      try {
-        const sequences = (result.qa_pairs || []).map((p) => p.sequence);
-        if (result.record_id && sequences.length > 0) {
-          analysis = await tasksApi.runTaskOrSync<InterviewReviewResult>(
-            'interview_review_analyze',
-            {
-              user_id: currentUserId,
-              record_id: result.record_id,
-              selected_sequences: sequences
-            },
-            () => interviewApi.analyzeInterviewReview(result.record_id, sequences, currentUserId),
-            { timeout: 180_000 }
-          );
-        }
-      } catch (e) {
-        // 分析失败不阻塞落库，保留 create 阶段的基础数据
-        console.error('Interview review analyze failed:', e);
-      }
-
-      const patch = analysis
-        ? buildReviewPatchFromAnalysis(analysis, result.qa_pair_count || 0)
-        : { overallScore: Math.round((result.qa_pair_count || 4) * 10), totalQACount: result.qa_pair_count || 0 };
-
-      addInterviewReview(targetInterview.id, patch);
-      return targetInterview.id;
-    } catch (error) {
-      console.error('Interview review failed:', error);
-      showToast({
-        type: 'error',
-        title: '面试复盘失败',
-        message: (error as Error).message || '请稍后重试'
-      });
-      return undefined;
-    }
-  };
-
-  const addInterviewReview = (
-    interviewId: string,
-    customReview?: Partial<InterviewReview>
-  ) => {
-    const targetInterview = interviews.find((i) => i.id === interviewId);
-    if (!targetInterview) return;
-
-    const newReview: InterviewReview = {
-      id: 'rev-' + Date.now(),
-      interviewId: targetInterview.id,
-      company: targetInterview.company,
-      role: targetInterview.role,
-      roundName: targetInterview.roundName,
-      reviewDate: new Date().toISOString().split('T')[0],
-      overallScore: customReview?.overallScore ?? 0,
-      passProbability: customReview?.passProbability || '',
-      totalQACount: customReview?.totalQACount || customReview?.qaBreakdown?.length || 0,
-      highlights: customReview?.highlights || [],
-      drawbacks: customReview?.drawbacks || [],
-      competencies: customReview?.competencies || [],
-      coreProblems: customReview?.coreProblems || [],
-      preparationVsActual: customReview?.preparationVsActual || [],
-      aiDiagnosis: customReview?.aiDiagnosis || '',
-      qaBreakdown: customReview?.qaBreakdown || [],
-      qaList: customReview?.qaList || [],
-      experienceFeedback: customReview?.experienceFeedback || [],
-      experienceFeedbacks: customReview?.experienceFeedbacks || []
-    };
-
-    setInterviews((prev) => {
-      const next = prev.map((i): Interview =>
-        i.id === targetInterview.id ? { ...i, status: 'completed', review: newReview } : i
-      )
-      // 过渡期双写（FE-INTERVIEW-01）：复盘写入需要同步 interviews cache，供已迁移视图读取。
-      queryClient.setQueryData([...INTERVIEWS_QUERY_KEY], next)
-      return next
-    });
-
-    if (targetInterview.jobId) {
-      setJobs((prev) =>
-        prev.map((j) =>
-          j.id === targetInterview.jobId
-            ? {
-                ...j,
-                steps: { ...j.steps, reviewStage: 'done', prepStage: 'done' }
-              }
-            : j
-        )
-      );
-    }
-
-    showToast({
-      type: 'success',
-      title: '智能复盘报告已生成',
-      message: `已解析面试问答记录，综合评分 ${newReview.overallScore} 分。`
-    });
-  };
-
-  const syncReviewToExperience = (experienceId: string, feedbackText: string) => {
-    setExperiences((prev) =>
-      prev.map((exp) => {
-        if (exp.id !== experienceId) return exp;
-        const nextVerNum = (parseFloat(exp.currentVersion.replace('V', '')) + 0.1).toFixed(1);
-        const nextVersion = `V${nextVerNum}`;
-        const newAction = `[实战高光沉淀] ${feedbackText}`;
-        const newVersionRecord = {
-          version: nextVersion,
-          date: new Date().toISOString().split('T')[0],
-          reason: '基于面试真实复盘亮点沉淀入库',
-          source: 'interview_review' as const,
-          changes: [{ field: 'actions', from: '原版本行动', to: newAction }]
-        };
-        return {
-          ...exp,
-          currentVersion: nextVersion,
-          actions: [newAction, ...exp.actions],
-          versionHistory: [newVersionRecord, ...(exp.versionHistory || [])]
-        };
-      })
-    );
-  };
-
-  const commitExperienceDiff = (
-    experienceId: string,
-    proposedVersion: string,
-    proposedChanges: { field: string; from: string; to: string }[]
-  ) => {
-    setExperiences((prev) =>
-      prev.map((exp) => {
-        if (exp.id !== experienceId) return exp;
-
-        // Apply proposed changes into experience fields
-        const updatedExp = { ...exp };
-        proposedChanges.forEach((change) => {
-          if (change.field.includes('responsibility')) {
-            updatedExp.responsibility = change.to;
-          } else if (change.field.includes('actions')) {
-            updatedExp.actions = [change.to, ...exp.actions.slice(1)];
-          } else if (change.field.includes('background')) {
-            updatedExp.background = change.to;
-          }
-        });
-
-        const newVersionRecord = {
-          version: proposedVersion,
-          date: new Date().toISOString().split('T')[0],
-          reason: '基于面试真实复盘与面试官深挖问题进行证据增强',
-          source: 'interview_review' as const,
-          changes: proposedChanges
-        };
-
-        return {
-          ...updatedExp,
-          currentVersion: proposedVersion,
-          versionHistory: [newVersionRecord, ...exp.versionHistory]
-        };
-      })
-    );
-
-    // Update the review feedback applied flag
-    setInterviews((prev) => {
-      const next = prev.map((int): Interview => {
-        if (!int.review) return int;
-        return {
-          ...int,
-          review: {
-            ...int.review,
-            experienceFeedbacks: int.review.experienceFeedbacks.map((fb) =>
-              fb.experienceId === experienceId ? { ...fb, applied: true } : fb
-            )
-          }
-        };
-      })
-      // 过渡期双写（FE-INTERVIEW-01）：复盘写入需要同步 interviews cache，供已迁移视图读取。
-      queryClient.setQueryData([...INTERVIEWS_QUERY_KEY], next)
-      return next
-    });
-
-    showToast({
-      type: 'success',
-      title: `经历资产已升级为 ${proposedVersion}！`,
-      message: `已将面试复盘证据沉淀至「我的经历库」，后续岗位与面试将自动复用。`
-    });
-
-    setActivities((prev) => [
-      {
-        id: 'act-' + Date.now(),
-        type: 'experience',
-        title: `沉淀面试复盘反馈：升级经历为 ${proposedVersion}`,
-        desc: '补充了方案选型决策对比与算法协同量化证据',
-        timestamp: '刚刚',
-        targetTab: 'experiences'
-      },
-      ...prev
-    ]);
-  };
-
-  const applyReviewFeedback = (interviewId: string, feedbackIndex: number) => {
-    const targetInterview = interviews.find((i) => i.id === interviewId);
-    if (!targetInterview || !targetInterview.review) return;
-
-    const feedbacks = targetInterview.review.experienceFeedbacks || [];
-    const feedback = feedbacks[feedbackIndex];
-    if (!feedback) return;
-
-    const experienceId = feedback.experienceId;
-    const proposedVersion = feedback.proposedVersion || 'V2';
-    const proposedChanges = feedback.proposedChanges || [];
-
-    // 1. Update the experience in state
-    setExperiences((prev) =>
-      prev.map((exp) => {
-        if (exp.id !== experienceId) return exp;
-
-        const updatedExp = { ...exp };
-        if (proposedChanges.length > 0) {
-          proposedChanges.forEach((change) => {
-            if (change.field.includes('responsibility')) {
-              updatedExp.responsibility = change.to;
-            } else if (change.field.includes('actions')) {
-              updatedExp.actions = [change.to, ...exp.actions.slice(1)];
-            } else if (change.field.includes('background')) {
-              updatedExp.background = change.to;
-            }
-          });
-        } else if (feedback.suggestions && feedback.suggestions.length > 0) {
-          updatedExp.actions = [
-            `[面试复盘升级] ${feedback.suggestions[0]}`,
-            ...exp.actions
-          ];
-        }
-
-        const newVersionRecord = {
-          version: proposedVersion,
-          date: new Date().toISOString().split('T')[0],
-          reason: '基于面试真实复盘与面试官深挖问题进行证据增强',
-          source: 'interview_review' as const,
-          changes: proposedChanges.length > 0 ? proposedChanges : [
-            { field: 'actions', from: exp.actions[0] || '', to: updatedExp.actions[0] || '' }
-          ]
-        };
-
-        return {
-          ...updatedExp,
-          currentVersion: proposedVersion,
-          versionHistory: [newVersionRecord, ...(exp.versionHistory || [])]
-        };
-      })
-    );
-
-    // 2. Mark this feedback as applied in the interview's review
-    setInterviews((prev) => {
-      const next = prev.map((int): Interview => {
-        if (int.id !== interviewId || !int.review) return int;
-        const updatedFeedbacks = (int.review.experienceFeedbacks || []).map((fb, idx) =>
-          idx === feedbackIndex ? { ...fb, applied: true } : fb
-        );
-        return {
-          ...int,
-          review: {
-            ...int.review,
-            experienceFeedbacks: updatedFeedbacks
-          }
-        };
-      })
-      // 过渡期双写（FE-INTERVIEW-01）：复盘写入需要同步 interviews cache，供已迁移视图读取。
-      queryClient.setQueryData([...INTERVIEWS_QUERY_KEY], next)
-      return next
-    });
-
-    // 3. Log activity
-    setActivities((prev) => [
-      {
-        id: 'act-' + Date.now(),
-        type: 'experience',
-        title: `沉淀面试复盘反馈：升级经历为 ${proposedVersion}`,
-        desc: `为「${feedback.experienceTitle || '核心经历'}」补充了面试实战证据与选型量化结果`,
-        timestamp: '刚刚',
-        targetTab: 'experiences'
-      },
-      ...prev
-    ]);
-  };
-
   // Experience Library CRUD
   // 过渡期 legacy 经历写入方（FE-EXPERIENCES-01）：视图已迁 hooks，此处保留给 context 内部流程，
   // 每个写入点同步 query cache 防镜像漂移（FE-CONTEXT-REMOVE 移除）。
@@ -1721,11 +1326,6 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
         saveResume,
         updateQuestionAnswer,
         addCustomQuestion,
-        addInterviewReview,
-        applyReviewFeedback,
-        syncReviewToExperience,
-        createReviewFromTranscript,
-        commitExperienceDiff,
         createExperience,
         updateExperience,
         deleteExperience,

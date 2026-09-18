@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { useJobCraft } from '../../context/JobCraftContext';
+import { useInterviewsQuery } from '../../features/interview/hooks';
+import { useApplyReviewFeedbackMutation } from '../../features/review/hooks';
 import { useTabNavigate } from '../../router/tabPaths';
 import {
   ArrowLeft,
@@ -23,7 +25,12 @@ interface InterviewReviewDetailViewProps {
 export const InterviewReviewDetailView: React.FC<InterviewReviewDetailViewProps> = ({
   interviewId
 }) => {
-  const { interviews, applyReviewFeedback, showToast } = useJobCraft();
+  const { showToast, syncInterviews, syncExperiences } = useJobCraft();
+  const { data: interviews = [] } = useInterviewsQuery();
+  const applyFeedbackMutation = useApplyReviewFeedbackMutation({
+    onSync: syncInterviews,
+    onSyncExperiences: syncExperiences
+  });
   const go = useTabNavigate();
 
   const currentInterview = interviews.find((i) => i.id === interviewId);
@@ -48,13 +55,24 @@ export const InterviewReviewDetailView: React.FC<InterviewReviewDetailViewProps>
   const qaList: InterviewQA[] = review.qaList && review.qaList.length > 0 ? review.qaList : [];
   const selectedQA: InterviewQA | undefined = qaList[selectedQAIndex] || qaList[0];
 
-  const handleApplyFeedback = (feedbackIndex: number) => {
-    applyReviewFeedback(currentInterview.id, feedbackIndex);
-    showToast({
-      type: 'success',
-      title: '经历资产已升级',
-      message: '已将本次面试复盘的建议沉淀至经历资产库最新版本！'
-    });
+  const handleApplyFeedback = async (feedbackIndex: number) => {
+    try {
+      await applyFeedbackMutation.mutateAsync({
+        interviewId: currentInterview.id,
+        feedbackIndex
+      });
+      showToast({
+        type: 'success',
+        title: '经历资产已升级',
+        message: '已将本次面试复盘的建议沉淀至经历资产库最新版本！'
+      });
+    } catch (e) {
+      showToast({
+        type: 'error',
+        title: '沉淀失败',
+        message: (e as Error).message || '请稍后重试'
+      });
+    }
   };
 
   // Helper for score badge color
@@ -334,7 +352,8 @@ export const InterviewReviewDetailView: React.FC<InterviewReviewDetailViewProps>
               ) : (
                 <button
                   onClick={() => feedbackIndex !== undefined && feedbackIndex >= 0 && handleApplyFeedback(feedbackIndex)}
-                  className="flex items-center gap-1 px-3.5 py-1.5 bg-sage hover:bg-sage-dim text-white text-xs font-bold rounded-lg transition shadow-xs cursor-pointer shrink-0"
+                  disabled={applyFeedbackMutation.isPending}
+                  className="flex items-center gap-1 px-3.5 py-1.5 bg-sage hover:bg-sage-dim text-white text-xs font-bold rounded-lg transition shadow-xs cursor-pointer shrink-0 disabled:opacity-60"
                 >
                   <span>沉淀至经历库</span>
                   <ArrowRight className="w-3.5 h-3.5" />

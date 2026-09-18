@@ -9,7 +9,7 @@ login → loadExperiences（legacy）→ listCards(userId) → cardToExperience 
                                                                               └→ query cache（双写）
 ExperiencesView / NewExperienceModal 读：useExperiencesQuery（cache 权威）
 ExperiencesView / NewExperienceModal 写：useCreate/Update/DeleteExperienceMutation → cache → onSync → context 镜像
-context 内部写入方（review 落盘 syncReviewToExperience / commitExperienceDiff）→ setExperiences → 双写 cache
+context 内部写入方（review 落盘已迁 FE-REVIEW-01：useApplyReviewFeedbackMutation → cache → onSyncExperiences → context 镜像）
 ```
 
 - **权威与镜像**：react-query cache 是 views 的读源；`context.experiences` 为只读镜像（ResumeEditorView /
