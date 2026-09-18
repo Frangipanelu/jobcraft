@@ -1,5 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { useJobCraft } from '../../context/JobCraftContext';
+import { useJobsQuery } from '../../features/jobs/hooks';
+import { useExperiencesQuery } from '../../features/experiences/hooks';
+import {
+  useResumesQuery,
+  useApplyResumeAiSuggestionMutation,
+  useRejectResumeAiSuggestionMutation,
+  useApplyAllResumeAiSuggestionsMutation,
+  useUpdateResumeBulletTextMutation,
+  useDeleteResumeBulletMutation,
+  useSaveResumeMutation,
+} from '../../features/resume/hooks';
 import {
   FileText,
   Sparkles,
@@ -35,22 +46,20 @@ export const ResumeEditorView: React.FC<ResumeEditorViewProps> = ({
   jobId,
   embedded = false
 }) => {
-  const {
-    jobs,
-    resumes,
-    experiences,
-    activeResumeId,
-    setActiveResumeId,
-    applyResumeAISuggestion,
-    rejectResumeAISuggestion,
-    applyAllResumeAISuggestions,
-    updateResumeBulletText,
-    addResumeBullet,
-    deleteResumeBullet,
-    saveResume,
-    navigateTo,
-    showToast
-  } = useJobCraft();
+  const { navigateTo, showToast } = useJobCraft();
+  const { data: jobs = [] } = useJobsQuery();
+  const { data: resumes = {} } = useResumesQuery();
+  const { data: experiences = [] } = useExperiencesQuery();
+
+  const applySuggestion = useApplyResumeAiSuggestionMutation();
+  const rejectSuggestion = useRejectResumeAiSuggestionMutation();
+  const applyAllSuggestions = useApplyAllResumeAiSuggestionsMutation();
+  const editBullet = useUpdateResumeBulletTextMutation();
+  const deleteBullet = useDeleteResumeBulletMutation();
+  const saveResume = useSaveResumeMutation();
+
+  // active 简历 id 为编辑器局部状态（legacy context.activeResumeId 仅本视图消费）
+  const [activeResumeId, setActiveResumeId] = useState<string | null>(null);
 
   // 解析当前编辑的简历 id：优先显式 resumeId，其次由 jobId 定位投递站简历，最后回退第一个真实简历
   const boundResumeId = resumeId
@@ -99,13 +108,43 @@ export const ResumeEditorView: React.FC<ResumeEditorViewProps> = ({
     setSelectedBulletForSource(bulletId);
   };
 
+  // resume 非空已由上方早退保证 → activeId 必非空（TS 需显式收窄）
+  const rid = activeId as string;
+
   const handleSaveBulletEdit = (sectionId: string, itemId: string, bulletId: string) => {
-    updateResumeBulletText(sectionId, itemId, bulletId, tempBulletText);
+    editBullet.mutate({ resumeId: rid, sectionId, itemId, bulletId, newText: tempBulletText });
     setEditingBulletId(null);
     showToast({
       type: 'success',
       title: '要点内容已保存'
     });
+  };
+
+  const handleSave = (resumeId: string) => {
+    saveResume
+      .mutateAsync({ resumeId })
+      .then((result) => {
+        if (result.saved) {
+          showToast({
+            type: 'success',
+            title: '简历已保存',
+            message: '内容已同步到当前投递记录。'
+          });
+        } else {
+          showToast({
+            type: 'warning',
+            title: '该简历为本地示例',
+            message: '暂不支持保存后端。'
+          });
+        }
+      })
+      .catch((error: unknown) => {
+        showToast({
+          type: 'error',
+          title: '保存失败',
+          message: (error as Error).message || '请稍后重试'
+        });
+      });
   };
 
   const handleExportPDF = () => {
@@ -142,7 +181,7 @@ export const ResumeEditorView: React.FC<ResumeEditorViewProps> = ({
 
           <div className="flex items-center gap-2.5 shrink-0">
             <button
-              onClick={() => saveResume(activeId)}
+              onClick={() => handleSave(rid)}
               className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg border border-edge bg-white hover:bg-page text-ink text-xs font-semibold transition cursor-pointer"
             >
               <Save className="w-3.5 h-3.5" />
@@ -171,7 +210,7 @@ export const ResumeEditorView: React.FC<ResumeEditorViewProps> = ({
 
           <div className="flex items-center gap-2.5">
             <button
-              onClick={() => saveResume(activeId)}
+              onClick={() => handleSave(rid)}
               className="flex items-center gap-1 px-3 py-1 rounded-md border border-edge bg-white hover:bg-page text-ink text-xs font-semibold transition cursor-pointer"
             >
               <Save className="w-3.5 h-3.5" />
@@ -203,7 +242,7 @@ export const ResumeEditorView: React.FC<ResumeEditorViewProps> = ({
               </div>
               {pendingSuggestions.length > 0 && (
                 <button
-                  onClick={applyAllResumeAISuggestions}
+                  onClick={() => applyAllSuggestions.mutate({ resumeId: rid })}
                   className="text-xs font-semibold text-sage hover:text-sage-dim transition cursor-pointer"
                 >
                   全部应用
@@ -251,13 +290,13 @@ export const ResumeEditorView: React.FC<ResumeEditorViewProps> = ({
                   {!sug.applied && !sug.rejected && (
                     <div className="flex items-center gap-2 pt-1">
                       <button
-                        onClick={() => applyResumeAISuggestion(sug.id)}
+                        onClick={() => applySuggestion.mutate({ resumeId: rid, suggestionId: sug.id })}
                         className="flex-1 py-1 rounded bg-sage hover:bg-sage-dim text-white text-xs font-semibold transition text-center shadow-2xs cursor-pointer"
                       >
                         应用优化
                       </button>
                       <button
-                        onClick={() => rejectResumeAISuggestion(sug.id)}
+                        onClick={() => rejectSuggestion.mutate({ resumeId: rid, suggestionId: sug.id })}
                         className="px-2.5 py-1 rounded bg-page hover:bg-edge text-muted text-xs transition cursor-pointer"
                       >
                         忽略
@@ -381,7 +420,7 @@ export const ResumeEditorView: React.FC<ResumeEditorViewProps> = ({
                                   <button
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      deleteResumeBullet(section.id, item.id, bullet.id);
+                                      deleteBullet.mutate({ resumeId: rid, sectionId: section.id, itemId: item.id, bulletId: bullet.id });
                                     }}
                                     className="p-1 text-faint hover:text-error rounded transition cursor-pointer"
                                     title="删除要点"

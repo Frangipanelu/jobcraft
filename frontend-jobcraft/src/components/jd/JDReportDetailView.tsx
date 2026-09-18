@@ -4,6 +4,7 @@ import { useTabNavigate } from '../../router/tabPaths';
 import type { Experience } from '../../types/jobcraft';
 import { saveResume } from '../../api/job';
 import { useJdAnalysesQuery } from '../../features/jd/hooks';
+import { useUpsertResumeMutation } from '../../features/resume/hooks';
 import {
   ArrowLeft,
   ArrowRight,
@@ -57,15 +58,15 @@ export const JDReportDetailView: React.FC<JDReportDetailViewProps> = ({
   const {
     jobs,
     experiences,
-    resumes,
     setSelectedJobId,
     setSelectedJDId,
-    setResumes,
     jdAnalysisReturnTarget,
     setJdAnalysisReturnTarget,
     showToast
   } = useJobCraft();
   const go = useTabNavigate();
+
+  const upsertResume = useUpsertResumeMutation();
 
   const { data: jdAnalyses = [], isLoading } = useJdAnalysesQuery();
 
@@ -265,7 +266,7 @@ export const JDReportDetailView: React.FC<JDReportDetailViewProps> = ({
             selected_card_ids: selectedIds.length > 0 ? selectedIds : experiences.map(e => parseInt(e.id)).filter(id => !isNaN(id)),
           });
           if (result.resume_markdown && result.submission_id) {
-            // 将生成的简历添加到 resumes 状态
+            // 将生成的简历并入 RESUMES cache
             const { markdownToResume } = await import('../../utils/resumeParser');
             const resumeVersion = markdownToResume(result.resume_markdown, {
               position: currentAnalysis.role,
@@ -273,10 +274,10 @@ export const JDReportDetailView: React.FC<JDReportDetailViewProps> = ({
               id: String(result.submission_id),
             });
             if (resumeVersion) {
-              setResumes(prev => ({
-                ...prev,
-                [String(result.submission_id)]: resumeVersion,
-              }));
+              upsertResume.mutate({
+                resumeId: String(result.submission_id),
+                resume: resumeVersion,
+              });
             }
           }
         } catch (err) {
