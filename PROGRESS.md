@@ -834,3 +834,14 @@
     4. `GET /cards/search` 前端消费者为 0（grep 前端 0 引用），后端唯一调用链为 `app/api/experience.py:467` 端点 → `db_tools.search_cards/count_search_cards`；`count_search_cards` 为分页镜像必须与 `search_cards` 同步改否则 total/items 不一致。
   - **决策（方案 C）**：不创建 V0006、不修改 `search_cards`/`count_search_cards`、不改 API contract、不改数据库技术栈。理由：技术上能做 ≠ 产品上现在该做；当前阶段前端未接线，硬上 FULLTEXT 只增加写入维护成本且带来语义变化风险。
   - **触发条件**：未来前端正式接入搜索并确定全文检索语义后，作为独立 Search Optimization Task 重新评估。届时方案 A = V0006 `ADD FULLTEXT INDEX ... WITH PARSER ngram`（沿用 DB-02 幂等模式）+ `search_cards`/`count_search_cards` 改 `MATCH...AGAINST(IN BOOLEAN MODE)`（需关键词转义、MATCH 列序与索引一致、短词兜底）。本项无代码变更、无 commit。
+
+### FE-INTERVIEW-01 面试域数据层迁移（2026-09-18，commit `99f0a07`）
+
+- [x] **`features/interview/mappers.ts`**：`INTERVIEWS_QUERY_KEY` + `mapRoundType` / `roundTypeToCn` / `prepRecordToInterview` / `buildInterviewFromPrep` 自 context 移出（映射单源，含 legacy `业务`→`product` 分支顺序）；context 删除本地实现
+- [x] **`features/interview/hooks.ts`**：`useInterviewsQuery`（getCurrentUser → listInterviewPreps → prepRecordToInterview）；`useCreateInterviewMutation`（JOBS cache 解析 jdAnalysisId 缺失抛错 → runTaskOrSync → 降级 generateInterviewPrep → 构建 Interview → INTERVIEWS cache 前置插入 + 跨域补写 JOBS cache interviewIds/prepStage → onSync + onSyncJobs 双镜像；mutateAsync 返回含 id 的 Interview 供 navigateTo；不内置 toast/nextActions）
+- [x] **context 改造**：接口/provider 增 `syncInterviews`、删 `createInterview`；`loadInterviews` 双写 cache（updater 内）；复盘 writers（`addInterviewReview` / `commitExperienceDiff` / `applyReviewFeedback`）改块体 updater（`(int): Interview` 标注）并双写 INTERVIEWS cache；清理未用导入（InterviewPrepRecord/InterviewPrepResult/ApiInterviewPrepRecord）
+- [x] **视图迁移**：`InterviewPrepCenterView` / `InterviewPrepWorkspaceView` 读 `useInterviewsQuery`；`NewInterviewModal` / `CreateInterview` 改 `useCreateInterviewMutation`（`mutateAsync(...).id` 导航）；toast 保留视图层
+- [x] **测试**：`mappers.test.ts`（5）+ `interview-query.test.tsx`（3：列表+搜索+镜像、创建走 task fallback→generateInterviewPrep＋双镜像＋job.interviewIds、jdAnalysisId 缺失抛错）；全量 `npm test` **17 文件 / 72 测试全绿**，tsc（lint）、build 通过
+- [x] **E2E**：全栈（Docker mysql/redis/backend:8000）下 Playwright 15 用例 **14/15 通过**；唯一失败「侧边栏→面试准备」为 beforeEach 偶发登录页未进入工作台（同模式其余用例含「登录后进入工作台」通过），**单独重跑通过（14.7s）**，判定非回归
+- [x] 已提交（commit `99f0a07`）
+- [ ] 留白：`updateQuestionAnswer` / `addCustomQuestion` / `nextActions`（无消费者）待 FE-CONTEXT-REMOVE 清理；workspace 内复盘叠加写路径保持 context；`syncInterviews` 与双写随 FE-CONTEXT-REMOVE 拆除
