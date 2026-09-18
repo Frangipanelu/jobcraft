@@ -845,3 +845,16 @@
 - [x] **E2E**：全栈（Docker mysql/redis/backend:8000）下 Playwright 15 用例 **14/15 通过**；唯一失败「侧边栏→面试准备」为 beforeEach 偶发登录页未进入工作台（同模式其余用例含「登录后进入工作台」通过），**单独重跑通过（14.7s）**，判定非回归
 - [x] 已提交（commit `99f0a07`）
 - [ ] 留白：`updateQuestionAnswer` / `addCustomQuestion` / `nextActions`（无消费者）待 FE-CONTEXT-REMOVE 清理；workspace 内复盘叠加写路径保持 context；`syncInterviews` 与双写随 FE-CONTEXT-REMOVE 拆除
+
+### FE-JD-02 JD create 收尾（2026-09-18，本轮）
+
+> 承接 FE-JD-01：把`JDAnalysisCenterView`的`createStructuredJDAnalysis`与`NewInterviewModal`的`createJDAnalysis`两位 legacy 写入迁到 features/jd 数据层，context 删除两个 method。
+
+- [x] **`features/jd/mappers.ts`**：新增 `dutiesText` / `requirementsText` / `StructuredJDAnalysisMeta` / `structuredResultToJD`（自 context 内联映射移出为唯一实现，含 `subtext_decoded`→subtextAnalysis、resumeAdvice=key_metrics、matchScore 0、合成的 `jd-<ts>` id）
+- [x] **`features/jd/hooks.ts`**：`JDMutationOptions` 增 `onSyncJobs`；新增 `useCreateJdAnalysisMutation`（`runTaskOrSync('resume_generate', …, fallback=analyzeJob, 180s)` → `analysisToJD`，真实 `job_analysis_id`，岗位写 jdAnalysisId/matchScore/steps）与 `useCreateStructuredJdAnalysisMutation`（`runTaskOrSync('jd_analyze_structured', …, fallback=analyzeStructuredJd, 120s)` → `structuredResultToJD` + 岗位 `jdAnalysisId=合成 id`，cache 前置）；helper `resolveTargetJob`（显式 jobId 复用，否则按公司+岗位 find-or-create，`job-<ts>` 自动 Job 写入 JOBS cache 且 produceJob=true 时同步 `onSyncJobs`，不产生后端提交）；`readJdAnalyses` / `readJobs` 从 cache 读
+- [x] **`JDAnalysisCenterView.tsx`**：`useCreateStructuredJdAnalysisMutation` 接管，**await-完成后跳转**（`mutateAsync` resolve 后 `navigateTo('jd_report', { jdId: analysis.id })`，移除 `setTimeout(800)` 假等待 + fire-and-forget），失败留表单页 + error toast，finally `setIsAnalyzing(false)`
+- [x] **`NewInterviewModal.tsx`**：`useCreateJdAnalysisMutation` 接管，文本路径保持 fire-and-forget（`mutate(vars, { onSuccess/onError })`），toast 归视图层；destructure 增 `syncJdAnalyses`
+- [x] **`JobCraftContext.tsx`**：删除 `createJDAnalysis` / `createStructuredJDAnalysis`（实现 + 接口 + provider 值）、`dutiesText` / `requirementsText` 私有 helpers；收敛 import（`analysisToJD`/`JobAnalysisResult` 移除），仅剩 legacy `deleteJDAnalysis` 待 FE-CONTEXT-REMOVE
+- [x] **测试**：`mappers.test.ts` +3 组（dutiesText/requirementsText、structuredResultToJD＋subtext_decoded＋空兜底）；`jd-query.test.tsx` +4（结构化自动建岗、复用显式 jobId、原始文本 fire-and-forget、结构化失败 reject）+ tasks mock + CreateHarness；全量 `npx vitest run` **17 文件 / 81 测试通过**（72→81），`npx tsc --noEmit` exit 0，`npm run build` exit 0，`scripts/check_encoding.py` 0 错误
+- [x] spec 落盘 `tasks/FE-JD-02.md`（设计决策 JD-C1..C5、Scope、Non-Goals）
+- [ ] **本段标记完成前需执行**：TODO.md 已勾选 FE-JD-02；提交（`feat(jd)` + `docs` 两支，PROGRESS.md 走 `git add -f`）+ 推 origin/main（代理 7890 需开启）
