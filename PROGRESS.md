@@ -4,7 +4,18 @@
 
 ## 已完成事项
 
-### FE-RESUME-01 简历编辑域迁移（2026-09-19，commit 待填）
+### FE-HISTORICAL-RESUMES-01 历史简历域迁移（2026-09-19，commit `7eece93`/`c0c3d72`）
+
+- [x] **`features/historical-resumes/mappers.ts`**：`HISTORICAL_RESUMES_QUERY_KEY = ['historical-resumes']` + `baseResumeToHistoricalResume`（自 context 内联映射提取，单一事实来源）
+- [x] **`features/historical-resumes/hooks.ts`**：`useHistoricalResumesQuery`（listBaseResumes → map，失败 `[]` 兜底）；`useAddHistoricalResumeMutation`（createBaseResume 成功回填 `serverId` 后前置入列，失败仅内存保留，toast 归视图层、无 console / 不写零消费者 activities）；`useDeleteHistoricalResumeMutation` / `useSetDefaultHistoricalResumeMutation`（后端成功后再写 cache，对齐 experiences delete 模式；无 serverId 仅本地操作）
+- [x] **视图迁移**：`UserProfileView`（query 读 + 3 mutation，删除/设默认 await 后各自的成功/失败 toast）；`CreateInterview`（query 读 + add mutation，`handleFileUpload`/`handleSimulatedDrop` 两路径；`hr-upload-{ts}` 选择器 quirk 保留）
+- [x] **context 清理**：删除 `historicalResumes` 域全部 key（`HistoricalResume` 导入 / interface 成员 / state / `loadHistoricalResumes` 与启动水合 / 3 action / provider value）
+- [x] **测试**：`src/test/historical-resumes-query.test.tsx`（6：列表渲染/计数/默认徽标、删除成功移除（断言 `deleteBaseResume(serverId)`）、删除失败保留、设默认徽标迁移（断言 `setDefaultBaseResume`）、新增落库回填 serverId 入列、落库失败内存兜底）；全量 **21 文件 / 113 测试全绿**，`npm run lint`（tsc）、`npm run build`、`python scripts/check_encoding.py` 通过
+- [x] **文档**：重写 `features/historical-resumes/README.md`；更新 `features/resume/README.md` 边界
+- [x] 已提交（commit `7eece93`/`c0c3d72`）；已 push
+- [ ] 留白：FE-CONTEXT-REMOVE（删 syncJobs/syncExperiences/syncJdAnalyses/syncInterviews 镜像与双写）+ `activities`/`nextActions`（零消费者）
+
+### FE-RESUME-01 简历编辑域迁移（2026-09-19，commit `b34268d`/`52b3afe`）
 
 - [x] **`features/resume/mappers.ts`**：`RESUMES_QUERY_KEY = ['resumes']`（`Record<submissionId, ResumeVersion>` 键控对象）
 - [x] **`features/resume/hooks.ts`**：`useResumesQuery`（getCurrentUser → getDashboard → has_resume 逐条 getSubmission → markdownToResume，单条失败容忍、无 console）；9 个 mutation——AI 建议 apply/reject/applyAll、bullet 编辑（updateText/add/delete）为**纯 cache 操作**；`useSaveResumeMutation`（合法 id → updateSubmission；NaN id → `{saved:false,reason:'local'}` 供视图 warning）；`useUpsertResumeMutation`（纯 cache 写，替换 `setResumes`）；React Query v5 下 7 个纯 mutation 全部 async
@@ -13,7 +24,7 @@
 - [x] **测试**：`src/test/resume-query.test.tsx`（9：空态/水合渲染/应用单条/忽略/全部应用/编辑要点/删除要点/保存草稿/upsert）；修复建议注入标题精确匹配（渲染为带序号前缀，改正则）；全量 **20 文件 / 107 测试全绿**，`npm run lint`（tsc）、`npm run build`、`python scripts/check_encoding.py` 通过
 - [x] **文档**：重写 `features/resume/README.md`（数据流/hooks API/边界）
 - [x] 已提交（commit 待填）；已 push
-- [ ] 留白：历史简历域（`UserProfileView`/`CreateInterview` 读 `historicalResumes`）规划 FE-HISTORICAL-RESUMES-01；补 FE-RESUME-01 完成后收尾 FE-CONTEXT-REMOVE（删 syncJobs/syncExperiences/syncJdAnalyses/syncInterviews 镜像与双写）
+- [ ] 留白：FE-CONTEXT-REMOVE（删 syncJobs/syncExperiences/syncJdAnalyses/syncInterviews 镜像与双写）
 
 ### FE-REVIEW-01 面试复盘域写入迁移（2026-09-19，commit `a1d1d8a`）
 

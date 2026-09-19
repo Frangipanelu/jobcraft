@@ -19,5 +19,5 @@
 
 ## 边界
 - AI 简历生成由后端任务接口（提交任务→轮询）完成，前端不实现 endpoint。
-- 历史简历域（`UserProfileView`、`CreateInterview` 的 `historicalResumes`）未迁移，规划 FE-HISTORICAL-RESUMES-01。
+- 历史简历域（底座简历 `base_resume`）已在 FE-HISTORICAL-RESUMES-01 迁移至 `features/historical-resumes`，Context 中无简历相关残留。
 - FE-CONTEXT-REMOVE 时不再有 resume 相关双写可删（本域已零 consumer）。
