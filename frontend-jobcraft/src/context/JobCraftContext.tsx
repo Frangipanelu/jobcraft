@@ -12,7 +12,6 @@ import {
   AISuggestionCard,
   PreparedAnswer,
   InterviewPreparation,
-  HistoricalResume,
   InterviewDraft
 } from '../types/jobcraft';
 import * as authApi from '../api/auth'
@@ -68,7 +67,6 @@ interface JobCraftContextType {
   nextActions: NextActionItem[];
   activities: ActivityLog[];
   aiSuggestions: AISuggestionCard[];
-  historicalResumes: HistoricalResume[];
   toasts: ToastMessage[];
   interviewDraft: InterviewDraft | null;
   jdAnalysisReturnTarget: 'create_interview' | 'create_review' | null;
@@ -95,11 +93,6 @@ interface JobCraftContextType {
   // Interview Draft actions
   saveInterviewDraft: (draft: InterviewDraft) => void;
   clearInterviewDraft: () => void;
-  
-  // Historical Resumes actions
-  addHistoricalResume: (resume: Omit<HistoricalResume, 'id' | 'uploadDate'>) => void;
-  deleteHistoricalResume: (id: string) => void;
-  setDefaultHistoricalResume: (id: string) => void;
   
   // Job actions
   createJob: (jobData: { company: string; role: string; department?: string; salaryRange?: string; status?: Job['status'] }) => Promise<string>;
@@ -171,7 +164,6 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
   const [nextActions, setNextActions] = useState<NextActionItem[]>([]);
   const [activities, setActivities] = useState<ActivityLog[]>([]);
   const [aiSuggestions, setAiSuggestions] = useState<AISuggestionCard[]>([]);
-  const [historicalResumes, setHistoricalResumes] = useState<HistoricalResume[]>([]);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [interviewDraft, setInterviewDraft] = useState<InterviewDraft | null>(null);
   const [jdAnalysisReturnTarget, setJdAnalysisReturnTarget] = useState<'create_interview' | 'create_review' | null>(null);
@@ -219,8 +211,7 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
       loadDashboard(userId),
       loadExperiences(userId),
       loadInterviews(userId),
-      loadJdAnalyses(userId),
-      loadHistoricalResumes(userId)
+      loadJdAnalyses(userId)
     ])
   }
 
@@ -309,30 +300,6 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
       queryClient.setQueryData([...EXPERIENCES_QUERY_KEY], list)
     } catch (error) {
       console.error('Load experiences failed:', error)
-    }
-  }
-
-  const loadHistoricalResumes = async (userId: number) => {
-    try {
-      const records = await jobApi.listBaseResumes()
-      const list = records.map((r) => {
-        const format = (r.format === 'pdf' ? 'pdf' : 'docx') as HistoricalResume['format']
-        const formatTags = r.tags && r.tags.length > 0 ? r.tags : (r.parsed_count > 0 ? ['已解析', 'AI 结构化'] : ['已上传'])
-        return {
-          id: 'hr-' + r.id,
-          serverId: r.id,
-          name: r.name || '上传简历',
-          uploadDate: (r.created_at || '').replace('T', ' ').substring(0, 16),
-          fileSize: r.file_size || '',
-          isDefault: !!r.is_default,
-          parsedExperiencesCount: r.parsed_count || 0,
-          format,
-          tags: formatTags
-        }
-      })
-      setHistoricalResumes(list)
-    } catch (error) {
-      console.error('Load historical resumes failed:', error)
     }
   }
 
@@ -429,85 +396,6 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
         message: '请检查网络后重试。'
       });
     }
-  };
-
-  const addHistoricalResume = (resumeData: Omit<HistoricalResume, 'id' | 'uploadDate'>) => {
-    const newResume: HistoricalResume = {
-      ...resumeData,
-      id: 'hr-' + Date.now(),
-      uploadDate: new Date().toISOString().replace('T', ' ').substring(0, 16)
-    };
-
-    // 持久化到后端（刷新后可通过历史版本列表恢复）
-    jobApi.createBaseResume({
-      name: resumeData.name,
-      file_size: resumeData.fileSize,
-      format: resumeData.format,
-      parsed_count: resumeData.parsedExperiencesCount,
-      tags: resumeData.tags
-    }).then((record) => {
-      setHistoricalResumes((prev) =>
-        prev.map((r) =>
-          r.id === newResume.id ? { ...r, serverId: record.id } : r
-        )
-      );
-    }).catch((error) => {
-      console.error('Persist base resume failed:', error);
-    });
-
-    setHistoricalResumes((prev) => [newResume, ...prev]);
-    showToast({
-      type: 'success',
-      title: '简历上传并解析成功',
-      message: `已解析「${resumeData.name}」，沉淀 ${resumeData.parsedExperiencesCount} 条核心经历。`
-    });
-
-    setActivities((prev) => [
-      {
-        id: 'act-' + Date.now(),
-        type: 'resume',
-        title: `上传并解析了历史简历：${resumeData.name}`,
-        desc: `已提取 ${resumeData.parsedExperiencesCount} 项 STAR 经历沉淀至经历资产库`,
-        timestamp: '刚刚',
-        actionText: '查看经历'
-      },
-      ...prev
-    ]);
-  };
-
-  const deleteHistoricalResume = (id: string) => {
-    const target = historicalResumes.find((r) => r.id === id);
-    setHistoricalResumes((prev) => prev.filter((r) => r.id !== id));
-    if (target?.serverId) {
-      jobApi.deleteBaseResume(target.serverId).catch((error) => {
-        console.error('Delete base resume failed:', error);
-      });
-    }
-    showToast({
-      type: 'info',
-      title: '历史简历已删除',
-      message: target ? `已移除「${target.name}」` : '简历已删除。'
-    });
-  };
-
-  const setDefaultHistoricalResume = (id: string) => {
-    const target = historicalResumes.find((r) => r.id === id);
-    setHistoricalResumes((prev) =>
-      prev.map((r) => ({
-        ...r,
-        isDefault: r.id === id
-      }))
-    );
-    if (target?.serverId) {
-      jobApi.setDefaultBaseResume(target.serverId).catch((error) => {
-        console.error('Set default base resume failed:', error);
-      });
-    }
-    showToast({
-      type: 'success',
-      title: '默认底座简历已设置',
-      message: '后续新建岗位与简历定制将默认优先调用此版本经历。'
-    });
   };
 
   const navigateTo = (
@@ -979,10 +867,6 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
         nextActions,
         activities,
         aiSuggestions,
-        historicalResumes,
-        addHistoricalResume,
-        deleteHistoricalResume,
-        setDefaultHistoricalResume,
         toasts,
         interviewDraft,
         saveInterviewDraft,
