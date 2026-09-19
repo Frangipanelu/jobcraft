@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useJobCraft } from '../context/JobCraftContext';
 import { useCreateInterviewMutation } from '../features/interview/hooks';
+import { useHistoricalResumesQuery, useAddHistoricalResumeMutation } from '../features/historical-resumes/hooks';
 import { InterviewRoundType, InterviewFormat } from '../types/jobcraft';
 import {
   ArrowLeft,
@@ -33,8 +34,6 @@ export const CreateInterview: React.FC = () => {
   const {
     jobs,
     selectedJobId: contextSelectedJobId,
-    historicalResumes,
-    addHistoricalResume,
     navigateTo,
     interviewDraft,
     saveInterviewDraft,
@@ -45,6 +44,8 @@ export const CreateInterview: React.FC = () => {
     syncJobs
   } = useJobCraft();
   const createInterview = useCreateInterviewMutation({ onSync: syncInterviews, onSyncJobs: syncJobs });
+  const { data: historicalResumes = [] } = useHistoricalResumesQuery();
+  const addHistoricalResumeMutation = useAddHistoricalResumeMutation();
 
   // Filter jobs in "interview prep" stage
   const prepStageJobs = jobs.filter(
@@ -189,7 +190,7 @@ export const CreateInterview: React.FC = () => {
     const file = e.target.files?.[0];
     if (file) {
       const newResumeId = `hr-upload-${Date.now()}`;
-      addHistoricalResume({
+      addHistoricalResumeMutation.mutate({
         name: file.name,
         fileSize: `${(file.size / (1024 * 1024)).toFixed(1)} MB`,
         isDefault: false,
@@ -210,7 +211,7 @@ export const CreateInterview: React.FC = () => {
   const handleSimulatedDrop = () => {
     const defaultUploadedName = `${selectedJob?.company || '定制'}_AI产品专家_2026最新简历.pdf`;
     const newResumeId = `hr-upload-${Date.now()}`;
-    addHistoricalResume({
+    addHistoricalResumeMutation.mutate({
       name: defaultUploadedName,
       fileSize: '1.6 MB',
       isDefault: false,

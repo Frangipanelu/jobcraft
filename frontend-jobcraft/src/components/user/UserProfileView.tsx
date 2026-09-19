@@ -2,6 +2,12 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useJobCraft } from '../../context/JobCraftContext';
 import type { UserProfile } from '../../types/jobcraft';
 import { useProfileQuery, useUpdateProfileMutation, EMPTY_PROFILE } from '../../features/profile/hooks';
+import {
+  useHistoricalResumesQuery,
+  useAddHistoricalResumeMutation,
+  useDeleteHistoricalResumeMutation,
+  useSetDefaultHistoricalResumeMutation,
+} from '../../features/historical-resumes/hooks';
 import * as jobApi from '../../api/job';
 import * as authApi from '../../api/auth';
 import {
@@ -37,10 +43,6 @@ interface UserProfileViewProps {
 
 export const UserProfileView: React.FC<UserProfileViewProps> = ({ initialTab }) => {
   const {
-    historicalResumes,
-    addHistoricalResume,
-    deleteHistoricalResume,
-    setDefaultHistoricalResume,
     experiences,
     loadExperiences,
     navigateTo,
@@ -53,6 +55,11 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({ initialTab }) 
   const { data: profile } = useProfileQuery();
   const updateProfileMutation = useUpdateProfileMutation();
   const user = profile ?? EMPTY_PROFILE;
+
+  const { data: historicalResumes = [] } = useHistoricalResumesQuery();
+  const addHistoricalResumeMutation = useAddHistoricalResumeMutation();
+  const deleteHistoricalResumeMutation = useDeleteHistoricalResumeMutation();
+  const setDefaultHistoricalResumeMutation = useSetDefaultHistoricalResumeMutation();
 
   const saveProfile = (updates: Partial<UserProfile>) => {
     updateProfileMutation.mutate(updates, {
@@ -231,7 +238,7 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({ initialTab }) 
       const count = result.cards?.length || 0;
 
       // 同步更新历史简历列表
-      addHistoricalResume({
+      addHistoricalResumeMutation.mutate({
         name: lastUploadedFileName || '上传简历',
         fileSize: `${(lastUploadedFileSize / 1024 / 1024).toFixed(1)} MB`,
         isDefault: historicalResumes.length === 0,
@@ -450,7 +457,22 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({ initialTab }) 
                 <div className="flex items-center gap-2 shrink-0 self-end md:self-center">
                   {!resume.isDefault && (
                     <button
-                      onClick={() => setDefaultHistoricalResume(resume.id)}
+                      onClick={() =>
+                        setDefaultHistoricalResumeMutation.mutate(resume.id, {
+                          onSuccess: () =>
+                            showToast({
+                              type: 'success',
+                              title: '默认底座简历已设置',
+                              message: '后续新建岗位与简历定制将默认优先调用此版本经历。'
+                            }),
+                          onError: () =>
+                            showToast({
+                              type: 'error',
+                              title: '设置默认失败',
+                              message: '请检查网络后重试。'
+                            })
+                        })
+                      }
                       className="px-3 py-1.5 rounded-lg border border-edge hover:border-sage text-xs font-semibold text-ink hover:text-sage bg-white transition cursor-pointer"
                     >
                       设为默认底座
@@ -481,7 +503,22 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({ initialTab }) 
 
                   {historicalResumes.length > 1 && (
                     <button
-                      onClick={() => deleteHistoricalResume(resume.id)}
+                      onClick={() =>
+                        deleteHistoricalResumeMutation.mutate(resume.id, {
+                          onSuccess: () =>
+                            showToast({
+                              type: 'info',
+                              title: '历史简历已删除',
+                              message: `已移除「${resume.name}」`
+                            }),
+                          onError: () =>
+                            showToast({
+                              type: 'error',
+                              title: '删除失败',
+                              message: '请检查网络后重试。'
+                            })
+                        })
+                      }
                       className="p-1.5 rounded-lg border border-edge hover:bg-error-bg text-error hover:border-error/40 transition cursor-pointer"
                       title="删除此简历"
                     >
