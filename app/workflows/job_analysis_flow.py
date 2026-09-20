@@ -3,7 +3,7 @@
 
 - run_step1_workflow: ATS 解析 + 推荐卡片（AtsRecommendAgent，合并一次 LLM）
 - run_step2_workflow: 缺口分析 + 润色建议（GapPolishAgent + 本地融合）
-- run_job_analysis_workflow: 旧版完整分析（JdAtsAgent → ScoreMatchAgent → 融合 → SugAgent）
+- run_job_analysis_workflow: 旧版完整分析（4 节点：ATS → 语义评分 → 建议 → 落库，每节点 1 次 LLM）
 - run_analyze_ats_workflow: 仅 ATS 解析（JdAtsAgent）
 - run_structured_ats_workflow: 结构化前端分析（用户已分好 duties/requirements）
 - run_resume_preview_workflow: 简历预览重新匹配（JdAtsAgent → ScoreMatchAgent → 融合）
@@ -36,6 +36,11 @@ class JobAnalysisState(TypedDict):
     position: str
     jd_text: str
     card_ids: List[int]
+    cards: List[Dict[str, Any]]
+    ats: Optional[Any]
+    jd_req: Optional[Any]
+    match: Optional[Dict[str, Any]]
+    suggestions: Optional[Any]
     result: Optional[Dict[str, Any]]
 
 
@@ -174,58 +179,77 @@ def run_step2_workflow(
 
 
 # ============================================================
-#  旧版完整岗位分析（兼容 /job/analyze）
+#  旧版完整岗位分析（兼容 /job/analyze，拆为 4 节点，每节点 1 次 LLM）
 # ============================================================
 
 
-def _run_legacy_analysis(state: Dict[str, Any]) -> Dict[str, Any]:
+def _run_legacy_ats(state: Dict[str, Any]) -> Dict[str, Any]:
+    """节点 1：加载卡片 + ATS 解析（1 次 LLM）。"""
     user_id = state["user_id"]
-    company = state.get("company", "")
-    position = state["position"]
-    jd_text = state["jd_text"]
-    card_ids = state["card_ids"]
-
     cards = []
-    for cid in card_ids:
+    for cid in state["card_ids"]:
         c = db_tools.get_card(cid, user_id)
         if c and c.get("is_active"):
             cards.append(c)
     if not cards:
         raise ValueError("所选卡片均不可用")
 
-    # 1. ATS 解析
-    ats_out = JdAtsAgent().run({"jd_text": jd_text})
+    ats_out = JdAtsAgent().run({"jd_text": state["jd_text"]})
     ats = ATSProfile(**ats_out["ats"])
-    jd_req = jobcraft_analyze._ats_to_jdreq(ats)
+    return {"cards": cards, "ats": ats, "jd_req": jobcraft_analyze._ats_to_jdreq(ats)}
 
-    # 2. LLM 语义评分
-    sm_out = ScoreMatchAgent().run({"jd_req": jd_req.model_dump(), "cards": cards})
+
+def _run_legacy_score(state: Dict[str, Any]) -> Dict[str, Any]:
+    """节点 2：LLM 语义评分 + 本地融合（1 次 LLM，融合为确定性计算）。"""
+    sm_out = ScoreMatchAgent().run(
+        {"jd_req": state["jd_req"].model_dump(), "cards": state["cards"]}
+    )
     llm_score_map = {
         cid: it.get("match", 0.0) for cid, it in sm_out["llm_match_items"].items()
     }
+    return {
+        "match": jobcraft_analyze.compute_match(
+            state["cards"], state["jd_req"], llm_scores=llm_score_map
+        )
+    }
 
-    # 3. 本地匹配融合
-    match = jobcraft_analyze.compute_match(cards, jd_req, llm_scores=llm_score_map)
 
-    # 4. 优化建议（Agent + 规则兜底）
+def _run_legacy_suggestions(state: Dict[str, Any]) -> Dict[str, Any]:
+    """节点 3：优化建议（1 次 LLM + 规则兜底）。"""
     suggestions = SuggestionsResult()
     try:
         sug_out = SugAgent().run(
             {
-                "jd_req": jd_req.model_dump(),
-                "cards": cards,
-                "per_card_scores": [pc.model_dump() for pc in match["per_card"]],
+                "jd_req": state["jd_req"].model_dump(),
+                "cards": state["cards"],
+                "per_card_scores": [
+                    pc.model_dump() for pc in state["match"]["per_card"]
+                ],
             }
         )
         suggestions = SuggestionsResult(**sug_out["suggestions"])
     except Exception as e:
         logger.warning("SugAgent 调用失败，使用规则兜底: %s", e)
-        suggestions = jobcraft_analyze.build_rule_suggestions(jd_req, match["per_card"])
+        suggestions = jobcraft_analyze.build_rule_suggestions(
+            state["jd_req"], state["match"]["per_card"]
+        )
+    return {"suggestions": suggestions}
 
-    # 5. 落库
+
+def _run_legacy_collate(state: Dict[str, Any]) -> Dict[str, Any]:
+    """节点 4：落库 + 组装返回（无 LLM，纯确定性）。"""
+    ats = state["ats"]
+    jd_req = state["jd_req"]
+    match = state["match"]
+    suggestions = state["suggestions"]
+    cards = state["cards"]
+    company = state.get("company", "")
+    position = state["position"]
+    jd_text = state["jd_text"]
+
     db_data = {
-        "user_id": user_id,
-        "company": company or "",
+        "user_id": state["user_id"],
+        "company": company,
         "position": position or ats.job_title or "",
         "jd_text": jd_text,
         "jd_requirements": jd_req.model_dump(),
@@ -237,15 +261,13 @@ def _run_legacy_analysis(state: Dict[str, Any]) -> Dict[str, Any]:
     }
     job_id = db_tools.insert_job_analysis(db_data)
 
-    # 6. 写关联 mapping
     for c in cards:
         db_tools.upsert_job_mapping(job_id, c["id"])
 
-    # 7. 组装返回
     result = JobAnalysisResult(
         job_analysis_id=job_id,
-        user_id=user_id,
-        company=company or "",
+        user_id=state["user_id"],
+        company=company,
         position=position or ats.job_title or "",
         jd_text=jd_text,
         jd_requirements=jd_req,
@@ -270,11 +292,21 @@ def run_job_analysis_workflow(
     jd_text: str,
     card_ids: List[int],
 ) -> Dict[str, Any]:
-    """执行旧版完整岗位分析 Workflow，返回 JobAnalysisResult dict。"""
+    """执行旧版完整岗位分析 Workflow，返回 JobAnalysisResult dict。
+
+    拆为 ats → score → suggestions → collate 四节点，每节点最多 1 次 LLM 调用
+    （AGENTS.md §1.2.5：单节点内不循环、不递归）。
+    """
     workflow = StateGraph(JobAnalysisState)
-    workflow.add_node("run_analysis", _run_legacy_analysis)
-    workflow.add_edge(START, "run_analysis")
-    workflow.add_edge("run_analysis", END)
+    workflow.add_node("_run_legacy_ats", _run_legacy_ats)
+    workflow.add_node("_run_legacy_score", _run_legacy_score)
+    workflow.add_node("_run_legacy_suggestions", _run_legacy_suggestions)
+    workflow.add_node("_run_legacy_collate", _run_legacy_collate)
+    workflow.add_edge(START, "_run_legacy_ats")
+    workflow.add_edge("_run_legacy_ats", "_run_legacy_score")
+    workflow.add_edge("_run_legacy_score", "_run_legacy_suggestions")
+    workflow.add_edge("_run_legacy_suggestions", "_run_legacy_collate")
+    workflow.add_edge("_run_legacy_collate", END)
 
     app = workflow.compile()
     initial_state: JobAnalysisState = {
@@ -283,6 +315,11 @@ def run_job_analysis_workflow(
         "position": position,
         "jd_text": jd_text,
         "card_ids": card_ids,
+        "cards": [],
+        "ats": None,
+        "jd_req": None,
+        "match": None,
+        "suggestions": None,
         "result": None,
     }
     result = app.invoke(initial_state)
