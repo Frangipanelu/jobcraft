@@ -406,19 +406,13 @@ def update_card(
 
 def delete_card(card_id: int, user_id: Optional[int] = None) -> bool:
     """
-    物理删除一张经历卡, 同时清理 experience_job_mapping 关联 (FK 已设 CASCADE 也行)
+    软删除经历卡 (is_active=0), 保留关联数据与历史版本（防投递/复盘断链）
 
-    可选按 user_id 过滤所有权: 越权删除时返回 False
+    按 DMV2 §54（删除应优先归档）；可选按 user_id 过滤所有权: 越权删除时返回 False
     """
     with transaction() as conn:
         with conn.cursor() as cur:
-            # 先删关联 (FK CASCADE 应该会处理, 但显式删更稳)
-            # 字段名是 experience_id, 不是 card_id (建表时用的是 experience)
-            cur.execute(
-                "DELETE FROM experience_job_mapping WHERE experience_id=%s",
-                (card_id,),
-            )
-            sql = "DELETE FROM experience_card WHERE id=%s"
+            sql = "UPDATE experience_card SET is_active=0 WHERE id=%s"
             params: List[Any] = [card_id]
             if user_id is not None:
                 sql += " AND user_id=%s"

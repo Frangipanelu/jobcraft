@@ -13,7 +13,6 @@ from app.tools.db_conn import (
     query_all,
     query_one,
     query_scalar,
-    transaction,
 )
 from app.tools.db_conn import _parse_json
 
@@ -50,6 +49,7 @@ def _ensure_resume_submission_table() -> None:
                     notes            TEXT,
                     is_manual        TINYINT(1) DEFAULT 0,
                     delivered        TINYINT(1) DEFAULT 0,
+                    is_active        TINYINT(1) DEFAULT 1,
                     created_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                     KEY idx_user_status (user_id, status),
@@ -126,7 +126,7 @@ def get_submission(
     submission_id: int, user_id: Optional[int] = None
 ) -> Optional[Dict[str, Any]]:
     _ensure_resume_submission_table()
-    sql = "SELECT * FROM resume_submission WHERE id=%s"
+    sql = "SELECT * FROM resume_submission WHERE id=%s AND is_active=1"
     params: List[Any] = [submission_id]
     if user_id is not None:
         sql += " AND user_id=%s"
@@ -157,7 +157,8 @@ def list_submissions(user_id: int = 1, limit: int = 50) -> List[Dict[str, Any]]:
     _ensure_resume_submission_table()
     rows = query_all(
         "SELECT id, position, company, status, job_analysis_id, created_at, updated_at "
-        "FROM resume_submission WHERE user_id=%s ORDER BY updated_at DESC LIMIT %s",
+        "FROM resume_submission WHERE user_id=%s AND is_active=1 "
+        "ORDER BY updated_at DESC LIMIT %s",
         (user_id, limit),
     )
     result = []
@@ -185,7 +186,7 @@ def get_submission_by_analysis(
 ) -> Optional[Dict[str, Any]]:
     """根据 job_analysis_id 查找已存在的投递记录"""
     _ensure_resume_submission_table()
-    sql = "SELECT * FROM resume_submission WHERE job_analysis_id=%s"
+    sql = "SELECT * FROM resume_submission WHERE job_analysis_id=%s AND is_active=1"
     params: List[Any] = [job_analysis_id]
     if user_id is not None:
         sql += " AND user_id=%s"
@@ -247,7 +248,11 @@ def update_submission(
     if not sets:
         return False
     values.append(submission_id)
-    sql = "UPDATE resume_submission SET " + ", ".join(sets) + " WHERE id=%s"
+    sql = (
+        "UPDATE resume_submission SET "
+        + ", ".join(sets)
+        + " WHERE id=%s AND is_active=1"
+    )
     if user_id is not None:
         sql += " AND user_id=%s"
         values.append(user_id)
@@ -255,47 +260,18 @@ def update_submission(
 
 
 def delete_submission(submission_id: int, user_id: Optional[int] = None) -> bool:
-    """删除投递记录（同时清理关联的 prep / 面试复盘记录，防孤儿数据）"""
-    from app.tools.db_interview import (
-        _ensure_interview_preps_table,
-        _ensure_interview_qa_pairs_table,
-        _ensure_interview_records_table,
-    )
+    """删除投递记录（软删：is_active=0，保留历史，防投递/复盘断链）。
 
+    按 DMV2 §55（删除优先归档而非物理删除）不再级联物理删除关联的面试记录，
+    历史投递与复盘保留；查询侧统一过滤 is_active=1。
+    """
     _ensure_resume_submission_table()
-    _ensure_interview_preps_table()
-    _ensure_interview_records_table()
-    _ensure_interview_qa_pairs_table()
-
-    with transaction() as conn:
-        with conn.cursor() as cur:
-            # 清理该投递下的面试复盘记录及其 QA 对
-            cur.execute(
-                "SELECT id FROM interview_records WHERE submission_id=%s",
-                (submission_id,),
-            )
-            record_ids = [row[0] for row in cur.fetchall()]
-            for rid in record_ids:
-                cur.execute("DELETE FROM interview_qa_pairs WHERE record_id=%s", (rid,))
-            if record_ids:
-                placeholders = ", ".join(["%s"] * len(record_ids))
-                cur.execute(
-                    f"DELETE FROM interview_records WHERE id IN ({placeholders})",
-                    tuple(record_ids),
-                )
-            cur.execute(
-                "DELETE FROM interview_preps WHERE submission_id=%s",
-                (submission_id,),
-            )
-
-            sql = "DELETE FROM resume_submission WHERE id=%s"
-            params: List[Any] = [submission_id]
-            if user_id is not None:
-                sql += " AND user_id=%s"
-                params.append(user_id)
-            cur.execute(sql, tuple(params))
-            affected = cur.rowcount
-            return affected > 0
+    sql = "UPDATE resume_submission SET is_active=0 WHERE id=%s"
+    params: List[Any] = [submission_id]
+    if user_id is not None:
+        sql += " AND user_id=%s"
+        params.append(user_id)
+    return execute(sql, tuple(params)) > 0
 
 
 def get_submission_prep_count(submission_id: int) -> int:

@@ -11,7 +11,6 @@ from app.tools.db_conn import (
     is_schema_ready,
     query_all,
     query_one,
-    transaction,
 )
 from app.tools.db_conn import _parse_json
 
@@ -19,7 +18,7 @@ logger = logging.getLogger("jobcraft.db.job")
 
 
 def _ensure_job_analysis_columns() -> None:
-    """为 job_analysis 表增加 dimension_requirements 字段（schema 已由启动引导保证时短路）"""
+    """为 job_analysis 表增加 dimension_requirements / is_active 字段（schema 已由启动引导保证时短路）"""
     if is_schema_ready():
         return
     with connection() as conn:
@@ -29,6 +28,10 @@ def _ensure_job_analysis_columns() -> None:
             if "dimension_requirements" not in existing:
                 cur.execute(
                     "ALTER TABLE job_analysis ADD COLUMN dimension_requirements JSON"
+                )
+            if "is_active" not in existing:
+                cur.execute(
+                    "ALTER TABLE job_analysis ADD COLUMN is_active TINYINT(1) DEFAULT 1"
                 )
 
 
@@ -59,9 +62,9 @@ def insert_job_analysis(data: Dict[str, Any]) -> int:
 def get_job_analysis(
     job_id: int, user_id: Optional[int] = None
 ) -> Optional[Dict[str, Any]]:
-    """按主键获取岗位分析记录（可选按 user_id 过滤所有权）"""
+    """按主键获取岗位分析记录（可选按 user_id 过滤所有权；排除软删记录）"""
     _ensure_job_analysis_columns()
-    sql = "SELECT * FROM job_analysis WHERE id=%s"
+    sql = "SELECT * FROM job_analysis WHERE id=%s AND is_active=1"
     params: List[Any] = [job_id]
     if user_id is not None:
         sql += " AND user_id=%s"
@@ -104,54 +107,26 @@ def list_job_analyses(user_id: int, limit: int = 20) -> List[Dict[str, Any]]:
     rows = query_all(
         "SELECT id, user_id, company, position, jd_text, jd_requirements, "
         "match_score, gap_analysis, dimension_requirements, created_at "
-        "FROM job_analysis WHERE user_id=%s ORDER BY created_at DESC LIMIT %s",
+        "FROM job_analysis WHERE user_id=%s AND is_active=1 "
+        "ORDER BY created_at DESC LIMIT %s",
         (user_id, limit),
     )
     return [_job_analysis_to_dict(r) for r in rows]
 
 
 def delete_job_analysis(job_id: int, user_id: Optional[int] = None) -> bool:
-    """删除岗位分析记录（同时清理关联的 mapping / prep / 面试复盘记录；可选按 user_id 过滤所有权）"""
-    from app.tools.db_interview import (
-        _ensure_interview_qa_pairs_table,
-        _ensure_interview_records_table,
-    )
+    """删除岗位分析记录（软删：is_active=0，保留历史，防投递/复盘断链）。
 
-    _ensure_interview_records_table()
-    _ensure_interview_qa_pairs_table()
-
-    with transaction() as conn:
-        with conn.cursor() as cur:
-            # 清理关联的面试复盘记录及其 QA 对（防孤儿数据）
-            cur.execute(
-                "SELECT id FROM interview_records WHERE job_analysis_id=%s",
-                (job_id,),
-            )
-            record_ids = [row[0] for row in cur.fetchall()]
-            for rid in record_ids:
-                cur.execute("DELETE FROM interview_qa_pairs WHERE record_id=%s", (rid,))
-            if record_ids:
-                placeholders = ", ".join(["%s"] * len(record_ids))
-                cur.execute(
-                    f"DELETE FROM interview_records WHERE id IN ({placeholders})",
-                    tuple(record_ids),
-                )
-
-            cur.execute(
-                "DELETE FROM experience_job_mapping WHERE job_analysis_id=%s",
-                (job_id,),
-            )
-            cur.execute(
-                "DELETE FROM interview_preps WHERE job_analysis_id=%s", (job_id,)
-            )
-            sql = "DELETE FROM job_analysis WHERE id=%s"
-            params: List[Any] = [job_id]
-            if user_id is not None:
-                sql += " AND user_id=%s"
-                params.append(user_id)
-            cur.execute(sql, tuple(params))
-            affected = cur.rowcount
-            return affected > 0
+    按 DMV2 §54/§55 不再级联物理删除关联的 mapping / prep / 面试复盘记录，
+    历史投递与复盘保留；查询侧统一过滤 is_active=1。
+    """
+    _ensure_job_analysis_columns()
+    sql = "UPDATE job_analysis SET is_active=0 WHERE id=%s"
+    params: List[Any] = [job_id]
+    if user_id is not None:
+        sql += " AND user_id=%s"
+        params.append(user_id)
+    return execute(sql, tuple(params)) > 0
 
 
 def upsert_job_mapping(job_id: int, experience_id: int) -> None:

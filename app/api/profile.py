@@ -154,11 +154,11 @@ def get_settings(current_user: int = Depends(get_current_user)) -> Dict[str, Any
 def export_all_data(current_user: int = Depends(get_current_user)) -> JSONResponse:
     """导出当前用户的全部数据（经历卡、投递、面试记录）"""
     cards = db_conn.query_all(
-        "SELECT * FROM experience_card WHERE user_id = %s ORDER BY id",
+        "SELECT * FROM experience_card WHERE user_id = %s AND is_active = 1 ORDER BY id",
         (current_user,),
     )
     submissions = db_conn.query_all(
-        "SELECT * FROM resume_submission WHERE user_id = %s ORDER BY id",
+        "SELECT * FROM resume_submission WHERE user_id = %s AND is_active = 1 ORDER BY id",
         (current_user,),
     )
     interviews = db_conn.query_all(
