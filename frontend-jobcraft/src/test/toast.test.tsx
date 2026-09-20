@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { act, fireEvent, screen } from '@testing-library/react';
 import { renderWithProviders } from './test-utils';
 import { ToastContainer } from '../components/common/Toast';
-import { useJobCraft } from '../context/JobCraftContext';
+import { useJobCraft, useToastActions } from '../context/JobCraftContext';
 
 const api = vi.hoisted(() => ({
   autoLogin: vi.fn(),
@@ -15,7 +15,7 @@ vi.mock('../api/auth', () => ({ ...api }));
 
 /** 触发 showToast 的消费者，模拟业务组件调用。 */
 const Trigger: React.FC = () => {
-  const { showToast } = useJobCraft();
+  const { showToast } = useToastActions();
   return (
     <button onClick={() => showToast({ type: 'info', title: '测试通知', message: '通知内容' })}>
       触发
@@ -92,5 +92,29 @@ describe('ToastContainer（FE-TOAST-CLEANUP-01）', () => {
   it('无 toast 时不渲染容器', () => {
     renderWithProviders(<ToastContainer />);
     expect(screen.queryByText('测试通知')).not.toBeInTheDocument();
+  });
+
+  it('触发 toast 不重渲染 useJobCraft 消费者（useMemo 隔离）', () => {
+    let navRenders = 0;
+    const NavConsumer: React.FC = () => {
+      useJobCraft();
+      navRenders += 1;
+      return <div>导航消费者</div>;
+    };
+
+    renderWithProviders(
+      <div>
+        <NavConsumer />
+        <Trigger />
+        <ToastContainer />
+      </div>,
+    );
+    const rendersBeforeToast = navRenders;
+    expect(rendersBeforeToast).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByText('触发'));
+    expect(screen.getByText('测试通知')).toBeInTheDocument();
+
+    expect(navRenders).toBe(rendersBeforeToast);
   });
 });

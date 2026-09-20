@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { ToastMessage, useJobCraft } from '../../context/JobCraftContext';
+import { ToastMessage, useToasts, useToastActions } from '../../context/JobCraftContext';
 import { CheckCircle2, AlertCircle, Info, AlertTriangle, X } from 'lucide-react';
 
 const TOAST_DURATION_MS = 4000;
@@ -54,7 +54,8 @@ const ToastItem: React.FC<{ toast: ToastMessage; onDismiss: (id: string) => void
 };
 
 export const ToastContainer: React.FC = () => {
-  const { toasts, dismissToast } = useJobCraft();
+  const toasts = useToasts();
+  const { dismissToast } = useToastActions();
 
   if (toasts.length === 0) return null;
 

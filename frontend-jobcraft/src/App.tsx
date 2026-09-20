@@ -1,13 +1,15 @@
 import React from 'react';
-import { JobCraftProvider, useJobCraft } from './context/JobCraftContext';
+import { JobCraftProvider, ToastProvider, useJobCraft } from './context/JobCraftContext';
 import { AppRouter } from './router/AppRouter';
 import { AuthPage } from './pages/AuthPage';
 
 export default function App() {
   return (
-    <JobCraftProvider>
-      <AppShell />
-    </JobCraftProvider>
+    <ToastProvider>
+      <JobCraftProvider>
+        <AppShell />
+      </JobCraftProvider>
+    </ToastProvider>
   );
 }
 

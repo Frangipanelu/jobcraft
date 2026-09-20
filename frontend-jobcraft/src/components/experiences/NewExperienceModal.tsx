@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useJobCraft } from '../../context/JobCraftContext';
+import { useToastActions } from '../../context/JobCraftContext';
 import { useCreateExperienceMutation } from '../../features/experiences/hooks';
 import { ExperienceCategory } from '../../types/jobcraft';
 import {
@@ -18,7 +18,7 @@ interface NewExperienceModalProps {
 }
 
 export const NewExperienceModal: React.FC<NewExperienceModalProps> = ({ isOpen, onClose }) => {
-  const { showToast } = useJobCraft();
+  const { showToast } = useToastActions();
   const createExperience = useCreateExperienceMutation();
 
   const [title, setTitle] = useState('');

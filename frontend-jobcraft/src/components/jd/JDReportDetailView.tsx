@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useJobCraft } from '../../context/JobCraftContext';
+import { useJobCraft, useToastActions } from '../../context/JobCraftContext';
 import { useTabNavigate } from '../../router/tabPaths';
 import type { Experience } from '../../types/jobcraft';
 import { saveResume } from '../../api/job';
@@ -61,9 +61,9 @@ export const JDReportDetailView: React.FC<JDReportDetailViewProps> = ({
     setSelectedJobId,
     setSelectedJDId,
     jdAnalysisReturnTarget,
-    setJdAnalysisReturnTarget,
-    showToast
+    setJdAnalysisReturnTarget
   } = useJobCraft();
+  const { showToast } = useToastActions();
   const go = useTabNavigate();
 
   const upsertResume = useUpsertResumeMutation();

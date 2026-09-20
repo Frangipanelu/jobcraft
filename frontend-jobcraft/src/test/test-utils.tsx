@@ -2,7 +2,7 @@ import React, { type ReactElement } from 'react';
 import { render } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { JobCraftProvider } from '../context/JobCraftContext';
+import { JobCraftProvider, ToastProvider } from '../context/JobCraftContext';
 
 /** 为测试创建隔离的 QueryClient（关闭重试，避免测试拖沓）。 */
 export function createTestQueryClient(): QueryClient {
@@ -19,16 +19,18 @@ interface RenderWithProvidersOptions {
   queryClient?: QueryClient;
 }
 
-/** 默认包装：QueryClient + JobCraftProvider + MemoryRouter。 */
+/** 默认包装：QueryClient + ToastProvider + JobCraftProvider + MemoryRouter。 */
 export function renderWithProviders(
   ui: ReactElement,
   { route = '/', queryClient = createTestQueryClient() }: RenderWithProvidersOptions = {},
 ) {
   return render(
     <QueryClientProvider client={queryClient}>
-      <JobCraftProvider>
-        <MemoryRouter initialEntries={[route]}>{ui}</MemoryRouter>
-      </JobCraftProvider>
+      <ToastProvider>
+        <JobCraftProvider>
+          <MemoryRouter initialEntries={[route]}>{ui}</MemoryRouter>
+        </JobCraftProvider>
+      </ToastProvider>
     </QueryClientProvider>,
   );
 }

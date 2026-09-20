@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useJobCraft } from '../../context/JobCraftContext';
+import { useJobCraft, useToastActions } from '../../context/JobCraftContext';
 import { useTabNavigate } from '../../router/tabPaths';
 import { useProfileQuery, EMPTY_PROFILE } from '../../features/profile/hooks';
 import { useJobsQuery } from '../../features/jobs/hooks';
@@ -31,9 +31,9 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
     currentTab,
     selectedJobId,
     selectedInterviewId,
-    logout,
-    showToast
+    logout
   } = useJobCraft();
+  const { showToast } = useToastActions();
 
   const { data: profile } = useProfileQuery();
   const user = profile ?? EMPTY_PROFILE;

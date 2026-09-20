@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { useJobCraft } from '../../context/JobCraftContext';
+import { useToastActions } from '../../context/JobCraftContext';
 import { useTabNavigate } from '../../router/tabPaths';
 import { useInterviewsQuery } from '../../features/interview/hooks';
 import {
@@ -74,7 +74,7 @@ export const InterviewPrepWorkspaceView: React.FC<InterviewPrepWorkspaceViewProp
   interviewId,
   onOpenMockInterview
 }) => {
-  const { showToast } = useJobCraft();
+  const { showToast } = useToastActions();
   const go = useTabNavigate();
   const { data: interviewData } = useInterviewsQuery();
   const interviews = interviewData || [];

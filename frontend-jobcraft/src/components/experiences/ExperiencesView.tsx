@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useJobCraft } from '../../context/JobCraftContext';
+import { useToastActions } from '../../context/JobCraftContext';
 import { useTabNavigate } from '../../router/tabPaths';
 import { Experience, ExperienceCategory, ExperienceVersionRecord } from '../../types/jobcraft';
 import * as jobApi from '../../api/job';
@@ -46,7 +46,7 @@ interface ExperiencesViewProps {
 }
 
 export const ExperiencesView: React.FC<ExperiencesViewProps> = ({ initialSelectedExpId }) => {
-  const { showToast } = useJobCraft();
+  const { showToast } = useToastActions();
   const go = useTabNavigate();
   const { data: experiencesData } = useExperiencesQuery();
   const updateExperience = useUpdateExperienceMutation();
@@ -706,7 +706,7 @@ const EditExperienceModal: React.FC<EditExperienceModalProps> = ({
   isOpen,
   onClose
 }) => {
-  const { showToast } = useJobCraft();
+  const { showToast } = useToastActions();
   const updateExperience = useUpdateExperienceMutation();
 
   const [title, setTitle] = useState(experience.title);

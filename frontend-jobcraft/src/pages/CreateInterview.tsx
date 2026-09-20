@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useJobCraft } from '../context/JobCraftContext';
+import { useJobCraft, useToastActions } from '../context/JobCraftContext';
 import { useCreateInterviewMutation } from '../features/interview/hooks';
 import { useJobsQuery } from '../features/jobs/hooks';
 import { useHistoricalResumesQuery, useAddHistoricalResumeMutation } from '../features/historical-resumes/hooks';
@@ -38,9 +38,9 @@ export const CreateInterview: React.FC<{ initialJobId?: string }> = ({ initialJo
     interviewDraft,
     saveInterviewDraft,
     clearInterviewDraft,
-    setJdAnalysisReturnTarget,
-    showToast
+    setJdAnalysisReturnTarget
   } = useJobCraft();
+  const { showToast } = useToastActions();
   const createInterview = useCreateInterviewMutation();
   const { data: jobs = [] } = useJobsQuery();
   const { data: historicalResumes = [] } = useHistoricalResumesQuery();

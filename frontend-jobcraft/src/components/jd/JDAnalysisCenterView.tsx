@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useJobCraft } from '../../context/JobCraftContext';
+import { useJobCraft, useToastActions } from '../../context/JobCraftContext';
 import {
   FileSearch,
   Sparkles,
@@ -18,7 +18,8 @@ import {
 } from '../../features/jd/hooks';
 
 export const JDAnalysisCenterView: React.FC = () => {
-  const { navigateTo, showToast } = useJobCraft();
+  const { navigateTo } = useJobCraft();
+  const { showToast } = useToastActions();
 
   const { data: jdAnalyses = [] } = useJdAnalysesQuery();
   const deleteAnalysis = useDeleteJdAnalysisMutation();

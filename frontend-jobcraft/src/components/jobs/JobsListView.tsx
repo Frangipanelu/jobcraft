@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useJobCraft } from '../../context/JobCraftContext';
+import { useToastActions } from '../../context/JobCraftContext';
 import { useJobsQuery, useTerminateJobMutation, useResumeJobMutation, useSetDeliveredMutation } from '../../features/jobs/hooks';
 import { JobStatus } from '../../types/jobcraft';
 import {
@@ -20,7 +20,7 @@ interface JobsListViewProps {
 }
 
 export const JobsListView: React.FC<JobsListViewProps> = ({ onOpenNewJob }) => {
-  const { showToast } = useJobCraft();
+  const { showToast } = useToastActions();
   const navigate = useNavigate();
   const { data: jobsData, isLoading } = useJobsQuery();
   const jobs = jobsData || [];

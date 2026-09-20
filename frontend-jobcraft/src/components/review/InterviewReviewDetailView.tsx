@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useJobCraft } from '../../context/JobCraftContext';
+import { useToastActions } from '../../context/JobCraftContext';
 import { useInterviewsQuery } from '../../features/interview/hooks';
 import { useApplyReviewFeedbackMutation } from '../../features/review/hooks';
 import { useTabNavigate } from '../../router/tabPaths';
@@ -25,7 +25,7 @@ interface InterviewReviewDetailViewProps {
 export const InterviewReviewDetailView: React.FC<InterviewReviewDetailViewProps> = ({
   interviewId
 }) => {
-  const { showToast } = useJobCraft();
+  const { showToast } = useToastActions();
   const { data: interviews = [] } = useInterviewsQuery();
   const applyFeedbackMutation = useApplyReviewFeedbackMutation();
   const go = useTabNavigate();

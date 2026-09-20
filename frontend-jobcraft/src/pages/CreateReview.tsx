@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useJobCraft } from '../context/JobCraftContext';
+import { useJobCraft, useToastActions } from '../context/JobCraftContext';
 import { useJobsQuery } from '../features/jobs/hooks';
 import { useInterviewsQuery } from '../features/interview/hooks';
 import { useCreateInterviewReviewMutation } from '../features/review/hooks';
@@ -35,9 +35,9 @@ const analysisSteps = [
 export const CreateReview: React.FC<{ initialJobId?: string }> = ({ initialJobId = '' }) => {
   const {
     navigateTo,
-    setJdAnalysisReturnTarget,
-    showToast
+    setJdAnalysisReturnTarget
   } = useJobCraft();
+  const { showToast } = useToastActions();
   const { data: jobs = [] } = useJobsQuery();
   const { data: interviews = [] } = useInterviewsQuery();
   const createReviewMutation = useCreateInterviewReviewMutation();

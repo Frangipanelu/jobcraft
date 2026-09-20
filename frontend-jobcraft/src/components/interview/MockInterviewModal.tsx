@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useJobCraft } from '../../context/JobCraftContext';
+import { useToastActions } from '../../context/JobCraftContext';
 import { useTabNavigate } from '../../router/tabPaths';
 import { useInterviewsQuery } from '../../features/interview/hooks';
 import {
@@ -32,7 +32,7 @@ export const MockInterviewModal: React.FC<MockInterviewModalProps> = ({
   onClose,
   interviewId
 }) => {
-  const { showToast } = useJobCraft();
+  const { showToast } = useToastActions();
   const go = useTabNavigate();
   const { data: interviews = [] } = useInterviewsQuery();
   const currentInterview = interviews.find((i) => i.id === interviewId);

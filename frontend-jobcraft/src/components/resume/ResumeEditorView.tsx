@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useJobCraft } from '../../context/JobCraftContext';
+import { useJobCraft, useToastActions } from '../../context/JobCraftContext';
 import { useJobsQuery } from '../../features/jobs/hooks';
 import { useExperiencesQuery } from '../../features/experiences/hooks';
 import {
@@ -46,7 +46,8 @@ export const ResumeEditorView: React.FC<ResumeEditorViewProps> = ({
   jobId,
   embedded = false
 }) => {
-  const { navigateTo, showToast } = useJobCraft();
+  const { navigateTo } = useJobCraft();
+  const { showToast } = useToastActions();
   const { data: jobs = [] } = useJobsQuery();
   const { data: resumes = {} } = useResumesQuery();
   const { data: experiences = [] } = useExperiencesQuery();

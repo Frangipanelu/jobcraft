@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useJobCraft } from '../../context/JobCraftContext';
+import { useToastActions } from '../../context/JobCraftContext';
 import { useTabNavigate } from '../../router/tabPaths';
 import { useCreateInterviewMutation } from '../../features/interview/hooks';
 import { useCreateJdAnalysisMutation } from '../../features/jd/hooks';
@@ -47,7 +47,7 @@ const aiGenerateItems = [
 ];
 
 export const NewInterviewModal: React.FC<Props> = ({ isOpen, jobId, mode, onClose }) => {
-  const { showToast } = useJobCraft();
+  const { showToast } = useToastActions();
   const { data: jobs = [] } = useJobsQuery();
   const createInterview = useCreateInterviewMutation();
   const createJdAnalysis = useCreateJdAnalysisMutation();

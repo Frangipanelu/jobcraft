@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useJobCraft } from '../../context/JobCraftContext';
+import { useJobCraft, useToastActions } from '../../context/JobCraftContext';
 import { useExperiencesQuery } from '../../features/experiences/hooks';
 import type { UserProfile } from '../../types/jobcraft';
 import { useProfileQuery, useUpdateProfileMutation, EMPTY_PROFILE } from '../../features/profile/hooks';
@@ -47,9 +47,9 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({ initialTab }) 
     navigateTo,
     userProfileTab,
     setUserProfileTab,
-    showToast,
     currentUserId
   } = useJobCraft();
+  const { showToast } = useToastActions();
   const { data: experiences = [], refetch: refetchExperiences } = useExperiencesQuery();
 
   const { data: profile } = useProfileQuery();

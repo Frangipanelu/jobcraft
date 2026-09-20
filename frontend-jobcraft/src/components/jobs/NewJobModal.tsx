@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useJobCraft } from '../../context/JobCraftContext';
+import { useToastActions } from '../../context/JobCraftContext';
 import { useCreateJobMutation } from '../../features/jobs/hooks';
 import { X, Briefcase, Sparkles, Building2, Layers } from 'lucide-react';
 
@@ -10,7 +10,7 @@ interface NewJobModalProps {
 }
 
 export const NewJobModal: React.FC<NewJobModalProps> = ({ isOpen, onClose }) => {
-  const { showToast } = useJobCraft();
+  const { showToast } = useToastActions();
   const navigate = useNavigate();
   const createJob = useCreateJobMutation();
   const [company, setCompany] = useState('');
