@@ -7,12 +7,6 @@ import { Interview, Job } from '../../types/jobcraft';
 import { JOBS_QUERY_KEY } from '../jobs/mappers';
 import { INTERVIEWS_QUERY_KEY, buildInterviewFromPrep, prepRecordToInterview, roundTypeToCn } from './mappers';
 
-export interface InterviewMutationOptions {
-  /** context 镜像写入（过渡期）：cache 更新后同步回 context.interviews，供未迁移视图读取。 */
-  onSync?: (interviews: Interview[]) => void;
-  /** 跨域镜像写入（过渡期）：interviews 变更会补写 jobs 域，同步回 context.jobs。 */
-  onSyncJobs?: (jobs: Job[]) => void;
-}
 
 export interface CreateInterviewArgs {
   jobId?: string;
@@ -47,14 +41,13 @@ export function useInterviewsQuery() {
  * 创建面试准备。与 legacy `JobCraftContext.createInterview` 行为等价：
  * - 从 JOBS cache 解析 job.jdAnalysisId（无则抛错），首选异步任务提交+轮询，
  *   任务服务不可用时降级为同步 generateInterviewPrep；
- * - 成功后 cache 前置插入面试 + 同步 context.interviews（onSync）；
- * - 跨域补写 JOBS cache（interviewIds / steps.prepStage）+ 同步 context.jobs（onSyncJobs）。
+ * - 成功后 cache 前置插入面试 + 跨域补写 JOBS cache（interviewIds / steps.prepStage）。
  * - 不内置 toast / nextActions（nextActions 无消费方，toast 归视图层）。
  * - mutateAsync 返回创建后的 Interview（含 id，供 navigateTo）。
  */
-export function useCreateInterviewMutation(options: InterviewMutationOptions = {}) {
+export function useCreateInterviewMutation() {
   const queryClient = useQueryClient();
-  const { onSync, onSyncJobs } = options;
+
 
   return useMutation<Interview, unknown, CreateInterviewArgs>({
     mutationFn: async (data) => {
@@ -135,7 +128,7 @@ export function useCreateInterviewMutation(options: InterviewMutationOptions = {
       const prev = queryClient.getQueryData<Interview[]>([...INTERVIEWS_QUERY_KEY]) || [];
       const next = [newInterview, ...prev];
       queryClient.setQueryData([...INTERVIEWS_QUERY_KEY], next);
-      onSync?.(next);
+
 
       if (variables.jobId) {
         const jobs = queryClient.getQueryData<Job[]>([...JOBS_QUERY_KEY]) || [];
@@ -151,7 +144,7 @@ export function useCreateInterviewMutation(options: InterviewMutationOptions = {
             : j
         );
         queryClient.setQueryData([...JOBS_QUERY_KEY], nextJobs);
-        onSyncJobs?.(nextJobs);
+  
       }
     },
   });

@@ -4,6 +4,8 @@ import { useTabNavigate } from '../../router/tabPaths';
 import type { Experience } from '../../types/jobcraft';
 import { saveResume } from '../../api/job';
 import { useJdAnalysesQuery } from '../../features/jd/hooks';
+import { useJobsQuery } from '../../features/jobs/hooks';
+import { useExperiencesQuery } from '../../features/experiences/hooks';
 import { useUpsertResumeMutation } from '../../features/resume/hooks';
 import {
   ArrowLeft,
@@ -56,8 +58,6 @@ export const JDReportDetailView: React.FC<JDReportDetailViewProps> = ({
   embedded = false
 }) => {
   const {
-    jobs,
-    experiences,
     setSelectedJobId,
     setSelectedJDId,
     jdAnalysisReturnTarget,
@@ -69,6 +69,8 @@ export const JDReportDetailView: React.FC<JDReportDetailViewProps> = ({
   const upsertResume = useUpsertResumeMutation();
 
   const { data: jdAnalyses = [], isLoading } = useJdAnalysesQuery();
+  const { data: jobs = [] } = useJobsQuery();
+  const { data: experiences = [] } = useExperiencesQuery();
 
   const [isReanalyzing, setIsReanalyzing] = useState(false);
 

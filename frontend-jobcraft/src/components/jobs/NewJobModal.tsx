@@ -10,9 +10,9 @@ interface NewJobModalProps {
 }
 
 export const NewJobModal: React.FC<NewJobModalProps> = ({ isOpen, onClose }) => {
-  const { syncJobs, showToast } = useJobCraft();
+  const { showToast } = useJobCraft();
   const navigate = useNavigate();
-  const createJob = useCreateJobMutation({ onSync: syncJobs });
+  const createJob = useCreateJobMutation();
   const [company, setCompany] = useState('');
   const [role, setRole] = useState('');
   const [department, setDepartment] = useState('');

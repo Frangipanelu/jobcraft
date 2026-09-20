@@ -18,12 +18,6 @@ import { EXPERIENCES_QUERY_KEY } from '../experiences/mappers';
 
 type StructuredJdResult = Awaited<ReturnType<typeof jobApi.analyzeStructuredJd>>;
 
-interface JDMutationOptions {
-  /** context 镜像写入（过渡期）：cache 更新后同步回 context.jdAnalyses，供未迁移视图读取。 */
-  onSync?: (analyses: JDAnalysis[]) => void;
-  /** 跨域镜像写入（过渡期）：JD 创建会补写 jobs 缓存，同步回 context.jobs。 */
-  onSyncJobs?: (jobs: Job[]) => void;
-}
 
 function readJdAnalyses(client: QueryClient): JDAnalysis[] {
   return client.getQueryData<JDAnalysis[]>([...JD_ANALYSES_QUERY_KEY]) || [];
@@ -91,9 +85,9 @@ function resolveTargetJob(client: QueryClient, params: ResolveTargetJobParams): 
  *
  * 区别于 fire-and-forget 的 legacy 实现：本 hook 返回 Promise，完成（或失败）时 resolve/reject。
  */
-export function useCreateJdAnalysisMutation(options: JDMutationOptions = {}) {
+export function useCreateJdAnalysisMutation() {
   const queryClient = useQueryClient();
-  const { onSync, onSyncJobs } = options;
+
 
   return useMutation({
     mutationFn: async (data: { company: string; role: string; rawText: string; jobId?: string }) => {
@@ -107,7 +101,7 @@ export function useCreateJdAnalysisMutation(options: JDMutationOptions = {}) {
         currentStage: '已完成 JD 分析 · 待投递',
         nextAction: '已完成 JD 深度分析，可开始定制简历并投递'
       });
-      onSyncJobs?.(readJobs(queryClient));
+
 
       const cardIds = (queryClient.getQueryData<Experience[]>([...EXPERIENCES_QUERY_KEY]) || [])
         .map((e) => parseInt(e.id))
@@ -131,7 +125,7 @@ export function useCreateJdAnalysisMutation(options: JDMutationOptions = {}) {
         [...JD_ANALYSES_QUERY_KEY],
         (prev: JDAnalysis[] | undefined) => [newAnalysis, ...(prev || [])]
       );
-      onSync?.(readJdAnalyses(queryClient));
+
 
       const jobs = readJobs(queryClient);
       const nextJobs = jobs.map((j) =>
@@ -145,7 +139,7 @@ export function useCreateJdAnalysisMutation(options: JDMutationOptions = {}) {
           : j
       );
       queryClient.setQueryData([...JOBS_QUERY_KEY], nextJobs);
-      onSyncJobs?.(nextJobs);
+
 
       return newAnalysis;
     },
@@ -159,9 +153,9 @@ export function useCreateJdAnalysisMutation(options: JDMutationOptions = {}) {
  *
  * 区别于 fire-and-forget 的 legacy 实现：本 hook 返回 Promise，完成（或失败）时 resolve/reject。
  */
-export function useCreateStructuredJdAnalysisMutation(options: JDMutationOptions = {}) {
+export function useCreateStructuredJdAnalysisMutation() {
   const queryClient = useQueryClient();
-  const { onSync, onSyncJobs } = options;
+
 
   return useMutation({
     mutationFn: async (data: {
@@ -181,7 +175,7 @@ export function useCreateStructuredJdAnalysisMutation(options: JDMutationOptions
         currentStage: '已完成结构化 JD 分析 · 待投递',
         nextAction: '已完成结构化 JD 分析，可开始定制简历并投递'
       });
-      onSyncJobs?.(readJobs(queryClient));
+
 
       const result = await tasksApi.runTaskOrSync<StructuredJdResult>(
         'jd_analyze_structured',
@@ -212,7 +206,7 @@ export function useCreateStructuredJdAnalysisMutation(options: JDMutationOptions
         [...JD_ANALYSES_QUERY_KEY],
         (prev: JDAnalysis[] | undefined) => [newAnalysis, ...(prev || [])]
       );
-      onSync?.(readJdAnalyses(queryClient));
+
 
       const jobs = readJobs(queryClient);
       const nextJobs = jobs.map((j) =>
@@ -221,7 +215,7 @@ export function useCreateStructuredJdAnalysisMutation(options: JDMutationOptions
           : j
       );
       queryClient.setQueryData([...JOBS_QUERY_KEY], nextJobs);
-      onSyncJobs?.(nextJobs);
+
 
       return newAnalysis;
     },
@@ -258,9 +252,9 @@ export function useJdAnalysesQuery() {
  * 仅从前端状态移除；id 形如 `sub-{number}` 时尝试删除后端 submission（失败忽略）；
  * 后端无 JD 分析删除端点，故真实分析 id（数字串）不产生网络删除请求。
  */
-export function useDeleteJdAnalysisMutation(options: JDMutationOptions = {}) {
+export function useDeleteJdAnalysisMutation() {
   const queryClient = useQueryClient();
-  const { onSync } = options;
+
 
   return useMutation<string, unknown, string>({
     mutationFn: async (id) => {
@@ -278,7 +272,7 @@ export function useDeleteJdAnalysisMutation(options: JDMutationOptions = {}) {
       const prev = queryClient.getQueryData<JDAnalysis[]>([...JD_ANALYSES_QUERY_KEY]) || [];
       const next = prev.filter((a) => a.id !== id);
       queryClient.setQueryData([...JD_ANALYSES_QUERY_KEY], next);
-      onSync?.(next);
+
     },
   });
 }

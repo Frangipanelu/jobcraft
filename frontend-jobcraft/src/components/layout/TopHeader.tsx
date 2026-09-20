@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { useJobCraft } from '../../context/JobCraftContext';
 import { useTabNavigate } from '../../router/tabPaths';
 import { useProfileQuery, EMPTY_PROFILE } from '../../features/profile/hooks';
+import { useJobsQuery } from '../../features/jobs/hooks';
+import { useInterviewsQuery } from '../../features/interview/hooks';
 import {
   ChevronRight,
   Sparkles,
@@ -29,14 +31,15 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
     currentTab,
     selectedJobId,
     selectedInterviewId,
-    jobs,
-    interviews,
     logout,
     showToast
   } = useJobCraft();
 
   const { data: profile } = useProfileQuery();
   const user = profile ?? EMPTY_PROFILE;
+
+  const { data: jobs = [] } = useJobsQuery();
+  const { data: interviews = [] } = useInterviewsQuery();
 
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);

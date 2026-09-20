@@ -4,10 +4,6 @@ import * as experienceApi from '../../api/experience';
 import type { Experience, ExperienceVersionRecord } from '../../types/jobcraft';
 import { EXPERIENCES_QUERY_KEY, cardToExperience } from './mappers';
 
-interface ExperienceMutationOptions {
-  /** context 镜像写入（过渡期）：cache 更新后同步回 context.experiences，供未迁移视图读取。 */
-  onSync?: (experiences: Experience[]) => void;
-}
 
 /**
  * 查询当前用户的经历卡列表（listCards → cardToExperience）。
@@ -29,9 +25,9 @@ export function useExperiencesQuery() {
  * 后端 createCard 成功 → 前端 Experience（cardToExperience + 草稿前端扩展字段）→ cache 前置插入；
  * 后端失败向上抛出（由消费方 toast）。
  */
-export function useCreateExperienceMutation(options: ExperienceMutationOptions = {}) {
+export function useCreateExperienceMutation() {
   const queryClient = useQueryClient();
-  const { onSync } = options;
+
 
   return useMutation<Experience, unknown, Partial<Experience>>({
     mutationFn: async (draft) => {
@@ -63,7 +59,7 @@ export function useCreateExperienceMutation(options: ExperienceMutationOptions =
       const prev = queryClient.getQueryData<Experience[]>([...EXPERIENCES_QUERY_KEY]) || [];
       const next = [newExp, ...prev];
       queryClient.setQueryData([...EXPERIENCES_QUERY_KEY], next);
-      onSync?.(next);
+
     },
   });
 }
@@ -75,12 +71,12 @@ interface UpdateExperienceArgs {
 
 /**
  * 更新经历卡。与 legacy `JobCraftContext.updateExperience` 行为等价：
- * 后端 updateCard 成功 → cache 内按 updates 合并 → 同步镜像；
+ * 后端 updateCard 成功 → cache 内按 updates 合并；
  * 后端失败向上抛出（不产生本地变更）。
  */
-export function useUpdateExperienceMutation(options: ExperienceMutationOptions = {}) {
+export function useUpdateExperienceMutation() {
   const queryClient = useQueryClient();
-  const { onSync } = options;
+
 
   return useMutation<UpdateExperienceArgs, unknown, UpdateExperienceArgs>({
     mutationFn: async ({ id, updates }) => {
@@ -101,18 +97,18 @@ export function useUpdateExperienceMutation(options: ExperienceMutationOptions =
       const prev = queryClient.getQueryData<Experience[]>([...EXPERIENCES_QUERY_KEY]) || [];
       const next = prev.map((exp) => (exp.id === id ? { ...exp, ...updates } : exp));
       queryClient.setQueryData([...EXPERIENCES_QUERY_KEY], next);
-      onSync?.(next);
+
     },
   });
 }
 
 /**
  * 删除经历卡。与 legacy `JobCraftContext.deleteExperience` 行为等价：
- * 后端 deleteCard 成功 → cache 内过滤 → 同步镜像。
+ * 后端 deleteCard 成功 → cache 内过滤。
  */
-export function useDeleteExperienceMutation(options: ExperienceMutationOptions = {}) {
+export function useDeleteExperienceMutation() {
   const queryClient = useQueryClient();
-  const { onSync } = options;
+
 
   return useMutation<string, unknown, string>({
     mutationFn: async (id) => {
@@ -124,7 +120,7 @@ export function useDeleteExperienceMutation(options: ExperienceMutationOptions =
       const prev = queryClient.getQueryData<Experience[]>([...EXPERIENCES_QUERY_KEY]) || [];
       const next = prev.filter((exp) => exp.id !== id);
       queryClient.setQueryData([...EXPERIENCES_QUERY_KEY], next);
-      onSync?.(next);
+
     },
   });
 }
@@ -141,9 +137,9 @@ interface AddExperienceVersionArgs {
  * 与 legacy `JobCraftContext.addExperienceVersion` 语义逐字等价：
  * versionHistory 前置插入新版本记录，currentVersion 更新，不发网络请求。
  */
-export function useAddExperienceVersionMutation(options: ExperienceMutationOptions = {}) {
+export function useAddExperienceVersionMutation() {
   const queryClient = useQueryClient();
-  const { onSync } = options;
+
 
   return useMutation<string, unknown, AddExperienceVersionArgs>({
     mutationFn: async (args) => args.expId,
@@ -170,7 +166,7 @@ export function useAddExperienceVersionMutation(options: ExperienceMutationOptio
         };
       });
       queryClient.setQueryData([...EXPERIENCES_QUERY_KEY], next);
-      onSync?.(next);
+
     },
   });
 }

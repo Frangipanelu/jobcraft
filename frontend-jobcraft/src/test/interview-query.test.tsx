@@ -3,8 +3,8 @@ import { useState } from 'react';
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { renderWithProviders } from './test-utils';
 import { InterviewPrepCenterView } from '../components/interview/InterviewPrepCenterView';
-import { useCreateInterviewMutation } from '../features/interview/hooks';
-import { useJobCraft } from '../context/JobCraftContext';
+import { useCreateInterviewMutation, useInterviewsQuery } from '../features/interview/hooks';
+import { useJobsQuery } from '../features/jobs/hooks';
 import type { DashboardItem, InterviewPrepRecord, InterviewPrepResult } from '../api/types';
 import type { Interview } from '../types/jobcraft';
 
@@ -114,19 +114,18 @@ const DASH_JOB: DashboardItem = {
   updated_at: '2026-09-18',
 };
 
-const MirrorCount = () => {
-  const { interviews } = useJobCraft();
-  return <span data-testid="iv-mirror-count">{interviews.length}</span>;
+const IvCacheCount = () => {
+  const { data: interviews = [] } = useInterviewsQuery();
+  return <span data-testid="iv-cache-count">{interviews.length}</span>;
 };
 
-const JobMirror = () => {
-  const { jobs } = useJobCraft();
+const JobCache = () => {
+  const { data: jobs = [] } = useJobsQuery();
   return <span data-testid="job-interview-ids">{jobs.map((j) => j.interviewIds.join(',')).join(';')}</span>;
 };
 
 const CreateHarness = ({ jobId = '1' }: { jobId?: string }) => {
-  const { syncInterviews, syncJobs } = useJobCraft();
-  const createInterview = useCreateInterviewMutation({ onSync: syncInterviews, onSyncJobs: syncJobs });
+  const createInterview = useCreateInterviewMutation();
   const [created, setCreated] = useState<Interview | null>(null);
   const [error, setError] = useState('');
   return (
@@ -187,7 +186,7 @@ describe('useInterviewsQuery 迁移视图', () => {
     renderWithProviders(
       <>
         <InterviewPrepCenterView onOpenMockInterview={vi.fn()} onOpenNewInterview={vi.fn()} />
-        <MirrorCount />
+        <IvCacheCount />
       </>,
     );
 
@@ -205,19 +204,19 @@ describe('useInterviewsQuery 迁移视图', () => {
       target: { value: '字节' },
     });
     expect(await screen.findByText('字节跳动')).toBeInTheDocument();
-    await waitFor(() => expect(screen.getByTestId('iv-mirror-count').textContent).toBe('1'));
+    await waitFor(() => expect(screen.getByTestId('iv-cache-count').textContent).toBe('1'));
   });
 });
 
 describe('useCreateInterviewMutation', () => {
-  it('从 JOBS cache 解析 job_analysis_id，runTaskOrSync 降级 generateInterviewPrep，双写 interviews + jobs 镜像', async () => {
+  it('从 JOBS cache 解析 job_analysis_id，runTaskOrSync 降级 generateInterviewPrep，写入 interviews + jobs cache', async () => {
     job.getDashboard.mockResolvedValue({ submissions: [DASH_JOB] });
 
     renderWithProviders(
       <>
         <CreateHarness />
-        <MirrorCount />
-        <JobMirror />
+        <IvCacheCount />
+        <JobCache />
       </>,
     );
 
@@ -234,7 +233,7 @@ describe('useCreateInterviewMutation', () => {
     );
     expect(interview.generateInterviewPrep).toHaveBeenCalledWith(12, { round_type: '技术面', card_ids: [] });
 
-    expect(screen.getByTestId('iv-mirror-count').textContent).toBe('1');
+    expect(screen.getByTestId('iv-cache-count').textContent).toBe('1');
     expect(screen.getByTestId('job-interview-ids').textContent).toBe('prep-55');
   });
 
@@ -242,7 +241,7 @@ describe('useCreateInterviewMutation', () => {
     renderWithProviders(
       <>
         <CreateHarness jobId="99" />
-        <JobMirror />
+        <JobCache />
       </>,
     );
 

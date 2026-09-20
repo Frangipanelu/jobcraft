@@ -15,14 +15,6 @@ import {
   buildVersionRecord,
 } from './mappers';
 
-export interface ReviewMutationOptions {
-  /** context 镜像写入（过渡期）：cache 更新后同步回 context.interviews，供未迁移视图读取。 */
-  onSync?: (interviews: Interview[]) => void;
-  /** 跨域镜像写入（过渡期）：写入 JOBS cache 后同步回 context.jobs。 */
-  onSyncJobs?: (jobs: Job[]) => void;
-  /** 跨域镜像写入（过渡期）：写入 EXPERIENCES cache 后同步回 context.experiences。 */
-  onSyncExperiences?: (experiences: Experience[]) => void;
-}
 
 // ---------------------------------------------------------------------------
 // useCreateInterviewReviewMutation
@@ -46,11 +38,9 @@ export interface CreateReviewArgs {
  * - 成功后 INTERVIEWS cache（review + status completed）+ 跨域 JOBS cache（steps done）；
  * - 不内置 toast / activities（toast 归视图层；activities 无消费者）。
  */
-export function useCreateInterviewReviewMutation(
-  options: ReviewMutationOptions = {}
-) {
+export function useCreateInterviewReviewMutation() {
   const queryClient = useQueryClient();
-  const { onSync, onSyncJobs } = options;
+
 
   return useMutation<CreateReviewMutationResult, unknown, CreateReviewArgs>({
     mutationFn: async ({ interviewId, transcript }) => {
@@ -111,7 +101,7 @@ export function useCreateInterviewReviewMutation(
         i.id === interviewId ? { ...i, status: 'completed', review } : i,
       );
       queryClient.setQueryData([...INTERVIEWS_QUERY_KEY], next);
-      onSync?.(next);
+
 
       const target = prev.find((i) => i.id === interviewId);
       if (target?.jobId) {
@@ -126,7 +116,7 @@ const nextJobs: Job[] = jobs.map((j) =>
           : j,
       );
         queryClient.setQueryData([...JOBS_QUERY_KEY], nextJobs);
-        onSyncJobs?.(nextJobs);
+  
       }
     },
   });
@@ -149,15 +139,13 @@ export interface ApplyReviewFeedbackArgs {
 /**
  * 将复盘反馈中的经历升级提案落地到经历资产库。
  * 与 legacy `JobCraftContext.applyReviewFeedback` 行为等价，额外修复漂移 bug：
- * - legacy 仅 setExperiences 不写 EXPERIENCES cache → 新实现同步写 cache + onSyncExperiences；
+ * - legacy 仅 setExperiences 不写 EXPERIENCES cache → 新实现同步写 cache；
  * - legacy 写 activities（零消费者）→ 本 hook 不写。
  * - 成功后 EXPERIENCES cache（版本升级 + 变更记录）+ INTERVIEWS cache（applied 标记）。
  */
-export function useApplyReviewFeedbackMutation(
-  options: ReviewMutationOptions = {}
-) {
+export function useApplyReviewFeedbackMutation() {
   const queryClient = useQueryClient();
-  const { onSync, onSyncExperiences } = options;
+
 
   return useMutation<ApplyReviewFeedbackResult, unknown, ApplyReviewFeedbackArgs>({
     mutationFn: async ({ interviewId, feedbackIndex }) => {
@@ -224,7 +212,7 @@ export function useApplyReviewFeedbackMutation(
         e.id === experienceId ? finalExp : e,
       );
       queryClient.setQueryData([...EXPERIENCES_QUERY_KEY], nextExp);
-      onSyncExperiences?.(nextExp);
+
 
       // INTERVIEWS cache + mirror
       const prevInt =
@@ -242,7 +230,7 @@ export function useApplyReviewFeedbackMutation(
         };
       });
       queryClient.setQueryData([...INTERVIEWS_QUERY_KEY], nextInt);
-      onSync?.(nextInt);
+
     },
   });
 }

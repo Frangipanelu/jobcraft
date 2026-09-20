@@ -25,12 +25,9 @@ interface InterviewReviewDetailViewProps {
 export const InterviewReviewDetailView: React.FC<InterviewReviewDetailViewProps> = ({
   interviewId
 }) => {
-  const { showToast, syncInterviews, syncExperiences } = useJobCraft();
+  const { showToast } = useJobCraft();
   const { data: interviews = [] } = useInterviewsQuery();
-  const applyFeedbackMutation = useApplyReviewFeedbackMutation({
-    onSync: syncInterviews,
-    onSyncExperiences: syncExperiences
-  });
+  const applyFeedbackMutation = useApplyReviewFeedbackMutation();
   const go = useTabNavigate();
 
   const currentInterview = interviews.find((i) => i.id === interviewId);

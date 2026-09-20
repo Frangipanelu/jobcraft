@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useJobCraft } from '../../context/JobCraftContext';
 import { useTabNavigate } from '../../router/tabPaths';
+import { useInterviewsQuery } from '../../features/interview/hooks';
 import {
   X,
   Sparkles,
@@ -31,8 +32,9 @@ export const MockInterviewModal: React.FC<MockInterviewModalProps> = ({
   onClose,
   interviewId
 }) => {
-  const { interviews, showToast } = useJobCraft();
+  const { showToast } = useJobCraft();
   const go = useTabNavigate();
+  const { data: interviews = [] } = useInterviewsQuery();
   const currentInterview = interviews.find((i) => i.id === interviewId);
 
   const [messages, setMessages] = useState<ChatMsg[]>([]);

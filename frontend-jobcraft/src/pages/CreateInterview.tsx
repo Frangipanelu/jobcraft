@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useJobCraft } from '../context/JobCraftContext';
 import { useCreateInterviewMutation } from '../features/interview/hooks';
+import { useJobsQuery } from '../features/jobs/hooks';
 import { useHistoricalResumesQuery, useAddHistoricalResumeMutation } from '../features/historical-resumes/hooks';
 import { InterviewRoundType, InterviewFormat } from '../types/jobcraft';
 import {
@@ -32,18 +33,16 @@ const interviewPrepAiSteps = [
 
 export const CreateInterview: React.FC<{ initialJobId?: string }> = ({ initialJobId = '' }) => {
   const {
-    jobs,
     selectedJobId: contextSelectedJobId,
     navigateTo,
     interviewDraft,
     saveInterviewDraft,
     clearInterviewDraft,
     setJdAnalysisReturnTarget,
-    showToast,
-    syncInterviews,
-    syncJobs
+    showToast
   } = useJobCraft();
-  const createInterview = useCreateInterviewMutation({ onSync: syncInterviews, onSyncJobs: syncJobs });
+  const createInterview = useCreateInterviewMutation();
+  const { data: jobs = [] } = useJobsQuery();
   const { data: historicalResumes = [] } = useHistoricalResumesQuery();
   const addHistoricalResumeMutation = useAddHistoricalResumeMutation();
 

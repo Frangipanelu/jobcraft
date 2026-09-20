@@ -1,6 +1,6 @@
 import { Interview, InterviewPrepRecord, InterviewPreparation } from '../../types/jobcraft';
 
-/** Interviews 查询缓存 key（迁移视图 + context 镜像双写共用）。 */
+/** Interviews 查询缓存 key（react-query 唯读源）。 */
 export const INTERVIEWS_QUERY_KEY = ['interviews'] as const;
 
 /**

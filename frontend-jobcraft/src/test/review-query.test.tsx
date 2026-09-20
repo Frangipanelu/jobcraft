@@ -3,7 +3,6 @@ import { useEffect, useRef, useState } from 'react';
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { useQueryClient } from '@tanstack/react-query';
 import { renderWithProviders } from './test-utils';
-import { useJobCraft } from '../context/JobCraftContext';
 import { InterviewReviewCenterView } from '../components/review/InterviewReviewCenterView';
 import { useInterviewsQuery } from '../features/interview/hooks';
 import { useJobsQuery } from '../features/jobs/hooks';
@@ -229,33 +228,6 @@ const ANALYSIS: InterviewReviewResult = {
   created_at: '2026-09-19',
 };
 
-// 过渡镜像计数：context.interviews / context.experiences 在写路径 onSync 后应同步
-const ReviewsMirror = () => {
-  const { interviews } = useJobCraft();
-  const iv = interviews[0];
-  const fb = iv?.review?.experienceFeedbacks?.[0];
-  return (
-    <>
-      <span data-testid="reviews-mirror-status">{iv?.status ?? ''}</span>
-      <span data-testid="reviews-mirror-score">{iv?.review?.overallScore ?? ''}</span>
-      <span data-testid="reviews-mirror-applied">{String(fb?.applied ?? '')}</span>
-    </>
-  );
-};
-
-const ExpMirror = () => {
-  const { experiences } = useJobCraft();
-  const exp = experiences[0];
-  return (
-    <>
-      <span data-testid="exp-mirror-version">{exp?.currentVersion ?? ''}</span>
-      <span data-testid="exp-mirror-responsibility">{exp?.responsibility ?? ''}</span>
-      <span data-testid="exp-mirror-action">{exp?.actions?.[0] ?? ''}</span>
-      <span data-testid="exp-mirror-hist">{exp?.versionHistory?.length ?? ''}</span>
-    </>
-  );
-};
-
 interface SeedProps {
   interviews: Interview[];
   experiences: Experience[];
@@ -313,11 +285,7 @@ const CacheReader = () => {
 };
 
 const CreateHarness = ({ interviewId = 'prep-7' }: { interviewId?: string }) => {
-  const { syncInterviews, syncJobs } = useJobCraft();
-  const createReview = useCreateInterviewReviewMutation({
-    onSync: syncInterviews,
-    onSyncJobs: syncJobs,
-  });
+  const createReview = useCreateInterviewReviewMutation();
   const [created, setCreated] = useState('');
   const [error, setError] = useState('');
   return (
@@ -341,11 +309,7 @@ const CreateHarness = ({ interviewId = 'prep-7' }: { interviewId?: string }) => 
 };
 
 const ApplyHarness = ({ interviews }: { interviews: Interview[] }) => {
-  const { syncInterviews, syncExperiences } = useJobCraft();
-  const applyFeedback = useApplyReviewFeedbackMutation({
-    onSync: syncInterviews,
-    onSyncExperiences: syncExperiences,
-  });
+  const applyFeedback = useApplyReviewFeedbackMutation();
   const [error, setError] = useState('');
   return (
     <div>
@@ -408,13 +372,12 @@ afterEach(() => {
 });
 
 describe('useCreateInterviewReviewMutation（生成复盘）', () => {
-  it('create + analyze 走 fallback：双写 INTERVIEWS/JOBS cache + 双镜像同步', async () => {
+  it('create + analyze 走 fallback：双写 INTERVIEWS/JOBS cache', async () => {
     renderWithProviders(
       <>
         <Seeder {...seedProps} />
         <CreateHarness />
         <CacheReader />
-        <ReviewsMirror />
       </>,
     );
 
@@ -445,9 +408,6 @@ describe('useCreateInterviewReviewMutation（生成复盘）', () => {
     expect(screen.getByTestId('cache-score').textContent).toBe('85');
     // 跨域 JOBS cache：steps.reviewStage/prepStage done
     expect(screen.getByTestId('cache-review-stage').textContent).toBe('done');
-    // 镜像同步
-    expect(screen.getByTestId('reviews-mirror-status').textContent).toBe('completed');
-    expect(screen.getByTestId('reviews-mirror-score').textContent).toBe('85');
   });
 
   it('分析失败时容忍：保留 base patch，仍写入 cache 且不抛错', async () => {
@@ -493,13 +453,11 @@ describe('useCreateInterviewReviewMutation（生成复盘）', () => {
 });
 
 describe('useApplyReviewFeedbackMutation（反哺经历资产）', () => {
-  it('proposedChanges 路径：EXPERIENCES cache + 镜像（修复 legacy 漂移）+ feedback.applied 标记', async () => {
+  it('proposedChanges 路径：EXPERIENCES cache 反哺 + feedback.applied 标记', async () => {
     renderWithProviders(
       <>
         <Seeder {...seedProps} />
         <ApplyHarness interviews={[INT_YUAN]} />
-        <ExpMirror />
-        <ReviewsMirror />
       </>,
     );
 
@@ -511,12 +469,8 @@ describe('useApplyReviewFeedbackMutation（反哺经历资产）', () => {
     await waitFor(() => expect(screen.getByTestId('cache-exp-version').textContent).toBe('V2'));
     expect(screen.getByTestId('cache-exp-responsibility').textContent).toBe('新职责（含选型对比）');
     expect(screen.getByTestId('cache-exp-hist').textContent).toBe('1');
-    // 镜像同步（legacy 只 setExperiences，不写 cache → 此处双写验证修复）
-    expect(screen.getByTestId('exp-mirror-version').textContent).toBe('V2');
-    expect(screen.getByTestId('exp-mirror-responsibility').textContent).toBe('新职责（含选型对比）');
-    // INTERVIEWS cache + 镜像：feedback applied
+    // INTERVIEWS cache：feedback applied
     expect(screen.getByTestId('cache-applied').textContent).toBe('true');
-    expect(screen.getByTestId('reviews-mirror-applied').textContent).toBe('true');
     expect(screen.getByTestId('apply-error').textContent).toBe('');
   });
 
@@ -529,7 +483,6 @@ describe('useApplyReviewFeedbackMutation（反哺经历资产）', () => {
           jobs={[JOB_12]}
         />
         <ApplyHarness interviews={[buildInt(RECORD_YUAN, REVIEW_SUGG)]} />
-        <ExpMirror />
       </>,
     );
 
@@ -539,8 +492,6 @@ describe('useApplyReviewFeedbackMutation（反哺经历资产）', () => {
 
     await waitFor(() => expect(screen.getByTestId('cache-exp-version').textContent).toBe('V2'));
     expect(screen.getByTestId('cache-exp-action').textContent).toBe('[面试复盘升级] 补充量化选型对比');
-    expect(screen.getByTestId('exp-mirror-version').textContent).toBe('V2');
-    expect(screen.getByTestId('exp-mirror-action').textContent).toBe('[面试复盘升级] 补充量化选型对比');
     expect(screen.getByTestId('cache-exp-hist').textContent).toBe('1');
     expect(screen.getByTestId('apply-error').textContent).toBe('');
   });

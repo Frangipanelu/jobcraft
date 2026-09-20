@@ -2,14 +2,15 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { useState } from 'react';
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { renderWithProviders } from './test-utils';
-import { useJobCraft } from '../context/JobCraftContext';
 import { JDAnalysisCenterView } from '../components/jd/JDAnalysisCenterView';
 import { JDReportDetailView } from '../components/jd/JDReportDetailView';
 import {
   useCreateJdAnalysisMutation,
   useCreateStructuredJdAnalysisMutation,
   useDeleteJdAnalysisMutation,
+  useJdAnalysesQuery,
 } from '../features/jd/hooks';
+import { useJobsQuery } from '../features/jobs/hooks';
 import type { DashboardItem, JobAnalysisResult, ATSProfile } from '../api/types';
 import type { JDAnalysis } from '../types/jobcraft';
 
@@ -143,28 +144,26 @@ function buildStructuredResult() {
   };
 }
 
-const MirrorCount = () => {
-  const { jdAnalyses } = useJobCraft();
-  return <span data-testid="jd-mirror-count">{jdAnalyses.length}</span>;
+const JdCacheCount = () => {
+  const { data: jdAnalyses = [] } = useJdAnalysesQuery();
+  return <span data-testid="jd-cache-count">{jdAnalyses.length}</span>;
 };
 
-const JobsMirrorState = () => {
-  const { jobs } = useJobCraft();
+const JobsCacheState = () => {
+  const { data: jobs = [] } = useJobsQuery();
   const detail = jobs[0]
     ? `${jobs.length}|${jobs[0].jdAnalysisId}|${jobs[0].matchScore}`
     : '0|';
-  return <span data-testid="jobs-mirror-state">{detail}</span>;
+  return <span data-testid="jobs-cache-state">{detail}</span>;
 };
 
 const DeleteHarness = () => {
-  const { syncJdAnalyses } = useJobCraft();
-  const del = useDeleteJdAnalysisMutation({ onSync: syncJdAnalyses });
+  const del = useDeleteJdAnalysisMutation();
   return <button onClick={() => del.mutate('sub-55')}>删除 sub</button>;
 };
 
 const StructuredCreateHarness = ({ jobId }: { jobId?: string }) => {
-  const { syncJobs, syncJdAnalyses } = useJobCraft();
-  const create = useCreateStructuredJdAnalysisMutation({ onSync: syncJdAnalyses, onSyncJobs: syncJobs });
+  const create = useCreateStructuredJdAnalysisMutation();
   const [result, setResult] = useState('');
   const [error, setError] = useState('');
   return (
@@ -196,8 +195,7 @@ const StructuredCreateHarness = ({ jobId }: { jobId?: string }) => {
 };
 
 const UnstructuredCreateHarness = ({ jobId }: { jobId?: string }) => {
-  const { syncJobs, syncJdAnalyses } = useJobCraft();
-  const create = useCreateJdAnalysisMutation({ onSync: syncJdAnalyses, onSyncJobs: syncJobs });
+  const create = useCreateJdAnalysisMutation();
   const [id, setId] = useState('');
   return (
     <div>
@@ -243,7 +241,7 @@ describe('useJdAnalysesQuery 迁移视图', () => {
     renderWithProviders(
       <>
         <JDAnalysisCenterView />
-        <MirrorCount />
+        <JdCacheCount />
       </>,
     );
 
@@ -266,21 +264,21 @@ describe('useJdAnalysesQuery 迁移视图', () => {
     });
     expect(await screen.findByText('未找到符合条件的研判记录')).toBeInTheDocument();
 
-    await screen.findByTestId('jd-mirror-count');
-    expect(screen.getByTestId('jd-mirror-count').textContent).toBe('2');
+    await screen.findByTestId('jd-cache-count');
+    expect(screen.getByTestId('jd-cache-count').textContent).toBe('2');
   });
 
-  it('delete：cache 过滤 + 镜像同步，真实分析 id 不发后端删除请求', async () => {
+  it('delete：cache 过滤，真实分析 id 不发后端删除请求', async () => {
     renderWithProviders(
       <>
         <JDAnalysisCenterView />
-        <MirrorCount />
+        <JdCacheCount />
       </>,
     );
 
     fireEvent.click(screen.getByText(/历史研判报告/));
     await screen.findByText('字节跳动');
-    expect(screen.getByTestId('jd-mirror-count').textContent).toBe('2');
+    expect(screen.getByTestId('jd-cache-count').textContent).toBe('2');
 
     fireEvent.click(screen.getAllByTitle('删除记录')[0]);
 
@@ -288,16 +286,16 @@ describe('useJdAnalysesQuery 迁移视图', () => {
     expect(screen.queryByText('字节跳动')).not.toBeInTheDocument();
     expect(screen.getByText('腾讯')).toBeInTheDocument();
     expect(job.deleteSubmission).not.toHaveBeenCalled();
-    expect(screen.getByTestId('jd-mirror-count').textContent).toBe('1');
+    expect(screen.getByTestId('jd-cache-count').textContent).toBe('1');
   });
 });
 
 describe('useDeleteJdAnalysisMutation', () => {
-  it('sub-{number} id 触发后端 deleteSubmission 并同步镜像', async () => {
+  it('sub-{number} id 触发后端 deleteSubmission 并更新 cache', async () => {
     renderWithProviders(
       <>
         <DeleteHarness />
-        <MirrorCount />
+        <JdCacheCount />
       </>,
     );
 
@@ -321,12 +319,12 @@ describe('JDReportDetailView 迁移读路径', () => {
 });
 
 describe('JD create 迁移（features/jd/hooks）', () => {
-  it('结构化分析：无 jobId 时自动创建岗位，runTaskOrSync 降级 analyzeStructuredJd，双写 jd + jobs 镜像', async () => {
+  it('结构化分析：无 jobId 时自动创建岗位，runTaskOrSync 降级 analyzeStructuredJd，双写 jd + jobs cache', async () => {
     renderWithProviders(
       <>
         <StructuredCreateHarness />
-        <MirrorCount />
-        <JobsMirrorState />
+        <JdCacheCount />
+        <JobsCacheState />
       </>,
     );
 
@@ -347,8 +345,8 @@ describe('JD create 迁移（features/jd/hooks）', () => {
       requirements: [{ text: '3年经验', tag: 'required' }],
     });
 
-    expect(screen.getByTestId('jd-mirror-count').textContent).toBe('3');
-    expect(screen.getByTestId('jobs-mirror-state').textContent).toMatch(/^1\|jd-\d+\|0$/);
+    expect(screen.getByTestId('jd-cache-count').textContent).toBe('3');
+    expect(screen.getByTestId('jobs-cache-state').textContent).toMatch(/^1\|jd-\d+\|0$/);
   });
 
   it('结构化分析：提供 jobId 时复用已有岗位并回填 jdAnalysisId（合成 id）', async () => {
@@ -357,17 +355,17 @@ describe('JD create 迁移（features/jd/hooks）', () => {
     renderWithProviders(
       <>
         <StructuredCreateHarness jobId="1" />
-        <MirrorCount />
-        <JobsMirrorState />
+        <JdCacheCount />
+        <JobsCacheState />
       </>,
     );
 
-    await waitFor(() => expect(screen.getByTestId('jobs-mirror-state').textContent).toBe('1|12|0'));
+    await waitFor(() => expect(screen.getByTestId('jobs-cache-state').textContent).toBe('1|12|0'));
     fireEvent.click(screen.getByText('发起结构化分析'));
 
     await waitFor(() => expect(screen.getByTestId('structured-result').textContent).toMatch(/^jd-\d+\|0\|结构化分析完成\|1$/));
-    expect(screen.getByTestId('jobs-mirror-state').textContent).toMatch(/^1\|jd-\d+\|0$/);
-    expect(screen.getByTestId('jd-mirror-count').textContent).toBe('3');
+    expect(screen.getByTestId('jobs-cache-state').textContent).toMatch(/^1\|jd-\d+\|0$/);
+    expect(screen.getByTestId('jd-cache-count').textContent).toBe('3');
   });
 
   it('原始文本分析（NewInterviewModal 路径）：复用已有岗位，回填真实 job_analysis_id 与 matchScore', async () => {
@@ -376,12 +374,12 @@ describe('JD create 迁移（features/jd/hooks）', () => {
     renderWithProviders(
       <>
         <UnstructuredCreateHarness jobId="1" />
-        <MirrorCount />
-        <JobsMirrorState />
+        <JdCacheCount />
+        <JobsCacheState />
       </>,
     );
 
-    await waitFor(() => expect(screen.getByTestId('jobs-mirror-state').textContent).toBe('1|12|0'));
+    await waitFor(() => expect(screen.getByTestId('jobs-cache-state').textContent).toBe('1|12|0'));
     fireEvent.click(screen.getByText('发起原始文本分析'));
 
     await waitFor(() => expect(screen.getByTestId('unstructured-id').textContent).toBe('12'));
@@ -399,8 +397,8 @@ describe('JD create 迁移（features/jd/hooks）', () => {
       card_ids: [],
     });
 
-    expect(screen.getByTestId('jobs-mirror-state').textContent).toBe('1|12|60');
-    expect(screen.getByTestId('jd-mirror-count').textContent).toBe('3');
+    expect(screen.getByTestId('jobs-cache-state').textContent).toBe('1|12|60');
+    expect(screen.getByTestId('jd-cache-count').textContent).toBe('3');
   });
 
   it('结构化分析失败时 mutateAsync reject（不再 fire-and-forget）', async () => {

@@ -18,8 +18,8 @@ interface NewExperienceModalProps {
 }
 
 export const NewExperienceModal: React.FC<NewExperienceModalProps> = ({ isOpen, onClose }) => {
-  const { showToast, syncExperiences } = useJobCraft();
-  const createExperience = useCreateExperienceMutation({ onSync: syncExperiences });
+  const { showToast } = useJobCraft();
+  const createExperience = useCreateExperienceMutation();
 
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState<ExperienceCategory>('project');

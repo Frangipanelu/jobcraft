@@ -1,7 +1,7 @@
 import { SUBMISSION_STATUS_CN, DashboardItem } from '../../api/types';
 import { Job, JobStatus } from '../../types/jobcraft';
 
-/** Jobs 查询缓存 key（迁移视图 + context 镜像双写共用）。 */
+/** Jobs 查询缓存 key（react-query 唯读源）。 */
 export const JOBS_QUERY_KEY = ['jobs'] as const;
 
 /**

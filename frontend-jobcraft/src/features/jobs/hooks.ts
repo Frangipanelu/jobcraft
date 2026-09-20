@@ -4,10 +4,6 @@ import * as jobApi from '../../api/job';
 import { Job } from '../../types/jobcraft';
 import { JOBS_QUERY_KEY, deriveJobStatus, submissionToJob } from './mappers';
 
-interface JobMutationOptions {
-  /** context 镜像写入（过渡期）：cache 更新后同步回 context.jobs，供未迁移视图读取。 */
-  onSync?: (jobs: Job[]) => void;
-}
 
 /**
  * 查询当前用户的岗位列表（dashboard → submissionToJob）。
@@ -30,9 +26,8 @@ export function useJobsQuery() {
  * - 后端失败仅保留本地 Job（fire-and-forget），不抛错；
  * - mutateAsync 返回最终 Job（含回填后的 id，供 navigateTo）。
  */
-export function useCreateJobMutation(options: JobMutationOptions = {}) {
+export function useCreateJobMutation() {
   const queryClient = useQueryClient();
-  const { onSync } = options;
 
   return useMutation<Job, unknown, {
     company: string;
@@ -82,7 +77,6 @@ export function useCreateJobMutation(options: JobMutationOptions = {}) {
       const prev = queryClient.getQueryData<Job[]>([...JOBS_QUERY_KEY]) || [];
       const next = [newJob, ...prev];
       queryClient.setQueryData([...JOBS_QUERY_KEY], next);
-      onSync?.(next);
     },
   });
 }
@@ -94,11 +88,10 @@ interface TerminateArgs {
 }
 
 /**
- * 纯本地状态变更基类：把 cache 中目标 Job 的 steps/lastUpdated 替换为传入值，并同步镜像。
+ * 纯本地状态变更基类：把 cache 中目标 Job 的 steps/lastUpdated 替换为传入值。
  */
-function useLocalJobPatchMutation(patch: (j: Job) => TerminateArgs, options: JobMutationOptions = {}) {
+function useLocalJobPatchMutation(patch: (j: Job) => TerminateArgs) {
   const queryClient = useQueryClient();
-  const { onSync } = options;
 
   return useMutation<string, unknown, string>({
     mutationFn: async (jobId) => jobId,
@@ -111,7 +104,6 @@ function useLocalJobPatchMutation(patch: (j: Job) => TerminateArgs, options: Job
         return { ...j, lastUpdated: applied.lastUpdated, steps, status: deriveJobStatus(steps) } as Job;
       });
       queryClient.setQueryData([...JOBS_QUERY_KEY], next);
-      onSync?.(next);
     },
   });
 }
@@ -120,31 +112,32 @@ function useLocalJobPatchMutation(patch: (j: Job) => TerminateArgs, options: Job
  * 标记岗位流程已结束（纯本地状态更新，无后端调用）。
  * 注意：P0-1 之后 applied（已投递）只能由用户确认，终止流程不再顺带标记投递。
  */
-export function useTerminateJobMutation(options: JobMutationOptions = {}) {
-  return useLocalJobPatchMutation(
-    (j) => ({ jobId: j.id, lastUpdated: '刚刚', steps: { ...j.steps, terminated: true } }),
-    options
-  );
+export function useTerminateJobMutation() {
+  return useLocalJobPatchMutation((j) => ({
+    jobId: j.id,
+    lastUpdated: '刚刚',
+    steps: { ...j.steps, terminated: true },
+  }));
 }
 
 /**
  * 恢复已结束岗位的处理流程（纯本地状态更新，无后端调用）。
  */
-export function useResumeJobMutation(options: JobMutationOptions = {}) {
-  return useLocalJobPatchMutation(
-    (j) => ({ jobId: j.id, lastUpdated: '刚刚', steps: { ...j.steps, terminated: false } }),
-    options
-  );
+export function useResumeJobMutation() {
+  return useLocalJobPatchMutation((j) => ({
+    jobId: j.id,
+    lastUpdated: '刚刚',
+    steps: { ...j.steps, terminated: false },
+  }));
 }
 
 /**
  * 用户主动标记/取消「已投递」（P0-1：已投递必须是用户手工确认，禁止自动进入）。
  * - 优先调用后端 PATCH delivered（有 backendId 时持久化），失败仅保留本地乐观状态；
- * - cache 与 context 镜像即时同步，前端状态仍由 deriveJobStatus 派生。
+ * - cache 即时更新，前端状态仍由 deriveJobStatus 派生。
  */
-export function useSetDeliveredMutation(delivered: boolean, options: JobMutationOptions = {}) {
+export function useSetDeliveredMutation(delivered: boolean) {
   const queryClient = useQueryClient();
-  const { onSync } = options;
 
   return useMutation<string, unknown, string>({
     mutationFn: async (jobId) => {
@@ -172,7 +165,6 @@ export function useSetDeliveredMutation(delivered: boolean, options: JobMutation
         } as Job;
       });
       queryClient.setQueryData([...JOBS_QUERY_KEY], next);
-      onSync?.(next);
     },
   });
 }

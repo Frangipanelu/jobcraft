@@ -16,7 +16,7 @@ type JDDetailInput = Pick<
   | 'created_at'
 >;
 
-/** JD 分析查询缓存 key（迁移视图 + context 镜像双写共用）。 */
+/** JD 分析查询缓存 key（react-query 唯读源）。 */
 export const JD_ANALYSES_QUERY_KEY = ['jdAnalyses'] as const;
 
 /** 将职责列表拼接为 JD 文本块（结构化分析新增路径用）。自 JobCraftContext 移出。 */

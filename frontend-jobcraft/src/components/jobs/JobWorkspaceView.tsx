@@ -17,7 +17,9 @@ import {
 } from 'lucide-react';
 import { JDReportDetailView } from '../jd/JDReportDetailView';
 import { ResumeEditorView } from '../resume/ResumeEditorView';
-import { useSetDeliveredMutation } from '../../features/jobs/hooks';
+import { useJobsQuery, useSetDeliveredMutation } from '../../features/jobs/hooks';
+import { useInterviewsQuery } from '../../features/interview/hooks';
+import { useJdAnalysesQuery } from '../../features/jd/hooks';
 
 type JobSubTab = 'jd' | 'resume' | 'interview';
 
@@ -36,14 +38,13 @@ export const JobWorkspaceView: React.FC<JobWorkspaceViewProps> = ({
 }) => {
   const {
     selectedJobId,
-    jobs,
-    interviews,
-    jdAnalyses,
-    jobWorkspaceSubTab,
-    syncJobs
+    jobWorkspaceSubTab
   } = useJobCraft();
   const navigate = useNavigate();
-  const markDelivered = useSetDeliveredMutation(true, { onSync: syncJobs });
+  const { data: jobs = [] } = useJobsQuery();
+  const { data: interviews = [] } = useInterviewsQuery();
+  const { data: jdAnalyses = [] } = useJdAnalysesQuery();
+  const markDelivered = useSetDeliveredMutation(true);
 
   const [activeTab, setActiveTab] = useState<JobSubTab>(initialSubTab || jobWorkspaceSubTab || 'jd');
 

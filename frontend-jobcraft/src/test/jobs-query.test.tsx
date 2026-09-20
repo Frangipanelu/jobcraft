@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { fireEvent, screen } from '@testing-library/react';
 import { renderWithProviders } from './test-utils';
-import { useJobCraft } from '../context/JobCraftContext';
+import { useJobsQuery } from '../features/jobs/hooks';
 import { JobsListView } from '../components/jobs/JobsListView';
 import { NewJobModal } from '../components/jobs/NewJobModal';
 import { WorkbenchView } from '../components/workbench/WorkbenchView';
@@ -94,9 +94,9 @@ const MIRROR_JOB = {
   updated_at: null,
 };
 
-const MirrorSpy = () => {
-  const { jobs } = useJobCraft();
-  return <span data-testid="mirror-count">{jobs.length}</span>;
+const CacheSpy = () => {
+  const { data: jobs = [] } = useJobsQuery();
+  return <span data-testid="cache-count">{jobs.length}</span>;
 };
 
 beforeEach(() => {
@@ -124,12 +124,12 @@ describe('useJobsQuery 迁移视图', () => {
     expect(job.getDashboard).toHaveBeenCalledWith(1);
   });
 
-  it('create：cache 前置写入 + context 镜像同步（未迁移视图可读）', async () => {
+  it('create：cache 前置写入（未迁移视图可读）', async () => {
     renderWithProviders(
       <>
         <JobsListView onOpenNewJob={() => {}} />
         <NewJobModal isOpen onClose={() => {}} />
-        <MirrorSpy />
+        <CacheSpy />
       </>,
     );
 
@@ -150,26 +150,26 @@ describe('useJobsQuery 迁移视图', () => {
       position: 'AI 策略产品',
       company: '快手',
     });
-    await screen.findByTestId('mirror-count');
-    expect(screen.getByTestId('mirror-count').textContent).toBe('3');
+    await screen.findByTestId('cache-count');
+    expect(screen.getByTestId('cache-count').textContent).toBe('3');
   });
 
-  it('terminate/resume：乐观更新 cache 与镜像', async () => {
+  it('terminate/resume：乐观更新 cache', async () => {
     renderWithProviders(
       <>
         <JobsListView onOpenNewJob={() => {}} />
-        <MirrorSpy />
+        <CacheSpy />
       </>,
     );
 
     await screen.findByText('字节跳动');
-    expect(screen.getByTestId('mirror-count').textContent).toBe('2');
+    expect(screen.getByTestId('cache-count').textContent).toBe('2');
 
     fireEvent.click(screen.getAllByText('标记已结束')[0]);
     expect(await screen.findByText('恢复处理')).toBeInTheDocument();
     expect(screen.getByText('已结束 (1)')).toBeInTheDocument();
     expect(screen.getByText('待处理 (0)')).toBeInTheDocument();
-    expect(screen.getByTestId('mirror-count').textContent).toBe('2');
+    expect(screen.getByTestId('cache-count').textContent).toBe('2');
 
     fireEvent.click(screen.getByText('恢复处理'));
     expect(await screen.findByText('待处理 (1)')).toBeInTheDocument();

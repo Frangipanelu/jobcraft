@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { fireEvent, screen } from '@testing-library/react';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { renderWithProviders } from './test-utils';
-import { useJobCraft } from '../context/JobCraftContext';
 import { ExperiencesView } from '../components/experiences/ExperiencesView';
 import { NewExperienceModal } from '../components/experiences/NewExperienceModal';
 import {
@@ -77,14 +76,14 @@ const CARD_B: ExperienceCard = {
   is_active: true,
 };
 
-const MirrorCount = () => {
-  const { experiences } = useJobCraft();
-  return <span data-testid="exp-mirror-count">{experiences.length}</span>;
+const ExpCacheCount = () => {
+  const { data: experiences = [] } = useExperiencesQuery();
+  return <span data-testid="exp-cache-count">{experiences.length}</span>;
 };
 
-const MirrorFirstTitle = () => {
-  const { experiences } = useJobCraft();
-  return <span data-testid="exp-mirror-title">{experiences[0]?.title ?? ''}</span>;
+const ExpCacheTitle = () => {
+  const { data: experiences = [] } = useExperiencesQuery();
+  return <span data-testid="exp-cache-title">{experiences[0]?.title ?? ''}</span>;
 };
 
 beforeEach(() => {
@@ -125,7 +124,7 @@ describe('useExperiencesQuery 迁移视图', () => {
     expect(screen.getByText('端侧大模型量化评测')).toBeInTheDocument();
   });
 
-  it('create：cache 前置写入 + context 镜像同步（未迁移视图可读）', async () => {
+  it('create：cache 前置写入（未迁移视图可读）', async () => {
     experience.createCard.mockResolvedValue({
       id: 9,
       user_id: 1,
@@ -146,7 +145,7 @@ describe('useExperiencesQuery 迁移视图', () => {
       <>
         <ExperiencesView />
         <NewExperienceModal isOpen onClose={() => {}} />
-        <MirrorCount />
+        <ExpCacheCount />
       </>,
     );
 
@@ -165,36 +164,35 @@ describe('useExperiencesQuery 迁移视图', () => {
     expect(experience.createCard).toHaveBeenCalledWith(
       expect.objectContaining({ title: '新经历', company: '新公司', source: 'manual' }),
     );
-    await screen.findByTestId('exp-mirror-count');
-    expect(screen.getByTestId('exp-mirror-count').textContent).toBe('3');
+    await screen.findByTestId('exp-cache-count');
+    expect(screen.getByTestId('exp-cache-count').textContent).toBe('3');
   });
 
-  it('delete：后端 deleteCard + cache 过滤 + 镜像同步', async () => {
+  it('delete：后端 deleteCard + cache 过滤', async () => {
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
     renderWithProviders(
       <>
         <ExperiencesView />
-        <MirrorCount />
+        <ExpCacheCount />
       </>,
     );
 
     await screen.findByText('端侧大模型量化评测');
-    expect(screen.getByTestId('exp-mirror-count').textContent).toBe('2');
+    expect(screen.getByTestId('exp-cache-count').textContent).toBe('2');
 
     fireEvent.click(screen.getAllByTitle('删除此经历')[0]);
 
     expect(await screen.findByText('全部资产 (1)')).toBeInTheDocument();
     expect(experience.deleteCard).toHaveBeenCalledWith(7);
     expect(screen.queryByText('端侧大模型量化评测')).not.toBeInTheDocument();
-    expect(screen.getByTestId('exp-mirror-count').textContent).toBe('1');
+    expect(screen.getByTestId('exp-cache-count').textContent).toBe('1');
     confirmSpy.mockRestore();
   });
 });
 
 const UpdateHarness = () => {
-  const { syncExperiences } = useJobCraft();
   const { data } = useExperiencesQuery();
-  const update = useUpdateExperienceMutation({ onSync: syncExperiences });
+  const update = useUpdateExperienceMutation();
   const first = (data ?? [])[0];
   return (
     <>
@@ -207,9 +205,8 @@ const UpdateHarness = () => {
 };
 
 const VersionHarness = () => {
-  const { syncExperiences } = useJobCraft();
   const { data } = useExperiencesQuery();
-  const addVersion = useAddExperienceVersionMutation({ onSync: syncExperiences });
+  const addVersion = useAddExperienceVersionMutation();
   const first = (data ?? [])[0];
   return (
     <>
@@ -233,37 +230,36 @@ const VersionHarness = () => {
 };
 
 describe('useUpdateExperienceMutation / 本地版本演进', () => {
-  it('update：后端 updateCard 成功 → cache 乐观合并 + 镜像同步', async () => {
+  it('update：后端 updateCard 成功 → cache 乐观合并', async () => {
     experience.updateCard.mockResolvedValue(CARD_A);
 
     renderWithProviders(
       <>
         <UpdateHarness />
-        <MirrorFirstTitle />
+        <ExpCacheTitle />
       </>,
     );
 
     await screen.findByTestId('cache-title');
-    expect(screen.getByTestId('cache-title').textContent).toBe('端侧大模型量化评测');
+    await waitFor(() => expect(screen.getByTestId('cache-title').textContent).toBe('端侧大模型量化评测'));
 
     fireEvent.click(screen.getByText('更新标题'));
 
-    await screen.findByTestId('cache-title');
-    expect(screen.getByTestId('cache-title').textContent).toBe('改名后的经历');
+    await waitFor(() => expect(screen.getByTestId('cache-title').textContent).toBe('改名后的经历'));
     expect(experience.updateCard).toHaveBeenCalledWith(7, expect.objectContaining({ title: '改名后的经历' }));
-    expect(screen.getByTestId('exp-mirror-title').textContent).toBe('改名后的经历');
+    await waitFor(() => expect(screen.getByTestId('exp-cache-title').textContent).toBe('改名后的经历'));
   });
 
   it('本地版本演进：versionHistory 前置展开 + currentVersion 更新，且不发网络请求', async () => {
     renderWithProviders(<VersionHarness />);
 
     expect(await screen.findByText('V3')).toBeInTheDocument();
-    expect(screen.getByTestId('hist').textContent).toBe('0');
+    await waitFor(() => expect(screen.getByTestId('hist').textContent).toBe('0'));
 
     fireEvent.click(screen.getByText('加版本'));
 
-    expect(screen.getByTestId('ver').textContent).toBe('V3.1');
-    expect(screen.getByTestId('hist').textContent).toBe('1');
+    await waitFor(() => expect(screen.getByTestId('ver').textContent).toBe('V3.1'));
+    await waitFor(() => expect(screen.getByTestId('hist').textContent).toBe('1'));
     expect(experience.listCards).toHaveBeenCalled();
     expect(experience.updateCard).not.toHaveBeenCalled();
   });

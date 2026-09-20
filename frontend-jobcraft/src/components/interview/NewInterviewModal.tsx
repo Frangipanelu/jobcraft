@@ -3,6 +3,7 @@ import { useJobCraft } from '../../context/JobCraftContext';
 import { useTabNavigate } from '../../router/tabPaths';
 import { useCreateInterviewMutation } from '../../features/interview/hooks';
 import { useCreateJdAnalysisMutation } from '../../features/jd/hooks';
+import { useCreateJobMutation, useJobsQuery } from '../../features/jobs/hooks';
 import { InterviewRoundType, InterviewFormat, InterviewDraft } from '../../types/jobcraft';
 import {
   X,
@@ -46,16 +47,11 @@ const aiGenerateItems = [
 ];
 
 export const NewInterviewModal: React.FC<Props> = ({ isOpen, jobId, mode, onClose }) => {
-  const {
-    jobs,
-    createJob,
-    showToast,
-    syncInterviews,
-    syncJobs,
-    syncJdAnalyses
-  } = useJobCraft();
-  const createInterview = useCreateInterviewMutation({ onSync: syncInterviews, onSyncJobs: syncJobs });
-  const createJdAnalysis = useCreateJdAnalysisMutation({ onSync: syncJdAnalyses, onSyncJobs: syncJobs });
+  const { showToast } = useJobCraft();
+  const { data: jobs = [] } = useJobsQuery();
+  const createInterview = useCreateInterviewMutation();
+  const createJdAnalysis = useCreateJdAnalysisMutation();
+  const createJobMutation = useCreateJobMutation();
   const go = useTabNavigate();
 
   if (!isOpen) return null;
@@ -212,10 +208,11 @@ export const NewInterviewModal: React.FC<Props> = ({ isOpen, jobId, mode, onClos
     }
     
     // Create job directly
-    const newJobId = await createJob({
+    const newJob = await createJobMutation.mutateAsync({
       company: newJobCompany.trim(),
       role: newJobRole.trim(),
     });
+    const newJobId = newJob.id;
     
     // Create JD analysis record (fire-and-forget，完成后回填岗位 jdAnalysisId)
     createJdAnalysis.mutate(

@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { useJobCraft } from '../../context/JobCraftContext';
 import { useTabNavigate } from '../../router/tabPaths';
 import { NavigationTab } from '../../types/jobcraft';
+import { useJobsQuery } from '../../features/jobs/hooks';
+import { useInterviewsQuery } from '../../features/interview/hooks';
 import {
   LayoutDashboard,
   Briefcase,
@@ -23,9 +25,12 @@ interface SidebarProps {
 export const Sidebar: React.FC<SidebarProps> = ({
   onOpenNewJob
 }) => {
-  const { currentTab, jobs, interviews } = useJobCraft();
+  const { currentTab } = useJobCraft();
   const go = useTabNavigate();
   const [isCollapsed, setIsCollapsed] = useState(false);
+
+  const { data: jobs = [] } = useJobsQuery();
+  const { data: interviews = [] } = useInterviewsQuery();
 
   const interviewingJobsCount = jobs.filter((j) => j.status === 'interviewing').length;
   const pendingReviewCount = interviews.filter((i) => i.status === 'completed' && !i.review).length || 1;

@@ -18,14 +18,11 @@ import {
 } from '../../features/jd/hooks';
 
 export const JDAnalysisCenterView: React.FC = () => {
-  const { navigateTo, showToast, syncJobs, syncJdAnalyses } = useJobCraft();
+  const { navigateTo, showToast } = useJobCraft();
 
   const { data: jdAnalyses = [] } = useJdAnalysesQuery();
-  const deleteAnalysis = useDeleteJdAnalysisMutation({ onSync: syncJdAnalyses });
-  const createStructuredAnalysis = useCreateStructuredJdAnalysisMutation({
-    onSync: syncJdAnalyses,
-    onSyncJobs: syncJobs,
-  });
+  const deleteAnalysis = useDeleteJdAnalysisMutation();
+  const createStructuredAnalysis = useCreateStructuredJdAnalysisMutation();
 
   const [activeTab, setActiveTab] = useState<'create' | 'history'>('create');
   const [company, setCompany] = useState('');

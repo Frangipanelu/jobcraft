@@ -1,7 +1,7 @@
 import type { ExperienceCard } from '../../api/types';
 import type { Experience } from '../../types/jobcraft';
 
-/** Experiences 查询缓存 key（迁移视图 + context 镜像双写共用）。 */
+/** Experiences 查询缓存 key（react-query 唯读源）。 */
 export const EXPERIENCES_QUERY_KEY = ['experiences'] as const;
 
 /**

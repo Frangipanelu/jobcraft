@@ -20,14 +20,14 @@ interface JobsListViewProps {
 }
 
 export const JobsListView: React.FC<JobsListViewProps> = ({ onOpenNewJob }) => {
-  const { syncJobs, showToast } = useJobCraft();
+  const { showToast } = useJobCraft();
   const navigate = useNavigate();
   const { data: jobsData, isLoading } = useJobsQuery();
   const jobs = jobsData || [];
-  const terminateJob = useTerminateJobMutation({ onSync: syncJobs });
-  const resumeJob = useResumeJobMutation({ onSync: syncJobs });
-  const markDelivered = useSetDeliveredMutation(true, { onSync: syncJobs });
-  const unmarkDelivered = useSetDeliveredMutation(false, { onSync: syncJobs });
+  const terminateJob = useTerminateJobMutation();
+  const resumeJob = useResumeJobMutation();
+  const markDelivered = useSetDeliveredMutation(true);
+  const unmarkDelivered = useSetDeliveredMutation(false);
   const [activeFilter, setActiveFilter] = useState<'all' | JobStatus>('all');
   const [searchQuery, setSearchQuery] = useState('');
 

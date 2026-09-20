@@ -46,12 +46,12 @@ interface ExperiencesViewProps {
 }
 
 export const ExperiencesView: React.FC<ExperiencesViewProps> = ({ initialSelectedExpId }) => {
-  const { showToast, syncExperiences } = useJobCraft();
+  const { showToast } = useJobCraft();
   const go = useTabNavigate();
   const { data: experiencesData } = useExperiencesQuery();
-  const updateExperience = useUpdateExperienceMutation({ onSync: syncExperiences });
-  const deleteExperience = useDeleteExperienceMutation({ onSync: syncExperiences });
-  const addExperienceVersion = useAddExperienceVersionMutation({ onSync: syncExperiences });
+  const updateExperience = useUpdateExperienceMutation();
+  const deleteExperience = useDeleteExperienceMutation();
+  const addExperienceVersion = useAddExperienceVersionMutation();
   const experiences = experiencesData ?? [];
 
   const [activeCategory, setActiveCategory] = useState<'all' | ExperienceCategory>('all');
@@ -706,8 +706,8 @@ const EditExperienceModal: React.FC<EditExperienceModalProps> = ({
   isOpen,
   onClose
 }) => {
-  const { showToast, syncExperiences } = useJobCraft();
-  const updateExperience = useUpdateExperienceMutation({ onSync: syncExperiences });
+  const { showToast } = useJobCraft();
+  const updateExperience = useUpdateExperienceMutation();
 
   const [title, setTitle] = useState(experience.title);
   const [category, setCategory] = useState<ExperienceCategory>(experience.category || 'project');

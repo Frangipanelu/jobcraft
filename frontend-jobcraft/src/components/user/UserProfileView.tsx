@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useJobCraft } from '../../context/JobCraftContext';
+import { useExperiencesQuery } from '../../features/experiences/hooks';
 import type { UserProfile } from '../../types/jobcraft';
 import { useProfileQuery, useUpdateProfileMutation, EMPTY_PROFILE } from '../../features/profile/hooks';
 import {
@@ -43,14 +44,13 @@ interface UserProfileViewProps {
 
 export const UserProfileView: React.FC<UserProfileViewProps> = ({ initialTab }) => {
   const {
-    experiences,
-    loadExperiences,
     navigateTo,
     userProfileTab,
     setUserProfileTab,
     showToast,
     currentUserId
   } = useJobCraft();
+  const { data: experiences = [], refetch: refetchExperiences } = useExperiencesQuery();
 
   const { data: profile } = useProfileQuery();
   const updateProfileMutation = useUpdateProfileMutation();
@@ -252,7 +252,7 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({ initialTab }) 
         title: '简历导入成功',
         message: `已保存 ${count} 段经历到资产库。`
       });
-      loadExperiences(currentUserId);
+      refetchExperiences();
       setShowPreview(false);
       setPreviewItems([]);
       setPreviewRawText('');

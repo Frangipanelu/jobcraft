@@ -36,16 +36,11 @@ export const CreateReview: React.FC<{ initialJobId?: string }> = ({ initialJobId
   const {
     navigateTo,
     setJdAnalysisReturnTarget,
-    showToast,
-    syncJobs,
-    syncInterviews
+    showToast
   } = useJobCraft();
   const { data: jobs = [] } = useJobsQuery();
   const { data: interviews = [] } = useInterviewsQuery();
-  const createReviewMutation = useCreateInterviewReviewMutation({
-    onSync: syncInterviews,
-    onSyncJobs: syncJobs
-  });
+  const createReviewMutation = useCreateInterviewReviewMutation();
 
   const [step, setStep] = useState<0 | 1 | 2>(0);
 
