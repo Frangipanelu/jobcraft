@@ -18,7 +18,13 @@
 - [x] **审查结论落盘**：`docs/health-review-and-v2-gap-2026-09-20.md`——现状梳理/对标差距/P0-P2 问题+证据/三阶段解决方案。对照基线 `design-v2.0/`（14 份）+ `domain-model-v2` + `frontend-backend-contract-audit-v1` + `implementation-roadmap-v1`。
 - [x] **验证**：后端 575 passed/11 skip、ruff 全绿、check_encoding 307 OK、前端 tsc/build/113 tests（会话内实测）
 - [x] **关键结论**：架构分层/AI 审计链/迁移驱动 = 最强项；3 处 P0 规范违背（`mappers.ts:51` 已投递自动推导、`job_analysis_flow.py:435` 非 StateGraph 入口、`experience_polish.py:38` 绕道 llm_json）
-- [ ] Phase A P0 修复（3 项）→ Phase B P1 收口 → Phase C P2（详见报告）
+- [x] **Phase A P0 修复（3 项完成，commits `0b58c34`/`bd8a9b4`/`ff0a8fc`）**：P0-1/P0-2/P0-3 详见下方"Phase A P0 修复"章节 → Phase B P1 收口 → Phase C P2（详见报告）
+
+### Phase A P0 修复（2026-09-20，commits `0b58c34`/`bd8a9b4`/`ff0a8fc`）
+
+- [x] **P0-2（`0b58c34`）**：`experience_polish.py` 从 `llm_json.invoke_structured` 直连改为统一出口 `experience_polish.invoke_structured` 的 `PolishOutput` 结构化（审计/缓存/观测链补齐）；新增 `TestExperiencePolish` 单测 3（结构化 schema、空输出兜错、LLM 失败兜错）。**保留风险**：`prompts/experience/polish_v1.txt` 仍指示"直接输出精炼文本"（纯文本），与 `invoke_structured` 期望 JSON 不匹配；单测 mock 跳过 LLM，需真实模型验证——若失败需新增 `polish_v2.txt`（JSON 指示）+ `load_prompt(version=2)` 切换
+- [x] **P0-3（`bd8a9b4`）**：`job_analysis_flow.py` 新增 `StructuredATSState`（forward）并以 `conda_edge` 把 3 阶段节点拼接为 StateGraph `run_structured_ats_workflow`；`run_structured_ats` 保持兼容包装，行为不变；相关 workflow/api 测试通过
+- [x] **P0-1（`ff0a8fc`）**：已投递改为用户确认（规范 §9.3：投递状态不得自动推导）。后端 `migrations/versions/V0006__submission_delivered.sql` 新增 `delivered TINYINT(1) DEFAULT 0`（仅加列，前向兼容）；`db_submission.py` ensure/insert/get/get_by_analysis/update/`get_dashboard` 全链 `delivered`；`api/submission.py` `UpdateSubmissionPayload.delivered` + 手动录入投递置 `delivered=1`。前端 `types/jobcraft.ts` JobStatus 新增 `'submitted'`（已投递）；`mappers.ts` `applied: sub.delivered ?? false` + `backendId`，`deriveJobStatus` 优先级 `terminated>prepStage>reviewStage>applied(submitted)>jdAnalysis(delivered)>pending`；`hooks.ts` 新增 `useSetDeliveredMutation`（先 PATCH 后端、失败仅本地乐观、写 cache `steps.applied` + `deriveJobStatus` + onSync 镜像）；`useTerminateJobMutation` 不再自动置 `applied:true`（避免误标已投递）；JobsListView 行内"标记已投递/取消已投递"、JobWorkspaceView header "标记已投递"、submitted 徽标/文案/过滤药丸。验证：后端 581 passed/11 skip、`ruff check`/`format` 全绿、check_encoding 307 OK、前端 tsc + vitest **115 tests** + `npm run build` ✅
 
 ### FE-HISTORICAL-RESUMES-01 历史简历域迁移（2026-09-19，commit `7eece93`/`c0c3d72`）
 
