@@ -4,6 +4,15 @@
 
 ## 已完成事项
 
+### 技术债收口 P1/P2（2026-09-20，commits `e29216a`/`88e76fb`/`731db68`/`27a51f0`/`1d45def`）
+
+- [x] **FE-CONTEXT-REMOVE 首切（`e29216a`）**：删除孤立 `app/legacy/MainLayout.tsx` + `router/LegacyPageWrapper.tsx`；删除 context 死 surface（`user`/`updateUserProfile`/`nextActions`/`activities`/`aiSuggestions`/`terminateJob`/`resumeJob`/`deleteJob`/`deleteJDAnalysis`/`updateQuestionAnswer`/`addCustomQuestion`/经历域 4 writer/`loadJdAnalyses` 外部入口）；`WorkbenchView` `user`→`useProfileQuery`（`useProfileQuery` 为权威 profile 源）；删除死类型 ActivityLog/NextActionItem/AISuggestionCard。context 2324→461 行。验证：tsc/`npm run build`（616.60 kB）✅、113 tests ✅、check_encoding（307 文件）✅。**剩余范围**：4 域 state+4 sync 镜像（jobs/experiences/jdAnalyses/interviews 仍被未迁移视图读取）、`currentTab`/`navigateTo`/`selected*` 待 URL 驱动化后移除
+- [x] **P1-1（`88e76fb`）**：`job_analysis_flow.py` legacy 单节点 3 次 LLM → 4 节点 StateGraph（`_run_legacy_ats`→`_run_legacy_score`→`_run_legacy_suggestions`→`_run_legacy_collate`），`JobAnalysisState` 增 cards/ats/jd_req/match/suggestions；行为不变。验证 `/job/analyze` + `resume_generate`（`tasks/handlers.py:43-66`）为存活路径（前端 `useCreateJdAnalysisMutation` runTaskOrSync fallback `analyzeJob`），仅重构不删端点。12 workflow + 22 api 测试 ✅，ruff ✅
+- [x] **P1-2（`731db68`）**：`extract_flow.py` backfill LLM 循环 → `MAX_BACKFILL_CARDS=10` 上限 + 单卡失败容忍（结果增 `failed` 列表，向后兼容）。新增 tolerance/cap 单测 2；test_workflows_unit.py 31 ✅
+- [x] **P2-1+P2-2（`27a51f0`）**：删除 `api/job.ts` 死 `uploadResume`（零消费者，`api/index.ts` re-export experience.ts 版）；**JD 分析列表 N+1 消除**——后端 `db_job.py` 新增 `_job_analysis_to_dict` 归一化（`get_job_analysis` 复用 + 补 `job_analysis_id` 双键修复潜伏契约 bug，`list_job_analyses` 单次 SQL 返回全量详情 + `_ensure_job_analysis_columns()`）；前端 `JobAnalysisDetail` 类型 + `useJdAnalysesQuery`/`loadJdAnalyses` 直接映射列表不再逐条 `getJobAnalysis`；`jd-query.test.tsx` 断言改 list 单次（`getJobAnalysis` 不被调）。`loadDashboard` 确认为单次 `getDashboard`（非 N+1）。前端 21 文件/113 tests ✅，build ✅，后端 TestJobList 18 ✅
+- [x] **P2-3（`1d45def`）**：`GET /resume/download` 错误返回从 200+`{"error":...}` 改为统一错误中间件契约（403/404 + `error.code/message`，无前端消费者零风险）；`JobAnalyzePayload`/`GapPolishPayload`/`SaveResumePayload`/`InterviewPrepPayload` 的 `card_ids`/`selected_card_ids` 统一 `Field(default_factory=list)`，缺键不再 pydantic 422、交 handler 统一友好 400（`/export` 可选过滤参数语义保留；card_ids vs selected_card_ids 命名方差为各端点绑定单消费者，保留）。test_api_routes_unit.py 103 ✅
+- [ ] 留白：`NewInterviewModal`(1056 行) 过大、context 零 memo 专项、`showToast` setTimeout/cleanup、9 个后端端点前端未接线、FE-CONTEXT-REMOVE 剩余（4 域镜像 + currentTab/navigateTo/selected*）
+
 ### FE-HISTORICAL-RESUMES-01 历史简历域迁移（2026-09-19，commit `7eece93`/`c0c3d72`）
 
 - [x] **`features/historical-resumes/mappers.ts`**：`HISTORICAL_RESUMES_QUERY_KEY = ['historical-resumes']` + `baseResumeToHistoricalResume`（自 context 内联映射提取，单一事实来源）
