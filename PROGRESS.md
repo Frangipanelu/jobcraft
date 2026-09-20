@@ -19,7 +19,7 @@
 ### Phase C P2 专项（2026-09-21 启动，四个候选 → 见 TODO.md P3 区）
 
 - [x] **C-2 FE-TOAST-CLEANUP-01 showToast setTimeout/cleanup**：auto-dismiss 从 context `showToast`（`JobCraftContext.tsx:170` 无清理 setTimeout）下沉到 `Toast.tsx` 新增 `ToastItem` 组件 `useEffect`（挂载 4s 计时 + 卸载 clearTimeout，`onDismiss` 用 ref 避免计时因引用变化重置）；context `showToast` 只入队；关闭按钮补 `aria-label="关闭通知"`。新增 `src/test/toast.test.tsx` 4 条单测（4s 自动消失 / 卸载后推进计时器不 setState 泄漏 / 点关闭立即消失 / 空态不渲染容器）。验证：vitest **21 files / 116 tests** 通过 + `npm run lint`（tsc 0 错）✅ + `npm run build` 通过 + check_encoding ✅。commit `4d820bc`
-- [ ] **C-3 FE-CONTEXT-MEMO-01 context 零 memo**：拆 ToastContext + AuthNavContext，useMemo value（前置 C-2）
+- [x] **C-3 FE-CONTEXT-MEMO-01 context 零 memo**（commit `f61f751`）：拆 `ToastProvider`（ToastState + ToastActions 双 context，`useToasts`/`useToastActions`，showToast/dismissToast `useCallback` 稳定化）；`JobCraftContext` 删 toast key，value 全量 `useMemo`（依赖表=state/action 引用），login/register/logout/navigateTo/saveInterviewDraft/clearInterviewDraft 全部 `useCallback`；16 个 showToast 消费者迁移 `useToastActions`；`App.tsx`（ToastProvider ⊃ JobCraftProvider）与 `test-utils` 同步包裹；新增 memo 隔离单测（触发 toast 不重渲染 useJobCraft 消费者）。验证：vitest **21 files / 117 tests** + tsc 0 错 + build + check_encoding ✅
 - [ ] **C-1 FE-NEWINTERVIEW-SPLIT-01 NewInterviewModal(1122 行) 拆分**：shell + 4 Step + draft util，接真实简历源
 - [ ] **C-4 FE-ENDPOINT-WIRE-01 9 个未接线端点清账**：逐端点裁决 + 删死 wrapper（step1/step2/saveCardVersion/getJobSelectedCards）
 
