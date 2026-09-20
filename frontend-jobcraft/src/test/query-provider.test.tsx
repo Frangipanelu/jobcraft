@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { QueryProvider } from '../app/providers/QueryProvider';
-import { apiClient } from '../services/api/client';
+import { request } from '../api/client';
 
 describe('QueryProvider 基础设施', () => {
   afterEach(() => {
@@ -31,7 +31,7 @@ describe('QueryProvider 基础设施', () => {
     expect(seen[0]).toBe(seen[1]);
   });
 
-  it('查询可穿透到 apiClient 并渲染结果', async () => {
+  it('查询可穿透到 api client 并渲染结果', async () => {
     const fetchMock = vi.fn(async () =>
       new Response(JSON.stringify({ value: 'pong' }), {
         status: 200,
@@ -43,7 +43,7 @@ describe('QueryProvider 基础设施', () => {
     const Probe = () => {
       const { data, status } = useQuery({
         queryKey: ['echo'],
-        queryFn: async () => (await apiClient.request<{ value: string }>('/api/echo')).value,
+        queryFn: async () => (await request<{ value: string }>('/api/echo')).value,
       });
       return <span>{status === 'success' ? data : status}</span>;
     };

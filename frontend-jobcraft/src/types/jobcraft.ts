@@ -1,3 +1,5 @@
+import type { InterviewPrepRecord } from '../api/types';
+
 export type NavigationTab = 
   | 'workbench'
   | 'experiences'
@@ -342,26 +344,8 @@ export interface Interview {
   prepSource?: InterviewPrepRecord;
 }
 
-export interface InterviewPrepRecord {
-  id: number;
-  job_analysis_id: number;
-  company: string;
-  position: string;
-  round_type: string;
-  duration: string;
-  elevator_pitch: string;
-  dimension_questions: {
-    dimension: string;
-    question: string;
-    answer_points: string[];
-    card_ids: number[];
-  }[];
-  full_version: string;
-  html_content: string;
-  created_at: string | null;
-  company_research?: Record<string, unknown> | null;
-  submission_id?: number | null;
-}
+// 面试准备记录（后端 wire 类型）唯一源在 api/types.ts，此处 re-export 供域模型复用
+export type { InterviewPrepRecord };
 
 export interface Job {
   id: string;

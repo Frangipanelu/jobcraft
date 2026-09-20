@@ -278,7 +278,7 @@ export interface InterviewPrepRecord extends InterviewPrepResult {
   id: number
   company: string
   position: string
-  submission_id: number | null
+  submission_id?: number | null
 }
 
 // ============================================================
