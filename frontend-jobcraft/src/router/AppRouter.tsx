@@ -1,6 +1,5 @@
 import React from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
-import { LegacyPageWrapper } from './LegacyPageWrapper';
 import { AppShell } from '../app/AppShell';
 import { ProfilePage } from '../features/profile/ProfilePage';
 import { WorkbenchPage } from '../features/jobs/pages/WorkbenchPage';
@@ -10,13 +9,18 @@ import { ExperiencesPage } from '../features/experiences/pages/ExperiencesPage';
 import { InterviewPrepPage } from '../features/interview/pages/InterviewPrepPage';
 import { InterviewReviewPage } from '../features/review/pages/InterviewReviewPage';
 import { JdReportPage } from '../features/jd/pages/JdReportPage';
+import { JdAnalysisCenterPage } from '../features/jd/pages/JdAnalysisCenterPage';
+import { ResumeEditorPage } from '../features/resume/pages/ResumeEditorPage';
+import { InterviewPrepCenterPage } from '../features/interview/pages/InterviewPrepCenterPage';
+import { CreateInterviewPage } from '../features/interview/pages/CreateInterviewPage';
+import { InterviewReviewCenterPage } from '../features/review/pages/InterviewReviewCenterPage';
+import { CreateReviewPage } from '../features/review/pages/CreateReviewPage';
 
 /**
- * 路由表：
- * - 已迁移 tab 走 AppShell 真实路由（独立页面 + URL 参数取参）。
- * - 尚未拆分的中心 / 创建 / 简历编辑走 LegacyPageWrapper（MainLayout 按 tab 渲染），但同样有 URL，
- *   保证 AppShell 内导航可达（FE-ROUTE-03）。
- * - tab → URL 映射的单一实现见 ./tabPaths.ts；遗留 navigateTo 触发的视图切换不改变 URL（过渡期行为）。
+ * 路由表（FE-ROUTE-02 / 组1-壳收口后）：
+ * 所有 tab 均有 URL，全部走 AppShell 真实路由页（此前经 LegacyPageWrapper 的 6 条路由已收口为真实壳页）。
+ * 中心 / 创建 / 简历编辑持有 URL（`/jd-analysis`、`/resume/:jobId`、`/interview/new/:jobId`、`/review/new/:jobId`），
+ * 选中项经 URL 参数回填；遗留 MainLayout / LegacyPageWrapper / useSyncRouteTab 已移除（FE-ROUTE-04/05）。
  */
 export const AppRoutes: React.FC = () => {
   return (
@@ -37,29 +41,48 @@ export const AppRoutes: React.FC = () => {
       <Route path="/jd-report/:jdId" element={<AppShell />}>
         <Route index element={<JdReportPage />} />
       </Route>
+      <Route path="/jd-analysis" element={<AppShell />}>
+        <Route index element={<JdAnalysisCenterPage />} />
+      </Route>
+      <Route path="/resume" element={<AppShell />}>
+        <Route index element={<ResumeEditorPage />} />
+      </Route>
+      <Route path="/resume/:jobId" element={<AppShell />}>
+        <Route index element={<ResumeEditorPage />} />
+      </Route>
       <Route path="/experiences" element={<AppShell />}>
         <Route index element={<ExperiencesPage />} />
       </Route>
       <Route path="/experiences/:experienceId" element={<AppShell />}>
         <Route index element={<ExperiencesPage />} />
       </Route>
+      <Route path="/prep" element={<AppShell />}>
+        <Route index element={<InterviewPrepCenterPage />} />
+      </Route>
       <Route path="/prep/:interviewId" element={<AppShell />}>
         <Route index element={<InterviewPrepPage />} />
+      </Route>
+      <Route path="/interview/new" element={<AppShell />}>
+        <Route index element={<CreateInterviewPage />} />
+      </Route>
+      <Route path="/interview/new/:jobId" element={<AppShell />}>
+        <Route index element={<CreateInterviewPage />} />
+      </Route>
+      <Route path="/review" element={<AppShell />}>
+        <Route index element={<InterviewReviewCenterPage />} />
       </Route>
       <Route path="/review/:interviewId" element={<AppShell />}>
         <Route index element={<InterviewReviewPage />} />
       </Route>
+      <Route path="/review/new" element={<AppShell />}>
+        <Route index element={<CreateReviewPage />} />
+      </Route>
+      <Route path="/review/new/:jobId" element={<AppShell />}>
+        <Route index element={<CreateReviewPage />} />
+      </Route>
       <Route path="/profile" element={<AppShell />}>
         <Route index element={<ProfilePage />} />
       </Route>
-
-      <Route path="/jd-analysis" element={<LegacyPageWrapper tab="jd_analysis_center" />} />
-      <Route path="/resume" element={<LegacyPageWrapper tab="resume_editor" />} />
-      <Route path="/resume/:jobId" element={<LegacyPageWrapper tab="resume_editor" />} />
-      <Route path="/prep" element={<LegacyPageWrapper tab="interview_prep_center" />} />
-      <Route path="/interview/new" element={<LegacyPageWrapper tab="create_interview" />} />
-      <Route path="/review" element={<LegacyPageWrapper tab="interview_review_center" />} />
-      <Route path="/review/new" element={<LegacyPageWrapper tab="create_review" />} />
 
       <Route path="*" element={<Navigate to="/workbench" replace />} />
     </Routes>

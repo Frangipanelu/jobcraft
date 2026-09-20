@@ -30,7 +30,7 @@ const interviewPrepAiSteps = [
   '面试准备方案生成中...'
 ];
 
-export const CreateInterview: React.FC = () => {
+export const CreateInterview: React.FC<{ initialJobId?: string }> = ({ initialJobId = '' }) => {
   const {
     jobs,
     selectedJobId: contextSelectedJobId,
@@ -58,14 +58,17 @@ export const CreateInterview: React.FC = () => {
   );
 
   // Restore draft or initial value
-  const initialJobId =
+  const computedInitialJobId =
     interviewDraft?.selectedJobId ||
     (contextSelectedJobId && jobs.some((j) => j.id === contextSelectedJobId)
       ? contextSelectedJobId
       : prepStageJobs[0]?.id || jobs[0]?.id || '');
 
+  const initialJobIdResolved =
+    (initialJobId && jobs.some((j) => j.id === initialJobId) ? initialJobId : '') || computedInitialJobId;
+
+  const [selectedJobId, setSelectedJobId] = useState<string>(initialJobIdResolved);
   const [step, setStep] = useState<number>(interviewDraft?.step ? interviewDraft.step - 1 : 0);
-  const [selectedJobId, setSelectedJobId] = useState<string>(initialJobId);
 
   // Step 1: Application Info
   const [selectedResumeId, setSelectedResumeId] = useState<string>(

@@ -32,7 +32,7 @@ const analysisSteps = [
   '复盘报告生成中...'
 ];
 
-export const CreateReview: React.FC = () => {
+export const CreateReview: React.FC<{ initialJobId?: string }> = ({ initialJobId = '' }) => {
   const {
     navigateTo,
     setJdAnalysisReturnTarget,
@@ -60,9 +60,12 @@ export const CreateReview: React.FC = () => {
   );
 
   // Step 0 - Job selection
-  const [selectedJobId, setSelectedJobId] = useState<string>(
-    reviewStageJobs[0]?.id || jobs[0]?.id || ''
-  );
+  const initialJobIdResolved =
+    (initialJobId && jobs.some((j) => j.id === initialJobId) ? initialJobId : '') ||
+    reviewStageJobs[0]?.id ||
+    jobs[0]?.id ||
+    '';
+  const [selectedJobId, setSelectedJobId] = useState<string>(initialJobIdResolved);
 
   // Step 1 - Interview selection
   const [selectedInterviewId, setSelectedInterviewId] = useState<string>('');
