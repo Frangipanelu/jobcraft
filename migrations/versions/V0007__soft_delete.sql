@@ -8,4 +8,4 @@
 -- 前向兼容约束（AGENTS §4.4）：只加列，不改/删列；旧代码不读 is_active，
 -- 未运行迁移的旧版本删除/查询行为不受影响（DEFAULT 1 对所有存量行有效）。
 ALTER TABLE resume_submission ADD COLUMN is_active TINYINT(1) DEFAULT 1;--SPLIT--
-ALTER TABLE job_analysis ADD COLUMN is_active TINYINT(1) DEFAULT 1;
+ALTER TABLE job_analysis ADD COLUMN is_active TINYINT(1) DEFAULT 1;--SPLIT--

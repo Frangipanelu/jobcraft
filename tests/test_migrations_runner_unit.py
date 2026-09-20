@@ -192,8 +192,12 @@ def _normalize_ddl(sql: str) -> str:
     return re.sub(r"\s+", " ", sql.replace("`", "")).strip()
 
 
-def _runtime_create_sql(fn) -> str:
-    """捕获 _ensure_* 函数实际执行的 CREATE TABLE 语句。"""
+def _runtime_create_sql(fn, mod=None) -> str:
+    """捕获 _ensure_* 函数实际执行的 CREATE TABLE 语句。
+
+    :param fn: 目标 _ensure_* 函数
+    :param mod: 该函数所在模块（默认 db_base_resume）
+    """
     executed: list[tuple[str, str]] = []
 
     class Cursor:
@@ -216,7 +220,8 @@ def _runtime_create_sql(fn) -> str:
         def __exit__(self, *a):
             return False
 
-    import app.tools.db_base_resume as mod
+    if mod is None:
+        import app.tools.db_base_resume as mod
 
     original_ready = mod.is_schema_ready
     original_conn = mod.connection
@@ -248,3 +253,39 @@ def test_v0005_base_resume_matches_runtime_ddl():
 
     runtime_ddl = _normalize_ddl(_runtime_create_sql(_ensure_base_resume_table))
     assert migration_ddl == runtime_ddl, "V0005 与运行时 base_resume DDL 漂移"
+
+
+def test_v0006_v0007_columns_matched_in_resume_submission_runtime_ddl():
+    """DB-04：V0006(delivered)/V0007(is_active) 补列应已在运行时
+    _ensure_resume_submission_table 建表语句中体现，迁移路径与 bootstrap 路径收敛一致。
+    """
+    v0006 = os.path.join(runner.MIGRATIONS_DIR, "V0006__submission_delivered.sql")
+    v0007 = os.path.join(runner.MIGRATIONS_DIR, "V0007__soft_delete.sql")
+    assert os.path.exists(v0006) and os.path.exists(v0007)
+    with open(v0006, encoding="utf-8") as fh:
+        assert "ADD COLUMN delivered" in fh.read()
+    with open(v0007, encoding="utf-8") as fh:
+        v0007_sql = fh.read()
+    assert "ALTER TABLE resume_submission ADD COLUMN is_active" in v0007_sql
+    assert "ALTER TABLE job_analysis ADD COLUMN is_active" in v0007_sql
+
+    from app.tools.db_submission import _ensure_resume_submission_table
+    import app.tools.db_submission as mod
+
+    runtime_ddl = _normalize_ddl(
+        _runtime_create_sql(_ensure_resume_submission_table, mod=mod)
+    )
+    assert "delivered TINYINT(1) DEFAULT 0" in runtime_ddl
+    assert "is_active TINYINT(1) DEFAULT 1" in runtime_ddl
+
+
+def test_v0007_soft_delete_follows_split_convention():
+    """DB-04：V0007 语句块应遵守 SPLIT 约定（无尾分号），可被 runner 逐条执行。"""
+    v0007 = os.path.join(runner.MIGRATIONS_DIR, "V0007__soft_delete.sql")
+    with open(v0007, encoding="utf-8") as fh:
+        sql = fh.read()
+    stmts = [s.strip() for s in sql.split(";--SPLIT--")]
+    real = [s for s in stmts if s]
+    assert len(real) == 2, f"V0007 应含 2 条语句块，实际 {len(real)}"
+    for stmt in real:
+        assert not stmt.endswith(";"), f"V0007 语句块含尾分号: {stmt[:60]}"
