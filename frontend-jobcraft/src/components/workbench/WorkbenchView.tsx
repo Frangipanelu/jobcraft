@@ -1,7 +1,7 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useJobCraft } from '../../context/JobCraftContext';
 import { useJobsQuery } from '../../features/jobs/hooks';
+import { useProfileQuery } from '../../features/profile/hooks';
 import { useTabNavigate } from '../../router/tabPaths';
 import type { Job } from '../../types/jobcraft';
 import {
@@ -24,9 +24,7 @@ interface StepItem {
 export const WorkbenchView: React.FC<WorkbenchViewProps> = ({
   onOpenNewJob
 }) => {
-  const {
-    user
-  } = useJobCraft();
+  const { data: profile } = useProfileQuery();
   const navigate = useNavigate();
   const go = useTabNavigate();
   const { data: jobsData, isLoading } = useJobsQuery();
@@ -182,7 +180,7 @@ export const WorkbenchView: React.FC<WorkbenchViewProps> = ({
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl sm:text-[26px] font-extrabold text-[#111814] tracking-tight">
-            晚上好，{user.name || '未设置姓名'}
+            晚上好，{profile?.name || '未设置姓名'}
           </h1>
           <p className="text-xs sm:text-[13px] text-[#4E5B53] mt-1 font-medium">
             <span className="text-sage font-bold">{activeCount} 个岗位</span> 正在推进，今天有 <span className="text-warning font-bold">{pendingCount} 个重要任务</span> 需要完成。

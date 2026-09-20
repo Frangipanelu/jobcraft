@@ -391,39 +391,6 @@ export interface Job {
   interviewIds: string[];
 }
 
-export interface ActivityLog {
-  id: string;
-  type: 'jd' | 'resume' | 'prep' | 'review' | 'experience';
-  title: string;
-  desc: string;
-  timestamp: string;
-  jobId?: string;
-  actionText?: string;
-  targetTab?: NavigationTab;
-}
-
-export interface NextActionItem {
-  id: string;
-  jobId: string;
-  company: string;
-  role: string;
-  actionTitle: string;
-  dueDate: string;
-  priority: 'high' | 'medium' | 'normal';
-  targetTab: NavigationTab;
-  targetId?: string;
-}
-
-export interface AISuggestionCard {
-  id: string;
-  title: string;
-  description: string;
-  type: 'opportunity' | 'warning' | 'tip';
-  actionText: string;
-  targetTab: NavigationTab;
-  jobId?: string;
-}
-
 export interface InterviewDraft {
   step: 1 | 2 | 3 | 4;
   selectedJobId: string;

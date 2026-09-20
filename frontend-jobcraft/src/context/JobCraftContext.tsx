@@ -2,16 +2,10 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 import { useQueryClient } from '@tanstack/react-query';
 import {
   NavigationTab,
-  UserProfile,
   Experience,
   Job,
   JDAnalysis,
   Interview,
-  ActivityLog,
-  NextActionItem,
-  AISuggestionCard,
-  PreparedAnswer,
-  InterviewPreparation,
   InterviewDraft
 } from '../types/jobcraft';
 import * as authApi from '../api/auth'
@@ -57,16 +51,12 @@ interface JobCraftContextType {
   ) => void;
 
   // Data
-  user: UserProfile;
   jobs: Job[];
   /** 过渡期镜像写入（FE-JOBS-01）：react-query jobs mutations 更新 cache 后同步到此，供未迁移视图读取。FE-CONTEXT-REMOVE 移除。 */
   syncJobs: (jobs: Job[]) => void;
   experiences: Experience[];
   jdAnalyses: JDAnalysis[];
   interviews: Interview[];
-  nextActions: NextActionItem[];
-  activities: ActivityLog[];
-  aiSuggestions: AISuggestionCard[];
   toasts: ToastMessage[];
   interviewDraft: InterviewDraft | null;
   jdAnalysisReturnTarget: 'create_interview' | 'create_review' | null;
@@ -83,12 +73,10 @@ interface JobCraftContextType {
   logout: () => void;
   currentUserId: number;
   loadExperiences: (userId: number) => Promise<void>;
-  loadJdAnalyses: (userId: number) => Promise<void>;
 
   // Actions
   showToast: (toast: Omit<ToastMessage, 'id'>) => void;
   dismissToast: (id: string) => void;
-  updateUserProfile: (updates: Partial<UserProfile>) => void;
   
   // Interview Draft actions
   saveInterviewDraft: (draft: InterviewDraft) => void;
@@ -96,27 +84,8 @@ interface JobCraftContextType {
   
   // Job actions
   createJob: (jobData: { company: string; role: string; department?: string; salaryRange?: string; status?: Job['status'] }) => Promise<string>;
-  terminateJob: (jobId: string) => void;
-  resumeJob: (jobId: string) => void;
-  deleteJob: (jobId: string) => void;
-
-  // JD Analysis actions
-  deleteJDAnalysis: (id: string) => void;
-
-  // Interview actions
-  updateQuestionAnswer: (interviewId: string, questionId: string, answer: Partial<PreparedAnswer>, isPrepared?: boolean) => void;
-  addCustomQuestion: (interviewId: string, questionText: string, focusText: string) => void;
 
   // Experience Library actions
-  createExperience: (exp: Partial<Experience>) => Promise<string>;
-  updateExperience: (id: string, updates: Partial<Experience>) => void;
-  deleteExperience: (id: string) => void;
-  addExperienceVersion: (
-    expId: string,
-    version: string,
-    reason: string,
-    updatedFields: Partial<Experience>
-  ) => void;
   /** 过渡期镜像写入（FE-EXPERIENCES-01）：react-query experiences mutations 调此函数同步 context.experiences（FE-CONTEXT-REMOVE 移除）。 */
   syncExperiences: (next: Experience[]) => void;
   /** 过渡期镜像写入（FE-JD-01）：react-query jd mutations 调此函数同步 context.jdAnalyses（FE-CONTEXT-REMOVE 移除）。 */
@@ -149,21 +118,10 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
   const [jobWorkspaceSubTab, setJobWorkspaceSubTab] = useState<'jd' | 'resume' | 'interview'>('jd');
   const [userProfileTab, setUserProfileTab] = useState<'resumes' | 'profile' | 'preferences' | 'settings'>('resumes');
 
-  const [user, setUser] = useState<UserProfile>({
-    name: '',
-    avatarUrl: '',
-    role: '求职者',
-    targetSalary: '',
-    yearsOfExp: 0,
-    city: ''
-  });
   const [jobs, setJobs] = useState<Job[]>([]);
   const [experiences, setExperiences] = useState<Experience[]>([]);
   const [jdAnalyses, setJdAnalyses] = useState<JDAnalysis[]>([]);
   const [interviews, setInterviews] = useState<Interview[]>([]);
-  const [nextActions, setNextActions] = useState<NextActionItem[]>([]);
-  const [activities, setActivities] = useState<ActivityLog[]>([]);
-  const [aiSuggestions, setAiSuggestions] = useState<AISuggestionCard[]>([]);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [interviewDraft, setInterviewDraft] = useState<InterviewDraft | null>(null);
   const [jdAnalysisReturnTarget, setJdAnalysisReturnTarget] = useState<'create_interview' | 'create_review' | null>(null);
@@ -181,30 +139,6 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
   const loadUserProfileAndData = async (userId: number) => {
     setCurrentUserId(userId)
     setIsAuthenticated(true)
-
-    // 获取用户信息（auth + profile 两个 API 并行）
-    try {
-      const [authUser, profileData] = await Promise.all([
-        authApi.getCurrentUser(),
-        authApi.getProfile().catch(() => ({})),
-      ])
-      const pd = profileData as Record<string, unknown>
-      setUser({
-        name: (pd.display_name as string) || authUser.display_name || authUser.username,
-        avatarUrl: (pd.avatar_url as string) || '',
-        role: (pd.role as string) || '求职者',
-        targetSalary: (pd.target_salary as string) || '',
-        yearsOfExp: (pd.years_of_exp as number) || 0,
-        city: (pd.city as string) || '',
-        email: (pd.email as string) || authUser.email || '',
-        phone: (pd.phone as string) || '',
-        summary: (pd.summary as string) || '',
-        targetRoles: (pd.target_roles as string[]) || [],
-        targetCompanies: (pd.target_companies as string[]) || [],
-      })
-    } catch {
-      // 用户信息获取失败，使用默认值
-    }
 
     // 并行加载数据
     await Promise.all([
@@ -364,40 +298,6 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
     setInterviewDraft(null);
   };
 
-  const updateUserProfile = async (updates: Partial<UserProfile>) => {
-    // 乐观更新 UI
-    setUser((prev) => ({ ...prev, ...updates }));
-    try {
-      // 映射前端字段名到后端字段名
-      const apiUpdates: Record<string, unknown> = {};
-      if (updates.name !== undefined) apiUpdates.display_name = updates.name;
-      if (updates.role !== undefined) apiUpdates.role = updates.role;
-      if (updates.targetSalary !== undefined) apiUpdates.target_salary = updates.targetSalary;
-      if (updates.yearsOfExp !== undefined) apiUpdates.years_of_exp = updates.yearsOfExp;
-      if (updates.city !== undefined) apiUpdates.city = updates.city;
-      if (updates.email !== undefined) apiUpdates.email = updates.email;
-      if (updates.phone !== undefined) apiUpdates.phone = updates.phone;
-      if (updates.summary !== undefined) apiUpdates.summary = updates.summary;
-      if (updates.targetRoles !== undefined) apiUpdates.target_roles = updates.targetRoles;
-      if (updates.targetCompanies !== undefined) apiUpdates.target_companies = updates.targetCompanies;
-      if (updates.targetCities !== undefined) apiUpdates.target_cities = updates.targetCities;
-      if (updates.avatarUrl !== undefined) apiUpdates.avatar_url = updates.avatarUrl;
-
-      await authApi.updateProfile(apiUpdates);
-      showToast({
-        type: 'success',
-        title: '个人资料已更新',
-        message: '个人求职信息与偏好设置已成功保存。'
-      });
-    } catch {
-      showToast({
-        type: 'error',
-        title: '保存失败',
-        message: '请检查网络后重试。'
-      });
-    }
-  };
-
   const navigateTo = (
     tab: NavigationTab,
     params?: {
@@ -479,344 +379,10 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
       message: `已添加「${jobData.company} · ${jobData.role}」到您的求职推进中。`
     });
 
-    setActivities((prev) => [
-      {
-        id: 'act-' + Date.now(),
-        type: 'jd',
-        title: `新建了岗位申请：${jobData.company} · ${jobData.role}`,
-        desc: '已创建岗位工作空间，可开始 JD 分析或简历定制',
-        timestamp: '刚刚',
-        jobId: newId,
-        actionText: '进入岗位',
-        targetTab: 'job_workspace'
-      },
-      ...prev
-    ]);
-
     return newId;
   };
 
-  const terminateJob = (jobId: string) => {
-    setJobs((prev) =>
-      prev.map((j) =>
-        j.id === jobId
-          ? {
-              ...j,
-              lastUpdated: '刚刚',
-              steps: { ...j.steps, terminated: true, applied: true }
-            }
-          : j
-      )
-    );
-    // 过渡期双写（FE-JOBS-01）
-    queryClient.setQueryData([...JOBS_QUERY_KEY], (prev: Job[] | undefined) =>
-      (prev || []).map((j) =>
-        j.id === jobId
-          ? { ...j, lastUpdated: '刚刚', steps: { ...j.steps, terminated: true, applied: true } }
-          : j
-      )
-    );
-    showToast({
-      type: 'info',
-      title: '流程已结束',
-      message: '该岗位流程已标记为「已结束」，可随时恢复处理。'
-    });
-  };
-
-  const resumeJob = (jobId: string) => {
-    setJobs((prev) =>
-      prev.map((j) =>
-        j.id === jobId
-          ? {
-              ...j,
-              lastUpdated: '刚刚',
-              steps: { ...j.steps, terminated: false }
-            }
-          : j
-      )
-    );
-    // 过渡期双写（FE-JOBS-01）
-    queryClient.setQueryData([...JOBS_QUERY_KEY], (prev: Job[] | undefined) =>
-      (prev || []).map((j) =>
-        j.id === jobId
-          ? { ...j, lastUpdated: '刚刚', steps: { ...j.steps, terminated: false } }
-          : j
-      )
-    );
-    showToast({
-      type: 'success',
-      title: '岗位已恢复',
-      message: '该岗位已重新进入推进列表，状态按实际进度自动展示。'
-    });
-  };
-
-  const deleteJob = (jobId: string) => {
-    setJobs((prev) => prev.filter((j) => j.id !== jobId));
-    // 过渡期双写（FE-JOBS-01）
-    queryClient.setQueryData([...JOBS_QUERY_KEY], (prev: Job[] | undefined) =>
-      (prev || []).filter((j) => j.id !== jobId)
-    );
-    showToast({
-      type: 'info',
-      title: '岗位已移除',
-      message: '该岗位及关联信息已移出您的推进列表。'
-    });
-  };
-
   // JD Analysis Creation
-  const deleteJDAnalysis = async (id: string) => {
-    // 从本地状态移除
-    setJdAnalyses((prev) => prev.filter((a) => a.id !== id));
-    queryClient.setQueryData(
-      [...JD_ANALYSES_QUERY_KEY],
-      (prev: JDAnalysis[] | undefined) => (prev || []).filter((a) => a.id !== id)
-    );
-    // 尝试删除后端 submission（id 格式为 "sub-{number}"）
-    const match = id.match(/^sub-(\d+)$/);
-    if (match) {
-      try { await jobApi.deleteSubmission(Number(match[1])); } catch { /* ignore */ }
-    }
-    showToast({
-      type: 'info',
-      title: 'JD 分析已删除'
-    });
-  };
-
-  // Interview Creation（FE-INTERVIEW-01：已迁移至 features/interview/hooks.ts useCreateInterviewMutation）
-
-  const updateQuestionAnswer = (
-    interviewId: string,
-    questionId: string,
-    answer: Partial<PreparedAnswer>,
-    isPrepared: boolean = true
-  ) => {
-    setInterviews((prev) =>
-      prev.map((int) => {
-        if (int.id !== interviewId) return int;
-
-        const updatedQuestions = int.preparation.highFreqQuestions.map((q) => {
-          if (q.id !== questionId) return q;
-          return {
-            ...q,
-            isPrepared: isPrepared ?? true,
-            preparedAnswer: {
-              ...q.preparedAnswer,
-              ...answer
-            }
-          };
-        });
-
-        const preparedCount = updatedQuestions.filter((q) => q.isPrepared).length;
-        const totalCount = updatedQuestions.length;
-        const newReadiness = Math.min(100, Math.round(40 + (preparedCount / totalCount) * 60));
-
-        return {
-          ...int,
-          readinessPercent: newReadiness,
-          preparation: {
-            ...int.preparation,
-            readinessPercent: newReadiness,
-            highFreqQuestions: updatedQuestions
-          }
-        };
-      })
-    );
-
-    showToast({
-      type: 'success',
-      title: '回答准备已保存',
-      message: '答题要点与逐字稿已同步更新。'
-    });
-  };
-
-  const addCustomQuestion = (interviewId: string, questionText: string, focusText: string) => {
-    setInterviews((prev) =>
-      prev.map((int) => {
-        if (int.id !== interviewId) return int;
-        const newQ: InterviewPreparation['highFreqQuestions'][0] = {
-          id: 'q-custom-' + Date.now(),
-          question: questionText,
-          probabilityStars: 4,
-          evaluationFocus: focusText || '自定义关注考点',
-          recommendedExperienceId: 'exp-1',
-          isPrepared: false,
-          preparedAnswer: {
-            mode: 'logic',
-            logicFlow: ['背景痛点', '核心行动', '量化成果'],
-            keywords: ['数据驱动', '落地实践'],
-            aiReference: '根据过往项目经验，建议围绕 STAR 法则展开阐述……',
-            inScript: false
-          }
-        };
-        return {
-          ...int,
-          preparation: {
-            ...int.preparation,
-            highFreqQuestions: [...int.preparation.highFreqQuestions, newQ]
-          }
-        };
-      })
-    );
-    showToast({
-      type: 'success',
-      title: '已添加自定义面试问题'
-    });
-  };
-
-  // Experience Library CRUD
-  // 过渡期 legacy 经历写入方（FE-EXPERIENCES-01）：视图已迁 hooks，此处保留给 context 内部流程，
-  // 每个写入点同步 query cache 防镜像漂移（FE-CONTEXT-REMOVE 移除）。
-  const createExperience = async (exp: Partial<Experience>) => {
-    try {
-      const card = await experienceApi.createCard({
-        title: exp.title || '新增核心经历',
-        raw_text: exp.background || exp.responsibility || '',
-        company: exp.company || '',
-        role: exp.role || '',
-        period: exp.period || '',
-        tags: exp.capabilityTags || [],
-        source: 'manual',
-        card_type: 'work',
-        is_active: true
-      })
-
-      const newExp: Experience = {
-        id: String(card.id),
-        title: card.title,
-        company: card.company || '',
-        role: card.role || '',
-        period: card.period || '',
-        background: card.raw_text,
-        responsibility: card.raw_text,
-        actions: exp.actions || [],
-        results: exp.results || [],
-        metrics: exp.metrics || [],
-        capabilityTags: card.tags,
-        targetJobs: [],
-        jdMatches: [],
-        resumeVersionsUsed: [],
-        currentVersion: `V${card.version}`,
-        versionHistory: []
-      }
-
-      setExperiences((prev) => [newExp, ...prev]);
-      queryClient.setQueryData(
-        [...EXPERIENCES_QUERY_KEY],
-        (prev: Experience[] | undefined) => [newExp, ...(prev || [])]
-      );
-      showToast({
-        type: 'success',
-        title: '已添加经历资产',
-        message: `已收录「${newExp.title}」至您的长期职业资产库。`
-      });
-      return String(card.id);
-    } catch (error: any) {
-      showToast({
-        type: 'error',
-        title: '创建经历失败',
-        message: error.message || '请稍后重试'
-      });
-      return 'error-' + Date.now();
-    }
-  };
-
-  const updateExperience = async (id: string, updates: Partial<Experience>) => {
-    try {
-      const cardId = parseInt(id)
-      if (!isNaN(cardId)) {
-        await experienceApi.updateCard(cardId, {
-          title: updates.title,
-          raw_text: updates.background,
-          company: updates.company,
-          role: updates.role,
-          period: updates.period,
-          tags: updates.capabilityTags
-        })
-      }
-
-      setExperiences((prev) =>
-        prev.map((exp) => (exp.id === id ? { ...exp, ...updates } : exp))
-      );
-      queryClient.setQueryData(
-        [...EXPERIENCES_QUERY_KEY],
-        (prev: Experience[] | undefined) =>
-          (prev || []).map((exp) => (exp.id === id ? { ...exp, ...updates } : exp))
-      );
-      showToast({
-        type: 'info',
-        title: '经历已更新'
-      });
-    } catch (error: any) {
-      showToast({
-        type: 'error',
-        title: '更新失败',
-        message: error.message || '请稍后重试'
-      });
-    }
-  };
-
-  const deleteExperience = async (id: string) => {
-    try {
-      const cardId = parseInt(id)
-      if (!isNaN(cardId)) {
-        await experienceApi.deleteCard(cardId)
-      }
-
-      setExperiences((prev) => prev.filter((exp) => exp.id !== id));
-      queryClient.setQueryData(
-        [...EXPERIENCES_QUERY_KEY],
-        (prev: Experience[] | undefined) => (prev || []).filter((exp) => exp.id !== id)
-      );
-      showToast({
-        type: 'info',
-        title: '经历已移除'
-      });
-    } catch (error: any) {
-      showToast({
-        type: 'error',
-        title: '删除失败',
-        message: error.message || '请稍后重试'
-      });
-    }
-  };
-
-  const addExperienceVersion = (
-    expId: string,
-    version: string,
-    reason: string,
-    updatedFields: Partial<Experience>
-  ) => {
-    const applyVersion = (exp: Experience) => {
-      if (exp.id !== expId) return exp;
-      const newVersionRecord = {
-        version,
-        date: new Date().toISOString().split('T')[0],
-        reason,
-        source: 'ai_optimization' as const,
-        changes: Object.keys(updatedFields).map((key) => ({
-          field: key,
-          from: '原版内容',
-          to: String((updatedFields as Record<string, unknown>)[key])
-        }))
-      };
-      return {
-        ...exp,
-        ...updatedFields,
-        currentVersion: version,
-        versionHistory: [newVersionRecord, ...(exp.versionHistory || [])]
-      };
-    };
-    setExperiences((prev) => prev.map(applyVersion));
-    queryClient.setQueryData(
-      [...EXPERIENCES_QUERY_KEY],
-      (prev: Experience[] | undefined) => (prev || []).map(applyVersion)
-    );
-    showToast({
-      type: 'success',
-      title: `经历已升级至 ${version}`,
-      message: reason
-    });
-  };
 
   // 过渡期镜像写入（FE-JOBS-01）：react-query jobs mutations 调此函数同步 context.jobs（FE-CONTEXT-REMOVE 移除）。
   const syncJobs = (next: Job[]) => {
@@ -854,8 +420,6 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
         navigateTo,
         userProfileTab,
         setUserProfileTab,
-        user,
-        updateUserProfile,
         jobs,
         syncJobs,
         experiences,
@@ -864,9 +428,6 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
         jdAnalyses,
         interviews,
         syncInterviews,
-        nextActions,
-        activities,
-        aiSuggestions,
         toasts,
         interviewDraft,
         saveInterviewDraft,
@@ -876,16 +437,6 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
         showToast,
         dismissToast,
         createJob,
-        terminateJob,
-        resumeJob,
-        deleteJob,
-        deleteJDAnalysis,
-        updateQuestionAnswer,
-        addCustomQuestion,
-        createExperience,
-        updateExperience,
-        deleteExperience,
-        addExperienceVersion,
         isLoading,
         isInitialLoaded,
         isAuthenticated,
@@ -893,8 +444,7 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
         register,
         logout,
         currentUserId,
-        loadExperiences,
-        loadJdAnalyses
+        loadExperiences
       }}
     >
       {children}
