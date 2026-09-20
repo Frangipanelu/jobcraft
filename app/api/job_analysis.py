@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.auth.dependencies import get_current_user
 from app.tools import db_tools, jobcraft_resume
@@ -18,7 +18,7 @@ class JobAnalyzePayload(BaseModel):
     company: str = ""
     position: str
     jd_text: str
-    card_ids: List[int]
+    card_ids: List[int] = Field(default_factory=list)
 
 
 class ATSRecommendPayload(BaseModel):
@@ -29,7 +29,7 @@ class ATSRecommendPayload(BaseModel):
 
 class GapPolishPayload(BaseModel):
     job_analysis_id: int
-    card_ids: List[int]
+    card_ids: List[int] = Field(default_factory=list)
 
 
 class SaveCardVersionPayload(BaseModel):
@@ -60,7 +60,7 @@ class StructuredJDRequest(BaseModel):
 
 class SaveResumePayload(BaseModel):
     job_analysis_id: int
-    selected_card_ids: List[int]
+    selected_card_ids: List[int] = Field(default_factory=list)
     card_versions: Optional[Dict[int, str]] = None
     personal_info: Optional[Dict[str, Any]] = None
 
@@ -368,12 +368,16 @@ def jobcraft_resume_download(path: str, current_user: int = Depends(get_current_
         abs_path = Path(path).resolve()
         output_abs = output_dir.resolve()
         if not abs_path.is_relative_to(output_abs):
-            return {"error": "拒绝访问: 只能下载 output 目录下的文件"}
+            raise HTTPException(
+                status_code=403, detail="拒绝访问: 只能下载 output 目录下的文件"
+            )
+        if not abs_path.exists():
+            raise HTTPException(status_code=404, detail="文件不存在")
+    except HTTPException:
+        raise
     except Exception as exc:
         logger.warning("简历下载路径参数校验失败: %s", exc)
-        return {"error": "无效的路径参数"}
-    if not abs_path.exists():
-        return {"error": "文件不存在"}
+        raise HTTPException(status_code=400, detail="无效的路径参数")
     from fastapi.responses import FileResponse
 
     return FileResponse(abs_path, filename=abs_path.name, media_type="text/markdown")

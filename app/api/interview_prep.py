@@ -2,7 +2,7 @@ import logging
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.auth.dependencies import get_current_user
 from app.tools import db_tools
@@ -14,7 +14,7 @@ logger = logging.getLogger("jobcraft.api.interview_prep")
 
 class InterviewPrepPayload(BaseModel):
     round_type: str = "技术面"
-    card_ids: List[int]
+    card_ids: List[int] = Field(default_factory=list)
     submission_id: Optional[int] = None
 
 

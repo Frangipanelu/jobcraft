@@ -891,15 +891,18 @@ class TestResumeDownload:
 
     def test_download_invalid_path(self):
         resp = client.get("/api/jobcraft/job/resume/download?path=../etc/passwd")
-        assert resp.status_code == 200
-        assert "error" in resp.json()
+        assert resp.status_code == 403
+        assert resp.json()["error"]["code"] == "FORBIDDEN"
+        assert resp.json()["error"]["message"]
 
     def test_download_nonexistent_file(self, monkeypatch):
-        resp = client.get(
-            "/api/jobcraft/job/resume/download?path=D:\\nonexistent\\file.md"
-        )
-        assert resp.status_code == 200
-        assert "error" in resp.json()
+        from app.api.server import output_dir
+
+        missing = (output_dir / "__no_such_file__.md").resolve()
+        resp = client.get(f"/api/jobcraft/job/resume/download?path={missing}")
+        assert resp.status_code == 404
+        assert resp.json()["error"]["code"] == "NOT_FOUND"
+        assert resp.json()["error"]["message"]
 
 
 # ============================================================
