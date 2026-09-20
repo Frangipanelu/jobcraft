@@ -189,6 +189,35 @@ def connection() -> Iterator[Any]:
             db_connections_active.dec()
 
 
+@contextmanager
+def transaction() -> Iterator[Any]:
+    """在单一连接上开启显式事务（成功提交 / 异常回滚，保证多语句写原子性）。
+
+    全局连接配置 `autocommit=True`（见 db_config），多语句写操作必须先关闭
+    autocommit 才能避免逐条 auto-commit 造成的部分写入；本上下文统一处理
+    关闭 autocommit、成功后 commit、异常时 rollback 并重新抛出。
+
+    :yield: mysql.connector 连接对象（调用方负责 `with conn.cursor() as cur:`）
+    """
+    conn = connect()
+    db_connections_active.inc()
+    conn.autocommit = False
+    try:
+        yield conn
+    except Exception:
+        conn.rollback()
+        raise
+    else:
+        conn.commit()
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            logger.warning("关闭 DB 连接失败（忽略）", exc_info=True)
+        finally:
+            db_connections_active.dec()
+
+
 def query_one(sql: str, params: Optional[Any] = None) -> Optional[Dict[str, Any]]:
     """执行 SELECT 并返回单行（字典）；无结果返回 None。
 

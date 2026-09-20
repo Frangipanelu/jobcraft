@@ -13,6 +13,7 @@ from app.tools.db_conn import (
     query_all,
     query_one,
     query_scalar,
+    transaction,
 )
 from app.tools.db_conn import _parse_json
 
@@ -266,8 +267,7 @@ def delete_submission(submission_id: int, user_id: Optional[int] = None) -> bool
     _ensure_interview_records_table()
     _ensure_interview_qa_pairs_table()
 
-    with connection() as conn:
-        conn.autocommit = False
+    with transaction() as conn:
         with conn.cursor() as cur:
             # 清理该投递下的面试复盘记录及其 QA 对
             cur.execute(
@@ -295,7 +295,6 @@ def delete_submission(submission_id: int, user_id: Optional[int] = None) -> bool
                 params.append(user_id)
             cur.execute(sql, tuple(params))
             affected = cur.rowcount
-            conn.commit()
             return affected > 0
 
 

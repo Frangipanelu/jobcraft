@@ -16,6 +16,7 @@ from app.tools.db_conn import (
     is_schema_ready,
     query_all,
     query_one,
+    transaction,
 )
 from app.tools.db_conn import _parse_json
 
@@ -125,9 +126,9 @@ def delete_base_resume(resume_id: int, user_id: Optional[int] = None) -> bool:
 
 
 def set_default_base_resume(resume_id: int, user_id: int) -> bool:
-    """把指定记录设为默认（同一用户的其余记录取消默认）。"""
+    """把指定记录设为默认（同一用户的其余记录取消默认，事务保证原子性）。"""
     _ensure_base_resume_table()
-    with connection() as conn:
+    with transaction() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 "UPDATE base_resume SET is_default=0 WHERE user_id=%s", (user_id,)

@@ -14,6 +14,7 @@ from app.tools.db_conn import (
     query_all,
     query_one,
     query_scalar,
+    transaction,
 )
 from app.tools.db_conn import _parse_json
 
@@ -409,7 +410,7 @@ def delete_card(card_id: int, user_id: Optional[int] = None) -> bool:
 
     可选按 user_id 过滤所有权: 越权删除时返回 False
     """
-    with connection() as conn:
+    with transaction() as conn:
         with conn.cursor() as cur:
             # 先删关联 (FK CASCADE 应该会处理, 但显式删更稳)
             # 字段名是 experience_id, 不是 card_id (建表时用的是 experience)

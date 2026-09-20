@@ -16,7 +16,7 @@ import hashlib
 import logging
 from typing import Any, Dict, Optional
 
-from app.tools.db_conn import connection, execute_lastrowid
+from app.tools.db_conn import execute_lastrowid, transaction
 
 logger = logging.getLogger("jobcraft.tools.db_ai")
 
@@ -105,7 +105,7 @@ def complete_ai_task(
     if task_id is None:
         return
     try:
-        with connection() as conn:
+        with transaction() as conn:
             with conn.cursor() as cur:
                 if status == _STATUS_SUCCESS and output_json is not None:
                     cur.execute(

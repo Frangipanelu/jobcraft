@@ -11,6 +11,7 @@ from app.tools.db_conn import (
     is_schema_ready,
     query_all,
     query_one,
+    transaction,
 )
 from app.tools.db_conn import _parse_json
 
@@ -423,7 +424,7 @@ def delete_interview_record(record_id: int, user_id: Optional[int] = None) -> No
     """删除面试记录及其 QA 对（可选按 user_id 过滤所有权，越权时无操作）"""
     _ensure_interview_records_table()
     _ensure_interview_qa_pairs_table()
-    with connection() as conn:
+    with transaction() as conn:
         with conn.cursor() as cur:
             sql = "DELETE FROM interview_records WHERE id=%s"
             params: List[Any] = [record_id]
