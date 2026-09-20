@@ -1,18 +1,13 @@
 import React from 'react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { JobCraftProvider, useJobCraft } from './context/JobCraftContext';
 import { AppRouter } from './router/AppRouter';
 import { AuthPage } from './pages/AuthPage';
 
-const queryClient = new QueryClient();
-
 export default function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <JobCraftProvider>
-        <AppShell />
-      </JobCraftProvider>
-    </QueryClientProvider>
+    <JobCraftProvider>
+      <AppShell />
+    </JobCraftProvider>
   );
 }
 
