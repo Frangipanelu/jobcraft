@@ -13,7 +13,7 @@
 - [x] **B-5（`a317bca`）**：运行时 `_ensure_*` DDL 固化为正式迁移 + 防漂移单测（`test_migrations_runner_unit.py`，冻结 V0007 软删 SQL），防止逐请求 ALTER
 - [x] **B-6（`b66c5a7`，FE-CONTEXT-REMOVE 清账）**：context 删除 4 域 state（jobs/experiences/jdAnalyses/interviews）+ 4 个 sync 镜像 + `createJob`/`loadExperiences`；navigateTo 不再由 jobId 推导 jdId（所有调用方显式传参）；9 组件 + MockInterviewModal + UserProfileView 全部迁移至 feature hooks（`useJobsQuery`/`useInterviewsQuery`/`useJdAnalysesQuery`/`useExperiencesQuery`，NewInterviewModal 用 `useCreateJobMutation`、UserProfileView 用 `refetchExperiences`）；hooks 移除 onSync 机制 + 空 `MutationOptions` 接口；5 个 query 测试改写为 cache 断言（CacheSpy/Seeder+CacheReader，删除 Mirror*）。context 现仅保留 auth + 导航过渡态 + 瞬态 UI
 - [x] **验证（Phase B 全绿）**：后端 pytest 581 passed / 11 skipped + ruff 全绿（B-4 后）；前端 tsc 0 错 + vitest 20 files / **112 tests** + `npm run build` ✅ + `python scripts/check_encoding.py` 305 files 0 warning
-- [ ] **待办**：B-1..B-6 推 origin/main（推后更新本节 commit 状态）
+- [x] **待办**：B-1..B-6 已推 origin/main（`427d585..936048f`，commit `936048f` 含本记录）
 - [ ] 留白：`NewInterviewModal`(1056 行) 过大、context 零 memo 专项、`showToast` setTimeout/cleanup、9 个后端端点前端未接线（均属 Phase C P2）
 
 ### 技术债收口 P1/P2（2026-09-20，commits `e29216a`/`88e76fb`/`731db68`/`27a51f0`/`1d45def`）
