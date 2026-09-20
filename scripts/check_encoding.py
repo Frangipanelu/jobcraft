@@ -115,7 +115,9 @@ REPLACEMENT_CHAR = "\ufffd"
 class Finding:
     """单条编码问题记录。"""
 
-    def __init__(self, path: Path, line: int, reason: str, level: str = "error") -> None:
+    def __init__(
+        self, path: Path, line: int, reason: str, level: str = "error"
+    ) -> None:
         """初始化记录。
 
         Args:
@@ -209,7 +211,9 @@ def check_file(path: Path) -> list[Finding]:
         return findings
 
     if has_bom and path.suffix.lower() in BOM_CHECK_EXTENSIONS:
-        findings.append(Finding(relative, 0, "文件含 UTF-8 BOM（建议去除）", level="warn"))
+        findings.append(
+            Finding(relative, 0, "文件含 UTF-8 BOM（建议去除）", level="warn")
+        )
 
     if REPLACEMENT_CHAR in text:
         findings.append(
@@ -241,10 +245,14 @@ def main() -> int:
         print(item.format())
 
     if errors:
-        print(f"\nFAILED: {len(errors)} encoding error(s) in {len(files)} scanned file(s).")
+        print(
+            f"\nFAILED: {len(errors)} encoding error(s) in {len(files)} scanned file(s)."
+        )
         return 1
 
-    print(f"OK: {len(files)} file(s) scanned, no encoding errors ({len(warns)} warning(s)).")
+    print(
+        f"OK: {len(files)} file(s) scanned, no encoding errors ({len(warns)} warning(s))."
+    )
     return 0
 
 
