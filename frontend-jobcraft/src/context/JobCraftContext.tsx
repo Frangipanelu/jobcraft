@@ -167,9 +167,6 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
   const showToast = (toast: Omit<ToastMessage, 'id'>) => {
     const id = Date.now().toString() + Math.random().toString(36).substring(2, 5);
     setToasts((prev) => [...prev, { ...toast, id }]);
-    setTimeout(() => {
-      dismissToast(id);
-    }, 4000);
   };
 
   const dismissToast = (id: string) => {
