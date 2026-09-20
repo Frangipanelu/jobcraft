@@ -13,6 +13,13 @@
 - [x] **P2-3（`1d45def`）**：`GET /resume/download` 错误返回从 200+`{"error":...}` 改为统一错误中间件契约（403/404 + `error.code/message`，无前端消费者零风险）；`JobAnalyzePayload`/`GapPolishPayload`/`SaveResumePayload`/`InterviewPrepPayload` 的 `card_ids`/`selected_card_ids` 统一 `Field(default_factory=list)`，缺键不再 pydantic 422、交 handler 统一友好 400（`/export` 可选过滤参数语义保留；card_ids vs selected_card_ids 命名方差为各端点绑定单消费者，保留）。test_api_routes_unit.py 103 ✅
 - [ ] 留白：`NewInterviewModal`(1056 行) 过大、context 零 memo 专项、`showToast` setTimeout/cleanup、9 个后端端点前端未接线、FE-CONTEXT-REMOVE 剩余（4 域镜像 + currentTab/navigateTo/selected*）
 
+### 整体健康审查 + v2 Spec 差距分析（2026-09-20）
+
+- [x] **审查结论落盘**：`docs/health-review-and-v2-gap-2026-09-20.md`——现状梳理/对标差距/P0-P2 问题+证据/三阶段解决方案。对照基线 `design-v2.0/`（14 份）+ `domain-model-v2` + `frontend-backend-contract-audit-v1` + `implementation-roadmap-v1`。
+- [x] **验证**：后端 575 passed/11 skip、ruff 全绿、check_encoding 307 OK、前端 tsc/build/113 tests（会话内实测）
+- [x] **关键结论**：架构分层/AI 审计链/迁移驱动 = 最强项；3 处 P0 规范违背（`mappers.ts:51` 已投递自动推导、`job_analysis_flow.py:435` 非 StateGraph 入口、`experience_polish.py:38` 绕道 llm_json）
+- [ ] Phase A P0 修复（3 项）→ Phase B P1 收口 → Phase C P2（详见报告）
+
 ### FE-HISTORICAL-RESUMES-01 历史简历域迁移（2026-09-19，commit `7eece93`/`c0c3d72`）
 
 - [x] **`features/historical-resumes/mappers.ts`**：`HISTORICAL_RESUMES_QUERY_KEY = ['historical-resumes']` + `baseResumeToHistoricalResume`（自 context 内联映射提取，单一事实来源）
