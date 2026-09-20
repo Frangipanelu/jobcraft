@@ -107,6 +107,7 @@ const DASH_JOB: DashboardItem = {
   card_version_count: 1,
   has_resume: true,
   is_manual: false,
+  delivered: false,
   prep_count: 0,
   review_count: 0,
   created_at: '2026-09-18',

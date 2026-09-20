@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { JDReportDetailView } from '../jd/JDReportDetailView';
 import { ResumeEditorView } from '../resume/ResumeEditorView';
+import { useSetDeliveredMutation } from '../../features/jobs/hooks';
 
 type JobSubTab = 'jd' | 'resume' | 'interview';
 
@@ -38,9 +39,11 @@ export const JobWorkspaceView: React.FC<JobWorkspaceViewProps> = ({
     jobs,
     interviews,
     jdAnalyses,
-    jobWorkspaceSubTab
+    jobWorkspaceSubTab,
+    syncJobs
   } = useJobCraft();
   const navigate = useNavigate();
+  const markDelivered = useSetDeliveredMutation(true, { onSync: syncJobs });
 
   const [activeTab, setActiveTab] = useState<JobSubTab>(initialSubTab || jobWorkspaceSubTab || 'jd');
 
@@ -93,6 +96,8 @@ export const JobWorkspaceView: React.FC<JobWorkspaceViewProps> = ({
                     ? 'bg-violet-soft text-violet border border-violet/20'
                     : currentJob.status === 'delivered'
                     ? 'bg-info-bg text-info border border-info/20'
+                    : currentJob.status === 'submitted'
+                    ? 'bg-sage-soft text-sage border border-sage/20'
                     : currentJob.status === 'finished'
                     ? 'bg-error-bg text-error border border-error/20'
                     : 'bg-warning-bg text-warning border border-warning/20'
@@ -104,6 +109,8 @@ export const JobWorkspaceView: React.FC<JobWorkspaceViewProps> = ({
                   ? '已复盘'
                   : currentJob.status === 'delivered'
                   ? '待投递'
+                  : currentJob.status === 'submitted'
+                  ? '已投递'
                   : currentJob.status === 'finished'
                   ? '已结束'
                   : '待处理'}
@@ -133,6 +140,16 @@ export const JobWorkspaceView: React.FC<JobWorkspaceViewProps> = ({
 
             {/* Header Action Buttons */}
             <div className="flex items-center gap-2.5 shrink-0">
+              {currentJob.status === 'delivered' && (
+                <button
+                  onClick={() => markDelivered.mutate(currentJob.id)}
+                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-info-bg hover:bg-info text-info border border-info/20 text-xs font-semibold transition"
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  <span>标记已投递</span>
+                </button>
+              )}
+
               <button
                 onClick={() => jobInterviews[0]?.id && onOpenMockInterview(jobInterviews[0].id)}
                 className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-sage-soft hover:bg-edge-deep text-sage border border-sage-soft text-xs font-semibold transition"

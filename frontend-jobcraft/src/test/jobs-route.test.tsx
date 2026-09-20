@@ -49,6 +49,7 @@ const SUBMISSIONS = [
     card_count: 0,
     has_resume: false,
     is_manual: false,
+    delivered: false,
     prep_count: 0,
     review_count: 0,
     created_at: '2026-09-10T00:00:00',

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useJobCraft } from '../../context/JobCraftContext';
-import { useJobsQuery, useTerminateJobMutation, useResumeJobMutation } from '../../features/jobs/hooks';
+import { useJobsQuery, useTerminateJobMutation, useResumeJobMutation, useSetDeliveredMutation } from '../../features/jobs/hooks';
 import { JobStatus } from '../../types/jobcraft';
 import {
   Briefcase,
@@ -26,6 +26,8 @@ export const JobsListView: React.FC<JobsListViewProps> = ({ onOpenNewJob }) => {
   const jobs = jobsData || [];
   const terminateJob = useTerminateJobMutation({ onSync: syncJobs });
   const resumeJob = useResumeJobMutation({ onSync: syncJobs });
+  const markDelivered = useSetDeliveredMutation(true, { onSync: syncJobs });
+  const unmarkDelivered = useSetDeliveredMutation(false, { onSync: syncJobs });
   const [activeFilter, setActiveFilter] = useState<'all' | JobStatus>('all');
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -47,6 +49,24 @@ export const JobsListView: React.FC<JobsListViewProps> = ({ onOpenNewJob }) => {
     });
   };
 
+  const handleMarkDelivered = (jobId: string) => {
+    markDelivered.mutate(jobId);
+    showToast({
+      type: 'success',
+      title: '已标记投递',
+      message: '该岗位已确认投递，状态更新为「已投递」。'
+    });
+  };
+
+  const handleUnmarkDelivered = (jobId: string) => {
+    unmarkDelivered.mutate(jobId);
+    showToast({
+      type: 'info',
+      title: '已取消投递标记',
+      message: '该岗位已回到「待投递」状态。'
+    });
+  };
+
   const filteredJobs = jobs.filter((job) => {
     const matchesFilter = activeFilter === 'all' || job.status === activeFilter;
     const matchesSearch =
@@ -64,6 +84,8 @@ export const JobsListView: React.FC<JobsListViewProps> = ({ onOpenNewJob }) => {
         return <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-violet-soft text-violet border border-violet/20">已复盘</span>;
       case 'delivered':
         return <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-info-bg text-info border border-info/20">待投递</span>;
+      case 'submitted':
+        return <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-sage-soft text-sage border border-sage/20">已投递</span>;
       case 'pending':
         return <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-warning-bg text-warning border border-warning/20">待处理</span>;
       case 'finished':
@@ -134,6 +156,16 @@ export const JobsListView: React.FC<JobsListViewProps> = ({ onOpenNewJob }) => {
             }`}
           >
             待投递 ({jobs.filter((j) => j.status === 'delivered').length})
+          </button>
+          <button
+            onClick={() => setActiveFilter('submitted')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+              activeFilter === 'submitted'
+                ? 'bg-ink text-white'
+                : 'text-muted hover:bg-page'
+            }`}
+          >
+            已投递 ({jobs.filter((j) => j.status === 'submitted').length})
           </button>
           <button
             onClick={() => setActiveFilter('interviewing')}
@@ -219,6 +251,22 @@ export const JobsListView: React.FC<JobsListViewProps> = ({ onOpenNewJob }) => {
 
             {/* Right: Actions */}
             <div className="flex items-center gap-2.5 shrink-0">
+              {job.status === 'delivered' && (
+                <button
+                  onClick={() => handleMarkDelivered(job.id)}
+                  className="px-3 py-1.5 text-xs rounded-lg border border-sage/30 text-sage hover:bg-sage-soft transition"
+                >
+                  标记已投递
+                </button>
+              )}
+              {job.status === 'submitted' && (
+                <button
+                  onClick={() => handleUnmarkDelivered(job.id)}
+                  className="px-3 py-1.5 text-xs rounded-lg border border-edge text-ink bg-page hover:bg-page-dim transition"
+                >
+                  取消已投递
+                </button>
+              )}
               {job.status === 'finished' ? (
                 <button
                   onClick={() => handleResume(job.id)}

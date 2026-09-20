@@ -40,6 +40,7 @@ class UpdateSubmissionPayload(BaseModel):
     resume_markdown: Optional[str] = None
     job_analysis_id: Optional[int] = None
     card_version_ids: Optional[List[int]] = None
+    delivered: Optional[bool] = None
 
 
 def _get_updated_dir():
@@ -231,6 +232,7 @@ async def jobcraft_submission_manual(
                 "jd_text": jd_text,
                 "resume_markdown": resume_text,
                 "is_manual": 1,
+                "delivered": 1,
                 "status": "APPLIED",
             }
         )

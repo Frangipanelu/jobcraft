@@ -185,6 +185,7 @@ export async function updateSubmission(
     resume_markdown?: string
     job_analysis_id?: number
     card_version_ids?: number[]
+    delivered?: boolean
   }
 ): Promise<Submission> {
   return request<Submission>(`/api/jobcraft/submission/${id}`, {

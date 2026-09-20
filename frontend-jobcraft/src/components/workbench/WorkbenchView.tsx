@@ -94,6 +94,7 @@ export const WorkbenchView: React.FC<WorkbenchViewProps> = ({
     interviewing: { text: '待面试', className: 'bg-sage-soft text-sage border border-sage/20' },
     reviewed: { text: '已复盘', className: 'bg-violet-soft text-violet border border-violet/20' },
     delivered: { text: '待投递', className: 'bg-info-bg text-info border border-info/20' },
+    submitted: { text: '已投递', className: 'bg-sage-soft text-sage border border-sage/20' },
     finished: { text: '已结束', className: 'bg-page text-muted border border-edge' },
     pending: { text: '待处理', className: 'bg-warning-bg text-warning border border-warning/20' }
   };
@@ -105,6 +106,7 @@ export const WorkbenchView: React.FC<WorkbenchViewProps> = ({
     interviewing: '参加面试 · 记录问答',
     reviewed: '复盘已完成 · 沉淀经历',
     delivered: '定制简历 · 准备投递',
+    submitted: '已投递 · 等待面试安排',
     finished: '流程已结束',
     pending: '查看 JD 分析结果'
   };
@@ -118,9 +120,10 @@ export const WorkbenchView: React.FC<WorkbenchViewProps> = ({
       const order: Record<Job['status'], number> = {
         interviewing: 0,
         delivered: 1,
-        pending: 2,
-        reviewed: 3,
-        finished: 4
+        submitted: 2,
+        pending: 3,
+        reviewed: 4,
+        finished: 5
       };
       return order[a.status] - order[b.status];
     })
@@ -149,6 +152,8 @@ export const WorkbenchView: React.FC<WorkbenchViewProps> = ({
           ? '准备面试阶段'
           : j.status === 'reviewed'
           ? '面试复盘完成'
+          : j.status === 'submitted'
+          ? '已投递'
           : j.status === 'finished'
           ? '流程已结束'
           : '待投递',
@@ -418,7 +423,7 @@ export const WorkbenchView: React.FC<WorkbenchViewProps> = ({
                     {job.company || '未命名岗位'} · {getNextStepText(job)}
                   </div>
                   <div className="text-xs text-muted">
-                    {job.status === 'interviewing' ? '面试准备阶段' : job.status === 'pending' ? 'JD 分析待完成' : job.status === 'reviewed' ? '已完成复盘' : '待投递'}
+                    {job.status === 'interviewing' ? '面试准备阶段' : job.status === 'pending' ? 'JD 分析待完成' : job.status === 'reviewed' ? '已完成复盘' : job.status === 'submitted' ? '已投递 · 等待面试安排' : '待投递'}
                   </div>
                   <button
                     onClick={() => navigate(`/jobs/${job.id}`)}

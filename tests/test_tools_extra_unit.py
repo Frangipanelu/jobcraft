@@ -683,6 +683,7 @@ class TestDbSubmission:
             "status": "submitted",
             "notes": "",
             "is_manual": 0,
+            "delivered": 0,
             "created_at": SimpleNamespace(isoformat=lambda: "2024-01-01"),
             "updated_at": SimpleNamespace(isoformat=lambda: "2024-01-02"),
         }
@@ -695,6 +696,36 @@ class TestDbSubmission:
             assert result["position"] == "Backend Eng"
             assert result["card_version_ids"] == [1, 2]
             assert result["is_manual"] is False
+            assert result["delivered"] is False
+
+    def test_get_submission_returns_delivered_true(self):
+        from app.tools.db_submission import get_submission
+
+        mock_cursor = MagicMock()
+        mock_cursor.fetchone.return_value = {
+            "id": 2,
+            "user_id": 1,
+            "job_analysis_id": None,
+            "position": "PM",
+            "company": "X",
+            "jd_text": "",
+            "resume_markdown": "",
+            "resume_file_path": None,
+            "card_version_ids": "[]",
+            "status": "APPLIED",
+            "notes": "",
+            "is_manual": 0,
+            "delivered": 1,
+            "created_at": SimpleNamespace(isoformat=lambda: "2024-01-01"),
+            "updated_at": SimpleNamespace(isoformat=lambda: "2024-01-02"),
+        }
+        mock_cursor.fetchall.return_value = []
+        mock_conn = _make_mock_conn(mock_cursor)
+
+        with patch("app.tools.db_conn.connect", return_value=mock_conn):
+            result = get_submission(2)
+            assert result is not None
+            assert result["delivered"] is True
 
     def test_update_submission_empty_returns_false(self):
         from app.tools.db_submission import update_submission

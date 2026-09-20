@@ -68,6 +68,7 @@ const DASH: DashboardItem = {
   card_count: 3,
   has_resume: true,
   is_manual: false,
+  delivered: false,
   prep_count: 0,
   review_count: 0,
   created_at: '2026-09-18T08:00:00',
@@ -100,6 +101,7 @@ const SUBMISSION_DETAIL: Submission = {
   card_version_ids: [1, 2, 3],
   status: 'APPLIED',
   notes: '',
+  delivered: false,
   created_at: '2026-09-18T08:00:00',
   updated_at: '2026-09-18T08:00:00',
 };

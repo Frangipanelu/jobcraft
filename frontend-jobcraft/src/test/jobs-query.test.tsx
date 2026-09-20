@@ -52,6 +52,7 @@ const SUBMISSIONS = [
     card_count: 0,
     has_resume: false,
     is_manual: false,
+    delivered: false,
     prep_count: 0,
     review_count: 0,
     created_at: '2026-09-01T00:00:00',
@@ -68,6 +69,7 @@ const SUBMISSIONS = [
     card_count: 0,
     has_resume: false,
     is_manual: false,
+    delivered: true,
     prep_count: 1,
     review_count: 0,
     created_at: '2026-09-05T00:00:00',
@@ -87,6 +89,7 @@ const MIRROR_JOB = {
   card_version_ids: [],
   status: 'APPLIED',
   notes: '',
+  delivered: false,
   created_at: null,
   updated_at: null,
 };

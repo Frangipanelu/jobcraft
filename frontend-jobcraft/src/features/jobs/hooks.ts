@@ -118,10 +118,11 @@ function useLocalJobPatchMutation(patch: (j: Job) => TerminateArgs, options: Job
 
 /**
  * 标记岗位流程已结束（纯本地状态更新，无后端调用）。
+ * 注意：P0-1 之后 applied（已投递）只能由用户确认，终止流程不再顺带标记投递。
  */
 export function useTerminateJobMutation(options: JobMutationOptions = {}) {
   return useLocalJobPatchMutation(
-    (j) => ({ jobId: j.id, lastUpdated: '刚刚', steps: { ...j.steps, terminated: true, applied: true } }),
+    (j) => ({ jobId: j.id, lastUpdated: '刚刚', steps: { ...j.steps, terminated: true } }),
     options
   );
 }
@@ -134,4 +135,44 @@ export function useResumeJobMutation(options: JobMutationOptions = {}) {
     (j) => ({ jobId: j.id, lastUpdated: '刚刚', steps: { ...j.steps, terminated: false } }),
     options
   );
+}
+
+/**
+ * 用户主动标记/取消「已投递」（P0-1：已投递必须是用户手工确认，禁止自动进入）。
+ * - 优先调用后端 PATCH delivered（有 backendId 时持久化），失败仅保留本地乐观状态；
+ * - cache 与 context 镜像即时同步，前端状态仍由 deriveJobStatus 派生。
+ */
+export function useSetDeliveredMutation(delivered: boolean, options: JobMutationOptions = {}) {
+  const queryClient = useQueryClient();
+  const { onSync } = options;
+
+  return useMutation<string, unknown, string>({
+    mutationFn: async (jobId) => {
+      const prev = queryClient.getQueryData<Job[]>([...JOBS_QUERY_KEY]) || [];
+      const job = prev.find((j) => j.id === jobId);
+      if (job?.backendId != null) {
+        try {
+          await jobApi.updateSubmission(job.backendId, { delivered });
+        } catch {
+          // 后端不可用时仅保留本地乐观状态
+        }
+      }
+      return jobId;
+    },
+    onMutate: (jobId) => {
+      const prev = queryClient.getQueryData<Job[]>([...JOBS_QUERY_KEY]) || [];
+      const next = prev.map((j) => {
+        if (j.id !== jobId) return j;
+        const steps = { ...j.steps, applied: delivered };
+        return {
+          ...j,
+          lastUpdated: '刚刚',
+          steps,
+          status: deriveJobStatus(steps),
+        } as Job;
+      });
+      queryClient.setQueryData([...JOBS_QUERY_KEY], next);
+      onSync?.(next);
+    },
+  });
 }

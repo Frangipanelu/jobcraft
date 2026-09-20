@@ -320,6 +320,7 @@ export interface Submission {
   card_version_ids: number[]
   status: SubmissionStatus
   notes: string
+  delivered: boolean
   created_at: string | null
   updated_at: string | null
 }
@@ -335,6 +336,7 @@ export interface DashboardItem {
   card_count: number
   has_resume: boolean
   is_manual: boolean
+  delivered: boolean
   prep_count: number
   review_count: number
   created_at: string | null

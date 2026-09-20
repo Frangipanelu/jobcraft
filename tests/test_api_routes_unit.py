@@ -998,6 +998,46 @@ class TestSubmissionUpdate:
         assert resp.status_code == 400
         assert "非法状态流转" in resp.json()["error"]["message"]
 
+    def test_update_delivered_flag(self, monkeypatch):
+        """P0-1：用户手动确认已投递 → delivered 标志透传到 db_tools.update_submission。"""
+        updates_captured = {}
+
+        def fake_update(submission_id, updates, user_id=None):
+            updates_captured["updates"] = updates
+            return True
+
+        monkeypatch.setattr(
+            "app.api.submission.db_tools.update_submission", fake_update
+        )
+        monkeypatch.setattr(
+            "app.api.submission.db_tools.get_submission",
+            lambda *a: {"id": 1, "status": "APPLIED", "delivered": True},
+        )
+        resp = client.patch("/api/jobcraft/submission/1", json={"delivered": True})
+        assert resp.status_code == 200
+        assert updates_captured["updates"]["delivered"] is True
+        assert resp.json()["delivered"] is True
+
+    def test_update_delivered_flag_false(self, monkeypatch):
+        """取消已投递：delivered=false 不能被过滤掉（布尔值应保留）。"""
+        updates_captured = {}
+
+        def fake_update(submission_id, updates, user_id=None):
+            updates_captured["updates"] = updates
+            return True
+
+        monkeypatch.setattr(
+            "app.api.submission.db_tools.update_submission", fake_update
+        )
+        monkeypatch.setattr(
+            "app.api.submission.db_tools.get_submission",
+            lambda *a: {"id": 1, "status": "APPLIED", "delivered": False},
+        )
+        resp = client.patch("/api/jobcraft/submission/1", json={"delivered": False})
+        assert resp.status_code == 200
+        assert updates_captured["updates"]["delivered"] is False
+        assert resp.json()["delivered"] is False
+
 
 class TestSubmissionDelete:
     """DELETE /api/jobcraft/submission/{submission_id}"""

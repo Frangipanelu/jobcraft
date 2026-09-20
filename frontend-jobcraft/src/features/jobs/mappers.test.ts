@@ -14,6 +14,7 @@ function makeItem(overrides: Partial<DashboardItem> = {}): DashboardItem {
     card_count: 0,
     has_resume: false,
     is_manual: false,
+    delivered: false,
     prep_count: 0,
     review_count: 0,
     created_at: '2026-09-10T10:00:00',
@@ -33,7 +34,7 @@ describe('submissionToJob 映射', () => {
     expect(job.applyDate).toBe('2026-09-10');
     expect(job.lastUpdated).toBe('2026-09-11T08:00:00');
     expect(job.steps).toMatchObject({
-      applied: true,
+      applied: false,
       jdAnalysis: false,
       expMatched: false,
       customResume: false,
@@ -44,7 +45,14 @@ describe('submissionToJob 映射', () => {
     expect(job.interviewIds).toEqual([]);
   });
 
-  it('有 JD 分析 → delivered，jdAnalysisId 归一为字符串', () => {
+  it('用户确认已投递（delivered）→ applied=true，状态降为 submitted', () => {
+    const job = submissionToJob(makeItem({ delivered: true }));
+    expect(job.steps.applied).toBe(true);
+    expect(job.status).toBe('submitted');
+    expect(job.backendId).toBe(5);
+  });
+
+  it('有 JD 分析且未确认投递 → delivered，jdAnalysisId 归一为字符串', () => {
     const job = submissionToJob(makeItem({ has_analysis: true, job_analysis_id: 42 }));
     expect(job.status).toBe('delivered');
     expect(job.jdAnalysisId).toBe('42');
@@ -64,19 +72,25 @@ describe('submissionToJob 映射', () => {
 });
 
 describe('deriveJobStatus 优先级', () => {
-  it('terminated > prepStage > reviewStage > jdAnalysis > pending', () => {
-    const base = {
-      jdAnalysis: false,
-      expMatched: false,
-      customResume: false,
-      applied: true,
-      prepStage: 'pending' as const,
-      reviewStage: 'pending' as const,
-    };
+  const base = {
+    jdAnalysis: false,
+    expMatched: false,
+    customResume: false,
+    applied: false,
+    prepStage: 'pending' as const,
+    reviewStage: 'pending' as const,
+  };
+
+  it('terminated > prepStage > reviewStage > applied > jdAnalysis > pending', () => {
     expect(deriveJobStatus({ ...base, terminated: true })).toBe('finished');
     expect(deriveJobStatus({ ...base, prepStage: 'in_progress' as const })).toBe('interviewing');
     expect(deriveJobStatus({ ...base, reviewStage: 'done' as const })).toBe('reviewed');
+    expect(deriveJobStatus({ ...base, applied: true })).toBe('submitted');
     expect(deriveJobStatus({ ...base, jdAnalysis: true })).toBe('delivered');
     expect(deriveJobStatus(base)).toBe('pending');
+  });
+
+  it('已投递优先级高于待投递（applied 优先于 jdAnalysis）', () => {
+    expect(deriveJobStatus({ ...base, jdAnalysis: true, applied: true })).toBe('submitted');
   });
 });

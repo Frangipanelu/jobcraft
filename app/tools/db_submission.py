@@ -48,6 +48,7 @@ def _ensure_resume_submission_table() -> None:
                     status           VARCHAR(32) DEFAULT 'APPLIED',
                     notes            TEXT,
                     is_manual        TINYINT(1) DEFAULT 0,
+                    delivered        TINYINT(1) DEFAULT 0,
                     created_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                     KEY idx_user_status (user_id, status),
@@ -100,8 +101,8 @@ def insert_submission(data: Dict[str, Any]) -> int:
         """
         INSERT INTO resume_submission
             (user_id, job_analysis_id, position, company, jd_text,
-             resume_markdown, resume_file_path, card_version_ids, status, notes, is_manual)
-        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+             resume_markdown, resume_file_path, card_version_ids, status, notes, is_manual, delivered)
+        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
         """,
         (
             data.get("user_id", 1),
@@ -115,6 +116,7 @@ def insert_submission(data: Dict[str, Any]) -> int:
             status.value,
             data.get("notes"),
             data.get("is_manual", 0),
+            data.get("delivered", 0),
         ),
     )
 
@@ -144,6 +146,7 @@ def get_submission(
         "status": _normalize_or_raw(row["status"]),
         "notes": row["notes"] or "",
         "is_manual": bool(row.get("is_manual")),
+        "delivered": bool(row.get("delivered")),
         "created_at": row["created_at"].isoformat() if row.get("created_at") else None,
         "updated_at": row["updated_at"].isoformat() if row.get("updated_at") else None,
     }
@@ -203,6 +206,7 @@ def get_submission_by_analysis(
         "status": row["status"],
         "notes": row["notes"] or "",
         "is_manual": row.get("is_manual", 0),
+        "delivered": bool(row.get("delivered")),
         "created_at": row["created_at"].isoformat() if row.get("created_at") else None,
         "updated_at": row["updated_at"].isoformat() if row.get("updated_at") else None,
     }
@@ -220,6 +224,7 @@ def update_submission(
         "resume_file_path": "resume_file_path",
         "status": "status",
         "notes": "notes",
+        "delivered": "delivered",
     }
     sets: List[str] = []
     values: List[Any] = []
@@ -381,6 +386,7 @@ def get_dashboard(user_id: int = 1) -> List[Dict[str, Any]]:
                 "card_count": card_count,
                 "has_resume": bool(full.get("resume_markdown")),
                 "is_manual": full.get("is_manual", False),
+                "delivered": full.get("delivered", False),
                 "prep_count": get_submission_prep_count(sid),
                 "review_count": get_submission_review_count(sid),
                 "created_at": full["created_at"],
