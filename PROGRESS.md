@@ -14,7 +14,14 @@
 - [x] **B-6（`b66c5a7`，FE-CONTEXT-REMOVE 清账）**：context 删除 4 域 state（jobs/experiences/jdAnalyses/interviews）+ 4 个 sync 镜像 + `createJob`/`loadExperiences`；navigateTo 不再由 jobId 推导 jdId（所有调用方显式传参）；9 组件 + MockInterviewModal + UserProfileView 全部迁移至 feature hooks（`useJobsQuery`/`useInterviewsQuery`/`useJdAnalysesQuery`/`useExperiencesQuery`，NewInterviewModal 用 `useCreateJobMutation`、UserProfileView 用 `refetchExperiences`）；hooks 移除 onSync 机制 + 空 `MutationOptions` 接口；5 个 query 测试改写为 cache 断言（CacheSpy/Seeder+CacheReader，删除 Mirror*）。context 现仅保留 auth + 导航过渡态 + 瞬态 UI
 - [x] **验证（Phase B 全绿）**：后端 pytest 581 passed / 11 skipped + ruff 全绿（B-4 后）；前端 tsc 0 错 + vitest 20 files / **112 tests** + `npm run build` ✅ + `python scripts/check_encoding.py` 305 files 0 warning
 - [x] **待办**：B-1..B-6 已推 origin/main（`427d585..936048f`，commit `936048f` 含本记录）
-- [ ] 留白：`NewInterviewModal`(1056 行) 过大、context 零 memo 专项、`showToast` setTimeout/cleanup、9 个后端端点前端未接线（均属 Phase C P2）
+- [x] 留白已转 **Phase C P2 专项**（见下，2026-09-21 启动：C-2 已完成，C-1/C-3/C-4 待做）
+
+### Phase C P2 专项（2026-09-21 启动，四个候选 → 见 TODO.md P3 区）
+
+- [x] **C-2 FE-TOAST-CLEANUP-01 showToast setTimeout/cleanup**：auto-dismiss 从 context `showToast`（`JobCraftContext.tsx:170` 无清理 setTimeout）下沉到 `Toast.tsx` 新增 `ToastItem` 组件 `useEffect`（挂载 4s 计时 + 卸载 clearTimeout，`onDismiss` 用 ref 避免计时因引用变化重置）；context `showToast` 只入队；关闭按钮补 `aria-label="关闭通知"`。新增 `src/test/toast.test.tsx` 4 条单测（4s 自动消失 / 卸载后推进计时器不 setState 泄漏 / 点关闭立即消失 / 空态不渲染容器）。验证：vitest **21 files / 116 tests** 通过 + `npm run lint`（tsc 0 错）✅ + `npm run build` 通过 + check_encoding ✅。commit `4d820bc`
+- [ ] **C-3 FE-CONTEXT-MEMO-01 context 零 memo**：拆 ToastContext + AuthNavContext，useMemo value（前置 C-2）
+- [ ] **C-1 FE-NEWINTERVIEW-SPLIT-01 NewInterviewModal(1122 行) 拆分**：shell + 4 Step + draft util，接真实简历源
+- [ ] **C-4 FE-ENDPOINT-WIRE-01 9 个未接线端点清账**：逐端点裁决 + 删死 wrapper（step1/step2/saveCardVersion/getJobSelectedCards）
 
 ### 技术债收口 P1/P2（2026-09-20，commits `e29216a`/`88e76fb`/`731db68`/`27a51f0`/`1d45def`）
 
