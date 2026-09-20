@@ -68,8 +68,18 @@ def get_job_analysis(
     row = query_one(sql, tuple(params))
     if not row:
         return None
+    return _job_analysis_to_dict(row)
+
+
+def _job_analysis_to_dict(row: Dict[str, Any]) -> Dict[str, Any]:
+    """把 job_analysis 行归一化为契约 dict。
+
+    同时保留 ``id``（历史契约）与 ``job_analysis_id``（前端 JobAnalysisResult 契约），
+    避免 GET/列表两条链路字段形状不一致。
+    """
     return {
         "id": row["id"],
+        "job_analysis_id": row["id"],
         "user_id": row["user_id"],
         "company": row["company"],
         "position": row["position"],
@@ -85,18 +95,18 @@ def get_job_analysis(
 
 
 def list_job_analyses(user_id: int, limit: int = 20) -> List[Dict[str, Any]]:
-    """列出用户历史岗位分析,按时间倒序"""
+    """列出用户历史岗位分析，按时间倒序。
+
+    返回完整详情字段（单条 SQL 查询），前端无需对每条再发 GET（消除 N+1）。
+    """
+    _ensure_job_analysis_columns()
     rows = query_all(
-        "SELECT id, company, position, match_score, created_at "
+        "SELECT id, user_id, company, position, jd_text, jd_requirements, "
+        "match_score, gap_analysis, dimension_requirements, created_at "
         "FROM job_analysis WHERE user_id=%s ORDER BY created_at DESC LIMIT %s",
         (user_id, limit),
     )
-    for r in rows:
-        if r.get("created_at"):
-            r["created_at"] = r["created_at"].isoformat()
-        if r.get("match_score") is not None:
-            r["match_score"] = float(r["match_score"])
-    return rows
+    return [_job_analysis_to_dict(r) for r in rows]
 
 
 def delete_job_analysis(job_id: int, user_id: Optional[int] = None) -> bool:

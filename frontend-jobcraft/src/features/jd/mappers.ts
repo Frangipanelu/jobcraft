@@ -1,5 +1,20 @@
 import type { JobAnalysisResult, ATSProfile } from '../../api/types';
+import type { JobAnalysisDetail } from '../../api/job';
 import type { JDAnalysis } from '../../types/jobcraft';
+
+/** analysisDetailToJD 的输入结构：JobAnalysisResult（创建路径）与 JobAnalysisDetail（列表路径）均满足。 */
+type JDDetailInput = Pick<
+  JobAnalysisDetail,
+  | 'job_analysis_id'
+  | 'company'
+  | 'position'
+  | 'jd_text'
+  | 'jd_requirements'
+  | 'match_score'
+  | 'gap_analysis'
+  | 'dimension_requirements'
+  | 'created_at'
+>;
 
 /** JD 分析查询缓存 key（迁移视图 + context 镜像双写共用）。 */
 export const JD_ANALYSES_QUERY_KEY = ['jdAnalyses'] as const;
@@ -158,12 +173,12 @@ export function analysisToJD(result: JobAnalysisResult, jobId?: string): JDAnaly
 }
 
 /**
- * 将后端分析详情（getJobAnalysis 返回）转换为前端 JDAnalysis（历史列表加载路径）。
+ * 将后端分析详情（GET /job/analyze/{id} 或 /job/analyses 列表条目）转换为前端 JDAnalysis。
  *
  * 自 JobCraftContext.loadJdAnalyses 内联映射提取，作为唯一实现：
  * 依据 dimension_requirements 构建 skillGaps 与 goal，jd_requirements 构建 coreRequirements / atsKeywords。
  */
-export function analysisDetailToJD(detail: JobAnalysisResult): JDAnalysis {
+export function analysisDetailToJD(detail: JDDetailInput): JDAnalysis {
   const jdReq = (detail.jd_requirements || {}) as Record<string, unknown>;
   const hardSkills = (jdReq.hard_skills as string[]) || [];
   const softSkills = (jdReq.soft_skills as string[]) || [];
@@ -191,6 +206,9 @@ export function analysisDetailToJD(detail: JobAnalysisResult): JDAnalysis {
     : (detail.gap_analysis as string) || '待分析';
 
   const gapAnalysis = detail.gap_analysis as unknown;
+  const gapText = Array.isArray(gapAnalysis)
+    ? (gapAnalysis as string[]).join(' ')
+    : String(detail.gap_analysis || '');
 
   return {
     id: String(detail.job_analysis_id),
@@ -200,9 +218,7 @@ export function analysisDetailToJD(detail: JobAnalysisResult): JDAnalysis {
     rawText: detail.jd_text || '',
     matchScore: detail.match_score || 0,
     recommendationStars: Math.round((detail.match_score || 0) / 20),
-    verdictSummary: Array.isArray(gapAnalysis)
-      ? (gapAnalysis as string[]).join(' ')
-      : (detail.gap_analysis || ''),
+    verdictSummary: gapText,
     whyMatch: '',
     keyRisks: '',
     resumeAdvice: [],

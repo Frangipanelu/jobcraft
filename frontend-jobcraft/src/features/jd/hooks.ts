@@ -229,10 +229,9 @@ export function useCreateStructuredJdAnalysisMutation(options: JDMutationOptions
 }
 
 /**
- * 查询当前用户的 JD 分析历史（listJobAnalyses → 逐条 getJobAnalysis → analysisDetailToJD）。
+ * 查询当前用户的 JD 分析历史（单次 listJobAnalyses 返回完整详情，消除逐条 GET 的 N+1）。
  *
- * 与 legacy `JobCraftContext.loadJdAnalyses` 语义一致：先取摘要列表，再并发拉取每条完整详情；
- * 单条详情失败时跳过该条（不外抛），userId 取自已认证用户的 auth profile。
+ * 与 legacy `JobCraftContext.loadJdAnalyses` 语义保持一致；单条映射失败时跳过该条（不外抛）。
  */
 export function useJdAnalysesQuery() {
   return useQuery({
@@ -240,19 +239,16 @@ export function useJdAnalysesQuery() {
     queryFn: async () => {
       const user = await authApi.getCurrentUser();
       const data = await jobApi.listJobAnalyses(user.id);
-      const summaries = data.analyses || [];
-      const fullAnalyses = await Promise.all(
-        summaries.map(async (s) => {
-          try {
-            const summary = s as { id?: number; job_analysis_id?: number };
-            const detail = await jobApi.getJobAnalysis(Number(summary.id || summary.job_analysis_id));
-            return analysisDetailToJD(detail);
-          } catch {
-            return null;
-          }
-        }),
-      );
-      return fullAnalyses.filter(Boolean) as JDAnalysis[];
+      const entries = data.analyses || [];
+      const mapped: JDAnalysis[] = [];
+      for (const s of entries) {
+        try {
+          mapped.push(analysisDetailToJD(s));
+        } catch {
+          // 单条映射失败跳过，不影响整体列表
+        }
+      }
+      return mapped;
     },
   });
 }

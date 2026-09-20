@@ -240,20 +240,9 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
   const loadJdAnalyses = async (userId: number) => {
     try {
       const data = await jobApi.listJobAnalyses(userId)
-      const summaries = data.analyses || []
-      // 为每个分析获取完整数据
-      const fullAnalyses = await Promise.all(
-        summaries.map(async (s) => {
-          try {
-            const summary = s as { id?: number; job_analysis_id?: number }
-            const detail = await jobApi.getJobAnalysis(Number(summary.id || summary.job_analysis_id))
-            return analysisDetailToJD(detail)
-          } catch {
-            return null
-          }
-        })
-      )
-      const mapped = fullAnalyses.filter(Boolean) as JDAnalysis[]
+      const analyses = data.analyses || []
+      // 列表接口已返回完整详情（单次查询），无需逐条 GET（消除 N+1）。
+      const mapped = analyses.map(analysisDetailToJD)
       setJdAnalyses(mapped)
       queryClient.setQueryData([...JD_ANALYSES_QUERY_KEY], mapped)
     } catch (error) {

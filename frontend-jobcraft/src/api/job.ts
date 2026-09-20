@@ -5,6 +5,8 @@
 import { request, requestFormData } from './client'
 import type {
   JobAnalysisResult,
+  JDRequirements,
+  DimensionRequirement,
   Submission,
   DashboardItem,
   SaveResumeResult,
@@ -18,12 +20,6 @@ import type {
 // ============================================================
 // 岗位分析
 // ============================================================
-
-export async function uploadResume(file: File): Promise<{ cards: ExperienceCard[] }> {
-  const formData = new FormData()
-  formData.append('file', file)
-  return requestFormData<{ cards: ExperienceCard[] }>('/api/jobcraft/experience/upload', formData)
-}
 
 export interface PreviewItem {
   title: string
@@ -68,9 +64,23 @@ export async function analyzeJob(payload: {
   })
 }
 
+/** 岗位分析详情（GET /job/analyze/{id} 与 /job/analyses 列表条目的统一契约）。 */
+export interface JobAnalysisDetail {
+  id: number;
+  job_analysis_id: number;
+  company: string;
+  position: string;
+  jd_text: string;
+  jd_requirements: JDRequirements | null;
+  match_score: number | null;
+  gap_analysis: unknown;
+  dimension_requirements: DimensionRequirement[];
+  created_at: string | null;
+}
+
 export async function listJobAnalyses(
   userId?: number
-): Promise<{ analyses: { id: number; company: string; position: string; match_score: number | null; created_at: string | null }[] }> {
+): Promise<{ analyses: JobAnalysisDetail[] }> {
   const qs = userId !== undefined ? `?user_id=${userId}` : ''
   return request(`/api/jobcraft/job/analyses${qs}`)
 }

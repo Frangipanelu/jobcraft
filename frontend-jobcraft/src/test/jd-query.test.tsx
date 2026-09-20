@@ -225,12 +225,8 @@ beforeEach(() => {
   job.getDashboard.mockResolvedValue({ submissions: [] });
   job.listBaseResumes.mockResolvedValue([]);
   job.listJobAnalyses.mockResolvedValue({
-    analyses: [
-      { id: 12, company: '字节跳动', position: 'AI 产品经理', match_score: 82, created_at: '2026-02-01' },
-      { id: 13, company: '腾讯', position: '策略产品经理', match_score: 55, created_at: '2026-02-02' },
-    ],
+    analyses: [DETAIL_A, DETAIL_B],
   });
-  job.getJobAnalysis.mockImplementation(async (id: number) => (id === 13 ? DETAIL_B : DETAIL_A));
   job.deleteSubmission.mockResolvedValue(undefined);
   job.analyzeStructuredJd.mockResolvedValue(buildStructuredResult());
   job.analyzeJob.mockResolvedValue(buildResult());
@@ -256,8 +252,7 @@ describe('useJdAnalysesQuery 迁移视图', () => {
     expect(screen.getByText('腾讯')).toBeInTheDocument();
     expect(screen.getByText('历史研判报告 (2)')).toBeInTheDocument();
     expect(job.listJobAnalyses).toHaveBeenCalledWith(1);
-    expect(job.getJobAnalysis).toHaveBeenCalledWith(12);
-    expect(job.getJobAnalysis).toHaveBeenCalledWith(13);
+    expect(job.getJobAnalysis).not.toHaveBeenCalled();
 
     fireEvent.change(screen.getByPlaceholderText('搜索公司或岗位名称...'), {
       target: { value: '腾讯' },
