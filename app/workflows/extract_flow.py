@@ -5,7 +5,7 @@
 - run_extract_structured_workflow: raw_text → CardStructuredCache
 - run_recommend_tags_workflow: raw_text → 标签列表
 - run_parse_resume_entries_workflow: resume_text → 经历条目
-- run_backfill_workflow: 单卡装整份简历的旧数据拆卡（Agent + DB）
+- run_backfill_workflow: 单卡装整份简历的旧数据拆卡（Agent + DB，单次上限 MAX_BACKFILL_CARDS + 单卡失败容忍）
 """
 
 import logging
@@ -59,30 +59,43 @@ def _run_parse_resume_entries(state: Dict[str, Any]) -> Dict[str, Any]:
     return {"result": out["entries"]}
 
 
+# 单次 backfill 最多处理的卡片数上限（防止单节点内无限次 LLM 调用，AGENTS.md §1.2.5）。
+MAX_BACKFILL_CARDS = 10
+
+
 def _run_backfill(state: Dict[str, Any]) -> Dict[str, Any]:
     user_id = state.get("user_id", 1)
     min_chars = state.get("min_chars", 100)
 
     cards = db_tools.list_full_resume_cards(user_id, min_chars)
-    result: Dict[str, Any] = {"checked": 0, "splits": []}
+    result: Dict[str, Any] = {"checked": 0, "splits": [], "failed": []}
     if not cards:
         return {"result": result}
 
     # checked 统计所有卡片数，与旧接口对齐
     result["checked"] = len(db_tools.list_cards(user_id, include_inactive=False))
-    for card in cards:
-        out = ParseResumeEntriesAgent().run({"resume_text": card.get("raw_text") or ""})
-        entries = out["entries"]
-        if len(entries) < 2:
-            continue
-        created_ids = db_tools.split_resume_card_by_entries(user_id, card, entries)
-        result["splits"].append(
-            {
-                "from_card_id": card["id"],
-                "from_title": card["title"],
-                "created_ids": created_ids,
-            }
-        )
+    for card in cards[:MAX_BACKFILL_CARDS]:
+        try:
+            out = ParseResumeEntriesAgent().run(
+                {"resume_text": card.get("raw_text") or ""}
+            )
+            entries = out["entries"]
+            if len(entries) < 2:
+                continue
+            created_ids = db_tools.split_resume_card_by_entries(user_id, card, entries)
+            result["splits"].append(
+                {
+                    "from_card_id": card["id"],
+                    "from_title": card["title"],
+                    "created_ids": created_ids,
+                }
+            )
+        except Exception as e:
+            # 单卡失败记录并继续，不中断整次回填
+            logger.warning("backfill 拆卡失败 (card_id=%s): %s", card.get("id"), e)
+            result["failed"].append(
+                {"card_id": card["id"], "from_title": card["title"], "error": str(e)}
+            )
     return {"result": result}
 
 

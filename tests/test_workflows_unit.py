@@ -808,6 +808,85 @@ class TestExtractFlow:
         assert result["checked"] == 0
         assert result["splits"] == []
 
+    def test_backfill_workflow_failure_tolerance(self, monkeypatch):
+        """Backfill：单卡失败不中断整体回填，错误进入 failed 列表"""
+        from app.workflows.extract_flow import run_backfill_workflow
+
+        def fake_list_full(user_id, min_chars):
+            return [
+                {"id": 1, "title": "失败卡", "raw_text": "文本"},
+                {"id": 2, "title": "成功卡", "raw_text": "*" * 300},
+            ]
+
+        monkeypatch.setattr(
+            "app.workflows.extract_flow.db_tools.list_full_resume_cards", fake_list_full
+        )
+        monkeypatch.setattr(
+            "app.workflows.extract_flow.db_tools.list_cards",
+            lambda uid, include_inactive=False: [{"id": 1}, {"id": 2}],
+        )
+
+        def fake_parse_run(self, data):
+            if data["resume_text"] == "文本":
+                raise RuntimeError("解析超时")
+            return {
+                "entries": [
+                    {"company": "A", "title": "经历1"},
+                    {"company": "B", "title": "经历2"},
+                ]
+            }
+
+        monkeypatch.setattr(
+            "app.workflows.extract_flow.ParseResumeEntriesAgent.run", fake_parse_run
+        )
+        monkeypatch.setattr(
+            "app.workflows.extract_flow.db_tools.split_resume_card_by_entries",
+            lambda uid, card, entries: [10, 11],
+        )
+
+        result = run_backfill_workflow(user_id=1, min_chars=100)
+        assert len(result["splits"]) == 1
+        assert result["splits"][0]["from_card_id"] == 2
+        assert len(result["failed"]) == 1
+        assert result["failed"][0]["card_id"] == 1
+        assert result["failed"][0]["error"] != ""
+
+    def test_backfill_workflow_cap(self, monkeypatch):
+        """Backfill：单次回填受 MAX_BACKFILL_CARDS 上限约束"""
+        from app.workflows.extract_flow import (
+            MAX_BACKFILL_CARDS,
+            run_backfill_workflow,
+        )
+
+        def fake_list_full(user_id, min_chars):
+            return [
+                {"id": i, "title": f"长卡{i}", "raw_text": "*" * 300}
+                for i in range(1, MAX_BACKFILL_CARDS + 5)
+            ]
+
+        monkeypatch.setattr(
+            "app.workflows.extract_flow.db_tools.list_full_resume_cards", fake_list_full
+        )
+        monkeypatch.setattr(
+            "app.workflows.extract_flow.db_tools.list_cards",
+            lambda uid, include_inactive=False: list(range(1, MAX_BACKFILL_CARDS + 5)),
+        )
+
+        def fake_parse_run(self, data):
+            return {"entries": [{"company": "A"}, {"company": "B"}, {"company": "C"}]}
+
+        monkeypatch.setattr(
+            "app.workflows.extract_flow.ParseResumeEntriesAgent.run", fake_parse_run
+        )
+        monkeypatch.setattr(
+            "app.workflows.extract_flow.db_tools.split_resume_card_by_entries",
+            lambda uid, card, entries: [card["id"] * 10],
+        )
+
+        result = run_backfill_workflow(user_id=1, min_chars=100)
+        assert len(result["splits"]) == MAX_BACKFILL_CARDS
+        assert result["checked"] == MAX_BACKFILL_CARDS + 4
+
 
 # ============================================================
 #  4. interview_prep_flow
