@@ -1,15 +1,25 @@
 """
 经历卡 AI 润色工具
 
-从 API 层提取出的 1 次 LLM 调用，遵循四层架构规则。
+从 API 层提取出的 1 次 LLM 调用，遵循四层架构规则，
+统一经由 llm_json.invoke_structured 出口（审计/缓存/观测）。
 """
 
 import logging
 
+from pydantic import BaseModel, Field
+
 from app.core.llm import model
 from app.core.prompts import load_prompt
+from app.tools.llm_json import invoke_structured
 
 logger = logging.getLogger(__name__)
+
+
+class PolishOutput(BaseModel):
+    """润色输出结构：polished_text 为润色后的经历文本"""
+
+    polished_text: str = Field("", description="润色后的经历文本")
 
 
 def polish_experience(
@@ -35,8 +45,13 @@ def polish_experience(
         raw_text=raw_text,
     )
 
-    resp = model.invoke(prompt)
-    polished = resp.content.strip()
+    parsed = invoke_structured(
+        model,
+        PolishOutput,
+        prompt,
+        debug_label="experience_polish",
+    )
+    polished = parsed.polished_text.strip()
     if not polished:
         raise RuntimeError("AI 润色返回内容为空")
     return polished

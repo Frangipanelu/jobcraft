@@ -776,3 +776,50 @@ class TestDbInterview:
         with patch("app.tools.db_conn.connect", return_value=mock_conn):
             result = list_interview_records()
             assert result == []
+
+
+class TestExperiencePolish:
+    def test_polish_goes_through_invoke_structured(self, monkeypatch, tmp_path):
+        """polish_experience 必须走 llm_json 统一出口（审计/缓存/观测）。"""
+        import app.tools.experience_polish as ep
+
+        captured = {}
+
+        def fake_invoke(model, schema, prompt, **kwargs):
+            captured.update(
+                schema=schema.__name__,
+                debug_label=kwargs.get("debug_label"),
+                has_prompt="润色" in prompt,
+            )
+            assert "某公司" in prompt and "工程师" in prompt and "原始经历" in prompt
+            return schema(polished_text="润色之后的量化描述。")
+
+        monkeypatch.setattr(ep, "invoke_structured", fake_invoke)
+
+        out = ep.polish_experience("原始经历", company="某公司", role="工程师")
+        assert out == "润色之后的量化描述。"
+        assert captured["schema"] == "PolishOutput"
+        assert captured["debug_label"] == "experience_polish"
+        assert captured["has_prompt"]
+
+    def test_polish_raises_on_empty_output(self, monkeypatch, tmp_path):
+        import app.tools.experience_polish as ep
+
+        def fake_invoke_blank(model, schema, prompt, **kwargs):
+            return schema(polished_text="   ")
+
+        monkeypatch.setattr(ep, "invoke_structured", fake_invoke_blank)
+
+        with pytest.raises(RuntimeError, match="润色返回内容为空"):
+            ep.polish_experience("原始经历")
+
+    def test_polish_raises_on_llm_failure(self, monkeypatch, tmp_path):
+        import app.tools.experience_polish as ep
+
+        def fake_invoke_fail(model, schema, prompt, **kwargs):
+            raise RuntimeError("LLM 不可用")
+
+        monkeypatch.setattr(ep, "invoke_structured", fake_invoke_fail)
+
+        with pytest.raises(RuntimeError, match="LLM 不可用"):
+            ep.polish_experience("原始经历")
