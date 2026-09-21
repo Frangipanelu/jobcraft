@@ -833,6 +833,25 @@ class TestExperiencePolish:
         assert captured["debug_label"] == "experience_polish"
         assert captured["has_prompt"]
 
+    def test_polish_uses_json_structured_prompt_v2(self, monkeypatch):
+        """polish 必须使用 v2 JSON 指示（v1 的纯文本输出指示与 invoke_structured 期望不符）。"""
+        import app.tools.experience_polish as ep
+
+        captured = {}
+
+        def fake_invoke(model, schema, prompt, **kwargs):
+            captured["prompt"] = prompt
+            return schema(polished_text=".")
+
+        monkeypatch.setattr(ep, "invoke_structured", fake_invoke)
+
+        ep.polish_experience("原始经历", company="某公司", role="工程师")
+
+        assert "polished_text" in captured["prompt"]
+        assert "JSON" in captured["prompt"]
+        # v1 的"直接输出润色后的经历文本"纯文本指示不应再出现
+        assert "直接输出润色后的经历文本" not in captured["prompt"]
+
     def test_polish_raises_on_empty_output(self, monkeypatch, tmp_path):
         import app.tools.experience_polish as ep
 

@@ -40,6 +40,7 @@ def polish_experience(
     prompt = load_prompt(
         "experience",
         "polish",
+        version=2,
         company=company or "未知",
         role=role or "未知",
         raw_text=raw_text,
