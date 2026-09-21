@@ -13,8 +13,6 @@ import type {
   ResumePersonalInfo,
   ATSProfile,
   ExperienceCard,
-  CardGapItem,
-  GlobalSuggestion,
 } from './types'
 
 // ============================================================
@@ -89,38 +87,6 @@ export async function getJobAnalysis(
   jobId: number
 ): Promise<JobAnalysisResult> {
   return request<JobAnalysisResult>(`/api/jobcraft/job/analyze/${jobId}`)
-}
-
-export async function step1AtsRecommend(payload: {
-  position: string
-  company: string
-  jd_text: string
-}): Promise<{
-  job_analysis_id: number
-  ats: ATSProfile
-  recommended_cards: { card_id: number; score: number; reason: string }[]
-  all_cards: ExperienceCard[]
-}> {
-  return request('/api/jobcraft/job/step1-ats-recommend', {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  })
-}
-
-export async function step2GapPolish(payload: {
-  job_analysis_id: number
-  card_ids: number[]
-}): Promise<{
-  per_card: CardGapItem[]
-  global_suggestions: GlobalSuggestion[]
-  overall_score: number
-  match_level: string
-  score_weights: { local: number; llm: number }
-}> {
-  return request('/api/jobcraft/job/step2-gap-polish', {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  })
 }
 
 // ============================================================
@@ -281,18 +247,4 @@ export async function deleteBaseResume(resumeId: number): Promise<{ ok: boolean 
 
 export function getResumeDownloadUrl(path: string): string {
   return `/api/jobcraft/resume/download?path=${encodeURIComponent(path)}`
-}
-
-export async function saveCardVersion(payload: {
-  card_id: number
-  source_type: string
-  source_id: number
-  raw_text: string
-  title?: string
-  tags?: string[]
-}): Promise<{ version_id: number; status: string }> {
-  return request('/api/jobcraft/job/save-card-version', {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  })
 }

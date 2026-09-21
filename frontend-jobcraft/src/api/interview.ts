@@ -42,12 +42,6 @@ export async function getInterviewPrep(
   return request<InterviewPrepResult>(`/api/jobcraft/job/${jobId}/interview-prep${qs}`)
 }
 
-export async function getJobSelectedCards(
-  jobId: number
-): Promise<{ card_ids: number[] }> {
-  return request<{ card_ids: number[] }>(`/api/jobcraft/job/${jobId}/selected-cards`)
-}
-
 export async function listInterviewPreps(
   userId?: number
 ): Promise<{ records: InterviewPrepRecord[] }> {
