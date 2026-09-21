@@ -23,7 +23,7 @@
 - [x] **C-1 FE-NEWINTERVIEW-SPLIT-01 NewInterviewModal(1122→~500 行) 拆分**（commit `6f33d89`）：shell（状态编排+弹窗壳+stepper+footer）+ 4 个 Step 子组件——`JobSelectionStep`（岗位下拉 + 新建岗位内联表单含 JD 分析双写回填）、`InterviewDetailsStep`、`ResumeStep`、`AdditionalInfoStep`；草稿读写下沉 `interviewModalDraft.ts`（load 容错/读后删除/save/clear，收敛 `DRAFT_KEY`）；**ResumeStep 弃硬编码假简历（resume-1/2/3）**，接真实底座简历 `useHistoricalResumesQuery`（真实名称 + 上传时间 + 标签）；渲染样式与交互行为完全保持。新增 `src/test/resume-step.test.tsx` 3 条（真实列表渲染（断言无硬编码假简历）/ 选中详情 + 变更回调 / 无关联提示）。验证：vitest **22 files / 120 tests** + tsc 0 错 + build + check_encoding ✅
 - [x] **C-4 FE-ENDPOINT-WIRE-01 9 个未接线端点清账（逐端点裁决）**（commit `f137c78` 后端 + `866de10` 前端）：**下线 10 端点**——`job/step1-ats-recommend`、`job/step2-gap-polish`（被 POST /analyze 取代）、`job/save-card-version`、`job/analyze-ats`（被 save-resume + analyze-ats-structured/split-jd 取代）、`job/{id}/resume-preview`（无前端预览接线）、`job/{id}/selected-cards`、`experience/export`（与 profile/export 重叠）、`experience/cards/batch`（前端单卡操作）、`experience/cards/{id}/versions` GET/POST（版本历史纯前端演进）；**保留** `experience/cards/search`（DEFERRED，DB-03 安全收口）。同步删除死 Workflow（run_step1/step2/analyze_ats/resume_preview 及其 State/schema；AtsRecommendAgent/GapPolishAgent 保留）与前端 4 个死 wrapper（step1AtsRecommend/step2GapPolish/saveCardVersion/getJobSelectedCards）+ 清理类型导入。测试删除对应用例。验证：ruff + pytest **543 passed/11 skipped**（净删 ~40 用例）+ tsc/vitest **120 passed**/build + check_encoding ✅
 
-### 结构化 JD 报告降级展示 FE-JD-REPORT-01（2026-09-21，commit 待填）
+### 结构化 JD 报告降级展示 FE-JD-REPORT-01（2026-09-21，commit `422a312`）
 
 - [x] **背景**：TODO「结构化结果报告视图」遗留——`analyze-ats-structured` 只产出 ATS 画像（岗位理解/技能/暗话），不产出匹配类字段（matchScore=0、whyMatch=''、skillGaps=[]、recommendedExperiences=[]、合成 id `jd-{ts}` 无真实 `job_analysis_id`），报告页需如实降级而非误导。
 - [x] **修复（`JDReportDetailView.tsx` 3 处）**：
