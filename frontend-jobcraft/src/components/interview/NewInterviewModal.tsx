@@ -2,18 +2,23 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useToastActions } from '../../context/JobCraftContext';
 import { useTabNavigate } from '../../router/tabPaths';
 import { useCreateInterviewMutation } from '../../features/interview/hooks';
-import { useCreateJdAnalysisMutation } from '../../features/jd/hooks';
-import { useCreateJobMutation, useJobsQuery } from '../../features/jobs/hooks';
+import { useJobsQuery } from '../../features/jobs/hooks';
 import { InterviewRoundType, InterviewFormat, InterviewDraft } from '../../types/jobcraft';
+import { JobSelectionStep } from './JobSelectionStep';
+import { InterviewDetailsStep } from './InterviewDetailsStep';
+import { ResumeStep, ResumeMode } from './ResumeStep';
+import { AdditionalInfoStep, AI_GENERATE_ITEMS } from './AdditionalInfoStep';
+import {
+  loadInterviewModalDraft,
+  saveInterviewModalDraft,
+  clearInterviewModalDraft,
+} from './interviewModalDraft';
 import {
   X,
   CheckCircle2,
   ArrowRight,
   ArrowLeft,
-  FileText,
-  Upload,
-  Loader2,
-  Sparkles
+  Loader2
 } from 'lucide-react';
 
 interface Props {
@@ -22,8 +27,6 @@ interface Props {
   mode: 'standalone' | 'from-job';
   onClose: () => void;
 }
-
-const DRAFT_KEY = 'interviewDraft';
 
 const standaloneSteps = [
   { num: 0, label: '关联岗位' },
@@ -38,20 +41,10 @@ const fromJobSteps = [
   { num: 2, label: '补充信息' }
 ];
 
-const aiGenerateItems = [
-  '公司背景及最新动态研究',
-  '面试类型策略分析与角色推断',
-  '推荐经历与话术方向',
-  '高频问题及优化答案',
-  '模拟面试题目'
-];
-
 export const NewInterviewModal: React.FC<Props> = ({ isOpen, jobId, mode, onClose }) => {
   const { showToast } = useToastActions();
   const { data: jobs = [] } = useJobsQuery();
   const createInterview = useCreateInterviewMutation();
-  const createJdAnalysis = useCreateJdAnalysisMutation();
-  const createJobMutation = useCreateJobMutation();
   const go = useTabNavigate();
 
   if (!isOpen) return null;
@@ -66,16 +59,7 @@ export const NewInterviewModal: React.FC<Props> = ({ isOpen, jobId, mode, onClos
   };
 
   // Restore from localStorage draft
-  const [draft] = useState<Partial<InterviewDraft> | null>(() => {
-    try {
-      const saved = localStorage.getItem(DRAFT_KEY);
-      if (saved) {
-        localStorage.removeItem(DRAFT_KEY);
-        return JSON.parse(saved);
-      }
-    } catch {}
-    return null;
-  });
+  const [draft] = useState<Partial<InterviewDraft> | null>(() => loadInterviewModalDraft());
 
   // State
   const [step, setStep] = useState<number>(
@@ -105,14 +89,12 @@ export const NewInterviewModal: React.FC<Props> = ({ isOpen, jobId, mode, onClos
   const [interviewer, setInterviewer] = useState<string>(draft?.interviewer || '');
 
   // Step 2/1 - Resume
-  const [resumeMode, setResumeMode] = useState<'existing' | 'upload' | 'none'>(
+  const [resumeMode, setResumeMode] = useState<ResumeMode>(
     draft?.resumeMode || 'none'
   );
   const [selectedResumeId, setSelectedResumeId] = useState<string>(
     draft?.selectedResumeId || ''
   );
-  const [isDragging, setIsDragging] = useState(false);
-  const [uploadedFile, setUploadedFile] = useState<{ name: string; size: string } | null>(null);
 
   // Step 3/2 - Additional info
   const [supplementNotes, setSupplementNotes] = useState<string>(
@@ -152,7 +134,7 @@ export const NewInterviewModal: React.FC<Props> = ({ isOpen, jobId, mode, onClos
       supplementNotes,
       remindUpload
     };
-    localStorage.setItem(DRAFT_KEY, JSON.stringify(draftData));
+    saveInterviewModalDraft(draftData);
   }, [
     selectedJobId,
     roundNumber,
@@ -170,7 +152,7 @@ export const NewInterviewModal: React.FC<Props> = ({ isOpen, jobId, mode, onClos
 
   // Handle close
   const handleClose = () => {
-    localStorage.removeItem(DRAFT_KEY);
+    clearInterviewModalDraft();
     onClose();
   };
 
@@ -190,71 +172,6 @@ export const NewInterviewModal: React.FC<Props> = ({ isOpen, jobId, mode, onClos
     }
   };
 
-  // New job form state
-  const [newJobCompany, setNewJobCompany] = useState('');
-  const [newJobRole, setNewJobRole] = useState('');
-  const [newJobJD, setNewJobJD] = useState('');
-  const [showNewJobForm, setShowNewJobForm] = useState(false);
-
-  // Handle create job - directly create in modal
-  const handleCreateJob = async () => {
-    if (!newJobCompany.trim() || !newJobRole.trim()) {
-      showToast({
-        type: 'warning',
-        title: '请填写完整信息',
-        message: '公司名称和岗位名称不能为空'
-      });
-      return;
-    }
-    
-    // Create job directly
-    const newJob = await createJobMutation.mutateAsync({
-      company: newJobCompany.trim(),
-      role: newJobRole.trim(),
-    });
-    const newJobId = newJob.id;
-    
-    // Create JD analysis record (fire-and-forget，完成后回填岗位 jdAnalysisId)
-    createJdAnalysis.mutate(
-      {
-        company: newJobCompany.trim(),
-        role: newJobRole.trim(),
-        rawText: newJobJD.trim() || '待补充JD内容',
-        jobId: newJobId
-      },
-      {
-        onSuccess: (analysis) => {
-          showToast({
-            type: 'success',
-            title: 'JD 分析报告已生成',
-            message: `已解析「${analysis.company} · ${analysis.role}」，匹配度达 ${analysis.matchScore || 0}%。`
-          });
-        },
-        onError: (error) => {
-          console.error('JD analysis failed:', error);
-          showToast({
-            type: 'error',
-            title: 'JD 分析失败',
-            message: (error as Error).message || '请稍后重试'
-          });
-        }
-      }
-    );
-    
-    // Select the new job
-    setSelectedJobId(newJobId);
-    setShowNewJobForm(false);
-    setNewJobCompany('');
-    setNewJobRole('');
-    setNewJobJD('');
-    
-    showToast({
-      type: 'success',
-      title: '岗位已创建',
-      message: '已自动创建岗位和JD记录，请继续完善信息'
-    });
-  };
-
   // Handle finish
   const handleFinish = () => {
     setIsGenerating(true);
@@ -265,7 +182,7 @@ export const NewInterviewModal: React.FC<Props> = ({ isOpen, jobId, mode, onClos
   useEffect(() => {
     if (!isGenerating || currentAiStep < 0) return;
 
-    if (currentAiStep < aiGenerateItems.length) {
+    if (currentAiStep < AI_GENERATE_ITEMS.length) {
       const timer = setTimeout(() => {
         setCurrentAiStep((prev) => prev + 1);
       }, 600);
@@ -286,7 +203,7 @@ export const NewInterviewModal: React.FC<Props> = ({ isOpen, jobId, mode, onClos
             interviewer,
             supplementNotes
           });
-          localStorage.removeItem(DRAFT_KEY);
+          clearInterviewModalDraft();
           showToast({
             type: 'success',
             title: '面试准备已创建',
@@ -313,160 +230,15 @@ export const NewInterviewModal: React.FC<Props> = ({ isOpen, jobId, mode, onClos
 
   // Render step content
   const renderStepContent = () => {
-    const actualStep = mode === 'standalone' ? step : step + 1;
-
     // Standalone Step 0: Job selection
     if (mode === 'standalone' && step === 0) {
       return (
-        <div className="space-y-4">
-          <div>
-            <h3 className="text-sm font-semibold" style={{ color: '#202421' }}>
-              步骤 1：关联岗位
-            </h3>
-            <p className="text-xs mt-1" style={{ color: '#737873' }}>
-              选择要关联的岗位，或新建一个岗位。
-            </p>
-          </div>
-
-          {/* Job dropdown */}
-          <div>
-            <label className="block text-xs font-medium mb-[5px]" style={{ color: '#737873' }}>
-              选择岗位
-            </label>
-            <select
-              value={selectedJobId}
-              onChange={(e) => {
-                setSelectedJobId(e.target.value);
-                setShowNewJobForm(false);
-              }}
-              className="w-full px-3 py-[9px] text-[13.5px] rounded-lg outline-none"
-              style={{
-                border: '1px solid #E4E5E0',
-                background: '#FFFFFF',
-                color: '#202421'
-              }}
-            >
-              <option value="">请选择岗位</option>
-              {jobs.map((job) => (
-                <option key={job.id} value={job.id}>
-                  {job.company} · {job.role}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* New job form */}
-          {!showNewJobForm ? (
-            <div className="flex gap-2">
-              <button
-                onClick={() => setShowNewJobForm(true)}
-                className="flex-1 py-2.5 px-3.5 rounded-lg text-[13px] font-medium transition-all"
-                style={{
-                  border: '1px dashed #C8D8D1',
-                  background: 'transparent',
-                  color: '#3E6256'
-                }}
-              >
-                + 新建岗位
-              </button>
-              <button
-                onClick={handleOpenJDAnalysis}
-                className="py-2.5 px-4 rounded-lg text-[13px] font-medium transition-all"
-                style={{
-                  border: '1px solid #3E6256',
-                  background: '#FFFFFF',
-                  color: '#3E6256'
-                }}
-              >
-                去JD分析页面创建
-              </button>
-            </div>
-          ) : (
-            <div
-              className="p-4 rounded-[10px] space-y-3"
-              style={{
-                border: '1.5px solid #3E6256',
-                background: '#F5FAF7'
-              }}
-            >
-              <div className="text-[13px] font-semibold" style={{ color: '#202421' }}>
-                新建岗位
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <input
-                  type="text"
-                  placeholder="公司名称"
-                  value={newJobCompany}
-                  onChange={(e) => setNewJobCompany(e.target.value)}
-                  className="px-3 py-2 text-[13px] rounded-lg outline-none"
-                  style={{
-                    border: '1px solid #E4E5E0',
-                    background: '#FFFFFF',
-                    color: '#202421'
-                  }}
-                />
-                <input
-                  type="text"
-                  placeholder="岗位名称"
-                  value={newJobRole}
-                  onChange={(e) => setNewJobRole(e.target.value)}
-                  className="px-3 py-2 text-[13px] rounded-lg outline-none"
-                  style={{
-                    border: '1px solid #E4E5E0',
-                    background: '#FFFFFF',
-                    color: '#202421'
-                  }}
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium mb-[5px]" style={{ color: '#737873' }}>
-                  JD详情（可选）
-                </label>
-                <textarea
-                  rows={4}
-                  placeholder="粘贴岗位描述JD内容，用于AI分析..."
-                  value={newJobJD}
-                  onChange={(e) => setNewJobJD(e.target.value)}
-                  className="w-full px-3 py-2 text-[13px] rounded-lg outline-none resize-none"
-                  style={{
-                    border: '1px solid #E4E5E0',
-                    background: '#FFFFFF',
-                    color: '#202421',
-                    lineHeight: 1.6
-                  }}
-                />
-              </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => {
-                    setShowNewJobForm(false);
-                    setNewJobCompany('');
-                    setNewJobRole('');
-                    setNewJobJD('');
-                  }}
-                  className="flex-1 py-2 text-[13px] rounded-lg transition-all"
-                  style={{
-                    border: '1px solid #E4E5E0',
-                    background: '#FFFFFF',
-                    color: '#737873'
-                  }}
-                >
-                  取消
-                </button>
-                <button
-                  onClick={handleCreateJob}
-                  className="flex-1 py-2 text-[13px] font-medium rounded-lg transition-all"
-                  style={{
-                    background: '#3E6256',
-                    color: '#FFFFFF'
-                  }}
-                >
-                  创建
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
+        <JobSelectionStep
+          jobs={jobs}
+          selectedJobId={selectedJobId}
+          onSelectJob={setSelectedJobId}
+          onOpenJDAnalysis={handleOpenJDAnalysis}
+        />
       );
     }
 
@@ -474,184 +246,25 @@ export const NewInterviewModal: React.FC<Props> = ({ isOpen, jobId, mode, onClos
     const detailsStep = mode === 'standalone' ? 1 : 0;
     if (step === detailsStep) {
       return (
-        <div className="space-y-4">
-          <div>
-            <h3 className="text-sm font-semibold" style={{ color: '#202421' }}>
-              步骤 {detailsStep + 1}：面试详情
-            </h3>
-            <p className="text-xs mt-1" style={{ color: '#737873' }}>
-              填写本场面试的基本信息，AI 将据此生成准备方案。
-            </p>
-          </div>
-
-          {/* Job display */}
-          <div>
-            <label className="block text-xs font-medium mb-[5px]" style={{ color: '#737873' }}>
-              关联岗位
-            </label>
-            <div
-              className="px-3.5 py-2.5 rounded-lg text-[13.5px] font-medium"
-              style={{
-                background: '#F5FAF7',
-                border: '1px solid #C8D8D1',
-                color: '#3E6256'
-              }}
-            >
-              {currentJob?.company || '待填写公司'} · {currentJob?.role || '待填写岗位'}
-            </div>
-          </div>
-
-          {/* Grid 1 */}
-          <div className="grid grid-cols-2 gap-3.5">
-            <div>
-              <label className="block text-xs font-medium mb-[5px]" style={{ color: '#737873' }}>
-                面试轮次
-              </label>
-              <select
-                value={roundNumber}
-                onChange={(e) => {
-                  const rNum = parseInt(e.target.value);
-                  setRoundNumber(rNum);
-                  setRoundName(
-                    `第${rNum}面 · ${rNum === 1 ? '业务面' : rNum === 2 ? '技术/架构面' : rNum === 3 ? '总监面' : '终面'}`
-                  );
-                }}
-                className="w-full px-3 py-[9px] text-[13.5px] rounded-lg outline-none"
-                style={{
-                  border: '1px solid #E4E5E0',
-                  background: '#FFFFFF',
-                  color: '#202421'
-                }}
-              >
-                <option value={1}>第1面</option>
-                <option value={2}>第2面</option>
-                <option value={3}>第3面</option>
-                <option value={4}>HR面</option>
-                <option value={5}>终面</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-medium mb-[5px]" style={{ color: '#737873' }}>
-                面试类型
-              </label>
-              <select
-                value={roundType}
-                onChange={(e) => setRoundType(e.target.value as InterviewRoundType)}
-                className="w-full px-3 py-[9px] text-[13.5px] rounded-lg outline-none"
-                style={{
-                  border: '1px solid #E4E5E0',
-                  background: '#FFFFFF',
-                  color: '#202421'
-                }}
-              >
-                <option value="business">业务面</option>
-                <option value="tech">技术面</option>
-                <option value="hr">HR面</option>
-                <option value="product">产品面</option>
-                <option value="comprehensive">总监面/终面</option>
-              </select>
-            </div>
-          </div>
-
-          {/* Grid 2 */}
-          <div className="grid grid-cols-2 gap-3.5">
-            <div>
-              <label className="block text-xs font-medium mb-[5px]" style={{ color: '#737873' }}>
-                面试日期
-              </label>
-              <input
-                type="date"
-                value={interviewTime.split(' ')[0] || '2026-09-02'}
-                onChange={(e) =>
-                  setInterviewTime(`${e.target.value} ${interviewTime.split(' ')[1] || '14:00'}`)
-                }
-                className="w-full px-3 py-[9px] text-[13.5px] rounded-lg outline-none"
-                style={{
-                  border: '1px solid #E4E5E0',
-                  background: '#FFFFFF',
-                  color: '#202421'
-                }}
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium mb-[5px]" style={{ color: '#737873' }}>
-                面试时间
-              </label>
-              <input
-                type="time"
-                value={interviewTime.split(' ')[1] || '14:00'}
-                onChange={(e) =>
-                  setInterviewTime(`${interviewTime.split(' ')[0] || '2026-09-02'} ${e.target.value}`)
-                }
-                className="w-full px-3 py-[9px] text-[13.5px] rounded-lg outline-none"
-                style={{
-                  border: '1px solid #E4E5E0',
-                  background: '#FFFFFF',
-                  color: '#202421'
-                }}
-              />
-            </div>
-          </div>
-
-          {/* Grid 3 */}
-          <div className="grid grid-cols-2 gap-3.5">
-            <div>
-              <label className="block text-xs font-medium mb-[5px]" style={{ color: '#737873' }}>
-                面试形式
-              </label>
-              <select
-                value={interviewFormat}
-                onChange={(e) => setInterviewFormat(e.target.value as InterviewFormat)}
-                className="w-full px-3 py-[9px] text-[13.5px] rounded-lg outline-none"
-                style={{
-                  border: '1px solid #E4E5E0',
-                  background: '#FFFFFF',
-                  color: '#202421'
-                }}
-              >
-                <option value="video">视频面试</option>
-                <option value="phone">电话面试</option>
-                <option value="onsite">现场面试</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-medium mb-[5px]" style={{ color: '#737873' }}>
-                平台（可选）
-              </label>
-              <input
-                type="text"
-                placeholder="如 Zoom, Teams, 牛客..."
-                value={platform}
-                onChange={(e) => setPlatform(e.target.value)}
-                className="w-full px-3 py-[9px] text-[13.5px] rounded-lg outline-none"
-                style={{
-                  border: '1px solid #E4E5E0',
-                  background: '#FFFFFF',
-                  color: '#202421'
-                }}
-              />
-            </div>
-          </div>
-
-          {/* Interviewer */}
-          <div>
-            <label className="block text-xs font-medium mb-[5px]" style={{ color: '#737873' }}>
-              面试官信息（可选）
-            </label>
-            <input
-              type="text"
-              placeholder="如：技术总监、产品 lead…"
-              value={interviewer}
-              onChange={(e) => setInterviewer(e.target.value)}
-              className="w-full px-3 py-[9px] text-[13.5px] rounded-lg outline-none"
-              style={{
-                border: '1px solid #E4E5E0',
-                background: '#FFFFFF',
-                color: '#202421'
-              }}
-            />
-          </div>
-        </div>
+        <InterviewDetailsStep
+          stepNumber={detailsStep + 1}
+          currentJob={currentJob}
+          roundNumber={roundNumber}
+          roundType={roundType}
+          interviewTime={interviewTime}
+          interviewFormat={interviewFormat}
+          platform={platform}
+          interviewer={interviewer}
+          onRoundChange={(num, name) => {
+            setRoundNumber(num);
+            setRoundName(name);
+          }}
+          onRoundTypeChange={setRoundType}
+          onTimeChange={setInterviewTime}
+          onFormatChange={setInterviewFormat}
+          onPlatformChange={setPlatform}
+          onInterviewerChange={setInterviewer}
+        />
       );
     }
 
@@ -659,142 +272,13 @@ export const NewInterviewModal: React.FC<Props> = ({ isOpen, jobId, mode, onClos
     const resumeStep = mode === 'standalone' ? 2 : 1;
     if (step === resumeStep) {
       return (
-        <div className="space-y-4">
-          <div>
-            <h3 className="text-sm font-semibold" style={{ color: '#202421' }}>
-              步骤 {resumeStep + 1}：关联简历
-            </h3>
-            <p className="text-xs mt-1" style={{ color: '#737873' }}>
-              选择用于本次面试的简历，同一方向可沿用已有简历。
-            </p>
-          </div>
-
-          {/* Mode switch */}
-          <div className="flex gap-2">
-            {(['existing', 'upload', 'none'] as const).map((mode) => (
-              <button
-                key={mode}
-                type="button"
-                onClick={() => setResumeMode(mode)}
-                className="px-3.5 py-1.5 text-[13px] rounded-lg transition-all"
-                style={{
-                  border: resumeMode === mode ? '1px solid #3E6256' : '1px solid #E4E5E0',
-                  background: resumeMode === mode ? '#E5EEE9' : '#FFFFFF',
-                  color: resumeMode === mode ? '#3E6256' : '#737873',
-                  fontWeight: resumeMode === mode ? 500 : 400
-                }}
-              >
-                {mode === 'existing' ? '从简历库选择' : mode === 'upload' ? '上传简历' : '暂不关联'}
-              </button>
-            ))}
-          </div>
-
-          {/* Existing resume */}
-          {resumeMode === 'existing' && (
-            <div className="space-y-3">
-              <select
-                value={selectedResumeId}
-                onChange={(e) => setSelectedResumeId(e.target.value)}
-                className="w-full px-3 py-[9px] text-[13.5px] rounded-lg outline-none"
-                style={{
-                  border: '1px solid #E4E5E0',
-                  background: '#FFFFFF',
-                  color: '#202421'
-                }}
-              >
-                <option value="">请选择简历</option>
-                <option value="resume-1">字节跳动·AI产品经理 定制版 V2.1</option>
-                <option value="resume-2">通用产品经理简历 V1.0</option>
-                <option value="resume-3">腾讯·产品经理 定制版 V1.2</option>
-              </select>
-
-              {selectedResumeId && (
-                <div
-                  className="p-3 rounded-lg"
-                  style={{ background: '#FAFAF8', border: '1px solid #E4E5E0' }}
-                >
-                  <div className="text-[13px] font-medium" style={{ color: '#202421' }}>
-                    {selectedResumeId === 'resume-1'
-                      ? '字节跳动·AI产品经理 定制版 V2.1'
-                      : selectedResumeId === 'resume-2'
-                      ? '通用产品经理简历 V1.0'
-                      : '腾讯·产品经理 定制版 V1.2'}
-                  </div>
-                  <div className="text-xs mt-1" style={{ color: '#A8ADA8' }}>
-                    更新于 2026-08-28 · 关联岗位：字节跳动·AI产品经理
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Upload resume */}
-          {resumeMode === 'upload' && (
-            <div
-              className="rounded-xl text-center transition-all"
-              style={{
-                border: isDragging ? '2px dashed #3E6256' : '2px dashed #D0D2CB',
-                background: isDragging ? '#F5FAF7' : '#FAFAF8',
-                padding: '36px 20px'
-              }}
-              onDragOver={(e) => {
-                e.preventDefault();
-                setIsDragging(true);
-              }}
-              onDragLeave={() => setIsDragging(false)}
-              onDrop={(e) => {
-                e.preventDefault();
-                setIsDragging(false);
-                const file = e.dataTransfer.files[0];
-                if (file) {
-                  const size = file.size < 1024 * 1024
-                    ? `${(file.size / 1024).toFixed(1)} KB`
-                    : `${(file.size / (1024 * 1024)).toFixed(1)} MB`;
-                  setUploadedFile({ name: file.name, size });
-                }
-              }}
-            >
-              <div className="text-4xl mb-2">📄</div>
-              <div className="text-sm font-semibold mb-1" style={{ color: '#202421' }}>
-                拖入简历文件
-              </div>
-              <div className="text-xs mb-3" style={{ color: '#A8ADA8' }}>
-                支持 DOCX / PDF / TXT
-              </div>
-              <button
-                type="button"
-                className="px-4 py-[7px] text-[13px] rounded-lg"
-                style={{
-                  border: '1px solid #C8D8D1',
-                  background: '#FFFFFF',
-                  color: '#3E6256'
-                }}
-              >
-                浏览文件
-              </button>
-
-              {uploadedFile && (
-                <div className="mt-3 p-2 rounded-lg" style={{ background: '#F5FAF7' }}>
-                  <div className="text-[13px] font-medium" style={{ color: '#202421' }}>
-                    {uploadedFile.name}
-                  </div>
-                  <div className="text-xs" style={{ color: '#A8ADA8' }}>
-                    {uploadedFile.size}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* No resume */}
-          {resumeMode === 'none' && (
-            <div className="py-8 text-center">
-              <p className="text-[13px]" style={{ color: '#A8ADA8' }}>
-                可以稍后在面试准备工作中关联简历
-              </p>
-            </div>
-          )}
-        </div>
+        <ResumeStep
+          stepNumber={resumeStep + 1}
+          resumeMode={resumeMode}
+          onResumeModeChange={setResumeMode}
+          selectedResumeId={selectedResumeId}
+          onSelectedResumeIdChange={setSelectedResumeId}
+        />
       );
     }
 
@@ -802,123 +286,15 @@ export const NewInterviewModal: React.FC<Props> = ({ isOpen, jobId, mode, onClos
     const additionalStep = mode === 'standalone' ? 3 : 2;
     if (step === additionalStep) {
       return (
-        <div className="space-y-4">
-          <div>
-            <h3 className="text-sm font-semibold" style={{ color: '#202421' }}>
-              步骤 {additionalStep + 1}：补充信息
-            </h3>
-            <p className="text-xs mt-1" style={{ color: '#737873' }}>
-              补充额外背景信息，AI 将生成更精准的准备方案。
-            </p>
-          </div>
-
-          {/* Supplement notes */}
-          <div>
-            <label className="block text-xs font-medium mb-[5px]" style={{ color: '#737873' }}>
-              补充说明（可选）
-            </label>
-            <textarea
-              rows={5}
-              placeholder="例如：特别关注哪方面的准备？有哪些已知信息？"
-              value={supplementNotes}
-              onChange={(e) => setSupplementNotes(e.target.value)}
-              className="w-full px-3 py-[9px] text-[13.5px] rounded-lg outline-none resize-y"
-              style={{
-                border: '1px solid #E4E5E0',
-                background: '#FFFFFF',
-                color: '#202421',
-                lineHeight: 1.6
-              }}
-            />
-          </div>
-
-          {/* Checkbox */}
-          <label
-            className="flex items-center gap-2.5 p-3.5 rounded-lg cursor-pointer"
-            style={{ background: '#FAFAF8', border: '1px solid #E4E5E0' }}
-          >
-            <input
-              type="checkbox"
-              checked={remindUpload}
-              onChange={(e) => setRemindUpload(e.target.checked)}
-              className="w-3.5 h-3.5"
-              style={{ accentColor: '#3E6256' }}
-            />
-            <span className="text-[13.5px]" style={{ color: '#202421' }}>
-              面试结束后提醒我上传录音，用于复盘分析
-            </span>
-          </label>
-
-          {/* AI Preview */}
-          <div
-            className="rounded-[10px]"
-            style={{
-              background: '#F5FAF7',
-              border: '1px solid #C8D8D1',
-              padding: '14px 16px',
-              marginTop: '20px'
-            }}
-          >
-            <div
-              className="text-xs font-semibold mb-2"
-              style={{ color: '#3E6256' }}
-            >
-              AI 将为你生成：
-            </div>
-            <div className="space-y-1">
-              {aiGenerateItems.map((item) => (
-                <div key={item} className="flex items-center gap-2">
-                  <CheckCircle2
-                    className="w-3.5 h-3.5 shrink-0"
-                    style={{ color: '#3E6256' }}
-                  />
-                  <span className="text-xs" style={{ color: '#4A6559' }}>
-                    {item}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* AI Loading Animation */}
-          {isGenerating && currentAiStep >= 0 && (
-            <div
-              className="rounded-[10px] mt-4"
-              style={{
-                background: '#F5FAF7',
-                border: '1px solid #C8D8D1',
-                padding: '14px 16px'
-              }}
-            >
-              <div
-                className="text-xs font-semibold mb-3 flex items-center gap-1.5"
-                style={{ color: '#3E6256' }}
-              >
-                <Sparkles className="w-3.5 h-3.5 animate-pulse" />
-                AI 正在为你生成...
-              </div>
-              <div className="space-y-2">
-                {aiGenerateItems.map((item, i) => (
-                  <div key={item} className="flex items-center gap-2 text-xs">
-                    {i < currentAiStep ? (
-                      <CheckCircle2 className="w-3.5 h-3.5 shrink-0" style={{ color: '#3E6256' }} />
-                    ) : i === currentAiStep ? (
-                      <Loader2 className="w-3.5 h-3.5 shrink-0 animate-spin" style={{ color: '#3E6256' }} />
-                    ) : (
-                      <div
-                        className="w-3.5 h-3.5 rounded-full shrink-0"
-                        style={{ border: '1.5px solid #D0D2CB' }}
-                      />
-                    )}
-                    <span style={{ color: i <= currentAiStep ? '#202421' : '#A8ADA8' }}>
-                      {item}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
+        <AdditionalInfoStep
+          stepNumber={additionalStep + 1}
+          supplementNotes={supplementNotes}
+          remindUpload={remindUpload}
+          isGenerating={isGenerating}
+          currentAiStep={currentAiStep}
+          onSupplementNotesChange={setSupplementNotes}
+          onRemindUploadChange={setRemindUpload}
+        />
       );
     }
 
