@@ -107,8 +107,9 @@ export const JDReportDetailView: React.FC<JDReportDetailViewProps> = ({
   const expById = new Map<string, Experience>(experiences.map((e) => [e.id, e]));
 
   const responsibilities = (currentAnalysis?.coreRequirements || []).flatMap(
-    (group) =>
+    (group, gi) =>
       group.items.map((title, i) => ({
+        uid: `${gi}-${i}`,
         num: String(i + 1).padStart(2, '0'),
         title
       }))
@@ -472,7 +473,7 @@ export const JDReportDetailView: React.FC<JDReportDetailViewProps> = ({
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2.5 text-xs text-[#526058]">
                 {data.responsibilities.map((r) => (
-                  <div key={r.num} className="flex items-center gap-2">
+                  <div key={r.uid} className="flex items-center gap-2">
                     <span className="text-[11px] font-bold text-[#737873]">
                       {r.num}
                     </span>
