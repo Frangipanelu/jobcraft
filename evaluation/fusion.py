@@ -6,9 +6,9 @@ Hybrid 融合权重实验的纯函数模块（确定性离线融合）.
 做确定性融合，隔离 LLM 非确定性这一变量。
 
 变体定义：
-- hybrid_a (weighted 0.4/0.6): 现状 Local 40% + LLM 60%
+- hybrid_a (weighted 0.4/0.6): 生产历史权重（0.4/0.6，2026-09 起生产已切换为 max，见 `jobcraft_analyze.py`）
 - hybrid_b (weighted 0.2/0.8): LLM-heavy，降低 Local 权重
-- hybrid_c (max): max(Local, LLM)，Local 只在不抢跑时抬升
+- hybrid_c (max): max(Local, LLM)，Local 只在不抢跑时抬升 — 生产当前方案
 
 所有函数为纯函数，无 LLM 调用，可直接单测。
 """

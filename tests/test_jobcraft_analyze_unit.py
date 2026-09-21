@@ -113,9 +113,34 @@ def test_compute_match_fuses_local_and_llm():
         }
     ]
     result = compute_match(cards, jd, llm_scores={1: 100.0})
-    assert result["overall"] >= 60
+    assert result["overall"] == 100.0
     assert result["per_card"][0].card_id == 1
+    assert result["per_card"][0].score == 100.0
     assert "python" in result["per_card"][0].matched
+
+
+def test_compute_match_uses_max_fusion():
+    jd = JDRequirements(hard_skills=["python"], soft_skills=[], keywords=["python"])
+
+    # local 高 LLM 低：max 保留本地分（0.4/0.6 加权会把 100 拉到 64）
+    card_local_high = {
+        "id": 1,
+        "title": "后端开发",
+        "raw_text": "负责 python 服务开发",
+        "tags": [],
+    }
+    r1 = compute_match([card_local_high], jd, llm_scores={1: 10.0})
+    assert r1["per_card"][0].score == 100.0
+
+    # local 为 0 LLM 高：max 不拉低 LLM 分（0.4/0.6 加权会把 80 拉到 24）
+    card_llm_high = {
+        "id": 2,
+        "title": "前端开发",
+        "raw_text": "负责 React 页面开发",
+        "tags": [],
+    }
+    r2 = compute_match([card_llm_high], jd, llm_scores={2: 80.0})
+    assert r2["per_card"][0].score == 80.0
 
 
 # ---------- 单卡回填: 整份简历识别 ----------

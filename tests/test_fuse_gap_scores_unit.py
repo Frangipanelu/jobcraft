@@ -46,14 +46,17 @@ def test_fuse_gap_scores_fuses_local_and_llm():
     ]
     result = fuse_gap_scores(_sample_ats(), _sample_cards(), per_card_raw)
 
-    # 卡1: 本地 100（python+redis 都命中）* 0.4 + 80 * 0.6 = 88
+    # 卡1: max(本地 100, LLM 80) = 100（0.4/0.6 加权会拉到 88）
     assert result["per_card"][0]["card_id"] == 1
     assert result["per_card"][0]["local_score"] == 100.0
     assert result["per_card"][0]["llm_score"] == 80.0
-    assert result["per_card"][0]["score"] == 88.0
+    assert result["per_card"][0]["score"] == 100.0
 
-    assert result["overall_score"] == 59.0
-    assert result["score_weights"] == {"local": 0.4, "llm": 0.6}
+    # 卡2: max(本地 0, LLM 50) = 50（LLM 分不被 local 拉低）
+    assert result["per_card"][1]["score"] == 50.0
+
+    assert result["overall_score"] == 75.0
+    assert result["score_weights"] == {"mode": "max"}
     assert result["match_level"] in ("高度匹配", "基本匹配", "部分匹配", "匹配度低")
 
 
@@ -67,7 +70,7 @@ def test_fuse_gap_scores_ignores_unknown_card_id():
     per_card_raw = [{"card_id": 999, "score": 70, "action": "good"}]
     result = fuse_gap_scores(_sample_ats(), _sample_cards(), per_card_raw)
     assert result["per_card"][0]["local_score"] == 0.0
-    assert result["per_card"][0]["score"] == 42.0  # 0*0.4 + 70*0.6
+    assert result["per_card"][0]["score"] == 70.0  # max(0, 70)
 
 
 def test_fuse_gap_scores_missing_card_does_not_fail():

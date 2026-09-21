@@ -8,7 +8,7 @@
 策略复用现有生产代码：
 - Keyword: app.tools.jobcraft_analyze._local_score（纯本地关键词匹配）
 - LLM: app.agents.score_match_agent.ScoreMatchAgent（LLM 语义匹配，每 case 一次 LLM 调用）
-- Hybrid: keyword × 0.4 + LLM × 0.6（与 fuse_gap_scores 权重一致）
+- Hybrid: max(local, llm)（与生产 fuse 一致——2026-09 由 0.4/0.6 加权切换，见 evaluation/fusion.py）
 """
 
 import logging
@@ -16,11 +16,7 @@ from typing import Any, Dict, List
 
 from app.agents.score_match_agent import ScoreMatchAgent
 from app.schemas.jobcraft import JDRequirements
-from app.tools.jobcraft_analyze import (
-    LOCAL_WEIGHT,
-    LLM_WEIGHT,
-    _local_score,
-)
+from app.tools.jobcraft_analyze import _local_score
 
 logger = logging.getLogger("jobcraft.evaluation.strategies")
 
@@ -143,7 +139,7 @@ class LLMStrategy(BaseStrategy):
 
 
 class HybridStrategy(BaseStrategy):
-    """Hybrid: keyword × 0.4 + LLM × 0.6（与 fuse_gap_scores 权重一致）。"""
+    """Hybrid: max(local, llm)（与生产 fuse 一致，local 只抬升不拉低）。"""
 
     name = "hybrid"
 
@@ -169,7 +165,7 @@ class HybridStrategy(BaseStrategy):
             item = items.get(card["id"])
             if item:
                 llm_match = float(item.get("match") or 0.0)
-            fused = local_scores[card["id"]] * LOCAL_WEIGHT + llm_match * LLM_WEIGHT
+            fused = max(local_scores[card["id"]], llm_match)
             card_scores[card["id"]] = fused
         return self._finalize(cards, card_scores)
 

@@ -158,9 +158,9 @@ One JSON object per line. The `label` is derived from `score` with thresholds al
 
 | Variant | Weight | Usage |
 |---|---|---|
-| hybrid_a | `0.4 * local + 0.6 * llm` | 现状产品权重 |
+| hybrid_a | `0.4 * local + 0.6 * llm` | 历史产品权重（生产 2026-09 已切换为 max，见 `jobcraft_analyze.py` `FUSION_MODE`）|
 | hybrid_b | `0.2 * local + 0.8 * llm` | LLM-heavy 实验 |
-| hybrid_c | `max(local, llm)` | Local 只抬升不拉低 |
+| hybrid_c | `max(local, llm)` | Local 只抬升不拉低 → **生产当前方案** |
 
 Because `fuse.py` derives all variants from one shared LLM prediction file, the comparison isolates the fusion weight from LLM nondeterminism.
 
@@ -192,7 +192,7 @@ For binary precision/recall, `high` and `medium` are treated as **relevant**. `l
 Key findings:
 - **Local signal did not add value to semantic matching on this dataset.** Case-by-instance, pure LLM was closest to the gold score in 24/30 instances; weighted fusion (A, and to a lesser degree B) drags LLM scores below thresholds.
 - **`max(Local, LLM)` (C) matches pure LLM structurally** — it can never lower an LLM score, so local only participates when it is genuinely higher.
-- Recommendation: switch production fusion from `0.4*local + 0.6*llm` to `max(local, llm)`, then re-validate on Chinese real JD data (dataset is synthetic English).
+- Decision: production fusion switched from `0.4*local + 0.6*llm` to `max(local, llm)` (2026-09) and was re-validated on Chinese real JD data (v0.2 showed `LLM ≡ Hybrid C(max)`). After the switch, re-run the benchmark on the current production code (`python -m evaluation.generate --strategy hybrid`) is pending until the broader refactor finishes.
 
 Full per-case failure analysis: [`reports/matching_report.md`](reports/matching_report.md).
 

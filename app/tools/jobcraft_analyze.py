@@ -17,8 +17,21 @@ from app.schemas.jobcraft import (
     SuggestionsResult,
 )
 
-LOCAL_WEIGHT = 0.4
-LLM_WEIGHT = 0.6
+# 融合策略：max(local, llm) —— local 只抬升不拉低 LLM 语义分。
+# 依据 evaluation 消融结论（matching_report / chinese_matching_report，2026-09）：
+# 0.4/0.6 加权会把 local 的校准问题传染给 LLM 分（0 分 local 把 80 分 LLM 拉到 48），
+# max 结构性等同纯 LLM，同时保留零成本本地关键词兜底。
+FUSION_MODE = "max"
+
+
+def _fuse_score(local: float, llm: float) -> float:
+    """确定性融合：取 local 与 llm 的较大者。
+
+    :param local: 本地关键词匹配分（0-100）
+    :param llm: LLM 语义分（0-100）
+    :return: 融合分（0-100）
+    """
+    return round(max(float(local), float(llm)), 1)
 
 
 def _normalize(term: str) -> str:
@@ -140,9 +153,9 @@ def compute_match(
 
     for card in cards:
         local_pct, matched, missing = _local_score(card, jd_req)
-        # 融合 LLM 评分
+        # 融合 LLM 评分（max：local 只抬升不拉低）
         llm_pct = llm_scores.get(card["id"], 0.0) if llm_scores else 0.0
-        final_score = round(local_pct * LOCAL_WEIGHT + llm_pct * LLM_WEIGHT, 1)
+        final_score = _fuse_score(local_pct, llm_pct)
 
         total_score += final_score
         per_card.append(
@@ -230,7 +243,8 @@ def fuse_gap_scores(
     per_card_raw: List[Dict[str, Any]],
 ) -> Dict[str, Any]:
     """
-    融合本地关键词分（40%）与 LLM 语义分（60%），产出最终缺口分析结果。
+    融合本地关键词分与 LLM 语义分（max(local, llm)：local 只抬升不拉低），
+    产出最终缺口分析结果。
 
     :param ats: ATS 岗位画像
     :param selected_cards: 用户勾选的经历卡
@@ -245,7 +259,7 @@ def fuse_gap_scores(
         llm_score = round(float(p.get("score") or 0.0), 1)
         card = card_by_id.get(p.get("card_id"))
         local_score = _local_score(card, jd_req)[0] if card else 0.0
-        final_score = round(local_score * LOCAL_WEIGHT + llm_score * LLM_WEIGHT, 1)
+        final_score = _fuse_score(local_score, llm_score)
         per_card_out.append(
             {
                 **p,
@@ -263,5 +277,5 @@ def fuse_gap_scores(
         "per_card": per_card_out,
         "overall_score": overall_score,
         "match_level": _match_level(overall_score),
-        "score_weights": {"local": LOCAL_WEIGHT, "llm": LLM_WEIGHT},
+        "score_weights": {"mode": FUSION_MODE},
     }
