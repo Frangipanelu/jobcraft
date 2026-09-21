@@ -35,14 +35,6 @@ _BUSINESS_ENDPOINTS = [
     # experience
     ("GET", "/api/jobcraft/experience/cards", None),
     ("GET", "/api/jobcraft/experience/cards/search?q=python", None),
-    ("GET", "/api/jobcraft/experience/export", None),
-    (
-        "POST",
-        "/api/jobcraft/experience/cards/batch",
-        {"action": "archive", "card_ids": [1]},
-    ),
-    ("GET", "/api/jobcraft/experience/cards/1/versions", None),
-    ("POST", "/api/jobcraft/experience/cards/1/versions", {"title": "v"}),
     ("POST", "/api/jobcraft/experience/cards", {"title": "t", "raw_text": "x"}),
     ("PATCH", "/api/jobcraft/experience/cards/1", {"title": "t"}),
     ("DELETE", "/api/jobcraft/experience/cards/1", None),
@@ -58,22 +50,6 @@ _BUSINESS_ENDPOINTS = [
         "/api/jobcraft/job/analyze",
         {"company": "C", "position": "P", "jd_text": "J", "card_ids": [1]},
     ),
-    (
-        "POST",
-        "/api/jobcraft/job/step1-ats-recommend",
-        {"company": "C", "position": "P", "jd_text": "J"},
-    ),
-    (
-        "POST",
-        "/api/jobcraft/job/step2-gap-polish",
-        {"job_analysis_id": 1, "card_ids": [1]},
-    ),
-    (
-        "POST",
-        "/api/jobcraft/job/save-card-version",
-        {"card_id": 1, "source_id": 1, "raw_text": "x"},
-    ),
-    ("POST", "/api/jobcraft/job/analyze-ats", {"jd_text": "J"}),
     (
         "POST",
         "/api/jobcraft/job/analyze-ats-structured",
@@ -94,7 +70,6 @@ _BUSINESS_ENDPOINTS = [
         "/api/jobcraft/job/save-resume",
         {"job_analysis_id": 1, "selected_card_ids": [1]},
     ),
-    ("POST", "/api/jobcraft/job/1/resume-preview", {"selected_card_ids": [1]}),
     ("GET", "/api/jobcraft/job/resume/download?path=out.md", None),
     # submission
     ("POST", "/api/jobcraft/submission", {"position": "P"}),
@@ -108,7 +83,6 @@ _BUSINESS_ENDPOINTS = [
         "/api/jobcraft/job/1/interview-prep",
         {"card_ids": [1], "round_type": "技术面"},
     ),
-    ("GET", "/api/jobcraft/job/1/selected-cards", None),
     ("GET", "/api/jobcraft/job/1/interview-prep", None),
     # interview_review
     (

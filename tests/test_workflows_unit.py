@@ -312,90 +312,6 @@ class TestInterviewReviewFlow:
 class TestJobAnalysisFlow:
     """岗位分析 Workflow 测试"""
 
-    def test_step1_workflow_normal(self, monkeypatch):
-        """Step1: ATS 解析 + 推荐卡片"""
-        from app.workflows.job_analysis_flow import run_step1_workflow
-
-        def fake_ats_run(self, data):
-            return {
-                "ats": _fake_ats_profile(),
-                "recommended_cards": [{"id": 1, "title": "推荐系统", "match": 0.8}],
-            }
-
-        monkeypatch.setattr(
-            "app.workflows.job_analysis_flow.AtsRecommendAgent.run", fake_ats_run
-        )
-
-        result = run_step1_workflow(
-            user_id=1,
-            company="字节",
-            position="后端",
-            jd_text="负责后端开发",
-            cards=[{"id": 1, "raw_text": "做过推荐系统"}],
-        )
-        assert result is not None
-        assert "ats" in result
-
-    def test_step2_workflow_normal(self, monkeypatch):
-        """Step2: 缺口分析 + 润色建议"""
-        from app.workflows.job_analysis_flow import run_step2_workflow
-
-        monkeypatch.setattr(
-            "app.workflows.job_analysis_flow.db_tools.get_job_analysis",
-            lambda jid, user_id=None: _fake_job_analysis_db(jid),
-        )
-        monkeypatch.setattr(
-            "app.workflows.job_analysis_flow.db_tools.get_card",
-            lambda cid, user_id=None: {
-                "id": cid,
-                "title": "卡",
-                "raw_text": "文本",
-                "is_active": True,
-            },
-        )
-
-        def fake_gap_run(self, data):
-            return {
-                "gap_polish": {
-                    "per_card": [{"card_id": 1, "gap_score": 70}],
-                    "global_suggestions": ["提升表达"],
-                }
-            }
-
-        monkeypatch.setattr(
-            "app.workflows.job_analysis_flow.GapPolishAgent.run", fake_gap_run
-        )
-
-        def fake_fuse(ats, selected_cards, per_card_raw):
-            return {
-                "per_card": [{"card_id": 1, "score": 75}],
-                "overall_score": 75,
-                "match_level": "中",
-                "score_weights": {"local": 0.4, "llm": 0.6},
-            }
-
-        monkeypatch.setattr(
-            "app.workflows.job_analysis_flow.jobcraft_analyze.fuse_gap_scores",
-            fake_fuse,
-        )
-
-        result = run_step2_workflow(job_analysis_id=10, card_ids=[1])
-        assert result is not None
-        assert "per_card" in result
-        assert result["overall_score"] == 75
-
-    def test_step2_workflow_analysis_not_found(self, monkeypatch):
-        """Step2: job_analysis 不存在"""
-        from app.workflows.job_analysis_flow import run_step2_workflow
-
-        monkeypatch.setattr(
-            "app.workflows.job_analysis_flow.db_tools.get_job_analysis",
-            lambda jid, user_id=None: None,
-        )
-
-        with pytest.raises(ValueError, match="不存在"):
-            run_step2_workflow(job_analysis_id=999, card_ids=[1])
-
     def test_legacy_workflow_normal(self, monkeypatch):
         """旧版完整岗位分析"""
         from app.schemas.jobcraft import PerCardScore
@@ -510,21 +426,6 @@ class TestJobAnalysisFlow:
                 card_ids=[1],
             )
 
-    def test_analyze_ats_workflow_normal(self, monkeypatch):
-        """仅 ATS 解析"""
-        from app.workflows.job_analysis_flow import run_analyze_ats_workflow
-
-        def fake_jd_ats_run(self, data):
-            return {"ats": _fake_ats_profile()}
-
-        monkeypatch.setattr(
-            "app.workflows.job_analysis_flow.JdAtsAgent.run", fake_jd_ats_run
-        )
-
-        result = run_analyze_ats_workflow(jd_text="负责后端开发")
-        assert result is not None
-        assert result["job_title"] == "后端工程师"
-
     def test_structured_ats_workflow_normal(self, monkeypatch):
         """结构化 JD 分析（前端已分好类）"""
         from app.schemas.jobcraft import StructuredRequirementItem
@@ -581,91 +482,6 @@ class TestJobAnalysisFlow:
             req_by_tag.setdefault(r["tag"], []).append(r["text"])
         assert any("Python" in t for t in req_by_tag.get("required", []))
         assert any("高并发" in t for t in req_by_tag.get("preferred", []))
-
-    def test_resume_preview_workflow_normal(self, monkeypatch):
-        """简历预览重新匹配"""
-        from app.workflows.job_analysis_flow import run_resume_preview_workflow
-
-        monkeypatch.setattr(
-            "app.workflows.job_analysis_flow.db_tools.get_job_analysis",
-            lambda jid, user_id=None: _fake_job_analysis_db(jid),
-        )
-        monkeypatch.setattr(
-            "app.workflows.job_analysis_flow.db_tools.get_card",
-            lambda cid, user_id=None: {
-                "id": cid,
-                "title": "卡",
-                "raw_text": "文本",
-                "is_active": True,
-            },
-        )
-
-        def fake_jd_ats_run(self, data):
-            return {"ats": _fake_ats_profile()}
-
-        monkeypatch.setattr(
-            "app.workflows.job_analysis_flow.JdAtsAgent.run", fake_jd_ats_run
-        )
-
-        def fake_sm_run(self, data):
-            return {
-                "llm_match_items": {
-                    "1": {"match": 80.0},
-                }
-            }
-
-        monkeypatch.setattr(
-            "app.workflows.job_analysis_flow.ScoreMatchAgent.run", fake_sm_run
-        )
-
-        def fake_compute_match(cards, jd_req, llm_scores=None):
-            return {
-                "overall": 78,
-                "per_card": [
-                    {
-                        "card_id": 1,
-                        "score": 78,
-                        "local_score": 70,
-                        "llm_score": 85,
-                        "matched": [],
-                        "missing": [],
-                    },
-                ],
-            }
-
-        monkeypatch.setattr(
-            "app.workflows.job_analysis_flow.jobcraft_analyze.compute_match",
-            fake_compute_match,
-        )
-
-        def fake_gen_md(**kwargs):
-            return "# 简历\n\n这是生成的简历内容"
-
-        monkeypatch.setattr(
-            "app.tools.jobcraft_resume_gen.generate_resume_markdown", fake_gen_md
-        )
-
-        result = run_resume_preview_workflow(job_id=10, selected_card_ids=[1])
-        assert result is not None
-        assert result["job_analysis_id"] == 10
-        assert "简历" in result["resume_markdown"]
-        assert result["match_score"] == 78
-
-    def test_resume_preview_no_cards(self, monkeypatch):
-        """简历预览：无可用卡片"""
-        from app.workflows.job_analysis_flow import run_resume_preview_workflow
-
-        monkeypatch.setattr(
-            "app.workflows.job_analysis_flow.db_tools.get_job_analysis",
-            lambda jid, user_id=None: _fake_job_analysis_db(jid),
-        )
-        monkeypatch.setattr(
-            "app.workflows.job_analysis_flow.db_tools.get_card",
-            lambda cid, user_id=None: None,
-        )
-
-        with pytest.raises(ValueError, match="无可用经历卡"):
-            run_resume_preview_workflow(job_id=10, selected_card_ids=[1])
 
 
 # ============================================================

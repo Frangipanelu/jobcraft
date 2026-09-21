@@ -346,15 +346,6 @@ def _call_endpoint_direct(module_import, func_name, **kwargs):
     return seen
 
 
-def test_experience_versions_passes_current_user():
-    """experience get_card 控制器必须把 current_user 传入 DAO（越权时 get_card 返回 None → 404）。"""
-    seen = _call_endpoint_direct(
-        "app.api.experience", "jobcraft_experience_versions", card_id=5, current_user=99
-    )
-    args, _ = seen["get_card"]
-    assert args == (5, 99)
-
-
 def test_job_analysis_get_passes_current_user():
     """job_analysis get_job_analysis 控制器必须把 current_user 传入 DAO。"""
     seen = _call_endpoint_direct(
