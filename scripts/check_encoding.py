@@ -140,10 +140,15 @@ class Finding:
 def _get_tracked_files() -> set[Path] | None:
     """返回 git 已追踪的文件集合；git 不可用时返回 None。"""
     try:
+        import shutil
         import subprocess
 
-        result = subprocess.run(
-            ["git", "ls-files", "--cached"],
+        git_path = shutil.which("git")
+        if not git_path:
+            return None
+
+        result = subprocess.run(  # noqa: S603 - 命令与参数均为静态字面量（git 由 PATH 解析），无不可信输入注入
+            [git_path, "ls-files", "--cached"],
             capture_output=True,
             text=True,
             cwd=REPO_ROOT,
