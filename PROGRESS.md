@@ -2,6 +2,12 @@
 
 > 本文件用于追踪项目整体进度。AI 在每次会话结束或完成子任务时，必须更新本文件的对应板块。
 
+## 生产评分策略 max + polish prompt 收口（2026-09-21，commits `8eba56b`/`1051877`）
+
+- [x] **EVAL-PROD-001 生产评分策略切换 max(Local, LLM)**：依据 evaluation 消融结论（0.4/0.6 加权把 local 校准问题传染给 LLM 分——0 分 local 把 80 分 LLM 拉到 48；max 结构性等同纯 LLM 且保留零成本本地兜底）。`app/tools/jobcraft_analyze.py` 移除 `LOCAL_WEIGHT=0.4/LLM_WEIGHT=0.6`，新增 `FUSION_MODE="max"` + `_fuse_score()`，`compute_match`/`fuse_gap_scores` 改取两者较大者；`fuse_gap_scores` 返回 `score_weights` 改 `{"mode":"max"}`（对应端点已下线、无消费者）；`evaluation/strategies.py` Hybrid 镜像同步为 max；`evaluation/README.md`/`fusion.py` 标注生产已切换、hybrid_a 标记为历史权重。**单测锁定 max 语义**：`test_compute_match_uses_max_fusion`（local 100+llm 10→100 保本地分 / local 0+llm 80→80 不拉低 LLM）+ `fuse_gap_scores` 断言更新（card1 100 / card2 50 / unknown 70）。重测（中文真实 JD 回测、LLM 抖动量化、Regression 基线 v1.json，TASK-EVAL-018）按用户决策**待整体重构完成后统一做**
+- [x] **EXP-POLISH-001 experience_polish prompt 修复**：`prompts/experience/polish_v1.txt` 指示"直接输出润色后的经历文本"（纯文本）与 `invoke_structured` 期望 schema JSON 不符（P0-2 保留风险）→ 新增 `polish_v2.txt`（明确输出单对象 JSON `{"polished_text": ...}`，禁止解释/前缀/Markdown 代码块）+ `polish_experience` 切 `load_prompt(version=2)`；新增单测 `test_polish_uses_json_structured_prompt_v2`（断言 prompt 含 polished_text/JSON、v1 纯文本指示消失）。真实模型验证待整体重构后统一回测
+- [x] **验证**：`python scripts/check_encoding.py`（312 文件 0 warning）+ `ruff check/format` 全绿 + pytest **545 passed / 11 skipped**（+2 新增）+ 前端 tsc 0 错 + vitest **22 files / 124 passed** + `npm run build` ✅
+
 ## 已完成事项
 
 ### Phase B P1 收口 全部完成（2026-09-20，commits `31ef8d4`..`b66c5a7`）
@@ -51,7 +57,7 @@
 
 ### Phase A P0 修复（2026-09-20，commits `0b58c34`/`bd8a9b4`/`ff0a8fc`）
 
-- [x] **P0-2（`0b58c34`）**：`experience_polish.py` 从 `llm_json.invoke_structured` 直连改为统一出口 `experience_polish.invoke_structured` 的 `PolishOutput` 结构化（审计/缓存/观测链补齐）；新增 `TestExperiencePolish` 单测 3（结构化 schema、空输出兜错、LLM 失败兜错）。**保留风险**：`prompts/experience/polish_v1.txt` 仍指示"直接输出精炼文本"（纯文本），与 `invoke_structured` 期望 JSON 不匹配；单测 mock 跳过 LLM，需真实模型验证——若失败需新增 `polish_v2.txt`（JSON 指示）+ `load_prompt(version=2)` 切换
+- [x] **P0-2（`0b58c34`）**：`experience_polish.py` 从 `llm_json.invoke_structured` 直连改为统一出口 `experience_polish.invoke_structured` 的 `PolishOutput` 结构化（审计/缓存/观测链补齐）；新增 `TestExperiencePolish` 单测 3（结构化 schema、空输出兜错、LLM 失败兜错）。**原保留风险已解除（2026-09-21，EXP-POLISH-001）**：`polish_v1.txt` 纯文本指示与 `invoke_structured` JSON 期望不符 → 新增 `polish_v2.txt`（JSON 指示）+ 切 `load_prompt(version=2)`；真实模型验证待整体重构后统一回测
 - [x] **P0-3（`bd8a9b4`）**：`job_analysis_flow.py` 新增 `StructuredATSState`（forward）并以 `conda_edge` 把 3 阶段节点拼接为 StateGraph `run_structured_ats_workflow`；`run_structured_ats` 保持兼容包装，行为不变；相关 workflow/api 测试通过
 - [x] **P0-1（`ff0a8fc`）**：已投递改为用户确认（规范 §9.3：投递状态不得自动推导）。后端 `migrations/versions/V0006__submission_delivered.sql` 新增 `delivered TINYINT(1) DEFAULT 0`（仅加列，前向兼容）；`db_submission.py` ensure/insert/get/get_by_analysis/update/`get_dashboard` 全链 `delivered`；`api/submission.py` `UpdateSubmissionPayload.delivered` + 手动录入投递置 `delivered=1`。前端 `types/jobcraft.ts` JobStatus 新增 `'submitted'`（已投递）；`mappers.ts` `applied: sub.delivered ?? false` + `backendId`，`deriveJobStatus` 优先级 `terminated>prepStage>reviewStage>applied(submitted)>jdAnalysis(delivered)>pending`；`hooks.ts` 新增 `useSetDeliveredMutation`（先 PATCH 后端、失败仅本地乐观、写 cache `steps.applied` + `deriveJobStatus` + onSync 镜像）；`useTerminateJobMutation` 不再自动置 `applied:true`（避免误标已投递）；JobsListView 行内"标记已投递/取消已投递"、JobWorkspaceView header "标记已投递"、submitted 徽标/文案/过滤药丸。验证：后端 581 passed/11 skip、`ruff check`/`format` 全绿、check_encoding 307 OK、前端 tsc + vitest **115 tests** + `npm run build` ✅
 
