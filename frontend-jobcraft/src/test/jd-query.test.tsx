@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { useState } from 'react';
 import { fireEvent, screen, waitFor } from '@testing-library/react';
-import { renderWithProviders } from './test-utils';
+import { createTestQueryClient, renderWithProviders } from './test-utils';
+import { ToastContainer } from '../components/common/Toast';
 import { JDAnalysisCenterView } from '../components/jd/JDAnalysisCenterView';
 import { JDReportDetailView } from '../components/jd/JDReportDetailView';
 import {
@@ -11,8 +12,10 @@ import {
   useJdAnalysesQuery,
 } from '../features/jd/hooks';
 import { useJobsQuery } from '../features/jobs/hooks';
+import { structuredResultToJD } from '../features/jd/mappers';
 import type { DashboardItem, JobAnalysisResult, ATSProfile } from '../api/types';
 import type { JDAnalysis } from '../types/jobcraft';
+import type { QueryClient } from '@tanstack/react-query';
 
 const auth = vi.hoisted(() => ({
   autoLogin: vi.fn(),
@@ -315,6 +318,73 @@ describe('JDReportDetailView 迁移读路径', () => {
     expect(await screen.findByText('策略产品经理')).toBeInTheDocument();
     expect(screen.getByText('腾讯')).toBeInTheDocument();
     expect(screen.queryByText('字节跳动')).not.toBeInTheDocument();
+  });
+});
+
+describe('JDReportDetailView 结构化分析降级展示', () => {
+  const STRUCT_ANALYSIS = structuredResultToJD(
+    buildStructuredResult(),
+    {
+      id: 'jd-1700000000000',
+      company: '字节跳动',
+      role: 'AI 产品经理',
+      rawText: '1. 负责策略制定\n1. （硬性门槛）3年经验',
+    },
+  );
+
+  /** 预置结构化分析（合成 id + matchScore 0）到查询缓存，避免 useJdAnalysesQuery 重新拉取覆盖。 */
+  function seedStructuredClient(): QueryClient {
+    const client = createTestQueryClient();
+    client.setQueryDefaults(['jdAnalyses'], { staleTime: Infinity });
+    client.setQueryData(['jdAnalyses'], [STRUCT_ANALYSIS]);
+    return client;
+  }
+
+  it('matchScore 空 → 结论卡片降级：待分析 label、— 分、无 MATCH、无金色满星', async () => {
+    renderWithProviders(
+      <JDReportDetailView analysisId="jd-1700000000000" />,
+      { queryClient: seedStructuredClient() },
+    );
+
+    expect(await screen.findByText('AI 岗位匹配结论')).toBeInTheDocument();
+    expect(screen.getAllByText('待分析').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('—').length).toBeGreaterThan(0);
+    expect(screen.queryByText('MATCH')).not.toBeInTheDocument();
+    expect(screen.getByTestId('verdict-stars').dataset.filled).toBe('false');
+  });
+
+  it('结构化分析匹配区块降级占位、非匹配区块（暗话）正常展示', async () => {
+    renderWithProviders(
+      <JDReportDetailView analysisId="jd-1700000000000" />,
+      { queryClient: seedStructuredClient() },
+    );
+
+    expect(await screen.findByText(/暂无能力匹配数据/)).toBeInTheDocument();
+    expect(screen.getByText(/暂无推荐经历数据/)).toBeInTheDocument();
+    expect(screen.getByText('强自驱')).toBeInTheDocument();
+  });
+
+  it('点击「立即去定制简历」不发 saveResume（合成 id 无真实 job_analysis_id），提示先完整分析', async () => {
+    renderWithProviders(
+      <>
+        <JDReportDetailView analysisId="jd-1700000000000" />
+        <ToastContainer />
+      </>,
+      { queryClient: seedStructuredClient() },
+    );
+
+    fireEvent.click(await screen.findByText('立即去定制简历'));
+
+    expect(await screen.findByText('暂无法生成简历')).toBeInTheDocument();
+    expect(job.saveResume).not.toHaveBeenCalled();
+  });
+
+  it('有真实 matchScore 的分析仍显示 MATCH 标签与金色满星', async () => {
+    renderWithProviders(<JDReportDetailView analysisId="13" />);
+
+    expect(await screen.findByText('策略产品经理')).toBeInTheDocument();
+    expect(screen.getByText('MATCH')).toBeInTheDocument();
+    expect(screen.getByTestId('verdict-stars').dataset.filled).toBe('true');
   });
 });
 

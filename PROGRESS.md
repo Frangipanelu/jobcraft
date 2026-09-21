@@ -23,6 +23,16 @@
 - [x] **C-1 FE-NEWINTERVIEW-SPLIT-01 NewInterviewModal(1122→~500 行) 拆分**（commit `6f33d89`）：shell（状态编排+弹窗壳+stepper+footer）+ 4 个 Step 子组件——`JobSelectionStep`（岗位下拉 + 新建岗位内联表单含 JD 分析双写回填）、`InterviewDetailsStep`、`ResumeStep`、`AdditionalInfoStep`；草稿读写下沉 `interviewModalDraft.ts`（load 容错/读后删除/save/clear，收敛 `DRAFT_KEY`）；**ResumeStep 弃硬编码假简历（resume-1/2/3）**，接真实底座简历 `useHistoricalResumesQuery`（真实名称 + 上传时间 + 标签）；渲染样式与交互行为完全保持。新增 `src/test/resume-step.test.tsx` 3 条（真实列表渲染（断言无硬编码假简历）/ 选中详情 + 变更回调 / 无关联提示）。验证：vitest **22 files / 120 tests** + tsc 0 错 + build + check_encoding ✅
 - [x] **C-4 FE-ENDPOINT-WIRE-01 9 个未接线端点清账（逐端点裁决）**（commit `f137c78` 后端 + `866de10` 前端）：**下线 10 端点**——`job/step1-ats-recommend`、`job/step2-gap-polish`（被 POST /analyze 取代）、`job/save-card-version`、`job/analyze-ats`（被 save-resume + analyze-ats-structured/split-jd 取代）、`job/{id}/resume-preview`（无前端预览接线）、`job/{id}/selected-cards`、`experience/export`（与 profile/export 重叠）、`experience/cards/batch`（前端单卡操作）、`experience/cards/{id}/versions` GET/POST（版本历史纯前端演进）；**保留** `experience/cards/search`（DEFERRED，DB-03 安全收口）。同步删除死 Workflow（run_step1/step2/analyze_ats/resume_preview 及其 State/schema；AtsRecommendAgent/GapPolishAgent 保留）与前端 4 个死 wrapper（step1AtsRecommend/step2GapPolish/saveCardVersion/getJobSelectedCards）+ 清理类型导入。测试删除对应用例。验证：ruff + pytest **543 passed/11 skipped**（净删 ~40 用例）+ tsc/vitest **120 passed**/build + check_encoding ✅
 
+### 结构化 JD 报告降级展示 FE-JD-REPORT-01（2026-09-21，commit 待填）
+
+- [x] **背景**：TODO「结构化结果报告视图」遗留——`analyze-ats-structured` 只产出 ATS 画像（岗位理解/技能/暗话），不产出匹配类字段（matchScore=0、whyMatch=''、skillGaps=[]、recommendedExperiences=[]、合成 id `jd-{ts}` 无真实 `job_analysis_id`），报告页需如实降级而非误导。
+- [x] **修复（`JDReportDetailView.tsx` 3 处）**：
+  - 结论卡片 `matchLabel`：`whyMatch || 'MATCH'` → `whyMatch || (hasMatchScore ? 'MATCH' : '待分析')`（matchScore=0 不再显示 MATCH）
+  - 星标行条件渲染：有真实分数=金色满星 `data-filled="true"`，无分数=灰色占位星 `data-filled="false"`（`data-testid="verdict-stars"`）
+  - `handleGoToResume` 加 `parseInt` NaN 守卫：结构化合成 id 不向 `/job/save-resume` 发 `job_analysis_id: NaN`，toast「暂无法生成简历，请先完成完整 JD 分析」并返回
+- [x] **已确认的既有降级路径**（无需改动）：能力匹配/推荐经历/ATS 空区块占位文案、暗话解析正常展示、goal/risk「待分析」
+- [x] **测试**：`src/test/jd-query.test.tsx` 新增 4 条（结论卡片降级：待分析·—·无 MATCH·无金色满星 / 区块降级占位+暗话正常 / 定制简历守卫不调 saveResume+toast / 有真实分数仍显示 MATCH 与金色满星）；全量 vitest **22 files / 124 tests** 通过 + `npm run lint`（tsc 0 错）+ `npm run build` + `python scripts/check_encoding.py`（312 文件 0 warning）✅
+
 ### 技术债收口 P1/P2（2026-09-20，commits `e29216a`/`88e76fb`/`731db68`/`27a51f0`/`1d45def`）
 
 - [x] **FE-CONTEXT-REMOVE 首切（`e29216a`）**：删除孤立 `app/legacy/MainLayout.tsx` + `router/LegacyPageWrapper.tsx`；删除 context 死 surface（`user`/`updateUserProfile`/`nextActions`/`activities`/`aiSuggestions`/`terminateJob`/`resumeJob`/`deleteJob`/`deleteJDAnalysis`/`updateQuestionAnswer`/`addCustomQuestion`/经历域 4 writer/`loadJdAnalyses` 外部入口）；`WorkbenchView` `user`→`useProfileQuery`（`useProfileQuery` 为权威 profile 源）；删除死类型 ActivityLog/NextActionItem/AISuggestionCard。context 2324→461 行。验证：tsc/`npm run build`（616.60 kB）✅、113 tests ✅、check_encoding（307 文件）✅。**剩余范围**：4 域 state+4 sync 镜像（jobs/experiences/jdAnalyses/interviews 仍被未迁移视图读取）、`currentTab`/`navigateTo`/`selected*` 待 URL 驱动化后移除

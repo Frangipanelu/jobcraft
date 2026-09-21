@@ -149,6 +149,7 @@ export const JDReportDetailView: React.FC<JDReportDetailViewProps> = ({
   );
 
   const verdictScore = currentAnalysis?.matchScore || 0;
+  const hasMatchScore = (currentAnalysis?.matchScore ?? 0) > 0;
 
   const data = {
     company: currentAnalysis?.company || '未命名公司',
@@ -169,7 +170,7 @@ export const JDReportDetailView: React.FC<JDReportDetailViewProps> = ({
           : '谨慎评估',
       score: verdictScore,
       stars: 5,
-      matchLabel: currentAnalysis?.whyMatch || 'MATCH',
+      matchLabel: currentAnalysis?.whyMatch || (hasMatchScore ? 'MATCH' : '待分析'),
       why: currentAnalysis?.verdictSummary || '待分析',
       advantagesCount: (currentAnalysis?.recommendedExperiences || []).length,
       gapsCount: (currentAnalysis?.skillGaps || []).length,
@@ -258,6 +259,11 @@ export const JDReportDetailView: React.FC<JDReportDetailViewProps> = ({
       // 检查是否已有简历，没有则先生成
       const hasResume = matchedJob?.steps.customResume;
       if (!hasResume) {
+        const analysisIdNum = parseInt(currentAnalysis.id);
+        if (Number.isNaN(analysisIdNum)) {
+          showToast({ type: 'info', title: '暂无法生成简历', message: '结构化分析未包含完整匹配数据，请先完成完整 JD 分析后再生成简历。' });
+          return;
+        }
         showToast({ type: 'info', title: '正在生成简历...', message: 'AI 正在根据经历卡和岗位要求生成匹配简历' });
         try {
           const selectedIds = (currentAnalysis.recommendedExperiences || [])
@@ -423,7 +429,11 @@ export const JDReportDetailView: React.FC<JDReportDetailViewProps> = ({
               <div className="text-[11px] font-bold text-[#737873] tracking-widest mt-1 mb-1.5 uppercase">
                 {data.verdict.matchLabel}
               </div>
-              <div className="flex items-center gap-1 text-warning text-sm mb-1">
+              <div
+                data-testid="verdict-stars"
+                data-filled={hasMatchScore ? 'true' : 'false'}
+                className={`flex items-center gap-1 text-sm mb-1 justify-center ${hasMatchScore ? 'text-warning' : 'text-[#DBDDD8]'}`}
+              >
                 {Array.from({ length: 5 }).map((_, i) => (
                   <span key={i}>★</span>
                 ))}
