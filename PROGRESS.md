@@ -2,6 +2,12 @@
 
 > 本文件用于追踪项目整体进度。AI 在每次会话结束或完成子任务时，必须更新本文件的对应板块。
 
+## P1-P11 产品功能板块规划 + P2 规划定稿（2026-09-23）
+
+- [x] **P1-P11 板块划分**（沿 PRODUCT_MODEL §3 闭环顺序）：P1 个人资产/经历（§5, §14）→ P2 标准化表达与版本（§6, §24 回写, card_versions）→ P3 方向体系（§7, §39-§43 六维分类, §44-§62 Direction Knowledge）→ P4 岗位对象（§9 Job, §10 Job Profile, §4 对象模型）→ P5 JD 分析（§11, §13 个人匹配, §30 可信度）→ P6 简历系统（§8 四层关系）→ P7 公司调研（§12, §31 深度策略）→ P8 面试准备（§14, §15 经历故事, §16 面试类型, §19 问题过滤）→ P9 面试复盘（§17, §18 流水线, §20 意图, §21 多维分析, §22, §23）→ P10 反馈闭环与验证（§24, §45, §30 Level0-4）→ P11 状态机与投递（§26 已投递=用户确认, §27 多轮）。依赖链：P1→P2→P3→P4/5→P6→P7/8→P9→P10→P11。各板块状态：P4/P5/P7/P8/P9/P11 有部分既有实现，P2/P3/P6/P10 待建设
+- [x] **P2 七项不确定点决策**（U1-U7 全部确认）：U1 expression 独立表与 card_versions 共存（两表语义不同：expression 存 standardized/direction/job_specific + validationLevel/usageCount，card_versions 存 card 内容快照）／U2 标准化表达手动触发生成（非自动）／U3 复用 polish_v2 基线 prompt（调整保留事实+中性化）／U4 候选态+diff 确认闸门（§24.6 用户确认是唯一正式回写闸门）／U5 验证等级 MVP 仅 L0→L1（usage_count），L2-L4 归 P10／U6 P2 仅 Standardized Expression 回写，方向/岗位表达归 P3/P6／U7 sourceRefs 复用现有 SourceRef schema
+- [x] **P2 实施任务清单**：EXP-P2-01..11 已写入 TODO「优先级 P2」区（V0009 DDL → CRUD/版本链 → prompt+生成端点 → 状态机 → 消费链 → 前端 → 验证），标记 pending，P1（EXP-P1-03..09）完工后实施（2026-09-23 落盘）
+
 ## P1 实施 E1：分块评测基线 + 规则分块落地（2026-09-22）
 
 > 依据 §34.3「preview 规则优先+LLM 兜底」与 §29.1「分块评测」。**已提交并推送**：commit `9359a82`（EXP-P1-01/02）→ `origin/main`。
@@ -13,6 +19,7 @@
   - 新增 `tests/test_resume_splitter_unit.py`：12 样本逐块比对（块数+字段命中）、样本配对完整性（≥10）、**反编造断言**（period/title/company/role 必须为原文子串）；样本 4/5 两次迭代后 **27/27 块 100% 命中**
 - [x] **验证**：pytest 全量 **559 passed / 11 skipped**（+14 新用例）+ `ruff check` 全绿 + `python scripts/check_encoding.py`（313 文件 0 warning）
 - [ ] **待续（P1 剩余）**：规则标签池 → Confirm-As-V1 → 自动 STAR → 版本化 + 前端字段改名 + is_confirmed/fields 迁移 → direction/expression 表 → get_card_render_text()
+- [ ] **已知盲区（EXP-P1-02 审阅归档，2026-09-23）**：叙述式召回动词表仅 6 词（担任/任职/从事/负责/做/开发）→「主导/牵头/参与/协作/协同/搭建/设计/迭代/重构/落地/引入/开发」等高频叙述式开头**漏召回**（块保留但 company/role 元数据空；块非 None → 不触发 LLM 兜底）。**方案倾向：结构化体现驱动分块而非扩动词清单**（见 PROGRESS 底部审阅分析）。裁决点挂 EXP-P1-03 前
 
 ## EXPERIENCE_SPEC v0.2 落地决策写入（2026-09-22，P1 规划定稿）
 
