@@ -1,0 +1,18 @@
+{
+  "name": "resume_06_multiple_work_no_headers",
+  "description": "同一章节下两段工作连续排布（时间锚点切分，无子标题）",
+  "entries": [
+    {
+      "company": "阳光传媒",
+      "role": "新媒体运营",
+      "period": "2020.04 - 2023.05",
+      "title": "阳光传媒"
+    },
+    {
+      "company": "起点文化",
+      "role": "内容编辑",
+      "period": "2018.06 - 2020.03",
+      "title": "起点文化"
+    }
+  ]
+}

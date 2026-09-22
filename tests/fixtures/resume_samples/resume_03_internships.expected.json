@@ -1,0 +1,18 @@
+{
+  "name": "resume_03_internships",
+  "description": "多段实习经历，章节分明",
+  "entries": [
+    {
+      "company": "星辰电商",
+      "role": "数据分析实习生",
+      "period": "2024.07 - 2024.09",
+      "title": "星辰电商"
+    },
+    {
+      "company": "蓝湖网络",
+      "role": "运营实习生",
+      "period": "2023.07 - 2023.09",
+      "title": "蓝湖网络"
+    }
+  ]
+}

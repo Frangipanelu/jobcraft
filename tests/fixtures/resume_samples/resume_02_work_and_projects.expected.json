@@ -1,0 +1,24 @@
+{
+  "name": "resume_02_work_and_projects",
+  "description": "工作经历+多个项目经历，混合段落",
+  "entries": [
+    {
+      "company": "星河出行",
+      "role": "高级产品经理",
+      "period": "2022.08 - 至今",
+      "title": "星河出行"
+    },
+    {
+      "company": "",
+      "role": "",
+      "period": "2021.03 - 2022.07",
+      "title": "共享单车订单系统重构"
+    },
+    {
+      "company": "",
+      "role": "",
+      "period": "2020.06 - 2021.02",
+      "title": "智能客服知识库"
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "name": "resume_04_no_time_personalized",
+  "description": "无时间锚点、自由叙述式工作经历（口语化段落）",
+  "entries": [
+    {
+      "company": "云端测试中心",
+      "role": "测试开发工程师",
+      "period": "",
+      "title": "云端测试中心"
+    },
+    {
+      "company": "锐锋科技",
+      "role": "功能测试",
+      "period": "",
+      "title": "锐锋科技"
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "name": "resume_11_designer",
+  "description": "设计岗叙述式工作经历，含链接",
+  "entries": [
+    {
+      "company": "摩登互动",
+      "role": "UI 设计师",
+      "period": "2019.05 - 2022.02",
+      "title": "摩登互动"
+    },
+    {
+      "company": "潮汐社区",
+      "role": "视觉设计师",
+      "period": "2022.03 - 至今",
+      "title": "潮汐社区"
+    }
+  ]
+}

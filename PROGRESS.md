@@ -2,6 +2,35 @@
 
 > 本文件用于追踪项目整体进度。AI 在每次会话结束或完成子任务时，必须更新本文件的对应板块。
 
+## P1 实施 E1：分块评测基线 + 规则分块落地（2026-09-22）
+
+> 依据 §34.3「preview 规则优先+LLM 兜底」与 §29.1「分块评测样本集」。尚未提交 git。
+
+- [x] **EXP-P1-01 分块评测样本集**：新建 `tests/fixtures/resume_samples/`，12 份脱敏中文简历 + 配对 `expected.json`（覆盖：规整工作/工作+项目混合/多实习/无时间叙述式/纯项目(个人·开源·团队)/同章连续无子标题/教背景混排/稠密无空行/工作+实习/设计岗+链接/校招多域）。评测脚本 `scripts/eval_resume_splitter.py`（块级命中率）
+- [x] **EXP-P1-02 规则分块器 + preview 反向改造**：
+  - 新增 `app/tools/resume_splitter.py`（零 LLM，无状态）——章节过滤（教育/技能/评价等剔除）→ 主路径时间锚点切块（`_RANGE_RE` 复用 db_experience 语义）→ 无时间锚点回退段落切块 + 叙述式句法「`在X担任Y`」提取；产物与 `ResumeExperience` 契约兼容（company/role/period/title/card_type/summary/achievements/raw_text），规则无法切分返回 `None` 触发 LLM 兜底；不编造字段（提取到的填/没有留空）
+  - `app/api/experience.py` preview 改「规则优先 → LLM 兜底」单次调用，规则产物用原始块文本作 raw_text；SUPPORTED_EXTS/文件读取/AI 解析失败路径不变
+  - 新增 `tests/test_resume_splitter_unit.py`：12 样本逐块比对（块数+字段命中）、样本配对完整性（≥10）、**反编造断言**（period/title/company/role 必须为原文子串）；样本 4/5 两次迭代后 **27/27 块 100% 命中**
+- [x] **验证**：pytest 全量 **559 passed / 11 skipped**（+14 新用例）+ `ruff check` 全绿 + `python scripts/check_encoding.py`（313 文件 0 warning）
+- [ ] **待续（P1 剩余）**：规则标签池 → Confirm-As-V1 → 自动 STAR → 版本化 + 前端字段改名 + is_confirmed/fields 迁移 → direction/expression 表 → get_card_render_text()
+
+## EXPERIENCE_SPEC v0.2 落地决策写入（2026-09-22，P1 规划定稿）
+
+- [x] **EXPERIENCE_SPEC v0.1 → v0.2**：追加 Part II §25-§33（实现决策，不改动既有 §1-§24 语义）。文档：`docs/design-decisions/design-v2.0/EXPERIENCE_SPEC.md`
+- [x] **§25 Ingestion Pipeline**：上传→纯解析→规则分块(LLM兜底)→元数据提取→预览确认→入库草稿(is_confirmed=0)→跳转卡页自动 STAR→用户审阅补全→提交 V1；原文进 base_resume
+- [x] **§26 LLM 职责边界**：parse 分块仅规则失败兜底 / extract_structured 上传草稿确认后**自动 1 次**（手动创建不触发）/ recommend_tags 手动+规则标签池优先；提取到的填、没提取留空、禁止编造量化；上传必经路径 LLM 可关停
+- [x] **§27 Confirm-As-V1**：事实源=用户确认卡片内容；confirm 时 version=1 + card_versions(original) 基线 + is_confirmed=1
+- [x] **§28 版本化模型**：全版本化，变更=快照+version++，无字段护栏；card_versions 表结构不动
+- [x] **§29 DB 变更**：experience_card 加 is_confirmed(默认1) + fields JSON（类型特有字段）；§29.1 分块评测样本集（TDD+回归，10-15 份脱敏简历+expected.json）
+- [x] **§30 字段契约**：STAR 槽位 S1-S4（语义投影，MUST/MUST NOT，禁止编造量化）+ 通用列+fields JSON（card_type 区分 work/intern/project）
+- [x] **§30/§31 后端细化**：**STAR 四槽位统一** `background(S)/problem(T)/actions[](A)/results[](R)`（量化结果并入 results，`metrics` 废弃）；废弃 DB `solution/execution`、前端 `responsibility`；`summary` 保留降级为展示派生；`tags` 替 `capabilityTags`；`card_type` 定稿 `work/intern/project`（前端 8 值收窄，all 仅过滤）；**education/论文/竞赛归个人资料域，不作卡类型**；**社招/校招=简历场景维度（简历版本层），非卡类型**；§30.4 含完整传输 JSON + extract_structured 输出形状；`direction`/`expression` 新表（§31，表结构 P2 细化）
+- [x] **§31 Expression/Direction 模型**：新增 direction 表 + expression 表（表达版本链，表结构 P2 细化）
+- [x] **§32 Consumer Chain**：Experience→(简历+1/方向+1/表达+1)→ResumeVersion(resume_submission)→面试准备(表达+1)→复盘(表达+1)；统一 get_card_render_text() 消费入口
+- [x] **§33 复盘回写**：⚠️ 待定（P10 前裁定），默认「用户确认制」
+- [x] **§34 P1 实施迁移决策（2026-09-22，消解 6 个实现缺口）**：ⓐ card_versions V1 基线用哨兵 `source_type='original'/source_id=0`，不动表结构；ⓑ 自动 STAR **保留在 confirmUpload 内同步**（不拆接口），前端 confirm 成功后跳转卡片页审阅；ⓒ preview 改「规则优先+LLM 兜底」反向改造，共用 ResumeParseResult 契约；ⓓ④⑥ 后端 ExperienceCardSchema/Create/Update 增四槽位 + updateCard payload 补 STAR + NewExperienceModal 表单绑四槽位 + cardToExperience 直读响应 + createCard 不写死 card_type；ⓖ 新增后端统一版本写入接口，useAddExperienceVersionMutation 接后端、下线纯前端假数据；ⓗ 术语统一「草稿确认≠定稿（V1）」，confimUpload=入库草稿(is_confirmed=0)，定稿=卡片页保存(version=1+哨兵基线+is_confirmed=1)。录入 §25.1/§27/§29/§34 + TODO 更新
+- [x] **P1 关键决策确认**：规则优先+LLM兜底分块（0~1次LLM/份）、STAR 自动提取于草稿确认后触发、失败留空可重试、手动创建不自动、通用列+fields JSON、新增 direction/expression 表、版本化无护栏
+- [ ] **待实施（P1）**：分块评测样本集 → 规则分块/规则标签池 → Confirm-As-V1 → 自动 STAR → 版本化 + 前端字段改名(background/problem/actions/results/tags/card_type，metrics 并入 results) + is_confirmed/fields 迁移 → direction/expression 表
+
 ## 生产评分策略 max + polish prompt 收口（2026-09-21，commits `8eba56b`/`1051877`）
 
 - [x] **EVAL-PROD-001 生产评分策略切换 max(Local, LLM)**：依据 evaluation 消融结论（0.4/0.6 加权把 local 校准问题传染给 LLM 分——0 分 local 把 80 分 LLM 拉到 48；max 结构性等同纯 LLM 且保留零成本本地兜底）。`app/tools/jobcraft_analyze.py` 移除 `LOCAL_WEIGHT=0.4/LLM_WEIGHT=0.6`，新增 `FUSION_MODE="max"` + `_fuse_score()`，`compute_match`/`fuse_gap_scores` 改取两者较大者；`fuse_gap_scores` 返回 `score_weights` 改 `{"mode":"max"}`（对应端点已下线、无消费者）；`evaluation/strategies.py` Hybrid 镜像同步为 max；`evaluation/README.md`/`fusion.py` 标注生产已切换、hybrid_a 标记为历史权重。**单测锁定 max 语义**：`test_compute_match_uses_max_fusion`（local 100+llm 10→100 保本地分 / local 0+llm 80→80 不拉低 LLM）+ `fuse_gap_scores` 断言更新（card1 100 / card2 50 / unknown 70）。重测（中文真实 JD 回测、LLM 抖动量化、Regression 基线 v1.json，TASK-EVAL-018）按用户决策**待整体重构完成后统一做**

@@ -1,0 +1,24 @@
+{
+  "name": "resume_05_projects_personal",
+  "description": "纯项目经历，含中英混排标题与冒号分隔",
+  "entries": [
+    {
+      "company": "",
+      "role": "",
+      "period": "",
+      "title": "Tree 记账本"
+    },
+    {
+      "company": "",
+      "role": "",
+      "period": "",
+      "title": "vue-element-admin"
+    },
+    {
+      "company": "",
+      "role": "",
+      "period": "",
+      "title": "校园二手交易平台"
+    }
+  ]
+}

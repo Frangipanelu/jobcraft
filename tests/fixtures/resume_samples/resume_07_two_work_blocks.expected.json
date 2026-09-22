@@ -1,0 +1,18 @@
+{
+  "name": "resume_07_two_work_blocks",
+  "description": "工作经历两段，含教育背景（教育不进经历卡）",
+  "entries": [
+    {
+      "company": "极光智能",
+      "role": "iOS 开发工程师",
+      "period": "2019.07 - 2022.10",
+      "title": "极光智能"
+    },
+    {
+      "company": "云帆科技",
+      "role": "iOS 高级工程师",
+      "period": "2022.11 - 至今",
+      "title": "云帆科技"
+    }
+  ]
+}

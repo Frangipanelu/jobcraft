@@ -1,0 +1,24 @@
+{
+  "name": "resume_09_dense_no_blank",
+  "description": "整份简历段落密集，段间无空行（靠时间锚点+章节标题切分）",
+  "entries": [
+    {
+      "company": "中科曙光",
+      "role": "C++ 开发工程师",
+      "period": "2018.07 - 2021.08",
+      "title": "中科曙光"
+    },
+    {
+      "company": "紫光云",
+      "role": "高级后端工程师",
+      "period": "2021.09 - 至今",
+      "title": "紫光云"
+    },
+    {
+      "company": "",
+      "role": "",
+      "period": "2020.05 - 2020.11",
+      "title": "分布式日志检索平台"
+    }
+  ]
+}

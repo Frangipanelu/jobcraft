@@ -1,0 +1,18 @@
+{
+  "name": "resume_12_campus_recruit",
+  "description": "校招简历：教育背景两段、实习+项目+获奖（教育/获奖不进经历卡）",
+  "entries": [
+    {
+      "company": "恒天软件",
+      "role": "测试开发实习生",
+      "period": "2025.06 - 2025.09",
+      "title": "恒天软件"
+    },
+    {
+      "company": "",
+      "role": "",
+      "period": "2024.10 - 2025.04",
+      "title": "教务管理系统"
+    }
+  ]
+}

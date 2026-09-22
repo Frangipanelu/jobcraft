@@ -70,59 +70,74 @@ async def jobcraft_experience_upload_preview(
     if resume_text.startswith("错误"):
         raise HTTPException(status_code=400, detail=resume_text)
 
-    # 尝试 AI 解析
+    # 反向改造（EXPERIENCE_SPEC §34.3）：规则优先 + LLM 兜底
     try:
-        from app.workflows.extract_flow import run_parse_resume_entries_workflow
+        from app.tools.resume_splitter import split_resume_text
 
-        entries = run_parse_resume_entries_workflow(resume_text.strip())
+        entries = split_resume_text(resume_text.strip())
     except Exception:
-        logger.warning("简历预览解析失败")
-        entries = []
+        logger.warning("简历规则分块失败")
+        entries = None
 
-    # 如果 AI 解析出条目，返回结构化预览；否则返回原始文本让用户手动分段
+    # 规则分块失败 → LLM 兜底（单次调用）
+    if not entries:
+        try:
+            from app.workflows.extract_flow import run_parse_resume_entries_workflow
+
+            entries = run_parse_resume_entries_workflow(resume_text.strip())
+        except Exception:
+            logger.warning("简历预览解析失败")
+            entries = []
+
+    # 如果解析出条目，返回结构化预览；否则返回原始文本让用户手动分段
     if entries:
         preview_items = []
         for ent in entries:
-            # 从 achievements 构建可读的 raw_text
-            achievements = ent.get("achievements", [])
-            bullets = []
-            for a in achievements:
-                if isinstance(a, dict):
-                    # 提取可读文本，避免输出 JSON
-                    parts = []
-                    if a.get("title"):
-                        parts.append(f"【{a['title']}】")
-                    if a.get("situation"):
-                        parts.append(f"背景：{a['situation']}")
-                    if isinstance(a.get("action"), dict) and a["action"].get("main"):
-                        parts.append(f"行动：{a['action']['main']}")
-                    elif a.get("action"):
-                        parts.append(f"行动：{a['action']}")
-                    if a.get("result"):
-                        parts.append(f"结果：{a['result']}")
-                    if parts:
-                        bullets.append(" ".join(parts))
-                    elif a.get("text"):
-                        bullets.append(a["text"])
-                    elif a.get("description"):
-                        bullets.append(a["description"])
-                elif isinstance(a, str) and a.strip():
-                    bullets.append(a.strip())
+            if ent.get("raw_text"):
+                raw_text = ent["raw_text"]
+            else:
+                # LLM 兜底产物：从 achievements 构建可读的 raw_text
+                achievements = ent.get("achievements", [])
+                bullets = []
+                for a in achievements:
+                    if isinstance(a, dict):
+                        # 提取可读文本，避免输出 JSON
+                        parts = []
+                        if a.get("title"):
+                            parts.append(f"【{a['title']}】")
+                        if a.get("situation"):
+                            parts.append(f"背景：{a['situation']}")
+                        if isinstance(a.get("action"), dict) and a["action"].get(
+                            "main"
+                        ):
+                            parts.append(f"行动：{a['action']['main']}")
+                        elif a.get("action"):
+                            parts.append(f"行动：{a['action']}")
+                        if a.get("result"):
+                            parts.append(f"结果：{a['result']}")
+                        if parts:
+                            bullets.append(" ".join(parts))
+                        elif a.get("text"):
+                            bullets.append(a["text"])
+                        elif a.get("description"):
+                            bullets.append(a["description"])
+                    elif isinstance(a, str) and a.strip():
+                        bullets.append(a.strip())
 
-            raw_text_parts = []
-            if ent.get("summary"):
-                raw_text_parts.append(ent["summary"])
-            if ent.get("company"):
-                raw_text_parts.append(f"公司：{ent['company']}")
-            if ent.get("role"):
-                raw_text_parts.append(f"岗位：{ent['role']}")
-            if ent.get("period"):
-                raw_text_parts.append(f"时间：{ent['period']}")
-            if bullets:
-                raw_text_parts.append("工作内容：")
-                raw_text_parts.extend(f"- {b}" for b in bullets)
+                raw_text_parts = []
+                if ent.get("summary"):
+                    raw_text_parts.append(ent["summary"])
+                if ent.get("company"):
+                    raw_text_parts.append(f"公司：{ent['company']}")
+                if ent.get("role"):
+                    raw_text_parts.append(f"岗位：{ent['role']}")
+                if ent.get("period"):
+                    raw_text_parts.append(f"时间：{ent['period']}")
+                if bullets:
+                    raw_text_parts.append("工作内容：")
+                    raw_text_parts.extend(f"- {b}" for b in bullets)
 
-            raw_text = "\n".join(raw_text_parts)
+                raw_text = "\n".join(raw_text_parts)
 
             preview_items.append(
                 {
