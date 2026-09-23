@@ -169,6 +169,7 @@ describe('applyProposedChanges', () => {
     tags: [],
     currentVersion: 'V1',
     versionHistory: [],
+    isConfirmed: true,
   };
 
   it('按 field 字段法应用 problem / actions（前置替换第二位开始）/ background', () => {
