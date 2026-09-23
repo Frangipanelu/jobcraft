@@ -2,6 +2,17 @@
 
 > 本文件用于追踪项目整体进度。AI 在每次会话结束或完成子任务时，必须更新本文件的对应板块。
 
+## Expression/Consumer Chain 基础（EXP-P1-08，2026-09-23）
+
+> 依据 EXPERIENCE_SPEC §32/§30.5：统一消费入口 `get_card_render_text()`（优先版本链 → 结构化 STAR → raw_text → summary/title），下游 `_get_card_text` / `_card_text` / gap_polish 收敛至该函数，不再各自拼。§30.5 场景参数（排序/字段权重）归 P2。
+
+- [x] **统一入口 `app/tools/card_render.py`**：零 LLM、无状态、纯文本渲染——`get_card_render_text(card, versions=None, *, markdown=False, include_tags=False)`，优先级 版本链 → 结构化 STAR（achievements）→ raw_text → content → summary → title；`markdown=True` 输出简历正文格式（`### 标题` + `**背景/行动/困难/解决/结果**：`），`markdown=False` 输出纯文本（仅 S/A/R 值，无标签词，供关键词匹配/LLM 提示词）；`include_tags=True` 末尾追加扁平标签（元素用空格连接）。
+- [x] **resume_gen 收敛**：`generate_resume_markdown`/`generate_resume_html` 点正文与 HTML 要点直接调用 `get_card_render_text(markdown=True)`，删除 `_get_card_text` 自拼逻辑。
+- [x] **interview_pre 收敛**：`_build_interview_prompt` 卡片段落直接调用 `get_card_render_text`（纯文本默认），**补齐 STAR 优先级**（原 `_card_text` 无 ai_structured 层），删除 `_card_text`。
+- [x] **analyze/gap_polish/score_match 收敛**：`_card_text_blob` 改为 `get_card_render_text(include_tags=True)` 薄封装（纯文本 STAR + tags，避免 markdown 标签词污染 `_normalize` 后的子串/精确匹配，匹配语义不变）；`gap_polish_agent`/`score_match_agent` 导入迁移至 `app.tools.card_render`。
+- [x] **测试**：新增 `tests/test_card_render_unit.py`（11 条：版本链优先 / markdown STAR 五字段 / 纯文本无标签词 / STAR 子串匹配 / 空 achievements 回退 / raw_text→content→summary→title 回退链 / include_tags 追加 / 全空返回空串）；`test_misc_unit.py`、`test_tools_extra_unit.py` 改断言统一入口。**pytest 615 passed / 12 skipped** + ruff 全绿 + security-scan（--select S）通过 + check_encoding 348 文件 0 错。
+- [ ] **待续（P1 剩余）**：前端字段改名收尾（direction/expression 表归 **P2 V0009**，随 EXP-P2-01）→ **P1-09 验证全绿（npm run build）**；后续优化：后端快照 note 支持自定义语义 + 版本回滚按槽位需 card_versions 快照扩展（前向兼容加列）+ P2-07 消费链接入 active expression 回退。
+
 ## 规则标签池 · 标签并入 STAR（EXP-P1-06c，2026-09-23）
 
 > 依据 EXPERIENCE_SPEC §26/§29/§55：「规则标签池无候选才 LLM」「LLM 失败规则路径照常工作」「代码内词典无新表」。标签推荐不再独立 LLM 调用——**并入 extract_structured 同一次 LLM 输出（v3）**；confirmUpload/upload 落库路径移除单独的 recommend_tags LLM。
