@@ -396,3 +396,76 @@ def test_v0008_columns_matched_in_experience_runtime_helper():
     assert "ADD COLUMN fields" in altered
     assert "TINYINT(1) NOT NULL DEFAULT 1" in altered
     assert "JSON" in altered
+
+
+def test_v0009_expression_direction_declares_both_tables():
+    """EXP-P2-01：V0009 应同时声明 direction 与 expression 两张新表（U8）。"""
+    v0009 = os.path.join(runner.MIGRATIONS_DIR, "V0009__expression_direction.sql")
+    assert os.path.exists(v0009)
+    with open(v0009, encoding="utf-8") as fh:
+        sql = fh.read()
+    assert "CREATE TABLE IF NOT EXISTS direction" in sql
+    assert "CREATE TABLE IF NOT EXISTS expression" in sql
+    # 前向兼容：只加表，不 ALTER 既有表
+    assert "ALTER TABLE" not in sql
+
+
+def test_v0009_expression_fields_follow_data_model():
+    """EXP-P2-01：expression 表字段应覆盖 DATA_MODEL §6 + §8 的稳定列。"""
+    v0009 = os.path.join(runner.MIGRATIONS_DIR, "V0009__expression_direction.sql")
+    with open(v0009, encoding="utf-8") as fh:
+        sql = fh.read()
+    expression_ddl = sql.split("CREATE TABLE IF NOT EXISTS expression", 1)[1]
+    for col in [
+        "user_id INT NOT NULL",
+        "experience_id INT NOT NULL",
+        "direction_id INT NULL",
+        "job_id INT NULL",
+        "type VARCHAR(16)",
+        "content TEXT NOT NULL",
+        "version INT NOT NULL",
+        "validation_level TINYINT",
+        "usage_count INT NOT NULL",
+        "source_refs JSON",
+        "status VARCHAR(16)",
+    ]:
+        assert col in expression_ddl, f"expression 表缺失列声明: {col}"
+
+
+def test_v0009_direction_fields_follow_data_model():
+    """EXP-P2-01：direction 表字段应覆盖 DATA_MODEL §7 + DIRECTION_SPEC §3。"""
+    v0009 = os.path.join(runner.MIGRATIONS_DIR, "V0009__expression_direction.sql")
+    with open(v0009, encoding="utf-8") as fh:
+        sql = fh.read()
+    direction_ddl = sql.split("CREATE TABLE IF NOT EXISTS direction", 1)[1]
+    for col in [
+        "user_id INT NOT NULL",
+        "name VARCHAR(200) NOT NULL",
+        "function_id INT NULL",
+        "primary_role_id INT NULL",
+        "status VARCHAR(16)",
+    ]:
+        assert col in direction_ddl, f"direction 表缺失列声明: {col}"
+
+
+def test_v0009_follows_split_convention():
+    """EXP-P2-01：V0009 语句块遵守 SPLIT 约定（无尾分号），可被 runner 逐条执行。"""
+    v0009 = os.path.join(runner.MIGRATIONS_DIR, "V0009__expression_direction.sql")
+    with open(v0009, encoding="utf-8") as fh:
+        sql = fh.read()
+    stmts = [s.strip() for s in sql.split(";--SPLIT--")]
+    real = [s for s in stmts if s]
+    assert len(real) == 2, f"V0009 应含 2 条语句块，实际 {len(real)}"
+    for stmt in real:
+        assert not stmt.endswith(";"), f"V0009 语句块含尾分号: {stmt[:60]}"
+
+
+def test_v0009_migrate_is_applied_via_runner(fake_conn):
+    """EXP-P2-01：V0009 与既有迁移共存，runner.migrate() 不抛错且全量入库。"""
+    runner.migrate()
+    inserted = [
+        e[1][0]
+        for e in fake_conn.cursor_obj.executed
+        if e[0].strip().startswith("INSERT INTO schema_migrations")
+    ]
+    assert "0009" in inserted
