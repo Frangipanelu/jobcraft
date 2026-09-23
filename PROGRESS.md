@@ -2,6 +2,20 @@
 
 > 本文件用于追踪项目整体进度。AI 在每次会话结束或完成子任务时，必须更新本文件的对应板块。
 
+## Confirm-As-V1 全闭环（EXP-P1-03，2026-09-23，`docs/experience/EXP-P1-03.md`）
+
+> 依据 EXPERIENCE_SPEC §25-§27/§29/§34：confirmUpload 入库草稿（`is_confirmed=0`）→ 卡片页保存定稿（`version=1` + card_versions 哨兵基线 + `is_confirmed=1`）。**用户拍板三点**：① 范围 = 完整闭环（草稿化 + 后端 + 前端 + 测试一次交付）；② direction/expression 新表**推迟到 P2 的 V0009**（裁决 EXP-P1-07 正文与 EXP-P2-01 矛盾——V0008 本期只加 `is_confirmed`+`fields` 两列）；③ 定稿触发 = updateCard 携带 `is_confirmed:true`，**不新增端点**。
+
+- [x] **V0008 迁移（`migrations/versions/V0008__confirm_draft_fields.sql`）**：`experience_card` 加 `is_confirmed TINYINT(1) NOT NULL DEFAULT 1` + `fields JSON`，SPLIT 约定下无尾分号，**不建新表**（direction/expression 归 P2 V0009）。存量行默认已定稿（前向兼容：旧代码不读这两列）。新增 2 条迁移测试：V0008 SPLIT/无新表 约定 + `is_confirmed/fields` 与运行时 `_ensure_experience_card_columns` ALTER 清单收敛一致（仿 V0007 防漂移）。
+- [x] **后端 db 层（`app/tools/db_experience.py`）**：`_ensure_experience_card_columns` 补两列；`_row_to_card` 暴露 `is_confirmed`（bool）`/fields`（JSON 解析字典）；`insert_card(data)` 透传两列，`data['write_baseline']=True` 控制键（pop 不入库）触发事务内写 V1 哨兵基线——**保持单参调用契约，既有 mock 不受破坏**；`update_card(..., confirm=False)` 重写为 `transaction()` 原子定稿：核验 `id+user_id` → 草稿才写基线（幂等）→ 置 `is_confirmed=1`，非 confirm 路径不含 `user_id`（兼容自动 STAR 等内部调用）；新增 `insert_original_baseline(cur, card, note=...)` 助手（`source_type='original'`/`source_id=0`）。
+- [x] **后端 schema（`app/schemas/jobcraft.py`）**：`ExperienceCardSchema` 增 `is_confirmed: bool=True`（响应）+`fields`；`ExperienceCardCreate` 增 `fields`；`ExperienceCardUpdate` 增 `fields`+`is_confirmed`（描述：卡片页保存携带 true 定稿）。
+- [x] **后端 API（`app/api/experience.py`）**：confirmUpload 每项及兜底单卡均 `is_confirmed=False`（legacy `/upload` 同步）；POST /cards 手动建卡 `is_confirmed=True` + `write_baseline=True`（创建即定稿，§34.7 手动创建用户已自行审阅）；PATCH 弹 `is_confirmed` 作为 `confirm` 透传 `update_card`（不出现在普通更新字段）。
+- [x] **后端测试**：既有 2 处 updateCard mock 加 `**k`（契约新增可选参数）；新增 `tests/test_experience_confirm_flow_unit.py` 15 条（insert 透传/默认/哨兵基线/控制键不入库；confirm 定稿/幂等/不存在 False/越权过滤/非 confirm 不误定稿；`_row_to_card`；confirmUpload 草稿入库；PATCH confirm 透传且 `is_confirmed` 不进普通更新字段）。**pytest 581 passed / 12 skipped** + ruff check/format 全绿 + check_encoding 340 文件 0 错。
+- [x] **前端类型/映射**：`api/types.ts` ExperienceCard 增 `is_confirmed: boolean`+`fields`；`types/jobcraft.ts` Experience 增 `isConfirmed: boolean`；`mappers.ts` cardToExperience 透传 `isConfirmed`（缺省 true）。测试 fixture 同步补 `is_confirmed`。
+- [x] **前端 hooks/视图**：`hooks.ts` `useUpdateExperienceMutation` 保存携带 `is_confirmed:true`（定稿触发）+ 成功后缓存置 `isConfirmed:true`；`ExperiencesView` 卡片头部**「待定稿」warning 徽标**（`isConfirmed===false`，title 提示打开编辑保存即定稿）；`UserProfileView` confirmUpload 成功后 `navigateTo('experiences')`（§34.2 引导卡片页定稿）。
+- [x] **前端验证**：mappers/experiences-query/review-query 相关测试新增 is_confirmed 断言；vitest **22 files / 128 tests 全过**；`npm run build` ✅（仅既有 CSS 导入序 / chunk 体积警告）。
+- [ ] **待续（P1 剩余）**：规则标签池 → 自动 STAR（§26 上传草稿确认后自动 1 次）→ 版本化接后端 + 前端字段改名收尾 → direction/expression 表（**P2 V0009**）。
+
 ## 分块判定与公司提取解绑（EXP-P1-02b，2026-09-23，`docs/handoff_resume_splitter_decouple.md`）
 
 > 用户拍板三点：① 分块判定只依赖结构信号、不依赖 company 能否提取；② 动词表降级为 role 提取器（盲区只留空 role）；③ `[个人项目]` 仅用于「章节明确是项目经历的卡」且 company 提取为空时。**决策：8 条空 company 卡全部落点均在显式「项目经历」章节（resume_02/05/08/09/12），故 8 条全部填 `[个人项目]`；work/intern 空公司保持留空。**
@@ -13,7 +27,7 @@
 - [x] **测试**：`tests/test_resume_splitter_unit.py` 反编造白名单 + 3 条行为锁单测（动词表外动词只留空 role 不丢块不丢公司 / project 占位仅空 company + work 空公司保持留空 / 「项目经历」章节信号驱动 project 卡）；`scripts/eval_resume_splitter.py` 补反编造断言 + 白名单。
 - [x] **清理**：删除孤儿 `_final_authoritative.json`（此前导致 `test_all_samples_have_expected` 既有失败）。
 - [x] **验证全绿**：pytest **566 passed / 12 skipped**（EXP-P1-06 基线 562 + 孤儿 fixture 修复 1 + 新增行为锁单测 3）、eval **27/27**、check_encoding 340 文件 0 错、ruff check/format 全绿、前端 `npm run build` ✅（仅既有 CSS/Chunk 警告）。
-- [ ] **待续**：此改造解除 EXP-P1-02 叙述式动词表盲区（`PROGRESS` 下方「已知盲区」已销项）；规则分块产物 company/role 的 LLM 兜底与 Confirm-As-V1（EXP-P1-03）衔接待 P1 后续任务。
+- [ ] **待续**：此改造解除 EXP-P1-02 叙述式动词表盲区（`PROGRESS` 下方「已知盲区」已销项）；规则分块产物 company/role 的 LLM 兜底接后续 P1 任务。
 
 ## EXP-P1-06 字段契约对齐 §30.4 + STAR 写路径打通（2026-09-23）
 
