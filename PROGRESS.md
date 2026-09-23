@@ -2,6 +2,29 @@
 
 > 本文件用于追踪项目整体进度。AI 在每次会话结束或完成子任务时，必须更新本文件的对应板块。
 
+## EXP-P1-06 字段契约对齐 §30.4 + STAR 写路径打通（2026-09-23）
+
+> 将经历卡与简历的数据字段/接口对齐 EXPERIENCE_SPEC §30.4（S=`background`/T=`problem`/A=`actions[]`/R=`results[]` + `tags` + `card_type` 收敛 work|intern|project），打通前后端 STAR 写路径。**范围边界**：不含 §34.6 save-card-version 版本化（无 V0008 迁移）。
+
+- [x] **后端 schema（`app/schemas/jobcraft.py`）**：`ExperienceCardCreate`/`Update` 增 `actions`/`results`（Optional[List[str]]），`solution`/`execution` 标 DEPRECATED；`ExperienceCardSchema` 响应增 `background/problem/actions/results`。ABCI 兼容：`solution/execution/result/dimensions` 保留 DEPRECATED 字段、`result` 单数字段保留为旧 `ai_structured.achievements[].result` 仍写仍返。
+- [x] **后端写路径（`app/tools/db_experience.py`）**：新增 `_merge_star_slots(existing_cache, actions, results)` 按索引合并进 `ai_structured.achievements`（保留 title/situation/action.difficulty/action.resolution，A/R 事实源=`achievements[].action.main`/`.result`）；`insert_card` 接收四槽位写 ai_structured + 列；`update_card` 在 actions/results 存在时先 `get_card` 取现有 ai_structured 再合并（旧数据兼容：`_ensure_ai_structured` 兜底）；`_row_to_card` 从 ai_structured.achievements 聚合 `actions`/`results`。
+- [x] **API 校验（`app/api/experience.py`）**：`_validate_card_type` 校验 card_type ∈ {work,intern,project}（`ALLOWED_CARD_TYPES`），非法→HTTPException 400；create/update 端点接入。
+- [x] **e2e + 单元测试**：`tests/test_jobcraft_e2e.py` sample_card 增 actions×3/results×2 + create 断言 A/R 聚合 + `test_update_experience_card_star_slots`（只更新 actions 保留 result/其他槽位、只更新 results 不破坏 actions、card_type 'hobby'→400）；`tests/test_tools_extra_unit.py` +4（`_row_to_card` 聚合、`_merge_star_slots` 构建/保留/非对称保留）。
+- [x] **前端类型收敛**：`api/types.ts` ExperienceCard 增四槽位；`types/jobcraft.ts` ExperienceCategory→`'all'|'work'|'intern'|'project'`、Experience 重写为 `{id,title,category?,company,role,period,background,problem,actions,results,tags,currentVersion,versionHistory}`（删 responsibility/metrics/capabilityTags/targetJobs/jdMatches/resumeVersionsUsed/interviewFeedbackSummary）。
+- [x] **前端 mapper/hooks**：`mappers.ts` 新增 `cardTypeToCategory` + `cardToExperience` 直读四槽位（旧数据兜底 background←raw_text、problem←summary/raw_text、A/R←achievements 聚合）；`hooks.ts` 新增 `categoryToCardType`，create 发送四槽位+tags+card_type（不再写死 'work'，raw_text 由槽位拼装），update 发送四槽位+tags+card_type（删除 `raw_text: updates.background` 覆盖）。
+- [x] **前端视图**：`NewExperienceModal` 删 metricsInput/假字段、responsibility→problem、分类仅 work/intern/project；`ExperiencesView` 分类按钮收敛（移除 education/competition/paper/other）、搜索匹配 tags/results、删除 Verified Metrics 区块、capabilityTags→tags、删除已对齐岗位/关联简历/feedback 区块、handleAIRefine/handleRestoreVersion 用 problem（兼容 responsibility）；`EditExperienceModal` 同上收敛。
+- [x] **其他消费方**：`ResumeEditorView` 量化业务成果 `linkedExp.metrics`→`results`；`JDReportDetailView` `capabilityTags`→`tags`；`features/review/mappers.ts` applyProposedChanges 接受 `problem` 兼容 `responsibility`。
+- [x] **验证**：ruff check/format 全绿；pytest 562 passed/12 skipped（含本批 +4 单元，仅 1 个**既有**失败 `test_resume_splitter_unit.py::test_all_samples_have_expected`——残留 `tests/fixtures/resume_samples/_scan*_tmp.json` 孤儿 fixture，与本次改动无关）；check_encoding 340 文件 0 错；tsc 0 错；vitest 22 files/127 tests 全过；`npm run build` ✅。
+- [x] **待续（EXP-P1-06b）**：`useAddExperienceVersionMutation` 接后端版本接口（§34.6）；`extract_structured` 输出 actions/results 平铺（随 EXP-P1-04 自动 STAR 一并做）。
+
+## P3 方向体系 / P4 岗位对象 差距分析落盘（2026-09-23）
+
+- [x] **只读分析**（未改代码）：对照 `JOBCRAFT_PRODUCT_MODEL_V0.1.md`（§4/§7/§9/§10/§39-§62）+ `DIRECTION_SPEC.md` + `PRODUCT_SPEC_V0.2.md` + `DATA_MODEL.md` 逐项核对
+  - **P3 方向体系零实现**：六维分类（Function/Role/Industry/Product/Scenario/Skills）无字段/表/端点/前端路由；Direction Knowledge 无 `direction`/`direction_knowledge` 表与状态机；唯一残留是前端 `Job.direction?: string`（`types/jobcraft.ts:355`）死字段、`experience_card.industry/role_type`（V0001:46-47）从未读写。
+  - **P4 部分实现、无后端 Job 实体**：前端 `deriveJobStatus` steps 派生状态机 + 已投递=用户确认（P0-1）已对齐 §9.2/9.3/9.4；后端 Job 由 `resume_submission`（pipeline）+ `job_analysis`（分析行）二分承担。**关键违规**：`insert_job_analysis` 只落 8 列，`ats_profile` 等明细不持久化 → 刷新丢失、违反 §10.5「分析持久化一次、后续引用」；`jd_text` 可被 PATCH 覆盖 → 违反 §9.3「原始 JD 必须保留」；`JobWorkspaceView` 无分析时用占位 id `jd-byte-1`；结构化分析合成 id `jd-{ts}` 与真实 `job_analysis_id` 双轨。
+  - **P3 是 P4 上游**：P4 的 directionId 与 §4 对象链（Job → JD Analysis+Company Research → Job Profile → Custom Expression → Resume）依赖 P3；D1-D8 能力维度与六维分类为**正交两套体系**，不可混用字段。
+- [x] **产出**：`docs/direction-job-gap-analysis-2026-09-23.md`（数据/API/业务逻辑/跳转四类差距清单 + 优先级建议）；TODO「状态」区记录裁决点（P3 是否先于 P4 落地）
+
 ## P1-P11 产品功能板块规划 + P2 规划定稿（2026-09-23）
 
 - [x] **P1-P11 板块划分**（沿 PRODUCT_MODEL §3 闭环顺序）：P1 个人资产/经历（§5, §14）→ P2 标准化表达与版本（§6, §24 回写, card_versions）→ P3 方向体系（§7, §39-§43 六维分类, §44-§62 Direction Knowledge）→ P4 岗位对象（§9 Job, §10 Job Profile, §4 对象模型）→ P5 JD 分析（§11, §13 个人匹配, §30 可信度）→ P6 简历系统（§8 四层关系）→ P7 公司调研（§12, §31 深度策略）→ P8 面试准备（§14, §15 经历故事, §16 面试类型, §19 问题过滤）→ P9 面试复盘（§17, §18 流水线, §20 意图, §21 多维分析, §22, §23）→ P10 反馈闭环与验证（§24, §45, §30 Level0-4）→ P11 状态机与投递（§26 已投递=用户确认, §27 多轮）。依赖链：P1→P2→P3→P4/5→P6→P7/8→P9→P10→P11。各板块状态：P4/P5/P7/P8/P9/P11 有部分既有实现，P2/P3/P6/P10 待建设
