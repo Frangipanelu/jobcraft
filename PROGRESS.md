@@ -2,6 +2,16 @@
 
 > 本文件用于追踪项目整体进度。AI 在每次会话结束或完成子任务时，必须更新本文件的对应板块。
 
+## 版本化模型（EXP-P1-05，2026-09-23）
+
+> 依据 EXPERIENCE_SPEC §28/§34.6（「并入 updateCard 事务」决策）：每次内容变更 → 同事务先写 `card_versions` 快照 → 更新主表 → `version = version + 1`；无字段护栏，旧版本永不覆盖。A/R 快照语义：已定稿卡保存即版本。
+
+- [x] **db 层（`app/tools/db_experience.py`）**：`_VERSION_CONTENT_FIELDS` 定义内容字段（title/raw_text/summary/content/company/role/period/card_type/background/problem/solution/execution/result/actions/results），`is_active/is_confirmed/fields/ai_structured/dimensions/tags`（AI 自动补写）**不算内容变更**；新增 `_insert_version_snapshot(cur, card, *, version_type, source_type, source_id, note)` 通用游标快照写入，`insert_original_baseline` 改为其 `version_type='original'/source_type='original'/source_id=0` 薄封装；`update_card` 事务内逻辑：先 SELECT 当前值（`id,title,raw_text,tags,is_confirmed,version`，带所有权过滤）→ UPDATE 主表 → **已定稿(content_change && is_confirmed && rowcount>0)** 时写 `user_edit` 快照（`source_type='card_edit'`，note=`编辑保存 V{n+1}`）并 `version = COALESCE(version,0)+1`；草稿 confirm 首次定稿仍只写 V1 哨兵基线不额外快照；越权/不存在与原有幂等语义保持。
+- [x] **schema（`app/schemas/jobcraft.py`）**：新增 `CardVersionRead`（快照行）+ `CardVersionListResponse`（card_id/current_version/versions）。
+- [x] **API（`app/api/experience.py`）**：新增 `GET /cards/{card_id}/versions`（所有权校验 404）→ `{current_version, versions}`，复用 `get_card_versions_by_card_id`（新→旧）。
+- [x] **测试**：EXP-P1-03 两个事务测试适配新执行顺序（先 SELECT 后 UPDATE）与「已定稿 confirm 不再写 original 基线、改为 user_edit 快照+递增」；新增 5 条（内容变更快照+递增 / AI 缓存写不版本化 / 草稿内容变更不版本化 / versions 端点 200 / 端点 404）。**pytest 593 passed / 12 skipped** + ruff 全绿 + check_encoding 344 文件 0 错。
+- [ ] **待续（P1 剩余）**：规则标签池 → 版本化接后端（`useAddExperienceVersionMutation` 下线假数据，§34.6，随 EXP-P1-06b）→ 前端字段改名收尾 → direction/expression 表（**P2 V0009**）。
+
 ## 自动 STAR（EXP-P1-04，2026-09-23）
 
 > 依据 EXPERIENCE_SPEC §25.1/§26/§30.4：upload 草稿确认后**同步** extract_structured 1 次（保留在 confirmUpload 内，不拆接口，§34.2）；抽取 prompt 版本化升 v2，规范「提取到的填/没提取留空/禁止编造量化」；parse_resume_entries 移除强制 x% 格式。A/R 槽位平铺聚合（§30.4.2）已在 `_row_to_card`/`_merge_star_slots` 落地（随 EXP-P1-03）。
