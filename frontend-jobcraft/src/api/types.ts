@@ -63,6 +63,10 @@ export interface ExperienceCard {
   card_type: string
   version: number
   is_active: boolean
+  // EXP-P1-03：False 表示 confirmUpload 入库草稿（未动效）；card 页定稿后转 True
+  is_confirmed: boolean
+  /** 卡片页可选字段（方向/字数等），后端 JSON 透传，未填为 null */
+  fields?: Record<string, unknown> | null
   created_at?: string
   updated_at?: string
 }

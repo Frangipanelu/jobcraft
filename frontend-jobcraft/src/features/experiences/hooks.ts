@@ -110,13 +110,15 @@ export function useUpdateExperienceMutation() {
           actions: updates.actions,
           results: updates.results,
           card_type: updates.category ? categoryToCardType(updates.category) : undefined,
+          // EXP-P1-03：卡片页保存即定稿（V1），服务端写哨兵基线并幂等置位
+          is_confirmed: true,
         });
       }
       return { id, updates };
     },
     onSuccess: ({ id, updates }) => {
       const prev = queryClient.getQueryData<Experience[]>([...EXPERIENCES_QUERY_KEY]) || [];
-      const next = prev.map((exp) => (exp.id === id ? { ...exp, ...updates } : exp));
+      const next = prev.map((exp) => (exp.id === id ? { ...exp, ...updates, isConfirmed: true } : exp));
       queryClient.setQueryData([...EXPERIENCES_QUERY_KEY], next);
 
     },

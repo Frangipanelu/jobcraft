@@ -42,6 +42,9 @@ def _ensure_experience_card_columns() -> None:
         ("raw_text", "LONGTEXT"),
         ("ai_structured", "JSON"),
         ("card_type", "VARCHAR(32) DEFAULT 'work'"),
+        # EXP-P1-03：草稿确认标记（V0001 无此列，V0008 补；存量行默认已定稿）
+        ("is_confirmed", "TINYINT(1) NOT NULL DEFAULT 1"),
+        ("fields", "JSON"),
     ]
     with connection() as conn:
         with conn.cursor() as cur:
@@ -115,6 +118,9 @@ def _row_to_card(row: Dict[str, Any]) -> Dict[str, Any]:
         "card_type": row.get("card_type") or "work",
         "version": row["version"],
         "is_active": bool(row["is_active"]),
+        # EXP-P1-03：is_confirmed=False 表示 confirmUpload 入库草稿（未定稿生效）
+        "is_confirmed": bool(row.get("is_confirmed", 1)),
+        "fields": _parse_json(row.get("fields")) or {},
         "created_at": row["created_at"].isoformat() if row.get("created_at") else None,
         "updated_at": row["updated_at"].isoformat() if row.get("updated_at") else None,
     }
@@ -377,15 +383,19 @@ def insert_card(data: Dict[str, Any]) -> int:
     插入一张经历卡,返回新主键
 
     :param data: 必含 title/raw_text; 可选 tags/ai_structured/actions/results/
-        background/problem/card_type
+        background/problem/card_type/is_confirmed/fields。
+        ``data[\"write_baseline\"]=True`` 时在同一事务内写入 V1 哨兵基线
+        （card_versions source_type='original'/source_id=0），用于手动建卡
+        （create 即定稿，EXP-P1-03 §34.7）；该控制键不入库。
     """
     _ensure_experience_card_columns()
+    write_baseline = bool(data.pop("write_baseline", False))
     sql = """
         INSERT INTO experience_card
             (user_id, title, raw_text, tags, ai_structured, summary, content,
              company, role, period, card_type, background, problem, solution, execution, result,
-             dimensions, source)
-        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+             dimensions, source, is_confirmed, fields)
+        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
     """
     raw_text = data.get("raw_text", "")
     if data.get("actions") or data.get("results"):
@@ -394,33 +404,55 @@ def insert_card(data: Dict[str, Any]) -> int:
         )
     else:
         cache = data.get("ai_structured")
-    return execute_lastrowid(
-        sql,
-        (
-            data.get("user_id", 1),
-            data["title"],
-            raw_text,
-            json.dumps(data.get("tags", []), ensure_ascii=False),
-            json.dumps(cache, ensure_ascii=False) if cache else None,
-            data.get("summary") or raw_text[:200],
-            data.get("content") or raw_text,
-            data.get("company"),
-            data.get("role"),
-            data.get("period"),
-            data.get("card_type") or "work",
-            data.get("background"),
-            data.get("problem"),
-            data.get("solution"),
-            data.get("execution"),
-            data.get("result"),
-            json.dumps(data.get("dimensions", []), ensure_ascii=False),
-            data.get("source") or "manual",
-        ),
+    params = (
+        data.get("user_id", 1),
+        data["title"],
+        raw_text,
+        json.dumps(data.get("tags", []), ensure_ascii=False),
+        json.dumps(cache, ensure_ascii=False) if cache else None,
+        data.get("summary") or raw_text[:200],
+        data.get("content") or raw_text,
+        data.get("company"),
+        data.get("role"),
+        data.get("period"),
+        data.get("card_type") or "work",
+        data.get("background"),
+        data.get("problem"),
+        data.get("solution"),
+        data.get("execution"),
+        data.get("result"),
+        json.dumps(data.get("dimensions", []), ensure_ascii=False),
+        data.get("source") or "manual",
+        1 if data.get("is_confirmed", True) else 0,
+        json.dumps(data.get("fields") or {}, ensure_ascii=False)
+        if data.get("fields")
+        else None,
     )
+    if not write_baseline:
+        return execute_lastrowid(sql, params)
+    _ensure_card_versions_table()
+    with transaction() as conn:
+        with conn.cursor() as cur:
+            cur.execute(sql, params)
+            card_id = cur.lastrowid
+            insert_original_baseline(
+                cur,
+                {
+                    "id": card_id,
+                    "title": data["title"],
+                    "raw_text": raw_text,
+                    "tags": data.get("tags", []),
+                },
+                note="V1 哨兵基线（手动定稿）",
+            )
+            return card_id
 
 
 def update_card(
-    card_id: int, updates: Dict[str, Any], user_id: Optional[int] = None
+    card_id: int,
+    updates: Dict[str, Any],
+    user_id: Optional[int] = None,
+    confirm: bool = False,
 ) -> bool:
     """
     按字段白名单增量更新
@@ -428,6 +460,12 @@ def update_card(
     只更新调用方实际传入的字段,避免覆盖空值;
     JSON 字段统一序列化; actions/results 合并进 ai_structured.achievements;
     可选按 user_id 过滤所有权
+
+    :param confirm: True 时在同一事务内核验草稿并定稿（EXP-P1-03 §34.7）：
+        若卡片 is_confirmed=0，则写入 V1 哨兵基线（card_versions
+        source_type='original'/source_id=0，version_type='original'）并置
+        is_confirmed=1；已定稿卡片为幂等空操作。仅卡片页保存（前端携带
+        is_confirmed:true）走此参数，内部自动 STAR 写入不触发。
     """
     _ensure_experience_card_columns()
     updates = dict(updates)
@@ -466,19 +504,57 @@ def update_card(
         if k in updates and updates[k] is not None:
             sets.append(f"{col}=%s")
             values.append(updates[k])
-    for json_field in ("tags", "ai_structured", "dimensions"):
+    for json_field in ("tags", "ai_structured", "dimensions", "fields"):
         if json_field in updates and updates[json_field] is not None:
             sets.append(f"{json_field}=%s")
             values.append(json.dumps(updates[json_field], ensure_ascii=False))
 
-    if not sets:
+    if not sets and not confirm:
         return False
-    values.append(card_id)
-    sql = "UPDATE experience_card SET " + ", ".join(sets) + " WHERE id=%s"
-    if user_id is not None:
-        sql += " AND user_id=%s"
-        values.append(user_id)
-    return execute(sql, tuple(values)) > 0
+
+    if confirm:
+        _ensure_card_versions_table()
+
+    where = " AND user_id=%s" if user_id is not None else ""
+    changed = False
+    found = False
+    with transaction() as conn:
+        with conn.cursor() as cur:
+            if sets:
+                sql = (
+                    "UPDATE experience_card SET "
+                    + ", ".join(sets)
+                    + " WHERE id=%s"
+                    + where
+                )
+                cur.execute(
+                    sql, tuple(values + [card_id] + ([user_id] if where else []))
+                )
+                changed = cur.rowcount > 0
+            if confirm:
+                select_sql = (
+                    "SELECT id, title, raw_text, tags, is_confirmed "
+                    "FROM experience_card WHERE id=%s" + where
+                )
+                cur.execute(
+                    select_sql,
+                    tuple([card_id] + ([user_id] if where else [])),
+                )
+                row = cur.fetchone()
+                found = row is not None
+                if row and not row["is_confirmed"]:
+                    insert_original_baseline(
+                        cur,
+                        row,
+                        note="V1 哨兵基线（确认定稿）",
+                    )
+                    cur.execute(
+                        "UPDATE experience_card SET is_confirmed=1 WHERE id=%s",
+                        (card_id,),
+                    )
+    if confirm:
+        return found
+    return changed
 
 
 def delete_card(card_id: int, user_id: Optional[int] = None) -> bool:
@@ -704,6 +780,36 @@ def insert_card_version(data: Dict[str, Any]) -> int:
             if data.get("tags")
             else None,
             data.get("note"),
+        ),
+    )
+
+
+def insert_original_baseline(
+    cur: Any, card: Dict[str, Any], note: str = "V1 哨兵基线（确认定稿）"
+) -> None:
+    """
+    在同一事务/游标上写入 V1 哨兵基线（EXP-P1-03 §34.1/§34.7）
+
+    基线 = card_versions 中 source_type='original'/source_id=0/version_type='original'
+    的快照记录，代表该卡定稿时的原始内容，供后续版本演进对比（EXP-P1-05）。
+
+    :param cur: 调用方事务的游标（保证与主表写入同事务提交）
+    :param card: 卡片快照（须含 id/title/raw_text/tags）
+    :param note: 基线说明
+    """
+    cur.execute(
+        "INSERT INTO card_versions "
+        "(card_id, version_type, source_type, source_id, title, raw_text, tags, note) "
+        "VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
+        (
+            card["id"],
+            "original",
+            "original",
+            0,
+            card["title"],
+            card["raw_text"] or "",
+            json.dumps(_parse_json(card.get("tags")) or [], ensure_ascii=False),
+            note,
         ),
     )
 

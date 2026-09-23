@@ -74,6 +74,8 @@ export interface Experience {
   tags: string[];
   currentVersion: string;
   versionHistory: ExperienceVersionRecord[];
+  // EXP-P1-03：False 表示 confirmUpload 草稿（未定稿，卡片页保存即转 True）
+  isConfirmed: boolean;
 }
 
 export interface JDAnalysis {

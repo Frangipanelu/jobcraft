@@ -169,14 +169,18 @@ class TestExperienceUpdate:
     """PATCH /api/jobcraft/experience/cards/{card_id}"""
 
     def test_update_card_not_found_returns_404(self, monkeypatch):
-        monkeypatch.setattr("app.api.experience.db_tools.update_card", lambda *a: False)
+        monkeypatch.setattr(
+            "app.api.experience.db_tools.update_card", lambda *a, **k: False
+        )
         resp = client.patch(
             "/api/jobcraft/experience/cards/999", json={"title": "updated"}
         )
         assert resp.status_code == 404
 
     def test_update_normal(self, monkeypatch):
-        monkeypatch.setattr("app.api.experience.db_tools.update_card", lambda *a: True)
+        monkeypatch.setattr(
+            "app.api.experience.db_tools.update_card", lambda *a, **k: True
+        )
         monkeypatch.setattr(
             "app.api.experience.db_tools.get_card",
             lambda *a: {"id": 1, "title": "updated"},

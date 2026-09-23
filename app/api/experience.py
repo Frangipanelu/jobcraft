@@ -272,6 +272,8 @@ async def jobcraft_experience_upload_confirm(
                 "card_type": item.get("card_type", "work"),
                 "source": "resume_upload",
                 "tags": [],
+                # EXP-P1-03：confirmUpload 只入库草稿，定稿在卡片页保存时完成
+                "is_confirmed": False,
             }
             card_id = db_tools.insert_card(card_data)
 
@@ -305,6 +307,7 @@ async def jobcraft_experience_upload_confirm(
                 "title": "上传简历",
                 "raw_text": payload.raw_text,
                 "source": "resume_upload",
+                "is_confirmed": False,
             }
             card_id = db_tools.insert_card(card_data)
             card = db_tools.get_card(card_id, current_user)
@@ -401,6 +404,7 @@ async def jobcraft_experience_upload(
                     "card_type": (ent.get("card_type") or "work"),
                     "source": "resume_upload",
                     "tags": [],
+                    "is_confirmed": False,
                     "ai_structured": {
                         "summary": ent.get("summary", ""),
                         "achievements": ent.get("achievements", []),
@@ -416,6 +420,7 @@ async def jobcraft_experience_upload(
                 "title": file.filename or "未命名经历",
                 "raw_text": resume_text.strip(),
                 "source": "resume_upload",
+                "is_confirmed": False,
             }
             card_id = db_tools.insert_card(card_data)
             card = db_tools.get_card(card_id, current_user)
@@ -544,6 +549,9 @@ def jobcraft_experience_create(
         data = payload.model_dump()
         data["source"] = "manual"
         data["user_id"] = current_user
+        # EXP-P1-03：手动建卡即定稿（用户在录入时完成审阅），写 V1 哨兵基线
+        data["is_confirmed"] = True
+        data["write_baseline"] = True
         card_id = db_tools.insert_card(data)
         return db_tools.get_card(card_id, current_user)
     except HTTPException:
@@ -563,8 +571,10 @@ def jobcraft_experience_update(
     except HTTPException:
         raise
     updates = {k: v for k, v in payload.model_dump().items() if v is not None}
+    # EXP-P1-03：is_confirmed 仅作定稿触发信号，不作为普通字段写入
+    confirm = bool(updates.pop("is_confirmed", False))
     try:
-        ok = db_tools.update_card(card_id, updates, current_user)
+        ok = db_tools.update_card(card_id, updates, current_user, confirm=confirm)
         if not ok:
             raise HTTPException(status_code=404, detail="卡片不存在或无变化")
         return db_tools.get_card(card_id, current_user)

@@ -32,6 +32,7 @@ const STRUCTURED_CARD: ExperienceCard = {
   card_type: 'work',
   version: 3,
   is_active: true,
+  is_confirmed: true,
 };
 
 describe('cardToExperience', () => {
@@ -94,6 +95,11 @@ describe('cardToExperience', () => {
     expect(cardTypeToCategory('project')).toBe('project');
     expect(cardTypeToCategory('education')).toBe('project');
     expect(cardTypeToCategory(null)).toBe('project');
+  });
+
+  it('EXP-P1-03：is_confirmed 草稿态透传，缺省视为已定稿', () => {
+    expect(cardToExperience({ ...STRUCTURED_CARD }).isConfirmed).toBe(true);
+    expect(cardToExperience({ ...STRUCTURED_CARD, is_confirmed: false }).isConfirmed).toBe(false);
   });
 });
 

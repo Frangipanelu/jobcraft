@@ -50,5 +50,7 @@ export function cardToExperience(card: ExperienceCard): Experience {
     category: cardTypeToCategory(card.card_type),
     currentVersion: `V${card.version}`,
     versionHistory: [],
+    // EXP-P1-03：草稿状态透传，false 时列表展示「待定稿」标记
+    isConfirmed: card.is_confirmed ?? true,
   };
 }

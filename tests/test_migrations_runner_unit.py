@@ -289,3 +289,110 @@ def test_v0007_soft_delete_follows_split_convention():
     assert len(real) == 2, f"V0007 应含 2 条语句块，实际 {len(real)}"
     for stmt in real:
         assert not stmt.endswith(";"), f"V0007 语句块含尾分号: {stmt[:60]}"
+
+
+def test_v0008_confirm_draft_follows_split_convention():
+    """EXP-P1-03：V0008 只加 is_confirmed/fields 两列，遵守 SPLIT 约定。"""
+    v0008 = os.path.join(runner.MIGRATIONS_DIR, "V0008__confirm_draft_fields.sql")
+    assert os.path.exists(v0008)
+    with open(v0008, encoding="utf-8") as fh:
+        sql = fh.read()
+    assert (
+        "ALTER TABLE experience_card ADD COLUMN is_confirmed TINYINT(1) NOT NULL DEFAULT 1"
+        in sql
+    ), "缺少 is_confirmed 列声明"
+    assert "ALTER TABLE experience_card ADD COLUMN fields JSON" in sql, (
+        "缺少 fields 列声明"
+    )
+    # direction/expression 表延期到 P2（V0009），本期不得新增表
+    assert "CREATE TABLE" not in sql
+    stmts = [s.strip() for s in sql.split(";--SPLIT--")]
+    real = [s for s in stmts if s]
+    assert len(real) == 2, f"V0008 应含 2 条语句块，实际 {len(real)}"
+    for stmt in real:
+        assert not stmt.endswith(";"), f"V0008 语句块含尾分号: {stmt[:60]}"
+
+
+def test_v0008_columns_matched_in_experience_runtime_helper():
+    """EXP-P1-03：V0008 两列应同时出现在运行时
+    _ensure_experience_card_columns 的 ALTER ADD 清单，迁移与 bootstrap 收敛一致。
+    """
+    v0008 = os.path.join(runner.MIGRATIONS_DIR, "V0008__confirm_draft_fields.sql")
+    with open(v0008, encoding="utf-8") as fh:
+        sql = fh.read()
+    assert "is_confirmed" in sql and "fields" in sql
+
+    from app.tools import db_experience
+    import app.tools.db_experience as mod
+
+    executed: list[str] = []
+    # V0001 基线列（缺 is_confirmed/fields），模拟旧库
+    existing = [
+        "id",
+        "user_id",
+        "title",
+        "raw_text",
+        "tags",
+        "ai_structured",
+        "summary",
+        "content",
+        "company",
+        "role",
+        "period",
+        "background",
+        "problem",
+        "solution",
+        "execution",
+        "result",
+        "dimensions",
+        "source",
+        "card_type",
+        "version",
+        "is_active",
+        "created_at",
+        "updated_at",
+    ]
+
+    class Cur:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def execute(self, stmt, params=None):
+            executed.append(stmt.strip())
+
+        def fetchall(self):
+            s = " ".join(executed[-1].split()) if executed else ""
+            if s.startswith("SHOW COLUMNS FROM experience_card"):
+                return [(name,) for name in existing]
+            return []
+
+        def fetchone(self):
+            return ("source", "varchar(50)")  # 非 enum，跳过 MODIFY
+
+    class Conn:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def cursor(self, dictionary=False):
+            return Cur()
+
+    original_ready = mod.is_schema_ready
+    original_conn = mod.connection
+    try:
+        mod.is_schema_ready = lambda: False
+        mod.connection = lambda: Conn()
+        db_experience._ensure_experience_card_columns()
+    finally:
+        mod.is_schema_ready = original_ready
+        mod.connection = original_conn
+    altered = " ".join(executed)
+    assert "ADD COLUMN is_confirmed" in altered
+    assert "ADD COLUMN fields" in altered
+    assert "TINYINT(1) NOT NULL DEFAULT 1" in altered
+    assert "JSON" in altered

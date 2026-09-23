@@ -303,6 +303,11 @@ export const ExperiencesView: React.FC<ExperiencesViewProps> = ({ initialSelecte
                     <span className="px-2 py-0.5 rounded-full text-xs font-mono font-bold bg-white text-ink border border-edge">
                       {exp.currentVersion}
                     </span>
+                    {exp.isConfirmed === false && (
+                      <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-warning-bg text-warning border border-warning-bg" title="confirmUpload 入库草稿，打开编辑并保存即为用户确认定稿（V1）">
+                        待定稿
+                      </span>
+                    )}
                   </div>
 
                   <div className="flex items-center gap-3 text-xs text-muted flex-wrap">

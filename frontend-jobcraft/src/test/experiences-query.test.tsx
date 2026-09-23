@@ -58,6 +58,7 @@ const CARD_A: ExperienceCard = {
   card_type: 'work',
   version: 3,
   is_active: true,
+  is_confirmed: true,
 };
 
 const CARD_B: ExperienceCard = {
@@ -74,6 +75,7 @@ const CARD_B: ExperienceCard = {
   card_type: 'work',
   version: 1,
   is_active: true,
+  is_confirmed: true,
 };
 
 const ExpCacheCount = () => {
@@ -246,7 +248,10 @@ describe('useUpdateExperienceMutation / 本地版本演进', () => {
     fireEvent.click(screen.getByText('更新标题'));
 
     await waitFor(() => expect(screen.getByTestId('cache-title').textContent).toBe('改名后的经历'));
-    expect(experience.updateCard).toHaveBeenCalledWith(7, expect.objectContaining({ title: '改名后的经历' }));
+    expect(experience.updateCard).toHaveBeenCalledWith(
+      7,
+      expect.objectContaining({ title: '改名后的经历', is_confirmed: true }),
+    );
     await waitFor(() => expect(screen.getByTestId('exp-cache-title').textContent).toBe('改名后的经历'));
   });
 

@@ -256,6 +256,8 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({ initialTab }) 
       setShowPreview(false);
       setPreviewItems([]);
       setPreviewRawText('');
+      // EXP-P1-03：确认入库后跳转「经历」页，引导用户进入卡片页逐条定稿（V1）
+      navigateTo('experiences');
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : '保存失败';
       showToast({ type: 'error', title: '保存失败', message: msg });

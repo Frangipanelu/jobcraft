@@ -113,6 +113,7 @@ const CARD_A: ExperienceCard = {
   card_type: 'work',
   version: 1,
   is_active: true,
+  is_confirmed: true,
 };
 
 const REVIEW: InterviewReview = {

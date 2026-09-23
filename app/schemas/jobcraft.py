@@ -120,6 +120,11 @@ class ExperienceCardSchema(BaseModel):
     dimensions: Optional[List[str]] = None
     version: int = 1
     is_active: bool = True
+    # EXP-P1-03：is_confirmed=False 表示 confirmUpload 入库草稿（定稿见 §34.7）
+    is_confirmed: bool = True
+    fields: Optional[Dict[str, Any]] = Field(
+        None, description="自定义结构字段（方向/表达评估扩展用）"
+    )
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
 
@@ -158,6 +163,9 @@ class ExperienceCardCreate(BaseModel):
     )
     result: Optional[str] = None
     dimensions: Optional[List[str]] = None
+    fields: Optional[Dict[str, Any]] = Field(
+        None, description="自定义结构字段（方向/表达评估扩展用）"
+    )
 
 
 class ExperienceCardUpdate(BaseModel):
@@ -194,7 +202,14 @@ class ExperienceCardUpdate(BaseModel):
     )
     result: Optional[str] = None
     dimensions: Optional[List[str]] = None
+    fields: Optional[Dict[str, Any]] = Field(
+        None, description="自定义结构字段（方向/表达评估扩展用）"
+    )
     is_active: Optional[bool] = None
+    # EXP-P1-03：卡片页保存携带 true 触发定稿（用例见 §34.7）
+    is_confirmed: Optional[bool] = Field(
+        None, description="true 时在同一事务内完成定稿（写 V1 哨兵基线并置位）"
+    )
 
 
 # ============================================================
