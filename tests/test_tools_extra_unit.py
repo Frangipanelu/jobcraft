@@ -33,29 +33,29 @@ from app.tools.db_tools import _parse_json
 
 class TestInterviewPre:
     def test_card_text_prefers_card_versions(self):
-        from app.tools.interview_pre import _card_text
+        from app.tools.card_render import get_card_render_text
 
         card = {"id": 10, "raw_text": "raw", "content": "c", "summary": "s"}
         versions = {10: "version text"}
-        assert _card_text(card, versions) == "version text"
+        assert get_card_render_text(card, versions) == "version text"
 
     def test_card_text_falls_back_to_raw_text(self):
-        from app.tools.interview_pre import _card_text
+        from app.tools.card_render import get_card_render_text
 
         card = {"id": 2, "raw_text": "raw text", "content": "", "summary": ""}
-        assert _card_text(card, {}) == "raw text"
+        assert get_card_render_text(card, {}) == "raw text"
 
     def test_card_text_falls_back_to_content(self):
-        from app.tools.interview_pre import _card_text
+        from app.tools.card_render import get_card_render_text
 
         card = {"id": 3, "raw_text": "", "content": "content field", "summary": ""}
-        assert _card_text(card, {}) == "content field"
+        assert get_card_render_text(card, {}) == "content field"
 
     def test_card_text_falls_back_to_summary(self):
-        from app.tools.interview_pre import _card_text
+        from app.tools.card_render import get_card_render_text
 
         card = {"id": 4, "raw_text": "", "content": "", "summary": "summary text"}
-        assert _card_text(card, {}) == "summary text"
+        assert get_card_render_text(card, {}) == "summary text"
 
     def test_build_interview_prompt_contains_key_sections(self):
         from app.tools.interview_pre import _build_interview_prompt

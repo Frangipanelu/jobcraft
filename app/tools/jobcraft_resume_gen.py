@@ -15,35 +15,7 @@ from html import escape
 from typing import Any, Dict, List, Optional
 
 from app.schemas.jobcraft import ResumePersonalInfo
-
-
-def _get_card_text(
-    card: Dict[str, Any], versions: Optional[Dict[int, str]] = None
-) -> str:
-    """获取卡片最终文本：优先 card_versions，次之 ai_structured，最后 raw_text"""
-    if versions and card["id"] in versions:
-        return versions[card["id"]]
-    ai_struct = card.get("ai_structured")
-    if ai_struct and isinstance(ai_struct, dict):
-        achievements = ai_struct.get("achievements") or []
-        if achievements:
-            parts = []
-            for ach in achievements:
-                parts.append(f"### {ach.get('title', '')}")
-                if ach.get("situation"):
-                    parts.append(f"**背景**：{ach['situation']}")
-                action = ach.get("action") or {}
-                if action.get("main"):
-                    parts.append(f"**行动**：{action['main']}")
-                if action.get("difficulty"):
-                    parts.append(f"**困难**：{action['difficulty']}")
-                if action.get("resolution"):
-                    parts.append(f"**解决**：{action['resolution']}")
-                if ach.get("result"):
-                    parts.append(f"**结果**：{ach['result']}")
-                parts.append("")
-            return "\n".join(parts)
-    return card.get("raw_text") or card.get("content") or card.get("summary") or ""
+from app.tools.card_render import get_card_render_text
 
 
 def _split_bullets(text: str) -> List[str]:
@@ -150,7 +122,7 @@ def generate_resume_markdown(
     for card in cards:
         lines.append(f"### {_card_header(card)}")
         lines.append("")
-        text = _get_card_text(card, card_versions)
+        text = get_card_render_text(card, versions=card_versions, markdown=True)
         lines.append(text)
         tags = card.get("tags") or []
         if tags:
@@ -203,7 +175,9 @@ def generate_resume_html(
     entries_html = []
     for card in cards:
         header = escape(_card_header(card))
-        bullets = _split_bullets(_get_card_text(card, card_versions))[:4]
+        bullets = _split_bullets(
+            get_card_render_text(card, versions=card_versions, markdown=True)
+        )[:4]
         bullet_html = ""
         if bullets:
             bullet_html = (

@@ -8,7 +8,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from app.tools.interview_review import _truncate_text
-from app.tools.jobcraft_resume_gen import _get_card_text
+from app.tools.card_render import get_card_render_text
 from app.tools.llm_json import _extract_json
 
 
@@ -23,12 +23,12 @@ def _card(**overrides):
     return card
 
 
-# ---------- _get_card_text ----------
+# ---------- get_card_render_text（markdown 渲染，简历正文） ----------
 
 
 def test_card_text_prefers_edited_version():
     card = _card()
-    text = _get_card_text(card, versions={1: "用户编辑终稿"})
+    text = get_card_render_text(card, versions={1: "用户编辑终稿"}, markdown=True)
     assert text == "用户编辑终稿"
 
 
@@ -50,7 +50,7 @@ def test_card_text_uses_ai_structured_achievements():
             ],
         }
     )
-    text = _get_card_text(card, versions={})
+    text = get_card_render_text(card, versions={}, markdown=True)
     assert "重构" in text
     assert "背景A" in text
     assert "行动B" in text
@@ -58,13 +58,13 @@ def test_card_text_uses_ai_structured_achievements():
 
 
 def test_card_text_falls_back_to_raw_text():
-    text = _get_card_text(_card(), versions={})
+    text = get_card_render_text(_card(), versions={}, markdown=True)
     assert "原始文本内容" in text
 
 
 def test_card_text_prefers_version_even_when_ai_structured_exists():
     card = _card(ai_structured={"achievements": []})
-    assert _get_card_text(card, versions={1: "终稿"}) == "终稿"
+    assert get_card_render_text(card, versions={1: "终稿"}, markdown=True) == "终稿"
 
 
 # ---------- _extract_json ----------

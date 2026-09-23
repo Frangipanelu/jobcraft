@@ -80,14 +80,14 @@ class GapPolishAgent(BaseAgent):
         ats = ATSProfile(**ats_dict) if ats_dict else ATSProfile()
         selected_cards = state.get("selected_cards", [])
 
-        from app.tools.jobcraft_analyze import _card_text_blob
+        from app.tools.card_render import get_card_render_text
 
         cards_text = []
         for c in selected_cards:
             cards_text.append(
                 f"card_id={c['id']}\ntitle={c.get('title', '')}\n"
                 f"tags={','.join(c.get('tags') or [])}\n"
-                f"全文：{_card_text_blob(c)[:800]}"
+                f"全文：{get_card_render_text(c, include_tags=True)[:800]}"
             )
         cards_section = "\n---\n".join(cards_text)
 

@@ -16,6 +16,7 @@ from app.schemas.jobcraft import (
     SuggestionItem,
     SuggestionsResult,
 )
+from app.tools.card_render import get_card_render_text
 
 # 融合策略：max(local, llm) —— local 只抬升不拉低 LLM 语义分。
 # 依据 evaluation 消融结论（matching_report / chinese_matching_report，2026-09）：
@@ -41,40 +42,14 @@ def _normalize(term: str) -> str:
 
 def _card_text_blob(card: Dict[str, Any]) -> str:
     """
-    把经历卡文本拼成一段，用于关键词匹配。
+    把经历卡文本拼成一段，用于关键词匹配（收敛至 get_card_render_text，纯文本+tags）。
 
     匹配源优先级：
       1. ai_structured.achievements（S/A/R 拼接，结构清晰）
       2. raw_text（用户原始文本）
       3. tags（扁平标签，作为补充）
     """
-    parts = []
-    ai_struct = card.get("ai_structured")
-    if ai_struct and isinstance(ai_struct, dict):
-        achievements = ai_struct.get("achievements") or []
-        if achievements:
-            for ach in achievements:
-                if ach.get("situation"):
-                    parts.append(str(ach["situation"]))
-                if ach.get("action") and isinstance(ach["action"], dict):
-                    if ach["action"].get("main"):
-                        parts.append(str(ach["action"]["main"]))
-                    if ach["action"].get("difficulty"):
-                        parts.append(str(ach["action"]["difficulty"]))
-                    if ach["action"].get("resolution"):
-                        parts.append(str(ach["action"]["resolution"]))
-                if ach.get("result"):
-                    parts.append(str(ach["result"]))
-            tags = card.get("tags") or []
-            parts.extend([str(t) for t in tags])
-            return " ".join(parts)
-    # fallback: raw_text
-    raw = card.get("raw_text") or card.get("content") or ""
-    if raw:
-        parts.append(raw)
-    tags = card.get("tags") or []
-    parts.extend([str(t) for t in tags])
-    return " ".join(parts)
+    return get_card_render_text(card, include_tags=True)
 
 
 def _match_term_to_blob(term: str, blob: str, tags_norm: set) -> int:

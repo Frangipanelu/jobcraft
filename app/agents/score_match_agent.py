@@ -38,12 +38,12 @@ class ScoreMatchAgent(BaseAgent):
             return {"llm_match_items": {}}
 
         cards_text = []
-        from app.tools.jobcraft_analyze import _card_text_blob
+        from app.tools.card_render import get_card_render_text
 
         for c in cards:
             cards_text.append(
                 f"card_id={c['id']}\ntitle={c.get('title', '')}\nsummary={c.get('summary', '')}\n"
-                f"tags={','.join(c.get('tags') or [])}\ncontent={_card_text_blob(c)[:600]}"
+                f"tags={','.join(c.get('tags') or [])}\ncontent={get_card_render_text(c, include_tags=True)[:600]}"
             )
         cards_section = "\n---\n".join(cards_text)
         prompt = load_prompt(

@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional
 from app.core.prompts import load_prompt
 from app.schemas.jobcraft import DimensionQuestion, InterviewPrepResult
 from app.tools import db_tools
+from app.tools.card_render import get_card_render_text
 
 logger = logging.getLogger("jobcraft.tools.interview_pre")
 
@@ -25,14 +26,6 @@ DIMENSION_DESCRIPTIONS = {
     "D7": "协作沟通",
     "D8": "职业规划",
 }
-
-
-def _card_text(card: Dict[str, Any], card_versions: Dict[int, str]) -> str:
-    """获取卡片文本：card_versions 优先"""
-    cid = card.get("id")
-    if cid in card_versions:
-        return card_versions[cid]
-    return card.get("raw_text") or card.get("content") or card.get("summary", "")
 
 
 def _build_interview_prompt(
@@ -50,7 +43,7 @@ def _build_interview_prompt(
     card_versions = card_versions or {}
     cards_text = []
     for c in cards:
-        text = _card_text(c, card_versions)[:300]
+        text = get_card_render_text(c, versions=card_versions)[:300]
         cards_text.append(
             f"- {c.get('title', '')}: {c.get('summary', '')}\n  "
             f"内容：{text}\n  "
