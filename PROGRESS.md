@@ -2,6 +2,17 @@
 
 > 本文件用于追踪项目整体进度。AI 在每次会话结束或完成子任务时，必须更新本文件的对应板块。
 
+## 自动 STAR（EXP-P1-04，2026-09-23）
+
+> 依据 EXPERIENCE_SPEC §25.1/§26/§30.4：upload 草稿确认后**同步** extract_structured 1 次（保留在 confirmUpload 内，不拆接口，§34.2）；抽取 prompt 版本化升 v2，规范「提取到的填/没提取留空/禁止编造量化」；parse_resume_entries 移除强制 x% 格式。A/R 槽位平铺聚合（§30.4.2）已在 `_row_to_card`/`_merge_star_slots` 落地（随 EXP-P1-03）。
+
+- [x] **prompt v2（`prompts/experience/extract_structured_v2.txt`）**：硬性规则（只提取原文内容、字段可溯源、留空兜底）；**禁止编造量化指标**（数字/百分比须原文逐字出现，原文无量化写定性结果或留空，绝不编造「xx%提升」）；不推断 S/A/R、不过度改写 action；无核心成就输出空 achievements。对齐 §30.4.2 输出形状（summary + achievements[].action.main/result 对）。
+- [x] **prompt v2（`prompts/experience/parse_resume_entries_v2.txt`）**：**移除 v1 强制「带来xx%提升」summary 格式**；rule 5/7 改「原文有量化才写原文量化，没提取到留空，禁止编造量化数字」。
+- [x] **agent 切版本（`app/agents/extract_agent.py`）**：`ExtractStructuredAgent`/`ParseResumeEntriesAgent` 均 `load_prompt(..., version=2)`，LLM 调用次数/契约不变。
+- [x] **确认上传链路复核（`app/api/experience.py` confirmUpload，§34.2）**：raw_text ≥ 20 字同步 `run_extract_structured_workflow`（1 次）→ `update_card({"ai_structured": cache})`；异常**留空不阻断入库**（warning 日志，可在卡页重试）；**手动创建 POST /cards 不触发抽取**（创建即定稿）。
+- [x] **测试**：`test_prompts.py` 升级为「每个版本占位符 = 注册字段 ∪ 该版本额外字段（`_VERSION_EXTRA_FIELDS`，如 jd_ats_analysis v4 的 `structured_summary`）」+ 新增 v2 内容断言（禁编造量化/无 xx% 强制格式）；`test_agents_mock_unit.py` 新增两 agent 加载 v2 prompt 断言；`test_experience_confirm_flow_unit.py` 新增 3 条确认上传同步链路（成功写 ai_structured / 失败留空 200 / 手动创建不触发）。**pytest 588 passed / 12 skipped** + ruff 全绿 + check_encoding 342 文件 0 错。
+- [ ] **待续（P1 剩余）**：规则标签池 → 版本化接后端 + 前端字段改名收尾 → direction/expression 表（**P2 V0009**）。
+
 ## Confirm-As-V1 全闭环（EXP-P1-03，2026-09-23，`docs/experience/EXP-P1-03.md`）
 
 > 依据 EXPERIENCE_SPEC §25-§27/§29/§34：confirmUpload 入库草稿（`is_confirmed=0`）→ 卡片页保存定稿（`version=1` + card_versions 哨兵基线 + `is_confirmed=1`）。**用户拍板三点**：① 范围 = 完整闭环（草稿化 + 后端 + 前端 + 测试一次交付）；② direction/expression 新表**推迟到 P2 的 V0009**（裁决 EXP-P1-07 正文与 EXP-P2-01 矛盾——V0008 本期只加 `is_confirmed`+`fields` 两列）；③ 定稿触发 = updateCard 携带 `is_confirmed:true`，**不新增端点**。
@@ -14,7 +25,7 @@
 - [x] **前端类型/映射**：`api/types.ts` ExperienceCard 增 `is_confirmed: boolean`+`fields`；`types/jobcraft.ts` Experience 增 `isConfirmed: boolean`；`mappers.ts` cardToExperience 透传 `isConfirmed`（缺省 true）。测试 fixture 同步补 `is_confirmed`。
 - [x] **前端 hooks/视图**：`hooks.ts` `useUpdateExperienceMutation` 保存携带 `is_confirmed:true`（定稿触发）+ 成功后缓存置 `isConfirmed:true`；`ExperiencesView` 卡片头部**「待定稿」warning 徽标**（`isConfirmed===false`，title 提示打开编辑保存即定稿）；`UserProfileView` confirmUpload 成功后 `navigateTo('experiences')`（§34.2 引导卡片页定稿）。
 - [x] **前端验证**：mappers/experiences-query/review-query 相关测试新增 is_confirmed 断言；vitest **22 files / 128 tests 全过**；`npm run build` ✅（仅既有 CSS 导入序 / chunk 体积警告）。
-- [ ] **待续（P1 剩余）**：规则标签池 → 自动 STAR（§26 上传草稿确认后自动 1 次）→ 版本化接后端 + 前端字段改名收尾 → direction/expression 表（**P2 V0009**）。
+- [ ] **待续（P1 剩余）**：规则标签池 → 版本化接后端 + 前端字段改名收尾 → direction/expression 表（**P2 V0009**）。
 
 ## 分块判定与公司提取解绑（EXP-P1-02b，2026-09-23，`docs/handoff_resume_splitter_decouple.md`）
 
