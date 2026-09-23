@@ -13,6 +13,20 @@
 - [x] **测试**：`test_migrations_runner_unit.py` 新增 6 条——两表声明 / 无 ALTER（前向兼容）/ expression 字段覆盖 §6 / direction 字段覆盖 §7 / SPLIT 约定 2 块 / `runner.migrate()` 全量入库含 0009。**pytest 620 passed / 12 skipped** + ruff 全绿 + check_encoding 350 文件 0 错。
 - [ ] **待续（EXP-P2-02）**：后端 expression CRUD + 版本链 API（`db_expression.py` + `api/experience.py` 端点 §24.9）。
 
+## 标准化表达 CRUD 与版本链（EXP-P2-02，2026-09-23）
+
+> 依据 EXPERIENCE_SPEC §8（JOBCRAFT_API_SPEC §8.1/8.2）+ DATA_MODEL §6：后端 DAO + 列表/创建端点。U2 手动触发生成（创建即 candidate），U6 P2 仅 Standardized Expression 回写；版本链"新版本=新行不覆盖"（§31）。
+
+- [x] **`app/tools/db_expression.py`**：零运行时 DDL（V0009 是唯一落点，ago.config V0009 已建表）——
+  - `create_expression`：版本链语义，组内（experience_id, type, direction_id, job_id）`max(version)+1`（`query_scalar_group_max_version`），校验 type/status 枚举 + content 非空，`source_refs` JSON 序列化
+  - `create_expression_version`：基于原行组归属复制为新版本行（`source_refs` 缺省继承，status 默认 candidate），返回组内最新版本 id（`query_group_max_version_id`）
+  - `get_expression`（可按 user_id 过滤所有权）/ `get_expressions_by_experience`（§8.1 过滤 type/direction/job + 按 version DESC，目录名索引体验取 ORDER BY type, direction_id, job_id, version DESC）/ `get_all` / `update_status`（事务 + 枚举校验）/ `delete_expression`
+  - row mapper：版本/验证等级/使用计数 int 化、JSON 解析、时间戳 isoformat
+- [x] **Schema**：`ExpressionCreate`（§8.2 请求体：experience_id/type/content/direction_id?/job_id?/source_refs）+ `ExpressionRead`（DATA_MODEL §6 响应子集）+ `ExpressionListResponse`
+- [x] **API 端点（`app/api/experience.py`）**：`GET /cards/{card_id}/expressions`（§8.1，卡片不存在 404 / type 非法 400）+ `POST /expressions`（§8.2，卡片不存在 404 / 空内容 400 / ValueError → 400 / 兜底 500）；所有权自动带 current_user
+- [x] **测试**：`tests/test_expression_db_unit.py`（15 条：row mapper / 枚举校验 / 组内 version+1 / INSERT 参数 / by-id 所有权 / 过滤+排序 / 新版本基于原行 / 未知表达 LookupError / status 校验 / delete）+ `test_api_routes_unit.py` 新增 2 类 10 条路由测试（列表、404、400、过滤透传、创建、422、500）。**pytest 645 passed / 12 skipped** + ruff 全绿 + check_encoding 351 文件 0 错。
+- [ ] **待续（EXP-P2-03）**：标准化表达生成 Prompt（基于 polish_v2 中性化，版本化 `prompts/experience/expression_standardized_v1.txt`）。
+
 ## Expression/Consumer Chain 基础（EXP-P1-08，2026-09-23）
 
 > 依据 EXPERIENCE_SPEC §32/§30.5：统一消费入口 `get_card_render_text()`（优先版本链 → 结构化 STAR → raw_text → summary/title），下游 `_get_card_text` / `_card_text` / gap_polish 收敛至该函数，不再各自拼。§30.5 场景参数（排序/字段权重）归 P2。
