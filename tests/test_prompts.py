@@ -1,4 +1,8 @@
-"""测试 prompts/ 目录模板：占位符完整性、loader 渲染、格式一致性。"""
+"""
+测试 prompts/ 目录模板：占位符完整性、loader 渲染、格式一致性。
+"""
+
+from pathlib import Path
 
 from app.core.prompts import PROMPTS_DIR, _PLACEHOLDER_RE, load_prompt
 
@@ -85,6 +89,12 @@ _REQUIRED_FIELDS = {
 }
 
 
+# 非默认版本额外占位符（对应各 loader 自己的填充实参，如 jd_ats_analysis v4 额外传 structured_summary）
+_VERSION_EXTRA_FIELDS = {
+    ("jd", "jd_ats_analysis", 4): {"structured_summary"},
+}
+
+
 def _all_templates():
     """返回 [(subdir, name, path)]，覆盖 prompts/ 下全部 .txt。"""
     templates = []
@@ -95,8 +105,13 @@ def _all_templates():
     return templates
 
 
+def _version_number(path: Path) -> int:
+    """从 'name_vN.txt' 提取 N。"""
+    return int(path.stem.rsplit("_v", 1)[1])
+
+
 def test_every_registered_template_exists_and_fields_match():
-    """注册表每个模板都存在，且注册字段集与模板实际占位符一致。"""
+    """注册表每个模板（默认 v1）都存在，且每个版本占位符 = 注册字段 ∪ 该版本额外字段。"""
     existing = {(subdir, name) for subdir, name, _ in _all_templates()}
     assert set(_REQUIRED_FIELDS) == existing, (
         f"差异:\n- 仅注册未建文件: {set(_REQUIRED_FIELDS) - existing}\n"
@@ -104,11 +119,19 @@ def test_every_registered_template_exists_and_fields_match():
     )
 
     for (subdir, name), fields in _REQUIRED_FIELDS.items():
-        text = (PROMPTS_DIR / subdir / f"{name}_v1.txt").read_text(encoding="utf-8")
-        template_fields = {m.group(1) for m in _PLACEHOLDER_RE.finditer(text)}
-        assert template_fields == fields, (
-            f"{subdir}/{name}: 模板占位符 {template_fields} != 注册占位符 {fields}"
+        version_files = sorted(
+            (PROMPTS_DIR / subdir).glob(f"{name}_v*.txt"), key=_version_number
         )
+        assert version_files, f"{subdir}/{name}: 缺少版本文件"
+        for path in version_files:
+            ver = _version_number(path)
+            expected = fields | _VERSION_EXTRA_FIELDS.get((subdir, name, ver), set())
+            text = path.read_text(encoding="utf-8")
+            template_fields = {m.group(1) for m in _PLACEHOLDER_RE.finditer(text)}
+            assert template_fields == expected, (
+                f"{subdir}/{name} v{ver}: 模板占位符 {sorted(template_fields)} "
+                f"!= 期望 {sorted(expected)}"
+            )
 
 
 def test_templates_contain_no_double_brace_artifacts():
@@ -119,6 +142,32 @@ def test_templates_contain_no_double_brace_artifacts():
         stripped = _PLACEHOLDER_RE.sub("", text)
         assert "{{" not in stripped, f"{subdir}/{name} 含未闭合 {{"
         assert "}}" not in stripped, f"{subdir}/{name} 含未闭合 }}"
+
+
+def test_extract_structured_v2_anti_fabrication():
+    """EXP-P1-04：extract_structured_v2 必须体现「提取到的填/没提取留空/禁止编造量化」。"""
+    text = (PROMPTS_DIR / "experience" / "extract_structured_v2.txt").read_text(
+        encoding="utf-8"
+    )
+    assert "禁止编造量化" in text
+    assert "留空" in text
+    assert "原文" in text
+    # 不再要求「尽量包含量化指标」这类诱导编造的表述
+    assert "尽量包含量化" not in text
+
+
+def test_parse_resume_entries_v2_no_forced_percent():
+    """EXP-P1-04：parse_resume_entries_v2 移除强制 'xx%' 格式。"""
+    text = (PROMPTS_DIR / "experience" / "parse_resume_entries_v2.txt").read_text(
+        encoding="utf-8"
+    )
+    # v1 的「带来xx%提升」强制格式必须移除
+    assert "带来xx%提升" not in text
+    assert "xx%提升" not in text
+    assert "尽量提取量化结果" not in text
+    # 保留占位符，但量化只允许原文举证
+    assert "resume_text" in text
+    assert "原文" in text
 
 
 def test_load_prompt_renders_placeholders():

@@ -441,3 +441,147 @@ def test_patch_card_confirm_flag_forwards_to_db(monkeypatch):
     assert "is_confirmed" not in captured["updates"], (
         "is_confirmed 不应作为普通字段写入"
     )
+
+
+# ============================================================
+# EXP-P1-04：confirmUpload 内同步 extract_structured（自动 STAR）
+# ============================================================
+
+
+def _patch_confirm_upload_deps(monkeypatch):
+    """确认上传链路通用桩：去重直通，capture insert/update。"""
+    captured = {"updates": [], "extract_calls": 0}
+
+    def fake_find(*a):
+        return None
+
+    def fake_insert(data):
+        captured["insert"] = data
+        return 77
+
+    def fake_get(*a):
+        return {"id": 77, "is_confirmed": False}
+
+    def fake_update(card_id, updates, user_id, **k):
+        captured["updates"].append(updates)
+        return True
+
+    def fake_extract(raw_text):
+        captured["extract_calls"] += 1
+        return {
+            "summary": "自动抽取",
+            "achievements": [
+                {
+                    "title": "重构召回",
+                    "situation": "",
+                    "action": {
+                        "main": "引入向量召回",
+                        "difficulty": "",
+                        "resolution": "",
+                    },
+                    "result": "点击率提升 20%",
+                }
+            ],
+        }
+
+    monkeypatch.setattr(
+        "app.api.experience.db_tools.find_card_by_company_role", fake_find
+    )
+    monkeypatch.setattr("app.api.experience.db_tools.insert_card", fake_insert)
+    monkeypatch.setattr("app.api.experience.db_tools.get_card", fake_get)
+    monkeypatch.setattr("app.api.experience.db_tools.update_card", fake_update)
+    monkeypatch.setattr(
+        "app.workflows.extract_flow.run_extract_structured_workflow", fake_extract
+    )
+    monkeypatch.setattr(
+        "app.workflows.extract_flow.run_recommend_tags_workflow", lambda *a: None
+    )
+    return captured
+
+
+def test_confirm_upload_sync_extract_writes_ai_structured(monkeypatch):
+    """EXP-P1-04：confirmUpload 内同步 extract_structured 1 次，结果写入 ai_structured。"""
+    captured = _patch_confirm_upload_deps(monkeypatch)
+    client = TestClient(app, raise_server_exceptions=False)
+    resp = client.post(
+        "/api/jobcraft/experience/upload/confirm",
+        json={
+            "items": [
+                {
+                    "selected": True,
+                    "company": "A",
+                    "role": "工程师",
+                    "raw_text": "我负责推荐系统后端开发，优化了召回链路。",
+                    "title": "经历",
+                }
+            ]
+        },
+        headers=_HEADERS,
+    )
+    assert resp.status_code == 200
+    assert captured["extract_calls"] == 1
+    assert captured["updates"], "应有一次 ai_structured 写入"
+    assert "ai_structured" in captured["updates"][0]
+
+
+def test_confirm_upload_extract_failure_keeps_draft_blank(monkeypatch):
+    """EXP-P1-04：监督 ST 失败时留空（不阻断入库），草稿仍可返回待重试。"""
+    captured = _patch_confirm_upload_deps(monkeypatch)
+
+    def _boom(raw_text):
+        raise RuntimeError("LLM 超时")
+
+    monkeypatch.setattr(
+        "app.workflows.extract_flow.run_extract_structured_workflow", _boom
+    )
+    client = TestClient(app, raise_server_exceptions=False)
+    resp = client.post(
+        "/api/jobcraft/experience/upload/confirm",
+        json={
+            "items": [
+                {
+                    "selected": True,
+                    "company": "A",
+                    "role": "工程师",
+                    "raw_text": "我负责推荐系统后端开发，优化了召回链路。",
+                    "title": "经历",
+                }
+            ]
+        },
+        headers=_HEADERS,
+    )
+    # 失败留空：接口仍成功返回卡片，未写入 ai_structured，且不产生 500
+    assert resp.status_code == 200
+    assert captured["updates"] == []
+
+
+def test_manual_create_card_does_not_trigger_extract(monkeypatch):
+    """EXP-P1-04：手动创建（POST /cards）不触发 extract_structured。"""
+    captured = {}
+
+    def fake_insert(data):
+        captured["insert"] = data
+        return 99
+
+    monkeypatch.setattr("app.api.experience.db_tools.insert_card", fake_insert)
+    monkeypatch.setattr("app.api.experience.db_tools.get_card", lambda *a: {"id": 99})
+    monkeypatch.setattr(
+        "app.workflows.extract_flow.run_extract_structured_workflow",
+        lambda *a: (_ for _ in ()).throw(AssertionError("手动创建不应触发抽取")),
+    )
+    client = TestClient(app, raise_server_exceptions=False)
+    resp = client.post(
+        "/api/jobcraft/experience/cards",
+        json={
+            "title": "手动录入",
+            "raw_text": "我手动录入一段足够长的经历文本用于测试。",
+            "company": "",
+            "role": "",
+            "period": "",
+            "card_type": "work",
+        },
+        headers=_HEADERS,
+    )
+    assert resp.status_code == 200
+    assert captured["insert"]["source"] == "manual"
+    assert captured["insert"]["is_confirmed"] is True

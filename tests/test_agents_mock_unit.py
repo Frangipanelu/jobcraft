@@ -62,6 +62,22 @@ def test_extract_structured_empty_achievements_returns_none(monkeypatch):
     assert out["cache"] is None
 
 
+def test_extract_structured_uses_v2_prompt_anti_fabrication(monkeypatch):
+    """EXP-P1-04：ExtractStructuredAgent 加载 v2 prompt（禁止编造量化/留空规则）。"""
+    from app.agents.extract_agent import ExtractStructuredAgent
+
+    captured = {}
+
+    def _fake_invoke(model, schema, prompt, **kwargs):
+        captured["prompt"] = prompt
+        return schema(summary="x", achievements=[])
+
+    monkeypatch.setattr("app.agents.extract_agent.invoke_structured", _fake_invoke)
+    ExtractStructuredAgent().run({"raw_text": "一段经历"})
+    assert "禁止编造量化" in captured["prompt"]
+    assert "留空" in captured["prompt"]
+
+
 # ---------- ParseResumeEntriesAgent ----------
 
 
@@ -110,6 +126,22 @@ def test_parse_resume_entries_with_mock_llm(monkeypatch):
     out = ParseResumeEntriesAgent().run({"resume_text": "简历文本"})
     assert len(out["entries"]) == 1
     assert out["entries"][0]["company"] == "字节跳动"
+
+
+def test_parse_resume_entries_uses_v2_prompt_no_forced_percent(monkeypatch):
+    """EXP-P1-04：ParseResumeEntriesAgent 加载 v2 prompt（移除强制 xx% 格式）。"""
+    from app.agents.extract_agent import ParseResumeEntriesAgent
+
+    captured = {}
+
+    def _fake_invoke(model, schema, prompt, **kwargs):
+        captured["prompt"] = prompt
+        return schema(entries=[])
+
+    monkeypatch.setattr("app.agents.extract_agent.invoke_structured", _fake_invoke)
+    ParseResumeEntriesAgent().run({"resume_text": "简历文本"})
+    assert "xx%提升" not in captured["prompt"]
+    assert "尽量提取量化结果" not in captured["prompt"]
 
 
 # ---------- RecommendTagsAgent ----------

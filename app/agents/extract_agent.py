@@ -35,7 +35,7 @@ class ExtractStructuredAgent(BaseAgent):
             return {"cache": None}
 
         prompt = load_prompt(
-            "experience", "extract_structured", raw_text=raw_text[:6000]
+            "experience", "extract_structured", version=2, raw_text=raw_text[:6000]
         )
         parsed = invoke_structured(
             model, CardStructuredCache, prompt, debug_label="extract_structured"
@@ -62,7 +62,10 @@ class ParseResumeEntriesAgent(BaseAgent):
             return {"entries": []}
 
         prompt = load_prompt(
-            "experience", "parse_resume_entries", resume_text=resume_text[:8000]
+            "experience",
+            "parse_resume_entries",
+            version=2,
+            resume_text=resume_text[:8000],
         )
         parsed = invoke_structured(
             model, ResumeParseResult, prompt, debug_label="parse_resume"
