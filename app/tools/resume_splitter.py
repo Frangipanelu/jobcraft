@@ -6,7 +6,12 @@
 
 原则：
 - 只做「分块 + 元数据」，不做 STAR 语义提取（STAR 归 extract_structured）。
-- 提取到的填、没提取的字段留空；不编造。
+- **分块判定与公司提取解绑**：分块只依赖结构信号（时间锚点 / 章节标题 / 段落，
+  叙述式段按段落切分即可，不依赖能否提取 company）。
+- 动词表只降级为 role 提取器；公司锚用「于在於 + 动词位/句读/时间锚/行尾」，
+  动词表盲区只造成 role 留空（LLM 兜底），不再整条丢失 / company 丢失 / 块误判。
+- `[个人项目]` 占位仅用于 ``card_type=="project"`` 且 company 为空时；
+  work/intern 卡空公司保持留空（不编造）。
 - 教育背景 / 技能 / 自我评价 / 获奖等非经历章节不产生经历条目。
 
 评测：tests/fixtures/resume_samples/ 12 份脱敏样本 + expected.json，
@@ -14,7 +19,7 @@
 """
 
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 # ---- 与 db_experience._RANGE_RE 同源的时间范围匹配（保持单份规范，避免漂移） ----
 _RANGE_RE = re.compile(
@@ -37,11 +42,16 @@ _PROJECT_TITLE_RE = re.compile(
     r"^\s*[（(]?\*?\**[（(]?(个人项目|团队项目|开源贡献|课程项目|毕业设计|毕设项目)"
     r"[、:：\s]*(.*)$"
 )
-# 叙述式：`在X担任Y` / `于X做Y`（无时间锚点的自由叙述段）
-_NARRATIVE_RE = re.compile(
-    r"[于在於]([^于在於，。；;\s：:]{2,20}?)(?:担任|任职|从事|负责|做|开发)"
-    r"([^。；;，,]{2,30})"
+# 叙述式公司锚：`于在於 + company + 动词位/句读/时间锚/行尾`
+# 仅用于锚定 company 截止位置，**不依赖动词表**（动词表盲区只造成 role 留空，不再丢公司）
+_NARRATIVE_COMPANY_RE = re.compile(
+    r"[于在於]([^于在於，。；;\s：:]{2,20}?)(?="
+    r"(?:担任|任职|从事|负责|做|开发|主导|牵头|参与|协作|协同|搭建|构建|设计|迭代|"
+    r"重构|落地|引入|推动|制定|编写|实现|优化|研发|带领|维护|创建)"
+    r"|[，。；;,、:：]|(?:19|20)\d{2}|至今|现在|$)"
 )
+# 叙述式 role 提取器（动词表**仅**提取 role，不参与分块判定/公司提取）
+_NARRATIVE_ROLE_RE = re.compile(r"(?:担任|任职|从事|负责|做|开发)([^。；;，,]{2,30})")
 # 元数据行后的 company/role 常见分隔为多空格 / 全角空格 / Tab
 _HEADER_SEP_RE = re.compile(r"[\u3000\t\s]{1,}")
 _ENTRY_HEADER_ONLY_RE = re.compile(r"^\s*经历\s*\d*\s*$")
@@ -67,19 +77,23 @@ class ResumeSplitter:
         lines = self._filtered_lines(raw_text)
         blocks = self._split_by_time_ranges(lines)
         if blocks:
-            blocks_from_raw = [[b for b in blk if b.strip()] for blk in blocks]
-            entries = [
-                self._parse_block(b, fallback=False, raw_block=b)
-                for b in blocks_from_raw
-            ]
+            entries = []
+            for blk, sec in blocks:
+                block = [b for b in blk if b.strip()]
+                entries.append(
+                    self._parse_block(block, sec, fallback=False, raw_block=block)
+                )
         else:
             # 主路径 2：无时间锚点 → 段落切块 + 叙述式句法
             para_blocks = self._split_by_paragraphs(raw_text)
             if not para_blocks:
                 return None
-            entries = [
-                self._parse_block(b, fallback=True, raw_block=b) for b in para_blocks
-            ]
+            entries = []
+            for blk, sec in para_blocks:
+                block = [b for b in blk if b.strip()]
+                entries.append(
+                    self._parse_block(block, sec, fallback=True, raw_block=block)
+                )
 
         entries = [e for e in entries if self._looks_like_entry(e)]
         entries = self._dedupe(entries)
@@ -87,59 +101,77 @@ class ResumeSplitter:
 
     # ---------------- 文本预处理 ----------------
 
-    def _filtered_lines(self, raw_text: str) -> List[str]:
-        """剔除空行 / 头噪声行 / 非经历章节，保留行内信息。"""
-        out: List[str] = []
+    def _filtered_lines(self, raw_text: str) -> List[Tuple[str, str]]:
+        """剔除空行 / 头噪声行 / 非经历章节，返回 (行文本, 所在章节类型)。
+
+        :param raw_text: 待过滤的原始文本
+        :return: (stripped_line, section_type) 列表；section_type ∈
+            {'work','intern','project',''}（''=未进入任何经历章节）
+        """
+        out: List[Tuple[str, str]] = []
         in_exclude = False
+        section_type = ""
         for ln in raw_text.splitlines():
             stripped = ln.strip()
             if not stripped:
                 continue
             if _EXCLUDE_SECTION_RE.match(stripped):
                 in_exclude = True
+                section_type = ""
                 continue
             if _EXPERIENCE_SECTION_RE.match(stripped):
                 in_exclude = False
+                section_type = self._section_type_of(stripped)
                 continue
             if in_exclude or _is_noise_header(stripped):
                 continue
-            out.append(stripped)
+            out.append((stripped, section_type))
         return out
 
     # ---------------- 切块 ----------------
 
-    def _split_by_time_ranges(self, lines: List[str]) -> List[List[str]]:
-        """按时间锚点行切块：时间行开新块，后续行并入直到下一条时间行或末尾。"""
-        blocks: List[List[str]] = []
+    def _split_by_time_ranges(
+        self, lines: List[Tuple[str, str]]
+    ) -> List[Tuple[List[str], str]]:
+        """按时间锚点行切块：时间行开新块，后续行并入直到下一条时间行或末尾。
+
+        :param lines: (line, section_type) 列表
+        :return: [(block_lines, section_type)] 列表
+        """
+        blocks: List[Tuple[List[str], str]] = []
         current: List[str] = []
-        for ln in lines:
+        current_type = ""
+        for ln, sec in lines:
             if _RANGE_RE.search(ln):
                 if current:
-                    blocks.append(current)
+                    blocks.append((current, current_type))
                 current = [ln]
+                current_type = sec
             elif current:
                 current.append(ln)
             # 无时间锚点行且当前无块 → 丢弃（头噪声已在过滤阶段剔除）
         if current:
-            blocks.append(current)
+            blocks.append((current, current_type))
         return blocks
 
-    def _split_by_paragraphs(self, raw_text: str) -> List[List[str]]:
+    def _split_by_paragraphs(self, raw_text: str) -> List[Tuple[List[str], str]]:
         """无时间锚点时按空行分段落；段内再按项目标题行二次切分。"""
-        blocks: List[List[str]] = []
+        blocks: List[Tuple[List[str], str]] = []
         for para in re.split(r"\n\s*\n+", raw_text):
             lines = self._filtered_lines(para)
             if not lines:
                 continue
             current: List[str] = []
-            for ln in lines:
+            current_type = lines[0][1]
+            for ln, sec in lines:
                 if self._is_block_start(ln) and current:
-                    blocks.append(current)
+                    blocks.append((current, current_type))
                     current = [ln]
+                    current_type = sec
                 else:
                     current.append(ln)
             if current:
-                blocks.append(current)
+                blocks.append((current, current_type))
         return blocks
 
     def _is_block_start(self, line: str) -> bool:
@@ -156,17 +188,19 @@ class ResumeSplitter:
     def _parse_block(
         self,
         block: List[str],
+        section_type: str = "",
         fallback: bool = False,
         raw_block: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """从单块提取 metadata（company/role/period/title/card_type）。
 
         :param block: 单个经历的文本行
+        :param section_type: 所在经历章节类型（'work'/'intern'/'project'/''）
         :param fallback: 无时间锚点的叙述式/段落分块
         :param raw_block: 原始文本行（附带给调用方展示，不参与元数据）
         """
         head = block[0]
-        card_type = self._detect_section_type(block)
+        card_type = self._detect_section_type(block, section_type)
 
         # 项目标题行优先识别
         raw_text = "\n".join(raw_block or block).strip()
@@ -193,16 +227,13 @@ class ResumeSplitter:
             )
 
         if fallback:
-            # 叙述式：`在X担任Y`（无时间锚点）
-            nm = _NARRATIVE_RE.search(head)
-            if nm:
-                company = nm.group(1).strip()
-                role = nm.group(2).strip()
-                return self._entry(
-                    company, role, "", company or role, card_type, raw_text
-                )
-            title = self._clean_title(None, head)
-            return self._entry("", "", "", title, card_type, raw_text)
+            # 叙述式：公司锚与 role 解耦提取（互不依赖）
+            cm = _NARRATIVE_COMPANY_RE.search(head)
+            rm = _NARRATIVE_ROLE_RE.search(head)
+            company = cm.group(1).strip() if cm else ""
+            role = rm.group(1).strip() if rm else ""
+            title = company or role or self._clean_title(None, head)
+            return self._entry(company, role, "", title, card_type, raw_text)
 
         # 时间行缺失但块存在（主路径不应触发）
         title = self._clean_title(None, head)
@@ -217,8 +248,12 @@ class ResumeSplitter:
         card_type: str,
         raw_text: str = "",
     ) -> Dict[str, Any]:
-        """构造与 ResumeExperience 兼容的条目 dict。"""
-        return {
+        """构造与 ResumeExperience 兼容的条目 dict。
+
+        project 卡 company 为空时填 ``[个人项目]`` 占位；
+        work/intern 卡空公司保持留空（不编造）。
+        """
+        entry = {
             "company": company,
             "role": role,
             "period": period,
@@ -228,6 +263,9 @@ class ResumeSplitter:
             "achievements": [],
             "raw_text": raw_text,
         }
+        if card_type == "project" and not str(company or "").strip():
+            entry["company"] = "[个人项目]"
+        return entry
 
     def _clean_title(self, raw: Optional[str], head: str) -> str:
         """清洗标题：去括号技术栈、去英文引导词。"""
@@ -240,8 +278,18 @@ class ResumeSplitter:
 
     # ---------------- 辅助 ----------------
 
-    def _detect_section_type(self, block: List[str]) -> str:
-        """根据内容特征推断经历类型。"""
+    def _section_type_of(self, header: str) -> str:
+        """由经历章节标题推导卡类型。"""
+        if re.match(r"^\s*(实习经历|實習經歷)\s*[：:]?\s*$", header):
+            return "intern"
+        if re.match(r"^\s*(项目经历|項目經歷)\s*[：:]?\s*$", header):
+            return "project"
+        return "work"
+
+    def _detect_section_type(self, block: List[str], section_type: str = "") -> str:
+        """根据章节信号与内容特征推断经历类型。"""
+        if section_type in ("work", "intern", "project"):
+            return section_type
         joined = "\n".join(block)
         if re.search(r"实习", joined):
             return "intern"
