@@ -2,6 +2,19 @@
 
 > 本文件用于追踪项目整体进度。AI 在每次会话结束或完成子任务时，必须更新本文件的对应板块。
 
+## 规则标签池 · 标签并入 STAR（EXP-P1-06c，2026-09-23）
+
+> 依据 EXPERIENCE_SPEC §26/§29/§55：「规则标签池无候选才 LLM」「LLM 失败规则路径照常工作」「代码内词典无新表」。标签推荐不再独立 LLM 调用——**并入 extract_structured 同一次 LLM 输出（v3）**；confirmUpload/upload 落库路径移除单独的 recommend_tags LLM。
+
+- [x] **词典**：新增 `app/pipeline/data/business_fields.json`（20 个业务领域/行业，tag + keywords 同义词，如 `电商`↔`跨境电商/ecommerce`、`企业服务`↔`SaaS/B2B`）；技术栈/能力维度复用 `technical_skills.json`/`soft_skills.json`（零重复）。
+- [x] **规则模块 `app/tools/tag_pool.py`**：零 LLM、无状态、确定性——按词典顺序（技术栈→业务领域→能力维度）关键词子串匹配（ASCII 小写归一、CJK 原文直配），去重上限 `MAX_TAGS=8`；空/空白输入返回 `[]`。
+- [x] **prompt `extract_structured_v3.txt`**：在 v2 反编造基线（禁止编造量化/留空/原文举证）之上，一次调用同时输出 `tags`（扁平 3-5 个、不分类不加#、禁止编造原文没有的标签）。
+- [x] **schema/agent**：`schemas/jobcraft.py` 新增 `CardStructuredCacheWithTags`；`ExtractStructuredAgent` 切 `version=3`，返回 `{"cache":..., "tags":[...]}`（achievements 为空时 cache=None 但 tags 照常）。
+- [x] **workflow**：`run_extract_structured_workflow` 返回 `{"cache","tags"}`；`run_recommend_tags_workflow` 改双节点 StateGraph——`rule`（tag_pool，零 LLM）→ 条件边（有候选直接 END/无候选进 `llm` 兜底）。
+- [x] **API 落库**：confirmUpload/upload 内改为「STAR+标签一次 LLM」——`out["cache"]→ai_structured`、`out["tags"]→tags`（单次 update_card 合并写，异常时整段跳过，草稿留空可重试）；`POST /cards/{id}/structure` 适配 `out["cache"]` 判空；手动 `POST /cards/{id}/recommend-tags` 走 `run_recommend_tags_workflow`（规则→LLM）。
+- [x] **测试**：新增 `tests/test_tag_pool_unit.py`（9 条：技术/业务/能力命中、同义词、大小写、去重排序、上限、空输入）；workflow 新增规则命中跳过 LLM / 规则落空走 LLM 兜底两条；agents/prompts 切 v3 断言（含 tags 输出）。**pytest 604 passed / 12 skipped** + ruff 全绿 + security-scan（--select S）通过 + check_encoding 344 文件 0 错。
+- [ ] **待续（P1 剩余）**：前端字段改名收尾（direction/expression 表归 **P2 V0009**，随 EXP-P2-01）→ **P1-08 消费链 → P1-09 验证**；后续优化：后端快照 note 支持自定义语义 + 版本回滚按槽位需 card_versions 快照扩展（前向兼容加列）。
+
 ## 版本化接后端 · 前端假数据下线（EXP-P1-06b，2026-09-23）
 
 > 依据 EXPERIENCE_SPEC §28/§34.6：`useAddExperienceVersionMutation` 从纯本地假数据改为调用后端能力（并入 updateCard 事务已由 EXP-P1-05 实现），`versionHistory` 从后端 `GET /cards/{id}/versions` 拉取，**前端不再有假数据版本记录**。
@@ -13,7 +26,7 @@
 - [x] **回顾反哺（`features/review/hooks.ts` `useApplyReviewFeedbackMutation`）**：不再本地拼 `buildVersionRecord` 假记录——mutationFn 先 `updateCard` 持久化四槽位变更（+定稿）→ `listCardVersions` 回流真实版本；版本服务失败回退升级内容+原有版本信息，不阻塞反哺落地。
 - [x] **清理**：删除 `review/mappers.ts` `buildVersionRecord`（假版本记录唯一生产者）；`ExperiencesView` `handleAIRefine` 用 mutation 返回的真实 currentVersion 展示 toast、`handleRestoreVersion` 改为 PATCH 快照 `raw_text` 回滚原文（兼容历史 changes 记录）。
 - [x] **测试**：removed buildVersionRecord 单测；新增 `versionsToHistory` 单测（新→旧编号/reason/source/rawText、version_type 来源映射、编号下限收敛）；`experiences-query`「本地版本演进不发网络」改「加版本 updateCard 持久化 + 版本回流」；`review-query` applyReviewFeedback 断言 updateCard 持久化 + 后端版本回流。**vitest 22 files / 130 tests 全过** + `npm run lint`（tsc 0 错）+ `npm run build` ✅。
-- [ ] **待续（P1 剩余）**：规则标签池 → 前端字段改名收尾（direction/expression 表归 **P2 V0009**，随 EXP-P2-01）；后续优化：后端快照 note 支持自定义语义（如 ai_polish/review_refined 固化来源说明）+ 版本回滚按槽位需 card_versions 快照扩展（前向兼容加列）。
+- [ ] **待续（P1 剩余）**：前端字段改名收尾（direction/expression 表归 **P2 V0009**，随 EXP-P2-01）；后续优化：后端快照 note 支持自定义语义（如 ai_polish/review_refined 固化来源说明）+ 版本回滚按槽位需 card_versions 快照扩展（前向兼容加列）。
 
 ## 版本化模型（EXP-P1-05，2026-09-23）
 
