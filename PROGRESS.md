@@ -2,6 +2,19 @@
 
 > 本文件用于追踪项目整体进度。AI 在每次会话结束或完成子任务时，必须更新本文件的对应板块。
 
+## 版本化接后端 · 前端假数据下线（EXP-P1-06b，2026-09-23）
+
+> 依据 EXPERIENCE_SPEC §28/§34.6：`useAddExperienceVersionMutation` 从纯本地假数据改为调用后端能力（并入 updateCard 事务已由 EXP-P1-05 实现），`versionHistory` 从后端 `GET /cards/{id}/versions` 拉取，**前端不再有假数据版本记录**。
+
+- [x] **API/类型**：`api/types.ts` 新增 `ExperienceCardVersion`/`ExperienceCardVersionList`；`api/experience.ts` 新增 `listCardVersions(cardId)`。
+- [x] **映射（`features/experiences/mappers.ts`）**：新增 `versionsToHistory(versions, currentVersion)`——后端快照（新→旧）→ `ExperienceVersionRecord`：V 编号从 `V{current_version}` 依序递减到 V1（哨兵基线），date 取 created_at、reason 取 note 兜底按 version_type 文案、source 按 version_type 映射（original/user_edit→manual、review_refined→interview_review、jd_alignment→jd_alignment、ai_polish→ai_optimization）、changes=[]（后端不存逐字段 diff）、`rawText`=快照 raw_text 供原文回滚。
+- [x] **类型**：`types/jobcraft.ts` `ExperienceVersionRecord` 增可选 `title?`/`rawText?`。
+- [x] **经历 hooks（`features/experiences/hooks.ts`）**：`loadVersionMeta`/`toUpdateCardPayload` 助手；`useExperiencesQuery` 列表并行拉各卡版本历史回流（失败静默空历史）；`useCreateExperienceMutation` 创建后回流（手动建卡 V1 哨兵基线可见）；`useUpdateExperienceMutation` 保存后经 `listCardVersions` 回流真实版本（支持 `raw_text` 原文回滚透传）；**`useAddExperienceVersionMutation` 重写**：mutationFn 内 `updateCard`（四槽位+`is_confirmed:true`，服务端自动快照+version+1）→ `listCardVersions` 回流，onSuccess 合并 updatedFields + 后端 currentVersion/versionHistory（返回 `{expId, currentVersion, versionHistory}`）。
+- [x] **回顾反哺（`features/review/hooks.ts` `useApplyReviewFeedbackMutation`）**：不再本地拼 `buildVersionRecord` 假记录——mutationFn 先 `updateCard` 持久化四槽位变更（+定稿）→ `listCardVersions` 回流真实版本；版本服务失败回退升级内容+原有版本信息，不阻塞反哺落地。
+- [x] **清理**：删除 `review/mappers.ts` `buildVersionRecord`（假版本记录唯一生产者）；`ExperiencesView` `handleAIRefine` 用 mutation 返回的真实 currentVersion 展示 toast、`handleRestoreVersion` 改为 PATCH 快照 `raw_text` 回滚原文（兼容历史 changes 记录）。
+- [x] **测试**：removed buildVersionRecord 单测；新增 `versionsToHistory` 单测（新→旧编号/reason/source/rawText、version_type 来源映射、编号下限收敛）；`experiences-query`「本地版本演进不发网络」改「加版本 updateCard 持久化 + 版本回流」；`review-query` applyReviewFeedback 断言 updateCard 持久化 + 后端版本回流。**vitest 22 files / 130 tests 全过** + `npm run lint`（tsc 0 错）+ `npm run build` ✅。
+- [ ] **待续（P1 剩余）**：规则标签池 → 前端字段改名收尾（direction/expression 表归 **P2 V0009**，随 EXP-P2-01）；后续优化：后端快照 note 支持自定义语义（如 ai_polish/review_refined 固化来源说明）+ 版本回滚按槽位需 card_versions 快照扩展（前向兼容加列）。
+
 ## 版本化模型（EXP-P1-05，2026-09-23）
 
 > 依据 EXPERIENCE_SPEC §28/§34.6（「并入 updateCard 事务」决策）：每次内容变更 → 同事务先写 `card_versions` 快照 → 更新主表 → `version = version + 1`；无字段护栏，旧版本永不覆盖。A/R 快照语义：已定稿卡保存即版本。
@@ -10,7 +23,7 @@
 - [x] **schema（`app/schemas/jobcraft.py`）**：新增 `CardVersionRead`（快照行）+ `CardVersionListResponse`（card_id/current_version/versions）。
 - [x] **API（`app/api/experience.py`）**：新增 `GET /cards/{card_id}/versions`（所有权校验 404）→ `{current_version, versions}`，复用 `get_card_versions_by_card_id`（新→旧）。
 - [x] **测试**：EXP-P1-03 两个事务测试适配新执行顺序（先 SELECT 后 UPDATE）与「已定稿 confirm 不再写 original 基线、改为 user_edit 快照+递增」；新增 5 条（内容变更快照+递增 / AI 缓存写不版本化 / 草稿内容变更不版本化 / versions 端点 200 / 端点 404）。**pytest 593 passed / 12 skipped** + ruff 全绿 + check_encoding 344 文件 0 错。
-- [ ] **待续（P1 剩余）**：规则标签池 → 版本化接后端（`useAddExperienceVersionMutation` 下线假数据，§34.6，随 EXP-P1-06b）→ 前端字段改名收尾 → direction/expression 表（**P2 V0009**）。
+- [ ] **待续（P1 剩余）**：规则标签池 → 前端字段改名收尾（方向/表达相关新表归 **P2 V0009**）→ **P1-08/09**。
 
 ## 自动 STAR（EXP-P1-04，2026-09-23）
 
