@@ -430,6 +430,185 @@ class TestBaseResume:
         assert resp.status_code == 404
 
 
+class TestExperienceExpressions:
+    """GET /api/jobcraft/experience/cards/{card_id}/expressions（EXP-P2-02 §8.1）"""
+
+    def _mock_card(self, monkeypatch, card_id=10):
+        monkeypatch.setattr(
+            "app.api.experience.db_tools.get_card", lambda *a, **k: {"id": card_id}
+        )
+
+    def test_list_normal(self, monkeypatch):
+        self._mock_card(monkeypatch, 10)
+        monkeypatch.setattr(
+            "app.tools.db_expression.EXPRESSION_TYPES",
+            ("standardized", "direction", "job_specific"),
+        )
+        monkeypatch.setattr(
+            "app.tools.db_expression.get_expressions_by_experience",
+            lambda *a, **k: [
+                {
+                    "id": 1,
+                    "user_id": 7,
+                    "experience_id": 10,
+                    "direction_id": None,
+                    "job_id": None,
+                    "type": "standardized",
+                    "content": "内容",
+                    "version": 3,
+                    "validation_level": 0,
+                    "usage_count": 0,
+                    "source_refs": [],
+                    "status": "active",
+                    "created_at": None,
+                    "updated_at": None,
+                }
+            ],
+        )
+        resp = client.get("/api/jobcraft/experience/cards/10/expressions")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["experience_id"] == 10
+        assert len(data["items"]) == 1
+        assert data["items"][0]["version"] == 3
+
+    def test_list_card_not_found_returns_404(self, monkeypatch):
+        monkeypatch.setattr(
+            "app.api.experience.db_tools.get_card", lambda *a, **k: None
+        )
+        resp = client.get("/api/jobcraft/experience/cards/999/expressions")
+        assert resp.status_code == 404
+
+    def test_list_invalid_type_returns_400(self, monkeypatch):
+        self._mock_card(monkeypatch)
+        monkeypatch.setattr(
+            "app.tools.db_expression.EXPRESSION_TYPES",
+            ("standardized", "direction", "job_specific"),
+        )
+        resp = client.get("/api/jobcraft/experience/cards/10/expressions?type=bogus")
+        assert resp.status_code == 400
+
+    def test_list_with_filters(self, monkeypatch):
+        self._mock_card(monkeypatch)
+        captured = {}
+
+        monkeypatch.setattr(
+            "app.tools.db_expression.EXPRESSION_TYPES",
+            ("standardized", "direction", "job_specific"),
+        )
+
+        def fake_list(card_id, user, t=None, d=None, j=None):
+            captured["card_id"] = card_id
+            captured["type"] = t
+            captured["direction_id"] = d
+            captured["job_id"] = j
+            return []
+
+        monkeypatch.setattr(
+            "app.tools.db_expression.get_expressions_by_experience", fake_list
+        )
+        resp = client.get(
+            "/api/jobcraft/experience/cards/10/expressions?type=direction&direction_id=3"
+        )
+        assert resp.status_code == 200
+        assert captured["card_id"] == 10
+        assert captured["type"] == "direction"
+        assert captured["direction_id"] == 3
+
+    def test_list_db_error_returns_500(self, monkeypatch):
+        self._mock_card(monkeypatch)
+
+        def boom(*a, **k):
+            raise Exception("db down")
+
+        monkeypatch.setattr(
+            "app.tools.db_expression.get_expressions_by_experience", boom
+        )
+        resp = client.get("/api/jobcraft/experience/cards/10/expressions")
+        assert resp.status_code == 500
+
+
+class TestExpressionCreate:
+    """POST /api/jobcraft/experience/expressions（EXP-P2-02 §8.2）"""
+
+    def test_create_normal(self, monkeypatch):
+        monkeypatch.setattr(
+            "app.api.experience.db_tools.get_card", lambda *a, **k: {"id": 10}
+        )
+        monkeypatch.setattr(
+            "app.tools.db_expression.create_expression", lambda *a, **k: 5
+        )
+        monkeypatch.setattr(
+            "app.tools.db_expression.get_expression",
+            lambda *a, **k: {
+                "id": 5,
+                "user_id": 7,
+                "experience_id": 10,
+                "direction_id": None,
+                "job_id": None,
+                "type": "standardized",
+                "content": "新表达",
+                "version": 1,
+                "validation_level": 0,
+                "usage_count": 0,
+                "source_refs": [],
+                "status": "candidate",
+                "created_at": None,
+                "updated_at": None,
+            },
+        )
+        resp = client.post(
+            "/api/jobcraft/experience/expressions",
+            json={"experience_id": 10, "type": "standardized", "content": "新表达"},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["id"] == 5
+        assert data["status"] == "candidate"
+
+    def test_create_card_not_found_returns_404(self, monkeypatch):
+        monkeypatch.setattr(
+            "app.api.experience.db_tools.get_card", lambda *a, **k: None
+        )
+        resp = client.post(
+            "/api/jobcraft/experience/expressions",
+            json={"experience_id": 999, "type": "standardized", "content": "x"},
+        )
+        assert resp.status_code == 404
+
+    def test_create_empty_content_returns_400(self, monkeypatch):
+        monkeypatch.setattr(
+            "app.api.experience.db_tools.get_card", lambda *a, **k: {"id": 10}
+        )
+        resp = client.post(
+            "/api/jobcraft/experience/expressions",
+            json={"experience_id": 10, "type": "standardized", "content": "  "},
+        )
+        assert resp.status_code == 400
+
+    def test_create_missing_required_returns_422(self):
+        resp = client.post(
+            "/api/jobcraft/experience/expressions",
+            json={"type": "standardized", "content": "x"},
+        )
+        assert resp.status_code == 422
+
+    def test_create_db_error_returns_500(self, monkeypatch):
+        monkeypatch.setattr(
+            "app.api.experience.db_tools.get_card", lambda *a, **k: {"id": 10}
+        )
+
+        def boom(**k):
+            raise Exception("db down")
+
+        monkeypatch.setattr("app.tools.db_expression.create_expression", boom)
+        resp = client.post(
+            "/api/jobcraft/experience/expressions",
+            json={"experience_id": 10, "type": "standardized", "content": "x"},
+        )
+        assert resp.status_code == 500
+
+
 # ============================================================
 # 2. job_analysis.py — 岗位分析路由
 # ============================================================

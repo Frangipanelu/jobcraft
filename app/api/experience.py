@@ -13,6 +13,9 @@ from app.schemas.jobcraft import (
     CardVersionListResponse,
     ExperienceCardCreate,
     ExperienceCardUpdate,
+    ExpressionCreate,
+    ExpressionListResponse,
+    ExpressionRead,
 )
 from app.tools import db_tools
 from app.tools.upload_file_read_tool import read_file_content
@@ -632,6 +635,79 @@ def jobcraft_experience_card_versions(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"查询版本失败: {e}")
+
+
+@router.get("/cards/{card_id}/expressions", response_model=ExpressionListResponse)
+def jobcraft_experience_expressions(
+    card_id: int,
+    current_user: int = Depends(get_current_user),
+    type: Optional[str] = None,
+    direction_id: Optional[int] = None,
+    job_id: Optional[int] = None,
+):
+    """列出某经历卡的标准化表达（§8.1，EXP-P2-02）。
+
+    支持按 type / directionId / jobId 过滤；同一版本链按 version 降序（最新在前）。
+    """
+    from app.tools.db_expression import (
+        EXPRESSION_TYPES,
+        get_expressions_by_experience,
+    )
+
+    try:
+        card = db_tools.get_card(card_id, current_user)
+        if not card:
+            raise HTTPException(status_code=404, detail="卡片不存在")
+        if type is not None and type not in EXPRESSION_TYPES:
+            raise HTTPException(
+                status_code=400,
+                detail=f"type 仅允许 {'/'.join(EXPRESSION_TYPES)}，收到: {type}",
+            )
+        items = get_expressions_by_experience(
+            card_id, current_user, type, direction_id, job_id
+        )
+        return ExpressionListResponse(experience_id=card_id, items=items)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"查询表达失败: {e}")
+
+
+@router.post("/expressions", response_model=ExpressionRead)
+def jobcraft_expression_create(
+    payload: ExpressionCreate,
+    current_user: int = Depends(get_current_user),
+):
+    """创建标准化表达（§8.2，EXP-P2-02；U2 手动创建为 candidate 态）。
+
+    新版本行 = 组内 version max+1（版本链可回溯，§31，不覆盖旧行）。
+    """
+    from app.tools.db_expression import create_expression, get_expression
+
+    try:
+        card = db_tools.get_card(payload.experience_id, current_user)
+        if not card:
+            raise HTTPException(status_code=404, detail="卡片不存在")
+        if not payload.content or not payload.content.strip():
+            raise HTTPException(status_code=400, detail="表达内容不能为空")
+        expression_id = create_expression(
+            {
+                "user_id": current_user,
+                "experience_id": payload.experience_id,
+                "direction_id": payload.direction_id,
+                "job_id": payload.job_id,
+                "type": payload.type,
+                "content": payload.content,
+                "source_refs": payload.source_refs,
+            }
+        )
+        return get_expression(expression_id, current_user)
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"创建表达失败: {e}")
 
 
 @router.post("/cards/{card_id}/structure")

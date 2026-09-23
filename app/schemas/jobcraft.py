@@ -244,6 +244,59 @@ class CardVersionListResponse(BaseModel):
 
 
 # ============================================================
+# 标准化表达（Expression，EXP-P2-02 §8 / DATA_MODEL §6）
+# ============================================================
+
+
+class ExpressionCreate(BaseModel):
+    """创建标准化表达的请求体（EXPERIENCE_SPEC §8.2 / DATA_MODEL §6）"""
+
+    experience_id: int = Field(..., description="源经历卡 id")
+    type: str = Field(
+        "standardized",
+        description="standardized / direction / job_specific（P2 仅 standardized 生效，U6）",
+    )
+    content: str = Field(..., description="表达内容（快照）")
+    direction_id: Optional[int] = Field(
+        None, description="所属方向 id（方向表达用，P2 暂留空）"
+    )
+    job_id: Optional[int] = Field(
+        None, description="所属岗位 id（岗位表达用，P2 暂留空）"
+    )
+    source_refs: List[Dict[str, Any]] = Field(
+        default_factory=list, description="来源引用（复用现有 SourceRef schema，U7）"
+    )
+
+
+class ExpressionRead(BaseModel):
+    """标准化表达响应结构（DATA_MODEL §6 的满足子集）"""
+
+    id: int
+    user_id: int = Field(default=1)
+    experience_id: int
+    direction_id: Optional[int] = None
+    job_id: Optional[int] = None
+    type: str = "standardized"
+    content: str
+    version: int = 1
+    validation_level: int = 0
+    usage_count: int = 0
+    source_refs: List[Dict[str, Any]] = Field(default_factory=list)
+    status: str = "candidate"
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+
+
+class ExpressionListResponse(BaseModel):
+    """经历卡表达列表响应（§8.1）"""
+
+    experience_id: int
+    items: List[ExpressionRead] = Field(
+        default_factory=list, description="表达行（同链按 version 降序）"
+    )
+
+
+# ============================================================
 # JD / ATS 相关
 # ============================================================
 
