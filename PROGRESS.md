@@ -11,7 +11,8 @@
 - [x] **interview_pre 收敛**：`_build_interview_prompt` 卡片段落直接调用 `get_card_render_text`（纯文本默认），**补齐 STAR 优先级**（原 `_card_text` 无 ai_structured 层），删除 `_card_text`。
 - [x] **analyze/gap_polish/score_match 收敛**：`_card_text_blob` 改为 `get_card_render_text(include_tags=True)` 薄封装（纯文本 STAR + tags，避免 markdown 标签词污染 `_normalize` 后的子串/精确匹配，匹配语义不变）；`gap_polish_agent`/`score_match_agent` 导入迁移至 `app.tools.card_render`。
 - [x] **测试**：新增 `tests/test_card_render_unit.py`（11 条：版本链优先 / markdown STAR 五字段 / 纯文本无标签词 / STAR 子串匹配 / 空 achievements 回退 / raw_text→content→summary→title 回退链 / include_tags 追加 / 全空返回空串）；`test_misc_unit.py`、`test_tools_extra_unit.py` 改断言统一入口。**pytest 615 passed / 12 skipped** + ruff 全绿 + security-scan（--select S）通过 + check_encoding 348 文件 0 错。
-- [ ] **待续（P1 剩余）**：前端字段改名收尾（direction/expression 表归 **P2 V0009**，随 EXP-P2-01）→ **P1-09 验证全绿（npm run build）**；后续优化：后端快照 note 支持自定义语义 + 版本回滚按槽位需 card_versions 快照扩展（前向兼容加列）+ P2-07 消费链接入 active expression 回退。
+- [x] **P1-09 验证全绿**：`python scripts/check_encoding.py`（348 文件 0 错）+ `uv run ruff check` 全绿 + `uv run pytest tests/` 615 passed/12 skipped + `cd frontend-jobcraft && npm run build` 构建通过（仅既有 CSS @import 顺序 / chunk>500kB warning）+ `npx tsc --noEmit` 0 错 + `npx vitest run` 130 全过。**P1（Experience 域 v0.2）全链路完成**。
+- [ ] **待续（P1 剩余）**：前端字段改名收尾（direction/expression 表归 **P2 V0009**，随 EXP-P2-01）→ **P2 标准化表达与版本系列（EXP-P2-01..11）**已就绪；后续优化：后端快照 note 支持自定义语义 + 版本回滚按槽位需 card_versions 快照扩展（前向兼容加列）+ P2-07 消费链接入 active expression 回退。
 
 ## 规则标签池 · 标签并入 STAR（EXP-P1-06c，2026-09-23）
 
