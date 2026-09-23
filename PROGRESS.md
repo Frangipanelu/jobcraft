@@ -2,6 +2,17 @@
 
 > 本文件用于追踪项目整体进度。AI 在每次会话结束或完成子任务时，必须更新本文件的对应板块。
 
+## 标准化表达与方向新表（EXP-P2-01，2026-09-23）
+
+> 依据 EXPERIENCE_SPEC §31 + DATA_MODEL §6/§7 + DIRECTION_SPEC §3（U8：V0009 是 direction/expression 新表的唯一落点）。前向兼容只加表（AGENTS §4.4），不 ALTER 既有表。
+
+- [x] **V0009 迁移（`migrations/versions/V0009__expression_direction.sql`）**：两表 `CREATE TABLE IF NOT EXISTS`（幂等）——
+  - `direction`：id/user_id/name/function_id?/primary_role_id?/status('active'|'archived')/created_at/updated_at + `idx_direction_user`/`idx_direction_name`；字段按 DATA_MODEL §7 + DIRECTION_SPEC §3（§31 早期 level/group 建议弃用）；function/role 主键表尚不存在（P3 六维分类），仅留 INT 可空位、不建外键（与 V0001 基线一致）
+  - `expression`：id/user_id/experience_id/direction_id?/job_id?/type('standardized'|'direction'|'job_specific')/content/version/validation_level 0-4/usage_count/source_refs JSON/status('candidate'|'active'|'deprecated')/created_at/updated_at + 5 索引（user/experience/direction/job/status）；字段按 DATA_MODEL §6 + EXPERIENCE_SPEC §8
+  - 版本链语义：每次生成/修改 → 新插一行不覆盖，同 (experience_id, type, direction_id, job_id) 多行构成版本链；SPLIT 约定无尾分号
+- [x] **测试**：`test_migrations_runner_unit.py` 新增 6 条——两表声明 / 无 ALTER（前向兼容）/ expression 字段覆盖 §6 / direction 字段覆盖 §7 / SPLIT 约定 2 块 / `runner.migrate()` 全量入库含 0009。**pytest 620 passed / 12 skipped** + ruff 全绿 + check_encoding 350 文件 0 错。
+- [ ] **待续（EXP-P2-02）**：后端 expression CRUD + 版本链 API（`db_expression.py` + `api/experience.py` 端点 §24.9）。
+
 ## Expression/Consumer Chain 基础（EXP-P1-08，2026-09-23）
 
 > 依据 EXPERIENCE_SPEC §32/§30.5：统一消费入口 `get_card_render_text()`（优先版本链 → 结构化 STAR → raw_text → summary/title），下游 `_get_card_text` / `_card_text` / gap_polish 收敛至该函数，不再各自拼。§30.5 场景参数（排序/字段权重）归 P2。
