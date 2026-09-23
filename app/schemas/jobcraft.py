@@ -212,6 +212,31 @@ class ExperienceCardUpdate(BaseModel):
     )
 
 
+class CardVersionRead(BaseModel):
+    """经历卡一条版本快照（card_versions 行，EXP-P1-05 §28）"""
+
+    id: int = Field(..., description="版本记录主键")
+    card_id: int = Field(..., description="经历卡 id")
+    version_type: str = Field(..., description="original / user_edit / ai_polish / ...")
+    source_type: str = Field(..., description="来源域，如 original / card_edit")
+    source_id: int = Field(0, description="来源对象 id，哨兵基线为 0")
+    title: Optional[str] = None
+    raw_text: str = Field("", description="快照原文（可恢复）")
+    tags: List[str] = Field(default_factory=list)
+    note: Optional[str] = None
+    created_at: Optional[str] = None
+
+
+class CardVersionListResponse(BaseModel):
+    """经历卡版本历史响应"""
+
+    card_id: int = Field(..., description="经历卡 id")
+    current_version: int = Field(1, description="当前主表 version（V 编号）")
+    versions: List[CardVersionRead] = Field(
+        default_factory=list, description="版本快照（新→旧）"
+    )
+
+
 # ============================================================
 # JD / ATS 相关
 # ============================================================

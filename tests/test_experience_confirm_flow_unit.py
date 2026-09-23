@@ -234,14 +234,16 @@ def test_update_card_confirm_finalizes_draft_with_baseline(monkeypatch):
                 "raw_text": "内容",
                 "tags": None,
                 "is_confirmed": 0,
+                "version": 1,
             }
         ],
     )
     ok = mod.update_card(5, {"title": "卡2"}, user_id=1, confirm=True)
     assert ok is True
     statements = [sql.strip() for sql, _ in executed]
-    assert statements[0].startswith("UPDATE experience_card SET")
-    assert statements[1].startswith("SELECT id, title, raw_text, tags, is_confirmed")
+    # EXP-P1-05：先 SELECT 当前值（供基线/快照），再 UPDATE 主表
+    assert statements[0].startswith("SELECT id, title, raw_text, tags, is_confirmed")
+    assert statements[1].startswith("UPDATE experience_card SET")
     baseline_sql, baseline_params = executed[2]
     assert baseline_sql.strip().startswith("INSERT INTO card_versions")
     assert baseline_params[1:4] == ("original", "original", 0)
@@ -249,7 +251,7 @@ def test_update_card_confirm_finalizes_draft_with_baseline(monkeypatch):
 
 
 def test_update_card_confirm_is_idempotent_on_confirmed(monkeypatch):
-    """已定稿卡 confirm 为幂等空操作（不重复写基线）。"""
+    """已定稿卡 confirm：不写 original 基线，但内容变更触发 user_edit 快照 + version+1。"""
     executed = []
     _patch_transaction(
         monkeypatch,
@@ -261,13 +263,29 @@ def test_update_card_confirm_is_idempotent_on_confirmed(monkeypatch):
                 "raw_text": "内容",
                 "tags": None,
                 "is_confirmed": 1,
+                "version": 1,
             }
         ],
     )
     ok = mod.update_card(5, {"title": "卡2"}, user_id=1, confirm=True)
     assert ok is True
+    # EXP-P1-03：不重复写 V1 哨兵基线
     assert not any(
-        sql.strip().startswith("INSERT INTO card_versions") for sql, _ in executed
+        sql.strip().startswith("INSERT INTO card_versions") and params[1] == "original"
+        for sql, params in executed
+    )
+    # EXP-P1-05：已定稿内容变更应写 user_edit 快照（旧内容）+ 版本递增
+    snapshots = [
+        params
+        for sql, params in executed
+        if sql.strip().startswith("INSERT INTO card_versions")
+    ]
+    assert snapshots and snapshots[0][1] == "user_edit"
+    assert snapshots[0][5] == "内容"  # 快照为变更前的 raw_text
+    assert snapshots[0][7] == "编辑保存 V2"
+    assert any(
+        sql.strip().startswith("UPDATE experience_card SET version")
+        for sql, _ in executed
     )
 
 
@@ -312,6 +330,113 @@ def test_update_card_without_confirm_keeps_draft(monkeypatch):
         ],
     )
     ok = mod.update_card(5, {"is_active": True}, user_id=1, confirm=False)
+    assert ok is True
+    assert not any(
+        sql.strip().startswith("INSERT INTO card_versions") for sql, _ in executed
+    )
+
+
+# ============================================================
+# EXP-P1-05：update_card 版本化（快照 + version+1）
+# ============================================================
+
+
+def test_update_card_content_change_snapshots_and_bumps_version(monkeypatch):
+    """已定稿卡内容变更：先快照当前值（user_edit），再更新主表并 version+1。"""
+    executed = []
+    _patch_transaction(
+        monkeypatch,
+        executed,
+        rows=[
+            {
+                "id": 5,
+                "title": "旧标题",
+                "raw_text": "旧内容",
+                "tags": ["a"],
+                "is_confirmed": 1,
+                "version": 2,
+            }
+        ],
+    )
+    ok = mod.update_card(
+        5,
+        {"title": "新标题", "raw_text": "新内容", "tags": ["a", "b"]},
+        user_id=1,
+        confirm=False,
+    )
+    assert ok is True
+    snapshots = [
+        params
+        for sql, params in executed
+        if sql.strip().startswith("INSERT INTO card_versions")
+    ]
+    assert len(snapshots) == 1
+    snap = snapshots[0]
+    assert snap[1] == "user_edit"
+    assert snap[2] == "card_edit"
+    assert snap[3] == 0
+    assert snap[4] == "旧标题"  # 快照为变更前内容
+    assert snap[5] == "旧内容"
+    assert snap[7] == "编辑保存 V3"
+    bump = [
+        sql
+        for sql, _ in executed
+        if sql.strip().startswith("UPDATE experience_card SET version")
+    ]
+    assert bump and "COALESCE(version, 0) + 1" in bump[0]
+
+
+def test_update_card_auto_cache_write_does_not_version(monkeypatch):
+    """AI 自动写 ai_structured（自动 STAR）不算内容变更，不产生快照/递增。"""
+    executed = []
+    _patch_transaction(
+        monkeypatch,
+        executed,
+        rows=[
+            {
+                "id": 5,
+                "title": "卡",
+                "raw_text": "内容",
+                "tags": None,
+                "is_confirmed": 1,
+                "version": 1,
+            }
+        ],
+    )
+    ok = mod.update_card(
+        5,
+        {"ai_structured": {"summary": "自动抽取", "achievements": []}},
+        user_id=1,
+        confirm=False,
+    )
+    assert ok is True
+    assert not any(
+        sql.strip().startswith("INSERT INTO card_versions") for sql, _ in executed
+    )
+    assert not any(
+        sql.strip().startswith("UPDATE experience_card SET version")
+        for sql, _ in executed
+    )
+
+
+def test_update_card_draft_content_change_does_not_version(monkeypatch):
+    """草稿卡内容变更（未定稿）不触发版本化（V1 定稿时才建基线）。"""
+    executed = []
+    _patch_transaction(
+        monkeypatch,
+        executed,
+        rows=[
+            {
+                "id": 5,
+                "title": "卡",
+                "raw_text": "内容",
+                "tags": None,
+                "is_confirmed": 0,
+                "version": 1,
+            }
+        ],
+    )
+    ok = mod.update_card(5, {"title": "卡2"}, user_id=1, confirm=False)
     assert ok is True
     assert not any(
         sql.strip().startswith("INSERT INTO card_versions") for sql, _ in executed
@@ -585,3 +710,63 @@ def test_manual_create_card_does_not_trigger_extract(monkeypatch):
     assert resp.status_code == 200
     assert captured["insert"]["source"] == "manual"
     assert captured["insert"]["is_confirmed"] is True
+
+
+# ============================================================
+# EXP-P1-05：GET /cards/{card_id}/versions 版本历史端点
+# ============================================================
+
+
+def test_get_card_versions_endpoint_returns_history(monkeypatch):
+    """GET 版本端点返回当前 version + 快照列表（新→旧）。"""
+    monkeypatch.setattr(
+        "app.api.experience.db_tools.get_card",
+        lambda *a: {"id": 7, "version": 3},
+    )
+    monkeypatch.setattr(
+        "app.api.experience.db_tools.get_card_versions_by_card_id",
+        lambda cid: [
+            {
+                "id": 2,
+                "card_id": 7,
+                "version_type": "user_edit",
+                "source_type": "card_edit",
+                "source_id": 0,
+                "title": "新标题",
+                "raw_text": "新内容",
+                "tags": [],
+                "note": "编辑保存 V3",
+                "created_at": "2026-09-23T10:00:00",
+            },
+            {
+                "id": 1,
+                "card_id": 7,
+                "version_type": "original",
+                "source_type": "original",
+                "source_id": 0,
+                "title": "旧标题",
+                "raw_text": "旧内容",
+                "tags": [],
+                "note": "V1 哨兵基线（确认定稿）",
+                "created_at": "2026-09-23T09:00:00",
+            },
+        ],
+    )
+    client = TestClient(app, raise_server_exceptions=False)
+    resp = client.get("/api/jobcraft/experience/cards/7/versions", headers=_HEADERS)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["card_id"] == 7
+    assert body["current_version"] == 3
+    assert len(body["versions"]) == 2
+    assert body["versions"][0]["version_type"] == "user_edit"
+    assert body["versions"][0]["note"] == "编辑保存 V3"
+    assert body["versions"][1]["source_type"] == "original"
+
+
+def test_get_card_versions_endpoint_404_for_missing_card(monkeypatch):
+    """卡不存在时版本端点返回 404（所有权/存在校验）。"""
+    monkeypatch.setattr("app.api.experience.db_tools.get_card", lambda *a: None)
+    client = TestClient(app, raise_server_exceptions=False)
+    resp = client.get("/api/jobcraft/experience/cards/99/versions", headers=_HEADERS)
+    assert resp.status_code == 404

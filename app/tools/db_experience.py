@@ -448,6 +448,28 @@ def insert_card(data: Dict[str, Any]) -> int:
             return card_id
 
 
+# 版本化内容字段（EXP-P1-05 §28）：这些字段变更视为「内容变更」，
+# 已定稿卡保存时触发快照 + version+1；is_active/is_confirmed/fields/
+# ai_structured/dimensions/tags（AI 自动补写）不算内容变更。
+_VERSION_CONTENT_FIELDS = {
+    "title",
+    "raw_text",
+    "summary",
+    "content",
+    "company",
+    "role",
+    "period",
+    "card_type",
+    "background",
+    "problem",
+    "solution",
+    "execution",
+    "result",
+    "actions",
+    "results",
+}
+
+
 def update_card(
     card_id: int,
     updates: Dict[str, Any],
@@ -466,9 +488,17 @@ def update_card(
         source_type='original'/source_id=0，version_type='original'）并置
         is_confirmed=1；已定稿卡片为幂等空操作。仅卡片页保存（前端携带
         is_confirmed:true）走此参数，内部自动 STAR 写入不触发。
+    :版本化（EXP-P1-05 §28）：已定稿卡发生「内容变更」（_VERSION_CONTENT_FIELDS）
+        且主表有实际改动时，同事务内先把当前值写入 card_versions
+        （version_type='user_edit'/source_type='card_edit'，note 记 Vn+1），
+        再更新主表 version=COALESCE(version,0)+1。AI 自动写缓存（ai_structured/
+        tags/dimensions）及非内容维护字段不触发版本化。
     """
     _ensure_experience_card_columns()
     updates = dict(updates)
+    content_change = bool(set(updates) & _VERSION_CONTENT_FIELDS)
+    if content_change or confirm:
+        _ensure_card_versions_table()
     field_map = {
         "title": "title",
         "raw_text": "raw_text",
@@ -512,14 +542,24 @@ def update_card(
     if not sets and not confirm:
         return False
 
-    if confirm:
-        _ensure_card_versions_table()
-
     where = " AND user_id=%s" if user_id is not None else ""
     changed = False
     found = False
     with transaction() as conn:
         with conn.cursor() as cur:
+            pre: Optional[Dict[str, Any]] = None
+            if confirm or content_change:
+                select_sql = (
+                    "SELECT id, title, raw_text, tags, is_confirmed, version "
+                    "FROM experience_card WHERE id=%s" + where
+                )
+                cur.execute(
+                    select_sql,
+                    tuple([card_id] + ([user_id] if where else [])),
+                )
+                pre = cur.fetchone()
+                if confirm:
+                    found = pre is not None
             if sets:
                 sql = (
                     "UPDATE experience_card SET "
@@ -531,27 +571,34 @@ def update_card(
                     sql, tuple(values + [card_id] + ([user_id] if where else []))
                 )
                 changed = cur.rowcount > 0
-            if confirm:
-                select_sql = (
-                    "SELECT id, title, raw_text, tags, is_confirmed "
-                    "FROM experience_card WHERE id=%s" + where
+            # EXP-P1-05 §28：已定稿卡内容变更 → 快照当前值（先写）→ version+1
+            if content_change and pre and pre["is_confirmed"] and changed:
+                _insert_version_snapshot(
+                    cur,
+                    pre,
+                    version_type="user_edit",
+                    source_type="card_edit",
+                    source_id=0,
+                    note=f"编辑保存 V{(pre.get('version') or 0) + 1}",
+                )
+                bump_sql = (
+                    "UPDATE experience_card SET version = COALESCE(version, 0) + 1 "
+                    "WHERE id=%s" + where
                 )
                 cur.execute(
-                    select_sql,
+                    bump_sql,
                     tuple([card_id] + ([user_id] if where else [])),
                 )
-                row = cur.fetchone()
-                found = row is not None
-                if row and not row["is_confirmed"]:
-                    insert_original_baseline(
-                        cur,
-                        row,
-                        note="V1 哨兵基线（确认定稿）",
-                    )
-                    cur.execute(
-                        "UPDATE experience_card SET is_confirmed=1 WHERE id=%s",
-                        (card_id,),
-                    )
+            if confirm and pre and not pre["is_confirmed"]:
+                insert_original_baseline(
+                    cur,
+                    pre,
+                    note="V1 哨兵基线（确认定稿）",
+                )
+                cur.execute(
+                    "UPDATE experience_card SET is_confirmed=1 WHERE id=%s",
+                    (card_id,),
+                )
     if confirm:
         return found
     return changed
@@ -797,16 +844,48 @@ def insert_original_baseline(
     :param card: 卡片快照（须含 id/title/raw_text/tags）
     :param note: 基线说明
     """
+    _insert_version_snapshot(
+        cur,
+        card,
+        version_type="original",
+        source_type="original",
+        source_id=0,
+        note=note,
+    )
+
+
+def _insert_version_snapshot(
+    cur: Any,
+    card: Dict[str, Any],
+    *,
+    version_type: str,
+    source_type: str,
+    source_id: int,
+    note: str = "",
+) -> None:
+    """
+    在事务游标上写入一条 card_versions 快照（基线 / 编辑版本共用，EXP-P1-05 §28）
+
+    表结构固定（AGENTS.md §4.4 前向兼容），快照仅存 title/raw_text/tags；
+    旧版本永不覆盖，可恢复。
+
+    :param cur: 调用方事务的游标
+    :param card: 快照数据（须含 id/title/raw_text/tags）
+    :param version_type: 'original'（哨兵基线）/'user_edit'（卡片页编辑）等
+    :param source_type: 来源域，编辑版本用 'card_edit'
+    :param source_id: 来源对象 id，无来源为 0
+    :param note: 版本说明
+    """
     cur.execute(
         "INSERT INTO card_versions "
         "(card_id, version_type, source_type, source_id, title, raw_text, tags, note) "
         "VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
         (
             card["id"],
-            "original",
-            "original",
-            0,
-            card["title"],
+            version_type,
+            source_type,
+            source_id,
+            card.get("title"),
             card["raw_text"] or "",
             json.dumps(_parse_json(card.get("tags")) or [], ensure_ascii=False),
             note,

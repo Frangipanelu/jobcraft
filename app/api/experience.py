@@ -9,7 +9,11 @@ from pydantic import BaseModel
 
 from app.api.context import set_session_context, reset_session_context
 from app.auth.dependencies import get_current_user
-from app.schemas.jobcraft import ExperienceCardCreate, ExperienceCardUpdate
+from app.schemas.jobcraft import (
+    CardVersionListResponse,
+    ExperienceCardCreate,
+    ExperienceCardUpdate,
+)
 from app.tools import db_tools
 from app.tools.upload_file_read_tool import read_file_content
 
@@ -597,6 +601,31 @@ def jobcraft_experience_delete(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"删除失败: {e}")
+
+
+@router.get("/cards/{card_id}/versions", response_model=CardVersionListResponse)
+def jobcraft_experience_card_versions(
+    card_id: int, current_user: int = Depends(get_current_user)
+):
+    """返回经历卡版本历史（新→旧）与当前 version 编号（EXP-P1-05 §28）。
+
+    - current_version 为主表 version 列（V 编号）
+    - versions 为 card_versions 快照（含 V1 哨兵基线 + 每次内容变更的 user_edit 快照）
+    """
+    try:
+        card = db_tools.get_card(card_id, current_user)
+        if not card:
+            raise HTTPException(status_code=404, detail="卡片不存在")
+        versions = db_tools.get_card_versions_by_card_id(card_id)
+        return CardVersionListResponse(
+            card_id=card_id,
+            current_version=card.get("version") or 1,
+            versions=versions,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"查询版本失败: {e}")
 
 
 @router.post("/cards/{card_id}/structure")
