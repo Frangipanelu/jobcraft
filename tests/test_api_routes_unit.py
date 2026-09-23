@@ -48,6 +48,8 @@ class _AuthedClient:
 
 client = _AuthedClient(TestClient(app, raise_server_exceptions=False))
 
+_SENTINEL = object()
+
 
 # ============================================================
 # Helper: 非空 raw_text 用于跳过长度校验
@@ -606,6 +608,105 @@ class TestExpressionCreate:
             "/api/jobcraft/experience/expressions",
             json={"experience_id": 10, "type": "standardized", "content": "x"},
         )
+        assert resp.status_code == 500
+
+
+class TestExpressionGenerate:
+    """POST /api/jobcraft/experience/cards/{card_id}/expressions（EXP-P2-04 §8.2 生成语义）"""
+
+    def _mock_card(self, monkeypatch, card=_SENTINEL):
+        if card is _SENTINEL:
+            card = {
+                "id": 10,
+                "raw_text": "负责构建推荐系统，提升了 CTR 30%",
+                "company": "字节",
+                "role": "算法工程师",
+            }
+        monkeypatch.setattr(
+            "app.api.experience.db_tools.get_card",
+            lambda *a, **k: card,
+        )
+
+    def _mock_llm(self, monkeypatch, content="生成的中性表达"):
+        monkeypatch.setattr(
+            "app.tools.expression_generate.generate_standardized_expression",
+            lambda *a, **k: content,
+        )
+
+    def test_generate_normal(self, monkeypatch):
+        self._mock_card(monkeypatch)
+        self._mock_llm(monkeypatch)
+        captured = {}
+
+        def fake_create(data):
+            captured["experience_id"] = data["experience_id"]
+            captured["type"] = data["type"]
+            captured["content"] = data["content"]
+            captured["status"] = data.get("status")
+            return 5
+
+        monkeypatch.setattr("app.tools.db_expression.create_expression", fake_create)
+        monkeypatch.setattr(
+            "app.tools.db_expression.get_expression",
+            lambda *a, **k: {
+                "id": 5,
+                "user_id": 7,
+                "experience_id": 10,
+                "direction_id": None,
+                "job_id": None,
+                "type": "standardized",
+                "content": "生成的中性表达",
+                "version": 1,
+                "validation_level": 0,
+                "usage_count": 0,
+                "source_refs": [],
+                "status": "candidate",
+                "created_at": None,
+                "updated_at": None,
+            },
+        )
+        resp = client.post("/api/jobcraft/experience/cards/10/expressions")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["id"] == 5
+        assert data["status"] == "candidate"
+        assert captured["type"] == "standardized"
+
+    def test_generate_card_not_found_returns_404(self, monkeypatch):
+        self._mock_card(monkeypatch, card=None)
+        resp = client.post("/api/jobcraft/experience/cards/999/expressions")
+        assert resp.status_code == 404
+
+    def test_generate_empty_raw_text_returns_400(self, monkeypatch):
+        self._mock_card(
+            monkeypatch,
+            card={"id": 10, "raw_text": "  ", "company": "", "role": ""},
+        )
+        resp = client.post("/api/jobcraft/experience/cards/10/expressions")
+        assert resp.status_code == 400
+
+    def test_generate_llm_value_error_returns_400(self, monkeypatch):
+        self._mock_card(monkeypatch)
+
+        def boom(*a, **k):
+            raise ValueError("经历内容过短")
+
+        monkeypatch.setattr(
+            "app.tools.expression_generate.generate_standardized_expression", boom
+        )
+        resp = client.post("/api/jobcraft/experience/cards/10/expressions")
+        assert resp.status_code == 400
+
+    def test_generate_llm_error_returns_500(self, monkeypatch):
+        self._mock_card(monkeypatch)
+
+        def boom(*a, **k):
+            raise RuntimeError("LLM 挂了")
+
+        monkeypatch.setattr(
+            "app.tools.expression_generate.generate_standardized_expression", boom
+        )
+        resp = client.post("/api/jobcraft/experience/cards/10/expressions")
         assert resp.status_code == 500
 
 

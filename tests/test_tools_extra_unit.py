@@ -980,3 +980,78 @@ class TestExperiencePolish:
 
         with pytest.raises(RuntimeError, match="LLM 不可用"):
             ep.polish_experience("原始经历")
+
+
+class TestExpressionGenerate:
+    def test_generate_goes_through_invoke_structured(self, monkeypatch):
+        """generate_standardized_expression 必须走 llm_json 统一出口（审计/缓存/观测）。"""
+        import app.tools.expression_generate as eg
+
+        captured = {}
+
+        def fake_invoke(model, schema, prompt, **kwargs):
+            captured.update(
+                schema=schema.__name__,
+                debug_label=kwargs.get("debug_label"),
+                has_prompt="标准化表达" in prompt,
+            )
+            assert "某公司" in prompt and "工程师" in prompt and "原始经历" in prompt
+            return schema(content="负责构建推荐系统，提升了 CTR。")
+
+        monkeypatch.setattr(eg, "invoke_structured", fake_invoke)
+
+        out = eg.generate_standardized_expression(
+            "负责构建推荐系统，提升了 CTR 30%。",
+            company="某公司",
+            role="工程师",
+        )
+        assert out == "负责构建推荐系统，提升了 CTR。"
+        assert captured["schema"] == "StandardizedExpressionOutput"
+        assert captured["debug_label"] == "expression_standardized"
+        assert captured["has_prompt"]
+
+    def test_generate_uses_standardized_prompt_v1(self, monkeypatch):
+        """生成必须使用 expression_standardized v1（中性化 + 输出 content）。"""
+        import app.tools.expression_generate as eg
+
+        captured = {}
+
+        def fake_invoke(model, schema, prompt, **kwargs):
+            captured["prompt"] = prompt
+            return schema(content=".")
+
+        monkeypatch.setattr(eg, "invoke_structured", fake_invoke)
+        eg.generate_standardized_expression("这是一段足够长的原始经历内容")
+        assert "content" in captured["prompt"]
+        assert "标准化表达" in captured["prompt"]
+
+    def test_generate_raises_on_empty_input(self, monkeypatch):
+        import app.tools.expression_generate as eg
+
+        with pytest.raises(ValueError, match="不能为空"):
+            eg.generate_standardized_expression("   ")
+
+        with pytest.raises(ValueError, match="过短"):
+            eg.generate_standardized_expression("短")
+
+    def test_generate_raises_on_empty_output(self, monkeypatch):
+        import app.tools.expression_generate as eg
+
+        def fake_invoke_blank(model, schema, prompt, **kwargs):
+            return schema(content="   ")
+
+        monkeypatch.setattr(eg, "invoke_structured", fake_invoke_blank)
+
+        with pytest.raises(RuntimeError, match="返回内容为空"):
+            eg.generate_standardized_expression("这是一段足够长的原始经历内容")
+
+    def test_generate_raises_on_llm_failure(self, monkeypatch):
+        import app.tools.expression_generate as eg
+
+        def fake_invoke_fail(model, schema, prompt, **kwargs):
+            raise RuntimeError("LLM 不可用")
+
+        monkeypatch.setattr(eg, "invoke_structured", fake_invoke_fail)
+
+        with pytest.raises(RuntimeError, match="LLM 不可用"):
+            eg.generate_standardized_expression("这是一段足够长的原始经历内容")

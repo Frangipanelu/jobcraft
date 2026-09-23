@@ -710,6 +710,54 @@ def jobcraft_expression_create(
         raise HTTPException(status_code=500, detail=f"创建表达失败: {e}")
 
 
+@router.post("/cards/{card_id}/expressions", response_model=ExpressionRead)
+def jobcraft_expression_generate(
+    card_id: int, current_user: int = Depends(get_current_user)
+):
+    """AI 生成标准化表达并入库（EXP-P2-04：§8.2 生成语义 + EXPERIENCE_SPEC §9）。
+
+    - 依据 expression_standardized_v1 Prompt（中性化 + 事实保留）
+    - 新版本行 = 组内 version max+1，仅自动进入 candidate 态（U2）
+    """
+    from app.tools.db_expression import create_expression, get_expression
+    from app.tools.expression_generate import generate_standardized_expression
+
+    try:
+        card = db_tools.get_card(card_id, current_user)
+        if not card:
+            raise HTTPException(status_code=404, detail="卡片不存在")
+        raw_text = (card.get("raw_text") or "").strip()
+        if len(raw_text) < 10:
+            raise HTTPException(
+                status_code=400,
+                detail="经历内容过短，请补充后再试",
+            )
+        content = generate_standardized_expression(
+            raw_text=raw_text,
+            company=card.get("company") or "",
+            role=card.get("role") or "",
+        )
+        expression_id = create_expression(
+            {
+                "user_id": current_user,
+                "experience_id": card_id,
+                "direction_id": None,
+                "job_id": None,
+                "type": "standardized",
+                "content": content,
+                "source_refs": [],
+            }
+        )
+        return get_expression(expression_id, current_user)
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.exception("标准化表达生成失败")
+        raise HTTPException(status_code=500, detail=f"标准化表达生成失败: {e}")
+
+
 @router.post("/cards/{card_id}/structure")
 def jobcraft_experience_structure(
     card_id: int, current_user: int = Depends(get_current_user)
