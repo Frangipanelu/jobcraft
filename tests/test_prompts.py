@@ -12,6 +12,7 @@ _REQUIRED_FIELDS = {
     ("experience", "parse_resume_entries"): {"resume_text"},
     ("experience", "recommend_tags"): {"raw_text"},
     ("experience", "polish"): {"company", "role", "raw_text"},
+    ("experience", "expression_standardized"): {"company", "role", "raw_text"},
     ("jd", "jd_ats_analysis"): {"dims", "jd_text"},
     ("jd", "ats_recommend"): {"jd_text", "cards_section"},
     ("jd", "score_match"): {
@@ -154,6 +155,17 @@ def test_extract_structured_v2_anti_fabrication():
     assert "原文" in text
     # 不再要求「尽量包含量化指标」这类诱导编造的表述
     assert "尽量包含量化" not in text
+
+
+def test_expression_standardized_v1_neutral_and_factual():
+    """EXP-P2-03：expression_standardized 必须体现中性化（不针对岗位）+ 事实保留/反编造 + 输出 content。"""
+    text = (PROMPTS_DIR / "experience" / "expression_standardized_v1.txt").read_text(
+        encoding="utf-8"
+    )
+    assert "content" in text
+    assert "不针对任何特定岗位" in text
+    assert "保持原始事实不变" in text or "保留事实完整性" in text
+    assert "虚构" in text
 
 
 def test_extract_structured_v3_tags_output():
