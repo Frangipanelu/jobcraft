@@ -2,6 +2,19 @@
 
 > 本文件用于追踪项目整体进度。AI 在每次会话结束或完成子任务时，必须更新本文件的对应板块。
 
+## 分块判定与公司提取解绑（EXP-P1-02b，2026-09-23，`docs/handoff_resume_splitter_decouple.md`）
+
+> 用户拍板三点：① 分块判定只依赖结构信号、不依赖 company 能否提取；② 动词表降级为 role 提取器（盲区只留空 role）；③ `[个人项目]` 仅用于「章节明确是项目经历的卡」且 company 提取为空时。**决策：8 条空 company 卡全部落点均在显式「项目经历」章节（resume_02/05/08/09/12），故 8 条全部填 `[个人项目]`；work/intern 空公司保持留空。**
+
+- [x] **动词表解绑（`app/tools/resume_splitter.py`）**：`_NARRATIVE_RE`（公司+role 单条绑定）拆为 `_NARRATIVE_COMPANY_RE`（`于在於 + company + 动词位/句读/时间锚/行尾` 前瞻，动词位前瞻已覆盖主导/牵头/参与/协作/设计/搭建等高频盲区动词，但**不绑定 role 提取**）+ `_NARRATIVE_ROLE_RE`（动词表仅提取 role）；叙述式段分块按段落切分，不再依赖能否提取 company。
+- [x] **分块结构信号驱动**：`_filtered_lines` 返回 `(line, section_type)`（新增 `_section_type_of` 由章节标题推导 work/intern/project）；`_split_by_time_ranges`/`_split_by_paragraphs`/`_parse_block`/`_detect_section_type` 携带 section_type——时间锚点块按「项目经历」章节信号判 project，不再依赖 content 兜底盲区（此前同时受动词表/blind-zone 影响）。
+- [x] **project 占位**：`_entry` 内 `card_type=="project"` 且 company 空 → `company="[个人项目]"`；work/intern 空公司保持留空（不编造）。
+- [x] **expected fixtures 同步（8 条）**：resume_02（共享单车订单系统重构/智能客服知识库）、resume_05（3 张 project 卡）、resume_08（在线教育用户行为分析）、resume_09（分布式日志检索平台）、resume_12（教务管理系统）company 全部从 `""` → `"[个人项目]"`；work/intern 卡空 company 契约为 0（全部有 company）。**重要**：占位非原文子串 → eval + 单测反编造断言加 `[个人项目]` 白名单。
+- [x] **测试**：`tests/test_resume_splitter_unit.py` 反编造白名单 + 3 条行为锁单测（动词表外动词只留空 role 不丢块不丢公司 / project 占位仅空 company + work 空公司保持留空 / 「项目经历」章节信号驱动 project 卡）；`scripts/eval_resume_splitter.py` 补反编造断言 + 白名单。
+- [x] **清理**：删除孤儿 `_final_authoritative.json`（此前导致 `test_all_samples_have_expected` 既有失败）。
+- [x] **验证全绿**：pytest **566 passed / 12 skipped**（EXP-P1-06 基线 562 + 孤儿 fixture 修复 1 + 新增行为锁单测 3）、eval **27/27**、check_encoding 340 文件 0 错、ruff check/format 全绿、前端 `npm run build` ✅（仅既有 CSS/Chunk 警告）。
+- [ ] **待续**：此改造解除 EXP-P1-02 叙述式动词表盲区（`PROGRESS` 下方「已知盲区」已销项）；规则分块产物 company/role 的 LLM 兜底与 Confirm-As-V1（EXP-P1-03）衔接待 P1 后续任务。
+
 ## EXP-P1-06 字段契约对齐 §30.4 + STAR 写路径打通（2026-09-23）
 
 > 将经历卡与简历的数据字段/接口对齐 EXPERIENCE_SPEC §30.4（S=`background`/T=`problem`/A=`actions[]`/R=`results[]` + `tags` + `card_type` 收敛 work|intern|project），打通前后端 STAR 写路径。**范围边界**：不含 §34.6 save-card-version 版本化（无 V0008 迁移）。
@@ -42,7 +55,7 @@
   - 新增 `tests/test_resume_splitter_unit.py`：12 样本逐块比对（块数+字段命中）、样本配对完整性（≥10）、**反编造断言**（period/title/company/role 必须为原文子串）；样本 4/5 两次迭代后 **27/27 块 100% 命中**
 - [x] **验证**：pytest 全量 **559 passed / 11 skipped**（+14 新用例）+ `ruff check` 全绿 + `python scripts/check_encoding.py`（313 文件 0 warning）
 - [ ] **待续（P1 剩余）**：规则标签池 → Confirm-As-V1 → 自动 STAR → 版本化 + 前端字段改名 + is_confirmed/fields 迁移 → direction/expression 表 → get_card_render_text()
-- [ ] **已知盲区（EXP-P1-02 审阅归档，2026-09-23）**：叙述式召回动词表仅 6 词（担任/任职/从事/负责/做/开发）→「主导/牵头/参与/协作/协同/搭建/设计/迭代/重构/落地/引入/开发」等高频叙述式开头**漏召回**（块保留但 company/role 元数据空；块非 None → 不触发 LLM 兜底）。**方案倾向：结构化体现驱动分块而非扩动词清单**（见 PROGRESS 底部审阅分析）。裁决点挂 EXP-P1-03 前
+- [x] **已知盲区（EXP-P1-02 审阅归档，2026-09-23）**：叙述式召回动词表仅 6 词（担任/任职/从事/负责/做/开发）→「主导/牵头/参与/协作/协同/搭建/设计/迭代/重构/落地/引入/开发」等高频叙述式开头**漏召回**（块保留但 company/role 元数据空；块非 None → 不触发 LLM 兜底）。**方案裁定：结构化体现驱动分块而非扩动词清单**——已按此落地 EXP-P1-02b（2026-09-23）：公司锚解绑动词表（`_NARRATIVE_COMPANY_RE` 前瞻覆盖高频盲区动词位），动词表仅提取 role，分块章节信号驱动，盲区只造成 role 留空。裁决点已解除。
 
 ## EXPERIENCE_SPEC v0.2 落地决策写入（2026-09-22，P1 规划定稿）
 
