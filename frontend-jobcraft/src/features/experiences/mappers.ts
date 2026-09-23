@@ -1,5 +1,12 @@
-import type { ExperienceCard } from '../../api/types';
-import type { Experience, ExperienceCategory } from '../../types/jobcraft';
+import type {
+  ExperienceCard,
+  ExperienceCardVersion,
+} from '../../api/types';
+import type {
+  Experience,
+  ExperienceCategory,
+  ExperienceVersionRecord,
+} from '../../types/jobcraft';
 
 /** Experiences 查询缓存 key（react-query 唯读源）。 */
 export const EXPERIENCES_QUERY_KEY = ['experiences'] as const;
@@ -53,4 +60,62 @@ export function cardToExperience(card: ExperienceCard): Experience {
     // EXP-P1-03：草稿状态透传，false 时列表展示「待定稿」标记
     isConfirmed: card.is_confirmed ?? true,
   };
+}
+
+/**
+ * 后端版本快照 → 前端版本历史（EXP-P1-05 §28 / §34.6）。
+ *
+ * 后端只存 title/raw_text/tags（表结构固定），无逐字段 diff；
+ * 前端据此展示 V 编号、日期、原因与来源，并以 rawText 支持原文回滚。
+ * 标签规则：最新快照 = 当前版本 V{current_version}，依序递减到 V1（哨兵基线）。
+ */
+export function versionsToHistory(
+  versions: ExperienceCardVersion[],
+  currentVersion: number
+): ExperienceVersionRecord[] {
+  return versions.map((v, idx) => ({
+    version: `V${Math.max(1, currentVersion - idx)}`,
+    date: (v.created_at || '').slice(0, 10),
+    reason: v.note || versionTypeReason(v.version_type),
+    source: versionTypeSource(v.version_type),
+    changes: [],
+    title: v.title || undefined,
+    rawText: v.raw_text,
+  }));
+}
+
+function versionTypeReason(version_type: string): string {
+  switch (version_type) {
+    case 'original':
+      return 'V1 哨兵基线（定稿原始内容）';
+    case 'user_edit':
+    case 'card_edit':
+      return '编辑保存';
+    case 'ai_polish':
+      return 'AI 深度润色';
+    case 'review_refined':
+      return '面试复盘反哺';
+    case 'jd_alignment':
+      return 'JD 深度对齐';
+    default:
+      return '版本快照';
+  }
+}
+
+function versionTypeSource(
+  version_type: string
+): ExperienceVersionRecord['source'] {
+  switch (version_type) {
+    case 'review_refined':
+      return 'interview_review';
+    case 'jd_alignment':
+      return 'jd_alignment';
+    case 'ai_polish':
+      return 'ai_optimization';
+    case 'original':
+    case 'user_edit':
+    case 'card_edit':
+    default:
+      return 'manual';
+  }
 }

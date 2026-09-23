@@ -116,9 +116,6 @@ export const ExperiencesView: React.FC<ExperiencesViewProps> = ({ initialSelecte
   };
 
   const handleAIRefine = async (exp: Experience) => {
-    const curNum = parseFloat(exp.currentVersion.replace('V', '')) || 1.0;
-    const nextVer = `V${(curNum + 0.1).toFixed(1)}`;
-
     // 拼接原始文本用于 AI 润色
     const originalText = [
       exp.background,
@@ -147,10 +144,9 @@ export const ExperiencesView: React.FC<ExperiencesViewProps> = ({ initialSelecte
         .map(l => l.replace(/^[-·•]\s*/, '').trim())
         .filter(l => l.length > 5);
 
-      addExperienceVersion.mutate({
+      // EXP-P1-06b §34.6：内容落库走后端 updateCard（自动版本化），版本号以后端回流为准
+      const saved = await addExperienceVersion.mutateAsync({
         expId: exp.id,
-        version: nextVer,
-        reason: 'AI 深度润色：强化量化指标与专业表述',
         updatedFields: {
           background: exp.background,
           problem: exp.problem,
@@ -161,7 +157,7 @@ export const ExperiencesView: React.FC<ExperiencesViewProps> = ({ initialSelecte
 
       showToast({
         type: 'success',
-        title: `已升级至 ${nextVer} (AI 润色版)`,
+        title: `已升级至 ${saved.currentVersion || '最新'} (AI 润色版)`,
         message: '经历已通过大模型深度润色优化。'
       });
     } catch (err: unknown) {
@@ -171,21 +167,24 @@ export const ExperiencesView: React.FC<ExperiencesViewProps> = ({ initialSelecte
   };
 
   const handleRestoreVersion = (exp: Experience, versionRecord: ExperienceVersionRecord) => {
-    // Apply changes from this record
-    const updated: Partial<Experience> = {
-      currentVersion: versionRecord.version
-    };
-    versionRecord.changes.forEach((c) => {
-      if (c.field === 'actions') {
-        updated.actions = [c.to, ...(exp.actions || []).slice(1)];
-      } else if (c.field === 'problem' || c.field === 'responsibility') {
-        updated.problem = c.to;
-      } else if (c.field === 'background') {
-        updated.background = c.to;
-      } else if (c.field === 'results') {
-        updated.results = [c.to, ...(exp.results || []).slice(1)];
-      }
-    });
+    // EXP-P1-06b：后端快照仅存原文，回滚 = PATCH raw_text（服务端自动版本化）；
+    // 兼容历史 cache 内的逐字段 changes 记录（旧假数据）。
+    const updated: Partial<Experience> & { raw_text?: string } = versionRecord.rawText
+      ? { title: versionRecord.title || exp.title, raw_text: versionRecord.rawText }
+      : { currentVersion: versionRecord.version };
+    if (!versionRecord.rawText) {
+      versionRecord.changes.forEach((c) => {
+        if (c.field === 'actions') {
+          updated.actions = [c.to, ...(exp.actions || []).slice(1)];
+        } else if (c.field === 'problem' || c.field === 'responsibility') {
+          updated.problem = c.to;
+        } else if (c.field === 'background') {
+          updated.background = c.to;
+        } else if (c.field === 'results') {
+          updated.results = [c.to, ...(exp.results || []).slice(1)];
+        }
+      });
+    }
 
     updateExperience.mutate({ id: exp.id, updates: updated });
     showToast({

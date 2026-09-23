@@ -1,10 +1,11 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import * as authApi from '../../api/auth';
+import * as experienceApi from '../../api/experience';
 import * as interviewApi from '../../api/interview';
 import * as tasksApi from '../../api/tasks';
 import type { InterviewReviewResult } from '../../api/types';
-import { Experience, ExperienceProposedChange, Interview, InterviewReview, Job } from '../../types/jobcraft';
-import { EXPERIENCES_QUERY_KEY } from '../experiences/mappers';
+import { Experience, Interview, InterviewReview, Job } from '../../types/jobcraft';
+import { EXPERIENCES_QUERY_KEY, versionsToHistory } from '../experiences/mappers';
 import { JOBS_QUERY_KEY } from '../jobs/mappers';
 import { INTERVIEWS_QUERY_KEY } from '../interview/mappers';
 import {
@@ -12,7 +13,6 @@ import {
   buildReviewPatchFromAnalysis,
   applyProposedChanges,
   applyFeedbackSuggestions,
-  buildVersionRecord,
 } from './mappers';
 
 
@@ -138,10 +138,11 @@ export interface ApplyReviewFeedbackArgs {
 
 /**
  * 将复盘反馈中的经历升级提案落地到经历资产库。
- * 与 legacy `JobCraftContext.applyReviewFeedback` 行为等价，额外修复漂移 bug：
- * - legacy 仅 setExperiences 不写 EXPERIENCES cache → 新实现同步写 cache；
- * - legacy 写 activities（零消费者）→ 本 hook 不写。
- * - 成功后 EXPERIENCES cache（版本升级 + 变更记录）+ INTERVIEWS cache（applied 标记）。
+ * EXP-P1-06b §34.6：不再本地拼接假版本记录——
+ * - mutationFn 先 updateCard 持久化四槽位变更（服务端写 card_versions 快照 + version+1），
+ * - 再从 listCardVersions 回流真实版本历史；currentVersion/versionHistory 以后端为准，
+ * - 版本服务不可用时保留升级内容、逐级回退原有版本信息。
+ * - 成功后 EXPERIENCES cache（内容 + 后端版本）+ INTERVIEWS cache（applied 标记）。
  */
 export function useApplyReviewFeedbackMutation() {
   const queryClient = useQueryClient();
@@ -177,29 +178,34 @@ export function useApplyReviewFeedbackMutation() {
           ? applyProposedChanges(exp, proposedChanges)
           : applyFeedbackSuggestions(exp, feedback.suggestions || []);
 
-      const versionChanges: ExperienceProposedChange[] =
-        proposedChanges.length > 0
-          ? proposedChanges
-          : [
-              {
-                field: 'actions',
-                from: exp.actions[0] || '',
-                to: base.actions[0] || '',
-              },
-            ];
+      // EXP-P1-06b：内容变更持久化到后端（updateCard 自动版本化，§28）
+      const cardId = parseInt(feedback.experienceId);
+      if (!isNaN(cardId)) {
+        await experienceApi.updateCard(cardId, {
+          background: base.background,
+          problem: base.problem,
+          actions: base.actions,
+          results: base.results,
+          // EXP-P1-03：复盘反哺亦视为定稿保存
+          is_confirmed: true,
+        });
+      }
+
+      // 版本历史回流：以后端快照为准；失败则保留升级内容、回退原有版本信息
+      let currentVersion = proposedVersion;
+      let versionHistory = exp.versionHistory || [];
+      try {
+        const res = await experienceApi.listCardVersions(cardId);
+        currentVersion = `V${res.current_version}`;
+        versionHistory = versionsToHistory(res.versions, res.current_version);
+      } catch {
+        // 版本服务不可用：不阻塞反哺落地
+      }
 
       const finalExp: Experience = {
         ...base,
-        currentVersion: proposedVersion,
-        versionHistory: [
-          buildVersionRecord(
-            proposedVersion,
-            versionChanges,
-            '基于面试真实复盘与面试官深挖问题进行证据增强',
-            'interview_review',
-          ),
-          ...(exp.versionHistory || []),
-        ],
+        currentVersion,
+        versionHistory,
       };
 
       return { experienceId: feedback.experienceId, finalExp };

@@ -3,7 +3,7 @@
  */
 
 import { request, requestFormData } from './client'
-import type { ExperienceCard } from './types'
+import type { ExperienceCard, ExperienceCardVersionList } from './types'
 
 /**
  * 获取经历卡列表
@@ -102,4 +102,15 @@ export async function backfillCards(payload?: {
     method: 'POST',
     body: JSON.stringify(payload || {}),
   })
+}
+
+/**
+ * 获取经历卡版本历史（新→旧快照，含 V1 哨兵基线，EXP-P1-05 §28）
+ */
+export async function listCardVersions(
+  cardId: number
+): Promise<ExperienceCardVersionList> {
+  return request<ExperienceCardVersionList>(
+    `/api/jobcraft/experience/cards/${cardId}/versions`
+  )
 }

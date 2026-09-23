@@ -1,7 +1,6 @@
 import type { InterviewReviewResult } from '../../api/types';
 import {
   Experience,
-  ExperienceVersionRecord,
   ExperienceProposedChange,
   Interview,
   InterviewQA,
@@ -166,24 +165,5 @@ export function applyFeedbackSuggestions(
   return {
     ...exp,
     actions: [`[面试复盘升级] ${suggestions[0]}`, ...exp.actions]
-  };
-}
-
-/**
- * 构建经历版本记录。
- * 自 JobCraftContext.commitExperienceDiff / syncReviewToExperience / applyReviewFeedback 共用逻辑移出。
- */
-export function buildVersionRecord(
-  version: string,
-  changes: ExperienceProposedChange[],
-  reason: string,
-  source: ExperienceVersionRecord['source']
-): ExperienceVersionRecord {
-  return {
-    version,
-    date: new Date().toISOString().split('T')[0],
-    reason,
-    source,
-    changes
   };
 }

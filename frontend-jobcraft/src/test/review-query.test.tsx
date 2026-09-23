@@ -50,6 +50,8 @@ const tasks = vi.hoisted(() => ({
 
 const experience = vi.hoisted(() => ({
   listCards: vi.fn(),
+  updateCard: vi.fn(),
+  listCardVersions: vi.fn(),
 }));
 
 vi.mock('../api/auth', () => ({ ...auth }));
@@ -352,6 +354,24 @@ beforeEach(() => {
   job.listJobAnalyses.mockResolvedValue({ analyses: [] });
   job.getJobAnalysis.mockResolvedValue(null);
   experience.listCards.mockResolvedValue([]);
+  // EXP-P1-06b：复盘反哺持久化 + 版本回流（updateCard 后 listCardVersions 返回 V2 + 2 条快照）
+  experience.updateCard.mockResolvedValue(CARD_A);
+  experience.listCardVersions.mockImplementation(async (cardId: number) => ({
+    card_id: cardId,
+    current_version: 2,
+    versions: [
+      {
+        id: 2, card_id: cardId, version_type: 'user_edit', source_type: 'card_edit',
+        source_id: 0, title: '端侧大模型量化评测', raw_text: '移动端端侧生成式体验的量产方案。',
+        tags: ['端侧大模型'], note: '编辑保存 V2', created_at: '2026-09-19T10:00:00',
+      },
+      {
+        id: 1, card_id: cardId, version_type: 'original', source_type: 'original',
+        source_id: 0, title: '端侧大模型量化评测', raw_text: '移动端端侧生成式体验的量产方案。',
+        tags: ['端侧大模型'], note: 'V1 哨兵基线（确认定稿）', created_at: '2026-09-18T10:00:00',
+      },
+    ],
+  }));
   interview.listInterviewPreps.mockResolvedValue({ records: [] });
   interview.createInterviewReview.mockResolvedValue({
     record_id: 101,
@@ -454,7 +474,7 @@ describe('useCreateInterviewReviewMutation（生成复盘）', () => {
 });
 
 describe('useApplyReviewFeedbackMutation（反哺经历资产）', () => {
-  it('proposedChanges 路径：EXPERIENCES cache 反哺 + feedback.applied 标记', async () => {
+  it('proposedChanges 路径：updateCard 持久化 + EXPERIENCES/INTERVIEWS cache 反哺', async () => {
     renderWithProviders(
       <>
         <Seeder {...seedProps} />
@@ -466,16 +486,25 @@ describe('useApplyReviewFeedbackMutation（反哺经历资产）', () => {
     await waitForSeed();
     fireEvent.click(screen.getByText('应用反馈'));
 
-    // EXPERIENCES cache：字段变更 + 版本升级 + versionHistory 前置
+    // EXPERIENCES cache：字段变更 + 后端版本回流（versionHistory 来自 card_versions）
     await waitFor(() => expect(screen.getByTestId('cache-exp-version').textContent).toBe('V2'));
+    // 内容已持久化到后端 + 定稿（EXP-P1-06b §34.6）
+    expect(experience.updateCard).toHaveBeenCalledWith(
+      7,
+      expect.objectContaining({
+        problem: '新职责（含选型对比）',
+        actions: ['旧动作A', '旧动作B'],
+        is_confirmed: true,
+      }),
+    );
     expect(screen.getByTestId('cache-exp-problem').textContent).toBe('新职责（含选型对比）');
-    expect(screen.getByTestId('cache-exp-hist').textContent).toBe('1');
+    expect(screen.getByTestId('cache-exp-hist').textContent).toBe('2');
     // INTERVIEWS cache：feedback applied
     expect(screen.getByTestId('cache-applied').textContent).toBe('true');
     expect(screen.getByTestId('apply-error').textContent).toBe('');
   });
 
-  it('proposedChanges 为空时走 suggestions 前置，versionHistory 记 actions 变更', async () => {
+  it('proposedChanges 为空时走 suggestions 前置持久化，版本历史来自后端', async () => {
     renderWithProviders(
       <>
         <Seeder
@@ -492,8 +521,16 @@ describe('useApplyReviewFeedbackMutation（反哺经历资产）', () => {
     fireEvent.click(screen.getByText('应用反馈'));
 
     await waitFor(() => expect(screen.getByTestId('cache-exp-version').textContent).toBe('V2'));
+    // suggestions 前置动作已持久化到后端
+    expect(experience.updateCard).toHaveBeenCalledWith(
+      7,
+      expect.objectContaining({
+        actions: ['[面试复盘升级] 补充量化选型对比', '旧动作A', '旧动作B'],
+        is_confirmed: true,
+      }),
+    );
     expect(screen.getByTestId('cache-exp-action').textContent).toBe('[面试复盘升级] 补充量化选型对比');
-    expect(screen.getByTestId('cache-exp-hist').textContent).toBe('1');
+    expect(screen.getByTestId('cache-exp-hist').textContent).toBe('2');
     expect(screen.getByTestId('apply-error').textContent).toBe('');
   });
 });

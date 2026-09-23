@@ -7,7 +7,6 @@ import {
   nextExperienceVersion,
   applyProposedChanges,
   applyFeedbackSuggestions,
-  buildVersionRecord,
 } from './mappers';
 
 const ANALYSIS: InterviewReviewResult = {
@@ -204,20 +203,5 @@ describe('applyFeedbackSuggestions', () => {
   it('suggestions 为空时原样返回', () => {
     const exp = { actions: ['旧动作A'] } as Experience;
     expect(applyFeedbackSuggestions(exp, [])).toBe(exp);
-  });
-});
-
-describe('buildVersionRecord', () => {
-  it('生成 interview_review 来源的版本记录', () => {
-    const record = buildVersionRecord(
-      'V2',
-      [{ field: 'problem', from: 'a', to: 'b' }],
-      '基于面试真实复盘与面试官深挖问题进行证据增强',
-      'interview_review',
-    );
-    expect(record.version).toBe('V2');
-    expect(record.source).toBe('interview_review');
-    expect(record.changes).toEqual([{ field: 'problem', from: 'a', to: 'b' }]);
-    expect(record.date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });
 });

@@ -58,6 +58,10 @@ export interface ExperienceVersionRecord {
   reason: string;
   source: 'manual' | 'interview_review' | 'jd_alignment' | 'ai_optimization';
   changes: { field: string; from: string; to: string }[];
+  /** 后端快照标题（rawText 回滚时一并恢复，EXP-P1-06b） */
+  title?: string;
+  /** 后端快照原文（card_versions.raw_text，支持按版本回滚，EXP-P1-06b §28） */
+  rawText?: string;
 }
 
 export interface Experience {

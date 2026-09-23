@@ -30,6 +30,7 @@ const experience = vi.hoisted(() => ({
   structureCard: vi.fn(),
   recommendTags: vi.fn(),
   backfillCards: vi.fn(),
+  listCardVersions: vi.fn(),
 }));
 
 vi.mock('../api/auth', () => ({ ...auth }));
@@ -96,6 +97,12 @@ beforeEach(() => {
   auth.updateProfile.mockResolvedValue({});
   auth.getSettings.mockResolvedValue({ model_name: 'test', provider: 'x', status: 'running' });
   experience.listCards.mockResolvedValue([CARD_A, CARD_B]);
+  // EXP-P1-06b：默认版本历史为空（版本服务仅在后端有快照时返回）
+  experience.listCardVersions.mockImplementation(async (cardId: number) => ({
+    card_id: cardId,
+    current_version: cardId === 7 ? 3 : 1,
+    versions: [],
+  }));
 });
 
 afterEach(() => {
@@ -219,8 +226,6 @@ const VersionHarness = () => {
           first &&
           addVersion.mutate({
             expId: first.id,
-            version: 'V3.1',
-            reason: '测试本地版本演进',
             updatedFields: { results: ['留存 +22.8%'] },
           })
         }
@@ -231,7 +236,7 @@ const VersionHarness = () => {
   );
 };
 
-describe('useUpdateExperienceMutation / 本地版本演进', () => {
+describe('useUpdateExperienceMutation / 版本保存（EXP-P1-06b 后端回流）', () => {
   it('update：后端 updateCard 成功 → cache 乐观合并', async () => {
     experience.updateCard.mockResolvedValue(CARD_A);
 
@@ -255,7 +260,34 @@ describe('useUpdateExperienceMutation / 本地版本演进', () => {
     await waitFor(() => expect(screen.getByTestId('exp-cache-title').textContent).toBe('改名后的经历'));
   });
 
-  it('本地版本演进：versionHistory 前置展开 + currentVersion 更新，且不发网络请求', async () => {
+  it('加版本：updateCard 持久化四槽位，versionHistory/currentVersion 以后端回流为准', async () => {
+    experience.updateCard.mockResolvedValue(CARD_A);
+    // 前两次调用 = 初始列表拉取（CARD_A / CARD_B，空历史）；
+    // 点击「加版本」后的第三次调用 = mutation 回流（后端已新增 user_edit 快照 V4）。
+    let versionCalls = 0;
+    experience.listCardVersions.mockImplementation(async (cardId: number) => {
+      versionCalls += 1;
+      if (versionCalls <= 2) {
+        return { card_id: cardId, current_version: cardId === 7 ? 3 : 1, versions: [] };
+      }
+      return {
+        card_id: cardId,
+        current_version: 4,
+        versions: [
+          {
+            id: 2, card_id: cardId, version_type: 'user_edit', source_type: 'card_edit',
+            source_id: 0, title: '端侧大模型量化评测', raw_text: '移动端端侧生成式体验的量产方案。',
+            tags: ['端侧大模型'], note: '编辑保存 V4', created_at: '2026-09-23T10:00:00',
+          },
+          {
+            id: 1, card_id: cardId, version_type: 'original', source_type: 'original',
+            source_id: 0, title: '端侧大模型量化评测', raw_text: '移动端端侧生成式体验的量产方案。',
+            tags: ['端侧大模型'], note: 'V1 哨兵基线（确认定稿）', created_at: '2026-09-20T10:00:00',
+          },
+        ],
+      };
+    });
+
     renderWithProviders(<VersionHarness />);
 
     expect(await screen.findByText('V3')).toBeInTheDocument();
@@ -263,9 +295,11 @@ describe('useUpdateExperienceMutation / 本地版本演进', () => {
 
     fireEvent.click(screen.getByText('加版本'));
 
-    await waitFor(() => expect(screen.getByTestId('ver').textContent).toBe('V3.1'));
-    await waitFor(() => expect(screen.getByTestId('hist').textContent).toBe('1'));
-    expect(experience.listCards).toHaveBeenCalled();
-    expect(experience.updateCard).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.getByTestId('ver').textContent).toBe('V4'));
+    await waitFor(() => expect(screen.getByTestId('hist').textContent).toBe('2'));
+    expect(experience.updateCard).toHaveBeenCalledWith(
+      7,
+      expect.objectContaining({ results: ['留存 +22.8%'], is_confirmed: true }),
+    );
   });
 });

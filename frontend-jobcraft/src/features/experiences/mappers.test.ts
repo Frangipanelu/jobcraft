@@ -1,6 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import type { ExperienceCard } from '../../api/types';
-import { cardToExperience, cardTypeToCategory, EXPERIENCES_QUERY_KEY } from './mappers';
+import type { ExperienceCard, ExperienceCardVersion } from '../../api/types';
+import {
+  cardToExperience,
+  cardTypeToCategory,
+  EXPERIENCES_QUERY_KEY,
+  versionsToHistory,
+} from './mappers';
 
 const STRUCTURED_CARD: ExperienceCard = {
   id: 7,
@@ -106,5 +111,63 @@ describe('cardToExperience', () => {
 describe('EXPERIENCES_QUERY_KEY', () => {
   it('固定为 experiences', () => {
     expect([...EXPERIENCES_QUERY_KEY]).toEqual(['experiences']);
+  });
+});
+
+describe('versionsToHistory（EXP-P1-06b 后端版本回流）', () => {
+  const SNAPSHOTS: ExperienceCardVersion[] = [
+    {
+      id: 3, card_id: 7, version_type: 'user_edit', source_type: 'card_edit',
+      source_id: 0, title: '端侧大模型量化评测', raw_text: 'V3 原文',
+      tags: ['端侧大模型'], note: '编辑保存 V3', created_at: '2026-09-23T10:00:00',
+    },
+    {
+      id: 2, card_id: 7, version_type: 'review_refined', source_type: 'interview_review',
+      source_id: 9, title: '端侧大模型量化评测', raw_text: 'V2 原文',
+      tags: ['端侧大模型'], note: '面试复盘反哺', created_at: '2026-09-21T08:00:00',
+    },
+    {
+      id: 1, card_id: 7, version_type: 'original', source_type: 'original',
+      source_id: 0, title: '端侧大模型量化评测', raw_text: 'V1 原文',
+      tags: ['端侧大模型'], note: 'V1 哨兵基线（确认定稿）', created_at: '2026-09-18T09:00:00',
+    },
+  ];
+
+  it('新→旧映射：V 编号从 currentVersion 递减，reason/date/source/rawText 来自后端快照，changes 置空', () => {
+    const history = versionsToHistory(SNAPSHOTS, 3);
+
+    expect(history).toHaveLength(3);
+    expect(history.map((v) => v.version)).toEqual(['V3', 'V2', 'V1']);
+    expect(history[0].reason).toBe('编辑保存 V3');
+    expect(history[0].date).toBe('2026-09-23');
+    expect(history[0].source).toBe('manual');
+    expect(history[0].rawText).toBe('V3 原文');
+    expect(history[0].title).toBe('端侧大模型量化评测');
+    expect(history[0].changes).toEqual([]);
+    expect(history[1].source).toBe('interview_review');
+    expect(history[2].reason).toBe('V1 哨兵基线（确认定稿）');
+    expect(history[2].source).toBe('manual');
+  });
+
+  it('version_type 识别：ai_polish→ai_optimization、jd_alignment→jd_alignment、original→manual', () => {
+    const history = versionsToHistory(
+      [
+        { ...SNAPSHOTS[0], id: 5, version_type: 'ai_polish', note: null, created_at: '2026-09-22' },
+        { ...SNAPSHOTS[0], id: 4, version_type: 'jd_alignment', note: null, created_at: '2026-09-22' },
+        { ...SNAPSHOTS[0], id: 3, version_type: 'original', note: null, created_at: '2026-09-22' },
+      ],
+      3,
+    );
+    expect(history[0].source).toBe('ai_optimization');
+    expect(history[0].reason).toBe('AI 深度润色');
+    expect(history[1].source).toBe('jd_alignment');
+    expect(history[1].reason).toBe('JD 深度对齐');
+    expect(history[2].source).toBe('manual');
+    expect(history[2].reason).toBe('V1 哨兵基线（定稿原始内容）');
+  });
+
+  it('snapshots 数超过 currentVersion 时 V 编号下限收敛在 V1', () => {
+    const history = versionsToHistory(SNAPSHOTS, 1);
+    expect(history.map((v) => v.version)).toEqual(['V1', 'V1', 'V1']);
   });
 });

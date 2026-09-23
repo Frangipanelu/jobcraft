@@ -71,6 +71,30 @@ export interface ExperienceCard {
   updated_at?: string
 }
 
+/**
+ * 经历卡一条版本快照（card_versions 行，EXP-P1-05 §28）。
+ * 表结构固定，仅存 title/raw_text/tags + 来源信息，可据此回滚原文。
+ */
+export interface ExperienceCardVersion {
+  id: number
+  card_id: number
+  version_type: string
+  source_type: string
+  source_id: number
+  title: string | null
+  raw_text: string
+  tags: string[]
+  note: string | null
+  created_at?: string | null
+}
+
+/** 经历卡版本历史响应（versions 新→旧） */
+export interface ExperienceCardVersionList {
+  card_id: number
+  current_version: number
+  versions: ExperienceCardVersion[]
+}
+
 // ============================================================
 // JD / ATS
 // ============================================================
