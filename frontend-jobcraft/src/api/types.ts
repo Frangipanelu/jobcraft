@@ -54,6 +54,11 @@ export interface ExperienceCard {
   company?: string | null
   role?: string | null
   period?: string | null
+  // 统一字段契约（EXPERIENCE_SPEC §30.4）：S / T 槽位 + A / R 槽位
+  background?: string | null
+  problem?: string | null
+  actions?: string[]
+  results?: string[]
   source: string
   card_type: string
   version: number

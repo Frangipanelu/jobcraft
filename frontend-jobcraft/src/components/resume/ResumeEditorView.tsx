@@ -493,14 +493,20 @@ export const ResumeEditorView: React.FC<ResumeEditorViewProps> = ({
                 <div className="space-y-2">
                   <div className="text-[11px] font-bold text-ink">量化业务成果：</div>
                   <div className="flex flex-wrap gap-1.5">
-                    {(linkedExp.metrics || []).map((met, idx) => (
-                      <span
-                        key={idx}
-                        className="px-2 py-0.5 rounded bg-sage-soft text-sage font-mono text-[11px] font-bold border border-sage/20"
-                      >
-                        {met}
+                    {linkedExp.results && linkedExp.results.length > 0 ? (
+                      linkedExp.results.map((met, idx) => (
+                        <span
+                          key={idx}
+                          className="px-2 py-0.5 rounded bg-sage-soft text-sage font-mono text-[11px] font-bold border border-sage/20"
+                        >
+                          {met}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="px-2 py-0.5 rounded bg-page text-faint font-mono text-[11px]">
+                        暂无量化数据
                       </span>
-                    ))}
+                    )}
                   </div>
                 </div>
 

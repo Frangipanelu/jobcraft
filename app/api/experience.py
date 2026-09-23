@@ -519,17 +519,35 @@ def jobcraft_experience_search(
         raise HTTPException(status_code=500, detail=f"搜索失败: {e}")
 
 
+ALLOWED_CARD_TYPES = {"work", "intern", "project"}
+
+
+def _validate_card_type(card_type: Optional[str]) -> Optional[str]:
+    """校验 card_type 是否在允许枚举内（EXPERIENCE_SPEC §30.4.1），否则抛 400"""
+    if card_type is None:
+        return card_type
+    if card_type not in ALLOWED_CARD_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"card_type 仅允许 work / intern / project，收到: {card_type}",
+        )
+    return card_type
+
+
 @router.post("/cards")
 def jobcraft_experience_create(
     payload: ExperienceCardCreate,
     current_user: int = Depends(get_current_user),
 ):
     try:
+        _validate_card_type(payload.card_type)
         data = payload.model_dump()
         data["source"] = "manual"
         data["user_id"] = current_user
         card_id = db_tools.insert_card(data)
         return db_tools.get_card(card_id, current_user)
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"新建失败: {e}")
 
@@ -540,6 +558,10 @@ def jobcraft_experience_update(
     payload: ExperienceCardUpdate,
     current_user: int = Depends(get_current_user),
 ):
+    try:
+        _validate_card_type(payload.card_type)
+    except HTTPException:
+        raise
     updates = {k: v for k, v in payload.model_dump().items() if v is not None}
     try:
         ok = db_tools.update_card(card_id, updates, current_user)

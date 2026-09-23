@@ -140,7 +140,7 @@ const REVIEW: InterviewReview = {
       currentVersion: 'V1',
       proposedVersion: 'V2',
       proposedChanges: [
-        { field: 'responsibility', from: '旧职责', to: '新职责（含选型对比）' },
+        { field: 'problem', from: '旧职责', to: '新职责（含选型对比）' },
       ],
       applied: false,
     },
@@ -168,7 +168,7 @@ const INT_TX_PREP = buildInt(RECORD_TX);
 
 const EXP_V1: Experience = {
   ...cardToExperience(CARD_A),
-  responsibility: '旧职责',
+  problem: '旧职责',
   actions: ['旧动作A', '旧动作B'],
   versionHistory: [],
 };
@@ -277,7 +277,7 @@ const CacheReader = () => {
         {jobData.find((j) => j.id === '12')?.steps?.reviewStage ?? ''}
       </span>
       <span data-testid="cache-exp-version">{exp0?.currentVersion ?? ''}</span>
-      <span data-testid="cache-exp-responsibility">{exp0?.responsibility ?? ''}</span>
+      <span data-testid="cache-exp-problem">{exp0?.problem ?? ''}</span>
       <span data-testid="cache-exp-action">{exp0?.actions?.[0] ?? ''}</span>
       <span data-testid="cache-exp-hist">{exp0?.versionHistory?.length ?? ''}</span>
     </>
@@ -467,7 +467,7 @@ describe('useApplyReviewFeedbackMutation（反哺经历资产）', () => {
 
     // EXPERIENCES cache：字段变更 + 版本升级 + versionHistory 前置
     await waitFor(() => expect(screen.getByTestId('cache-exp-version').textContent).toBe('V2'));
-    expect(screen.getByTestId('cache-exp-responsibility').textContent).toBe('新职责（含选型对比）');
+    expect(screen.getByTestId('cache-exp-problem').textContent).toBe('新职责（含选型对比）');
     expect(screen.getByTestId('cache-exp-hist').textContent).toBe('1');
     // INTERVIEWS cache：feedback applied
     expect(screen.getByTestId('cache-applied').textContent).toBe('true');

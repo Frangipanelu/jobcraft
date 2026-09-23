@@ -134,7 +134,7 @@ export function nextExperienceVersion(
 
 /**
  * 按 proposedChanges 的 field 字段法应用变更到经历对象。
- * 字段：responsibility / actions（前置） / background。
+ * 字段：problem（兼容旧名 responsibility）/ actions（前置） / background。
  * 自 JobCraftContext.applyReviewFeedback + commitExperienceDiff 移出，作为唯一实现。
  */
 export function applyProposedChanges(
@@ -143,8 +143,8 @@ export function applyProposedChanges(
 ): Experience {
   const updatedExp = { ...exp };
   changes.forEach((change) => {
-    if (change.field.includes('responsibility')) {
-      updatedExp.responsibility = change.to;
+    if (change.field.includes('problem') || change.field.includes('responsibility')) {
+      updatedExp.problem = change.to;
     } else if (change.field.includes('actions')) {
       updatedExp.actions = [change.to, ...exp.actions.slice(1)];
     } else if (change.field.includes('background')) {

@@ -99,6 +99,25 @@ class ExperienceCardSchema(BaseModel):
     card_type: str = Field(
         "work", description="卡片分类: work(工作) / intern(实习) / project(项目)"
     )
+    # 统一字段契约（EXPERIENCE_SPEC §30.4）：S / T 槽位 + A / R 槽位
+    background: Optional[str] = Field(None, description="STAR 背景槽位 (S)，列存储")
+    problem: Optional[str] = Field(None, description="STAR 任务槽位 (T)，列存储")
+    actions: List[str] = Field(
+        default_factory=list,
+        description="STAR 行动槽位 (A)，聚合自 ai_structured.achievements[].action.main",
+    )
+    results: List[str] = Field(
+        default_factory=list,
+        description="STAR 结果槽位 (R)，聚合自 ai_structured.achievements[].result",
+    )
+    solution: Optional[str] = Field(
+        None, description="已废弃 (DEPRECATED)，新实现请使用 actions"
+    )
+    execution: Optional[str] = Field(
+        None, description="已废弃 (DEPRECATED)，新实现请使用 results"
+    )
+    result: Optional[str] = None
+    dimensions: Optional[List[str]] = None
     version: int = 1
     is_active: bool = True
     created_at: Optional[str] = None
@@ -121,8 +140,22 @@ class ExperienceCardCreate(BaseModel):
     )
     background: Optional[str] = None
     problem: Optional[str] = None
-    solution: Optional[str] = None
-    execution: Optional[str] = None
+    actions: Optional[List[str]] = Field(
+        default_factory=list,
+        description="STAR 行动槽位 (A)，写入 ai_structured.achievements[].action.main",
+    )
+    results: Optional[List[str]] = Field(
+        default_factory=list,
+        description="STAR 结果槽位 (R)，写入 ai_structured.achievements[].result",
+    )
+    solution: Optional[str] = Field(
+        None,
+        description="已废弃 (DEPRECATED)，保留兼容前端旧写入；新实现请使用 actions",
+    )
+    execution: Optional[str] = Field(
+        None,
+        description="已废弃 (DEPRECATED)，保留兼容前端旧写入；新实现请使用 results",
+    )
     result: Optional[str] = None
     dimensions: Optional[List[str]] = None
 
@@ -138,11 +171,27 @@ class ExperienceCardUpdate(BaseModel):
     company: Optional[str] = None
     role: Optional[str] = None
     period: Optional[str] = None
-    card_type: Optional[str] = None
+    card_type: Optional[str] = Field(
+        None, description="卡片分类，仅允许 work / intern / project"
+    )
     background: Optional[str] = None
     problem: Optional[str] = None
-    solution: Optional[str] = None
-    execution: Optional[str] = None
+    actions: Optional[List[str]] = Field(
+        None,
+        description="STAR 行动槽位 (A)，合并写入 ai_structured.achievements[].action.main",
+    )
+    results: Optional[List[str]] = Field(
+        None,
+        description="STAR 结果槽位 (R)，合并写入 ai_structured.achievements[].result",
+    )
+    solution: Optional[str] = Field(
+        None,
+        description="已废弃 (DEPRECATED)，保留兼容前端旧写入；新实现请使用 actions",
+    )
+    execution: Optional[str] = Field(
+        None,
+        description="已废弃 (DEPRECATED)，保留兼容前端旧写入；新实现请使用 results",
+    )
     result: Optional[str] = None
     dimensions: Optional[List[str]] = None
     is_active: Optional[bool] = None

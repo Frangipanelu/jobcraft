@@ -19,7 +19,8 @@ export type NavigationTab =
   | 'settings';
 
 export type JobStatus = 'pending' | 'delivered' | 'submitted' | 'interviewing' | 'reviewed' | 'finished';
-export type ExperienceCategory = 'all' | 'work' | 'project' | 'education' | 'other' | 'internship' | 'competition' | 'paper';
+// EXPERIENCE_SPEC §30.4.1：card_type 收敛为 3 值（education/competition/award 归个人资料域）
+export type ExperienceCategory = 'all' | 'work' | 'intern' | 'project';
 
 export type InterviewRoundType = 'business' | 'tech' | 'product' | 'hr' | 'comprehensive' | 'other';
 export type InterviewFormat = 'video' | 'phone' | 'onsite';
@@ -67,15 +68,10 @@ export interface Experience {
   role: string;
   period: string;
   background: string;
-  responsibility: string;
+  problem: string;
   actions: string[];
   results: string[];
-  metrics: string[];
-  capabilityTags: string[];
-  targetJobs: string[];
-  jdMatches: { jdTitle: string; stars: number }[];
-  resumeVersionsUsed: string[];
-  interviewFeedbackSummary?: string;
+  tags: string[];
   currentVersion: string;
   versionHistory: ExperienceVersionRecord[];
 }

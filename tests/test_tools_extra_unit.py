@@ -13,6 +13,7 @@ Tools 额外单元测试
   9. db_interview.py — mock DB 测试 get_interview_prep_by_job
 """
 
+import json
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -489,6 +490,112 @@ class TestDbExperience:
         }
         card = _row_to_card(row)
         assert card["raw_text"] == "summary text"
+
+    def test_row_to_card_aggregates_star_slots(self):
+        from app.tools.db_experience import _row_to_card
+
+        row = {
+            "id": 1,
+            "user_id": 1,
+            "title": "T",
+            "raw_text": "raw",
+            "tags": "[]",
+            "ai_structured": json.dumps(
+                {
+                    "summary": "s",
+                    "achievements": [
+                        {
+                            "title": "a1",
+                            "situation": "st",
+                            "action": {
+                                "main": "行动1",
+                                "difficulty": "d",
+                                "resolution": "r",
+                            },
+                            "result": "结果1",
+                        },
+                        {
+                            "title": "a2",
+                            "situation": "st",
+                            "action": {"main": "行动2"},
+                            "result": "",
+                        },
+                    ],
+                },
+                ensure_ascii=False,
+            ),
+            "summary": "summary text",
+            "content": None,
+            "company": None,
+            "role": None,
+            "period": None,
+            "background": "背景",
+            "problem": "问题",
+            "solution": "",
+            "execution": "",
+            "result": "",
+            "dimensions": "[]",
+            "source": "manual",
+            "card_type": "work",
+            "version": 1,
+            "is_active": 1,
+            "created_at": None,
+            "updated_at": None,
+        }
+        card = _row_to_card(row)
+        assert card["background"] == "背景"
+        assert card["problem"] == "问题"
+        assert card["actions"] == ["行动1", "行动2"]
+        assert card["results"] == ["结果1"]
+
+    def test_merge_star_slots_builds_achievements(self):
+        from app.tools.db_experience import _merge_star_slots
+
+        cache = _merge_star_slots(
+            None,
+            actions=["行动A", "行动B"],
+            results=["结果A", "结果B"],
+        )
+        assert len(cache["achievements"]) == 2
+        assert cache["achievements"][0]["action"]["main"] == "行动A"
+        assert cache["achievements"][0]["result"] == "结果A"
+        assert cache["achievements"][1]["action"]["difficulty"] == ""
+
+    def test_merge_star_slots_preserves_existing_fields(self):
+        from app.tools.db_experience import _merge_star_slots
+
+        existing = {
+            "summary": "old summary",
+            "achievements": [
+                {
+                    "title": "标题保留",
+                    "situation": "场景保留",
+                    "action": {
+                        "main": "旧行动",
+                        "difficulty": "旧难度",
+                        "resolution": "旧解法",
+                    },
+                    "result": "旧结果",
+                }
+            ],
+        }
+        cache = _merge_star_slots(existing, actions=["新行动"], results=None)
+        assert cache["summary"] == "old summary"
+        assert cache["achievements"][0]["title"] == "标题保留"
+        assert cache["achievements"][0]["situation"] == "场景保留"
+        assert cache["achievements"][0]["action"]["main"] == "新行动"
+        assert cache["achievements"][0]["action"]["difficulty"] == "旧难度"
+        assert cache["achievements"][0]["result"] == "旧结果"
+
+    def test_merge_star_slots_asymmetric_preserves_other_slot(self):
+        from app.tools.db_experience import _merge_star_slots
+
+        cache = _merge_star_slots(None, actions=["行动1"], results=["结果1", "结果2"])
+        assert len(cache["achievements"]) == 2
+        assert cache["achievements"][0]["action"]["main"] == "行动1"
+        assert cache["achievements"][0]["result"] == "结果1"
+        assert cache["achievements"][1]["action"]["main"] == ""
+        assert cache["achievements"][1]["result"] == "结果2"
 
     def test_looks_like_full_resume_false_for_short_text(self):
         from app.tools.db_experience import _looks_like_full_resume

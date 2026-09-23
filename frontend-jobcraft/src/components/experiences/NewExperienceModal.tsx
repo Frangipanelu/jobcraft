@@ -5,11 +5,7 @@ import { ExperienceCategory } from '../../types/jobcraft';
 import {
   X,
   Layers,
-  Sparkles,
-  Plus,
-  ArrowRight,
-  TrendingUp,
-  Tag
+  Sparkles
 } from 'lucide-react';
 
 interface NewExperienceModalProps {
@@ -27,10 +23,9 @@ export const NewExperienceModal: React.FC<NewExperienceModalProps> = ({ isOpen, 
   const [role, setRole] = useState('');
   const [period, setPeriod] = useState('2024.06 - 2025.12');
   const [background, setBackground] = useState('');
-  const [responsibility, setResponsibility] = useState('');
+  const [problem, setProblem] = useState('');
   const [actionsInput, setActionsInput] = useState('');
   const [resultsInput, setResultsInput] = useState('');
-  const [metricsInput, setMetricsInput] = useState('');
   const [tagsInput, setTagsInput] = useState('');
 
   if (!isOpen) return null;
@@ -42,10 +37,9 @@ export const NewExperienceModal: React.FC<NewExperienceModalProps> = ({ isOpen, 
     setCategory('project');
     setPeriod('2025.01 - 2025.08');
     setBackground('移动端用户在弱网或离线场景下对实时生成式体验需求强烈，但云端请求延迟高且存在隐私泄露顾虑。');
-    setResponsibility('主导将 7B 级大模型部署至端侧移动设备的产品方案与评测标准制定。');
+    setProblem('主导将 7B 级大模型部署至端侧移动设备的产品方案与评测标准制定。');
     setActionsInput('与算法及工程团队配合定义 4-bit 量化剪枝策略；主导设计了动态分级上下文滑窗机制与端侧流式交互规范；搭建自动化回归测试集。');
-    setResultsInput('实现首字响应时间控制在 350ms 内，内存占用降低 42%，在弱网环境下用户留存率提升 22.8%。');
-    setMetricsInput('首字延迟 TTFT 350ms, 内存占用 -42%, 留存率 +22.8%');
+    setResultsInput('实现首字响应时间控制在 350ms 内，内存占用降低 42%，在弱网环境下用户留存率提升 22.8%；首字延迟 TTFT 350ms。');
     setTagsInput('端侧大模型, 量化评测, 交互设计, 性能优化');
   };
 
@@ -53,10 +47,7 @@ export const NewExperienceModal: React.FC<NewExperienceModalProps> = ({ isOpen, 
     e.preventDefault();
     if (!title.trim()) return;
 
-    const metrics = metricsInput
-      ? metricsInput.split(/[,，]/).map((m) => m.trim()).filter(Boolean)
-      : ['核心指标持续提升'];
-    const capabilityTags = tagsInput
+    const tags = tagsInput
       ? tagsInput.split(/[,，]/).map((t) => t.trim()).filter(Boolean)
       : ['AI产品', '项目落地'];
     const actions = actionsInput
@@ -73,14 +64,10 @@ export const NewExperienceModal: React.FC<NewExperienceModalProps> = ({ isOpen, 
       role: role.trim() || '负责人',
       period: period.trim(),
       background: background.trim(),
-      responsibility: responsibility.trim(),
+      problem: problem.trim(),
       actions,
       results,
-      metrics,
-      capabilityTags,
-      targetJobs: ['AI 产品经理', '策略产品经理'],
-      jdMatches: [{ jdTitle: 'AI 产品经理', stars: 5 }],
-      resumeVersionsUsed: ['字节跳动定制版 V2.1']
+      tags
     });
 
     showToast({
@@ -154,11 +141,7 @@ export const NewExperienceModal: React.FC<NewExperienceModalProps> = ({ isOpen, 
               >
                 <option value="project">项目经历</option>
                 <option value="work">工作经历</option>
-                <option value="internship">实习经历</option>
-                <option value="education">教育经历</option>
-                <option value="competition">竞赛与开源</option>
-                <option value="paper">论文与专利</option>
-                <option value="other">其他经历</option>
+                <option value="intern">实习经历</option>
               </select>
             </div>
           </div>
@@ -226,13 +209,13 @@ export const NewExperienceModal: React.FC<NewExperienceModalProps> = ({ isOpen, 
 
             <div>
               <label className="block text-[11px] font-semibold text-muted mb-0.5">
-                T · 任务与目标 (Task / Responsibility)
+                T · 任务与目标 (Task / Problem)
               </label>
               <textarea
                 rows={2}
                 placeholder="你的核心职责与设定的定量/定性攻坚目标是什么？"
-                value={responsibility}
-                onChange={(e) => setResponsibility(e.target.value)}
+                value={problem}
+                onChange={(e) => setProblem(e.target.value)}
                 className="w-full p-2.5 text-xs rounded-lg border border-edge bg-white text-ink resize-none focus:border-sage focus:outline-none"
               />
             </div>
@@ -264,21 +247,7 @@ export const NewExperienceModal: React.FC<NewExperienceModalProps> = ({ isOpen, 
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-semibold text-ink mb-1">
-                核心量化指标 (英文或中文逗号分隔)
-              </label>
-              <input
-                type="text"
-                placeholder="例如：幻觉率 -34.2%, NDCG@5 +18.5%"
-                value={metricsInput}
-                onChange={(e) => setMetricsInput(e.target.value)}
-                className="w-full px-3 py-2 text-xs rounded-lg border border-edge bg-white text-ink focus:border-sage focus:outline-none"
-              />
-            </div>
-
-            <div>
+          <div>
               <label className="block text-xs font-semibold text-ink mb-1">
                 能力标签 (逗号分隔)
               </label>
@@ -290,7 +259,6 @@ export const NewExperienceModal: React.FC<NewExperienceModalProps> = ({ isOpen, 
                 className="w-full px-3 py-2 text-xs rounded-lg border border-edge bg-white text-ink focus:border-sage focus:outline-none"
               />
             </div>
-          </div>
 
           {/* Footer actions */}
           <div className="pt-3 border-t border-edge flex items-center justify-end gap-2">

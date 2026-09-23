@@ -24,6 +24,9 @@ export function useExperiencesQuery() {
  * 创建经历卡。与 legacy `JobCraftContext.createExperience` 行为等价：
  * 后端 createCard 成功 → 前端 Experience（cardToExperience + 草稿前端扩展字段）→ cache 前置插入；
  * 后端失败向上抛出（由消费方 toast）。
+ *
+ * 统一字段契约（EXPERIENCE_SPEC §30.4）：提交 background / problem / actions / results / tags / card_type。
+ * raw_text 由四槽位拼装（后端 create 必填），card_type 由 category 收敛为 work|intern|project。
  */
 export function useCreateExperienceMutation() {
   const queryClient = useQueryClient();
@@ -33,13 +36,22 @@ export function useCreateExperienceMutation() {
     mutationFn: async (draft) => {
       const card = await experienceApi.createCard({
         title: draft.title || '新增核心经历',
-        raw_text: draft.background || draft.responsibility || '',
+        raw_text: [
+          draft.background,
+          draft.problem,
+          ...(draft.actions || []),
+          ...(draft.results || [])
+        ].filter(Boolean).join('\n'),
         company: draft.company || '',
         role: draft.role || '',
         period: draft.period || '',
-        tags: draft.capabilityTags || [],
+        tags: draft.tags || [],
+        background: draft.background || undefined,
+        problem: draft.problem || undefined,
+        actions: draft.actions || undefined,
+        results: draft.results || undefined,
+        card_type: categoryToCardType(draft.category),
         source: 'manual',
-        card_type: 'work',
         is_active: true,
       });
 
@@ -49,10 +61,6 @@ export function useCreateExperienceMutation() {
         category: draft.category,
         actions: draft.actions || base.actions,
         results: draft.results || base.results,
-        metrics: draft.metrics || base.metrics,
-        targetJobs: draft.targetJobs || [],
-        jdMatches: draft.jdMatches || [],
-        resumeVersionsUsed: draft.resumeVersionsUsed || [],
       };
     },
     onSuccess: (newExp) => {
@@ -64,6 +72,12 @@ export function useCreateExperienceMutation() {
   });
 }
 
+/** category → card_type（EXPERIENCE_SPEC §30.4.1，未知回退 project）。 */
+function categoryToCardType(category?: Experience['category']): 'work' | 'intern' | 'project' {
+  if (category === 'work' || category === 'intern') return category;
+  return 'project';
+}
+
 interface UpdateExperienceArgs {
   id: string;
   updates: Partial<Experience>;
@@ -73,6 +87,9 @@ interface UpdateExperienceArgs {
  * 更新经历卡。与 legacy `JobCraftContext.updateExperience` 行为等价：
  * 后端 updateCard 成功 → cache 内按 updates 合并；
  * 后端失败向上抛出（不产生本地变更）。
+ *
+ * 统一字段契约（EXPERIENCE_SPEC §30.4）：提交四槽位 + tags + card_type。
+ * 注意：不再把 background 当作 raw_text 整体覆盖（旧实现会破坏已保存的原始文本）。
  */
 export function useUpdateExperienceMutation() {
   const queryClient = useQueryClient();
@@ -84,11 +101,15 @@ export function useUpdateExperienceMutation() {
       if (!isNaN(cardId)) {
         await experienceApi.updateCard(cardId, {
           title: updates.title,
-          raw_text: updates.background,
           company: updates.company,
           role: updates.role,
           period: updates.period,
-          tags: updates.capabilityTags,
+          tags: updates.tags,
+          background: updates.background,
+          problem: updates.problem,
+          actions: updates.actions,
+          results: updates.results,
+          card_type: updates.category ? categoryToCardType(updates.category) : undefined,
         });
       }
       return { id, updates };

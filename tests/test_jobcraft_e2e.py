@@ -108,6 +108,15 @@ def sample_card(server_ok) -> Dict[str, Any]:
         "content": "负责站内信息流推荐优化，重构召回与排序策略，最终实现 GMV 增长 32%。",
         "raw_text": "负责站内信息流推荐优化，重构召回与排序策略，最终实现 GMV 增长 32%。",
         "tags": ["推荐策略", "增长", "AI"],
+        "actions": [
+            "引入多兴趣向量召回 + 强化学习排序，权衡短期点击与长期留存。",
+            "分 3 个阶段灰度上线，协调算法、工程、运营 3 个团队。",
+            "基于数据复盘迭代排序策略",
+        ],
+        "results": [
+            "人均使用时长 +22%，次日留存 +18%，GMV +32%，方法论沉淀为团队 SOP。",
+            "数据驱动迭代后团队沿用该策略",
+        ],
         "metrics": {"GMV": "+32%", "次日留存": "+18%", "使用时长": "+22%"},
         "dimensions": ["D2", "D3", "D4", "D6"],
         "industry": "电商",
@@ -169,6 +178,49 @@ def test_create_experience_card(sample_card: Dict[str, Any]):
     assert sample_card["execution"]
     assert sample_card["result"]
     assert sample_card["dimensions"]
+    # 统一字段契约（EXPERIENCE_SPEC §30.4）：A/R 槽位聚合自 ai_structured.achievements
+    assert sample_card["actions"]
+    assert sample_card["results"]
+    assert sample_card["actions"][0].startswith("引入多兴趣向量召回")
+    assert sample_card["results"][0].startswith("人均使用时长")
+
+
+def test_update_experience_card_star_slots(sample_card: Dict[str, Any]):
+    card_id = sample_card["id"]
+    # 只更新 actions：按索引合并，保留已有 result / title / situation
+    updated = req(
+        "PATCH",
+        f"/api/jobcraft/experience/cards/{card_id}",
+        json={"actions": ["重构召回链路，引入双塔召回模型", "搭建离线评估体系"]},
+    )
+    assert len(updated["actions"]) == 3
+    assert updated["actions"][0] == "重构召回链路，引入双塔召回模型"
+    assert updated["actions"][1] == "搭建离线评估体系"
+    assert updated["actions"][2] == "基于数据复盘迭代排序策略"
+    assert len(updated["results"]) == 2
+    cache = updated["ai_structured"]
+    ach = cache["achievements"]
+    assert ach[1]["action"]["main"] == "搭建离线评估体系"
+    assert ach[1]["result"] == "数据驱动迭代后团队沿用该策略"
+    # 只更新 results：不破坏已有 actions
+    updated2 = req(
+        "PATCH",
+        f"/api/jobcraft/experience/cards/{card_id}",
+        json={"results": ["效果指标翻倍"]},
+    )
+    assert updated2["actions"][0] == "重构召回链路，引入双塔召回模型"
+    assert updated2["results"] == ["效果指标翻倍"]
+    # card_type 不在枚举 → 400
+    resp = None
+    try:
+        resp = req(
+            "PATCH",
+            f"/api/jobcraft/experience/cards/{card_id}",
+            json={"card_type": "hobby"},
+        )
+    except AssertionError as e:
+        assert "400" in f"{e}"
+    assert resp is None
 
 
 def test_list_cards(sample_card: Dict[str, Any]):

@@ -139,7 +139,7 @@ export const JDReportDetailView: React.FC<JDReportDetailViewProps> = ({
         type: exp?.category || '经历',
         year: '',
         matchScore: r.matchScore,
-        tags: exp?.capabilityTags || [],
+        tags: exp?.tags || [],
         reason:
           r.reason ||
           (r.matchingJDReq

@@ -163,28 +163,32 @@ describe('applyProposedChanges', () => {
     role: 'AI 产品经理',
     period: '2025.01 - 2025.08',
     background: '背景',
-    responsibility: '旧职责',
+    problem: '旧职责',
     actions: ['旧动作A', '旧动作B', '旧动作C'],
     results: [],
-    metrics: [],
-    capabilityTags: [],
-    targetJobs: [],
-    jdMatches: [],
-    resumeVersionsUsed: [],
+    tags: [],
     currentVersion: 'V1',
     versionHistory: [],
   };
 
-  it('按 field 字段法应用 responsibility / actions（前置替换第二位开始）/ background', () => {
+  it('按 field 字段法应用 problem / actions（前置替换第二位开始）/ background', () => {
     const next = applyProposedChanges(exp, [
-      { field: 'responsibility', from: '旧职责', to: '新职责（含选型对比）' },
+      { field: 'problem', from: '旧职责', to: '新职责（含选型对比）' },
       { field: 'actions', from: '旧动作A', to: '新动作A' },
       { field: 'background', from: '', to: '新增背景补充' },
     ]);
 
-    expect(next.responsibility).toBe('新职责（含选型对比）');
+    expect(next.problem).toBe('新职责（含选型对比）');
     expect(next.actions).toEqual(['新动作A', '旧动作B', '旧动作C']);
     expect(next.background).toBe('新增背景补充');
+  });
+
+  it('兼容旧字段名 responsibility（历史复盘版本记录）', () => {
+    const next = applyProposedChanges(exp, [
+      { field: 'responsibility', from: '旧职责', to: '旧字段兼容职责' },
+    ]);
+
+    expect(next.problem).toBe('旧字段兼容职责');
   });
 });
 
@@ -206,13 +210,13 @@ describe('buildVersionRecord', () => {
   it('生成 interview_review 来源的版本记录', () => {
     const record = buildVersionRecord(
       'V2',
-      [{ field: 'responsibility', from: 'a', to: 'b' }],
+      [{ field: 'problem', from: 'a', to: 'b' }],
       '基于面试真实复盘与面试官深挖问题进行证据增强',
       'interview_review',
     );
     expect(record.version).toBe('V2');
     expect(record.source).toBe('interview_review');
-    expect(record.changes).toEqual([{ field: 'responsibility', from: 'a', to: 'b' }]);
+    expect(record.changes).toEqual([{ field: 'problem', from: 'a', to: 'b' }]);
     expect(record.date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });
 });

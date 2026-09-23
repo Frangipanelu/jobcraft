@@ -81,6 +81,14 @@ def _row_to_card(row: Dict[str, Any]) -> Dict[str, Any]:
     if not row:
         return row
     raw_text = row.get("raw_text") or row.get("content") or row.get("summary", "")
+    cache = _parse_json(row.get("ai_structured")) or {}
+    achievements = cache.get("achievements") or []
+    actions = [
+        a.get("action", {}).get("main", "")
+        for a in achievements
+        if isinstance(a.get("action"), dict) and a.get("action", {}).get("main")
+    ]
+    results = [a.get("result", "") for a in achievements if a.get("result")]
     return {
         "id": row["id"],
         "user_id": row["user_id"],
@@ -96,6 +104,9 @@ def _row_to_card(row: Dict[str, Any]) -> Dict[str, Any]:
         "period": row.get("period"),
         "background": row.get("background", ""),
         "problem": row.get("problem", ""),
+        # 统一字段契约（EXPERIENCE_SPEC §30.4）：A/R 槽位聚合自 ai_structured
+        "actions": actions,
+        "results": results,
         "solution": row.get("solution", ""),
         "execution": row.get("execution", ""),
         "result": row.get("result", ""),
@@ -315,11 +326,58 @@ def find_card_by_company_role(
     return _row_to_card(row) if row else None
 
 
+def _merge_star_slots(
+    existing_cache: Optional[Dict[str, Any]],
+    actions: Optional[List[str]] = None,
+    results: Optional[List[str]] = None,
+) -> Dict[str, Any]:
+    """
+    把 A/R 槽位合并进 ai_structured.achievements（EXPERIENCE_SPEC §30.4.2）
+
+    按索引合并：actions[] -> achievements[i].action.main，
+    results[] -> achievements[i].result；
+    保留已有 title / situation / action.difficulty / action.resolution。
+    若同时提供 actions 与 results, 较长者决定切片长度。
+
+    :param existing_cache: 已有的 ai_structured 缓存（可为 None）
+    :param actions: STAR 行动槽位列表，写到 action.main
+    :param results: STAR 结果槽位列表，写到 result
+    :return: 合并后的 ai_structured 字典
+    """
+    actions = actions or []
+    results = results or []
+    old = existing_cache if isinstance(existing_cache, dict) else {}
+    achievements = list((old.get("achievements") or []))
+    merged: List[Dict[str, Any]] = []
+    total = max(len(actions), len(results))
+    for i in range(total):
+        prev = achievements[i] if i < len(achievements) else {}
+        prev_action = prev.get("action") if isinstance(prev.get("action"), dict) else {}
+        merged.append(
+            {
+                "title": prev.get("title", ""),
+                "situation": prev.get("situation", ""),
+                "action": {
+                    "main": actions[i]
+                    if i < len(actions)
+                    else prev_action.get("main", ""),
+                    "difficulty": prev_action.get("difficulty", ""),
+                    "resolution": prev_action.get("resolution", ""),
+                },
+                "result": results[i] if i < len(results) else prev.get("result", ""),
+            }
+        )
+    out = dict(old)
+    out["achievements"] = merged
+    return out
+
+
 def insert_card(data: Dict[str, Any]) -> int:
     """
     插入一张经历卡,返回新主键
 
-    :param data: 必含 title/raw_text; 可选 tags/ai_structured
+    :param data: 必含 title/raw_text; 可选 tags/ai_structured/actions/results/
+        background/problem/card_type
     """
     _ensure_experience_card_columns()
     sql = """
@@ -330,6 +388,12 @@ def insert_card(data: Dict[str, Any]) -> int:
         VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
     """
     raw_text = data.get("raw_text", "")
+    if data.get("actions") or data.get("results"):
+        cache = _merge_star_slots(
+            data.get("ai_structured"), data["actions"], data["results"]
+        )
+    else:
+        cache = data.get("ai_structured")
     return execute_lastrowid(
         sql,
         (
@@ -337,9 +401,7 @@ def insert_card(data: Dict[str, Any]) -> int:
             data["title"],
             raw_text,
             json.dumps(data.get("tags", []), ensure_ascii=False),
-            json.dumps(data.get("ai_structured"), ensure_ascii=False)
-            if data.get("ai_structured")
-            else None,
+            json.dumps(cache, ensure_ascii=False) if cache else None,
             data.get("summary") or raw_text[:200],
             data.get("content") or raw_text,
             data.get("company"),
@@ -364,9 +426,11 @@ def update_card(
     按字段白名单增量更新
 
     只更新调用方实际传入的字段,避免覆盖空值;
-    JSON 字段统一序列化; 可选按 user_id 过滤所有权
+    JSON 字段统一序列化; actions/results 合并进 ai_structured.achievements;
+    可选按 user_id 过滤所有权
     """
     _ensure_experience_card_columns()
+    updates = dict(updates)
     field_map = {
         "title": "title",
         "raw_text": "raw_text",
@@ -383,6 +447,19 @@ def update_card(
         "result": "result",
         "is_active": "is_active",
     }
+    if updates.get("actions") is not None or updates.get("results") is not None:
+        current = get_card(card_id, user_id)
+        existing_cache = (current or {}).get("ai_structured") or None
+        actions = updates.get("actions")
+        results = updates.get("results")
+        merged = _merge_star_slots(existing_cache, actions, results)
+        has_slots = bool(
+            (actions or results) or ((existing_cache or {}).get("achievements") or [])
+        )
+        if has_slots:
+            updates["ai_structured"] = merged
+    updates.pop("actions", None)
+    updates.pop("results", None)
     sets: List[str] = []
     values: List[Any] = []
     for k, col in field_map.items():

@@ -9,7 +9,6 @@ import {
   Plus,
   Search,
   Sparkles,
-  TrendingUp,
   History,
   Tag,
   ArrowRight,
@@ -86,8 +85,8 @@ export const ExperiencesView: React.FC<ExperiencesViewProps> = ({ initialSelecte
       exp.title.toLowerCase().includes(q) ||
       exp.company.toLowerCase().includes(q) ||
       exp.role.toLowerCase().includes(q) ||
-      (exp.capabilityTags || []).some((t) => t.toLowerCase().includes(q)) ||
-      (exp.metrics || []).some((m) => m.toLowerCase().includes(q)) ||
+      (exp.tags || []).some((t) => t.toLowerCase().includes(q)) ||
+      (exp.results || []).some((m) => m.toLowerCase().includes(q)) ||
       exp.background.toLowerCase().includes(q);
     return matchesCat && matchesSearch;
   });
@@ -98,16 +97,8 @@ export const ExperiencesView: React.FC<ExperiencesViewProps> = ({ initialSelecte
         return '项目经历';
       case 'work':
         return '工作经历';
-      case 'internship':
+      case 'intern':
         return '实习经历';
-      case 'education':
-        return '教育经历';
-      case 'competition':
-        return '竞赛开源';
-      case 'paper':
-        return '论文专利';
-      case 'other':
-        return '其他经历';
       default:
         return '核心经历';
     }
@@ -131,7 +122,7 @@ export const ExperiencesView: React.FC<ExperiencesViewProps> = ({ initialSelecte
     // 拼接原始文本用于 AI 润色
     const originalText = [
       exp.background,
-      exp.responsibility,
+      exp.problem,
       ...(exp.actions || []),
       ...(exp.results || [])
     ].filter(Boolean).join('\n');
@@ -162,7 +153,7 @@ export const ExperiencesView: React.FC<ExperiencesViewProps> = ({ initialSelecte
         reason: 'AI 深度润色：强化量化指标与专业表述',
         updatedFields: {
           background: exp.background,
-          responsibility: exp.responsibility,
+          problem: exp.problem,
           actions: polishedLines.length > 0 ? polishedLines : exp.actions,
           results: exp.results || []
         }
@@ -187,8 +178,8 @@ export const ExperiencesView: React.FC<ExperiencesViewProps> = ({ initialSelecte
     versionRecord.changes.forEach((c) => {
       if (c.field === 'actions') {
         updated.actions = [c.to, ...(exp.actions || []).slice(1)];
-      } else if (c.field === 'responsibility') {
-        updated.responsibility = c.to;
+      } else if (c.field === 'problem' || c.field === 'responsibility') {
+        updated.problem = c.to;
       } else if (c.field === 'background') {
         updated.background = c.to;
       } else if (c.field === 'results') {
@@ -264,44 +255,14 @@ export const ExperiencesView: React.FC<ExperiencesViewProps> = ({ initialSelecte
             工作经历 ({experiences.filter((e) => e.category === 'work').length})
           </button>
           <button
-            onClick={() => setActiveCategory('internship')}
+            onClick={() => setActiveCategory('intern')}
             className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition shrink-0 cursor-pointer ${
-              activeCategory === 'internship'
+              activeCategory === 'intern'
                 ? 'bg-ink text-white shadow-2xs'
                 : 'text-muted hover:bg-page'
             }`}
           >
-            实习经历 ({experiences.filter((e) => e.category === 'internship').length})
-          </button>
-          <button
-            onClick={() => setActiveCategory('education')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition shrink-0 cursor-pointer ${
-              activeCategory === 'education'
-                ? 'bg-ink text-white shadow-2xs'
-                : 'text-muted hover:bg-page'
-            }`}
-          >
-            教育经历 ({experiences.filter((e) => e.category === 'education').length})
-          </button>
-          <button
-            onClick={() => setActiveCategory('competition')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition shrink-0 cursor-pointer ${
-              activeCategory === 'competition'
-                ? 'bg-ink text-white shadow-2xs'
-                : 'text-muted hover:bg-page'
-            }`}
-          >
-            竞赛开源 ({experiences.filter((e) => e.category === 'competition' || e.category === 'paper').length})
-          </button>
-          <button
-            onClick={() => setActiveCategory('other')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition shrink-0 cursor-pointer ${
-              activeCategory === 'other'
-                ? 'bg-ink text-white shadow-2xs'
-                : 'text-muted hover:bg-page'
-            }`}
-          >
-            其他经历 ({experiences.filter((e) => e.category === 'other').length})
+            实习经历 ({experiences.filter((e) => e.category === 'intern').length})
           </button>
         </div>
 
@@ -509,27 +470,7 @@ export const ExperiencesView: React.FC<ExperiencesViewProps> = ({ initialSelecte
 
               {/* Card Body: Verified Metrics */}
               <div className="p-5 md:p-6 space-y-5">
-                {/* 1. Verified Metrics Row */}
-                {(exp.metrics || []).length > 0 && (
-                  <div className="space-y-1.5">
-                    <div className="text-[11px] font-bold text-muted uppercase tracking-wider">
-                      核心量化成效与关键指标 (Verified Metrics)
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      {(exp.metrics || []).map((metric, idx) => (
-                        <div
-                          key={idx}
-                          className="px-3 py-1.5 rounded-lg bg-sage-soft text-sage font-semibold border border-sage-soft text-xs flex items-center gap-1.5"
-                        >
-                          <TrendingUp className="w-3.5 h-3.5 text-sage" />
-                          <span>{metric}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* 2. STAR Structured Sections */}
+                {/* 1. STAR Structured Sections */}
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 pt-1">
                   {/* S & T: Situation & Task (4 cols) */}
                   <div className="lg:col-span-4 p-4 rounded-xl bg-canvas border border-edge space-y-3">
@@ -553,7 +494,7 @@ export const ExperiencesView: React.FC<ExperiencesViewProps> = ({ initialSelecte
                           个人核心职责：
                         </div>
                         <p className="text-ink leading-relaxed mt-0.5">
-                          {exp.responsibility || '主导从 0 到 1 方案设计与落地'}
+                          {exp.problem || '主导从 0 到 1 方案设计与落地'}
                         </p>
                       </div>
                     </div>
@@ -600,14 +541,14 @@ export const ExperiencesView: React.FC<ExperiencesViewProps> = ({ initialSelecte
                   </div>
                 </div>
 
-                {/* 3. Capability Tags */}
-                {(exp.capabilityTags || []).length > 0 && (
+                {/* 3. 能力标签 */}
+                {(exp.tags || []).length > 0 && (
                   <div className="space-y-1.5 pt-1">
                     <div className="text-[11px] font-bold text-muted uppercase tracking-wider">
                       能力标签与知识体系 (Capability Tags)
                     </div>
                     <div className="flex items-center gap-2 flex-wrap">
-                      {(exp.capabilityTags || []).map((tag, idx) => (
+                      {(exp.tags || []).map((tag, idx) => (
                         <span
                           key={idx}
                           className="px-2.5 py-1 rounded-md bg-page text-ink border border-edge text-xs font-medium"
@@ -618,37 +559,6 @@ export const ExperiencesView: React.FC<ExperiencesViewProps> = ({ initialSelecte
                     </div>
                   </div>
                 )}
-
-                {/* 4. Target Jobs Linkage & Interview Feedback Note */}
-                <div className="pt-2 border-t border-edge flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs">
-                  {/* Matched jobs */}
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-faint font-medium">已对齐岗位：</span>
-                    {(exp.targetJobs || []).map((jobTitle, jIdx) => (
-                      <span
-                        key={jIdx}
-                        className="px-2 py-0.5 rounded bg-warning-bg text-warning border border-warning/20 text-[11px] font-semibold"
-                      >
-                        {jobTitle}
-                      </span>
-                    ))}
-                    {(exp.resumeVersionsUsed || []).length > 0 && (
-                      <span className="text-faint text-[11px]">
-                        · 关联简历：{exp.resumeVersionsUsed.join(', ')}
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Interview feedback prompt */}
-                  {exp.interviewFeedbackSummary && (
-                    <div className="text-[11px] text-sage bg-sage-soft/60 px-2.5 py-1 rounded-md border border-sage-soft flex items-center gap-1.5">
-                      <Sparkles className="w-3.5 h-3.5 text-sage shrink-0" />
-                      <span className="truncate max-w-md">
-                        实战提示：{exp.interviewFeedbackSummary}
-                      </span>
-                    </div>
-                  )}
-                </div>
               </div>
             </div>
           );
@@ -715,11 +625,10 @@ const EditExperienceModal: React.FC<EditExperienceModalProps> = ({
   const [role, setRole] = useState(experience.role);
   const [period, setPeriod] = useState(experience.period);
   const [background, setBackground] = useState(experience.background);
-  const [responsibility, setResponsibility] = useState(experience.responsibility);
+  const [problem, setProblem] = useState(experience.problem);
   const [actionsText, setActionsText] = useState((experience.actions || []).join('\n'));
   const [resultsText, setResultsText] = useState((experience.results || []).join('\n'));
-  const [metricsText, setMetricsText] = useState((experience.metrics || []).join(', '));
-  const [tagsText, setTagsText] = useState((experience.capabilityTags || []).join(', '));
+  const [tagsText, setTagsText] = useState((experience.tags || []).join(', '));
 
   if (!isOpen) return null;
 
@@ -735,11 +644,7 @@ const EditExperienceModal: React.FC<EditExperienceModalProps> = ({
       .split('\n')
       .map((r) => r.trim())
       .filter(Boolean);
-    const metrics = metricsText
-      .split(/[,，]/)
-      .map((m) => m.trim())
-      .filter(Boolean);
-    const capabilityTags = tagsText
+    const tags = tagsText
       .split(/[,，]/)
       .map((t) => t.trim())
       .filter(Boolean);
@@ -753,11 +658,10 @@ const EditExperienceModal: React.FC<EditExperienceModalProps> = ({
         role: role.trim(),
         period: period.trim(),
         background: background.trim(),
-        responsibility: responsibility.trim(),
+        problem: problem.trim(),
         actions,
         results,
-        metrics,
-        capabilityTags
+        tags
       }
     });
 
@@ -814,9 +718,7 @@ const EditExperienceModal: React.FC<EditExperienceModalProps> = ({
               >
                 <option value="project">项目经历</option>
                 <option value="work">工作经历</option>
-                <option value="internship">实习经历</option>
-                <option value="competition">竞赛开源</option>
-                <option value="paper">论文专利</option>
+                <option value="intern">实习经历</option>
               </select>
             </div>
           </div>
@@ -866,8 +768,8 @@ const EditExperienceModal: React.FC<EditExperienceModalProps> = ({
               <label className="block text-[11px] font-semibold text-muted mb-0.5">T · 任务与职责</label>
               <textarea
                 rows={2}
-                value={responsibility}
-                onChange={(e) => setResponsibility(e.target.value)}
+                value={problem}
+                onChange={(e) => setProblem(e.target.value)}
                 className="w-full p-2.5 text-xs rounded-lg border border-edge bg-white text-ink focus:border-sage focus:outline-none"
               />
             </div>
@@ -891,25 +793,14 @@ const EditExperienceModal: React.FC<EditExperienceModalProps> = ({
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-semibold text-ink mb-1">核心量化指标 (逗号分隔)</label>
-              <input
-                type="text"
-                value={metricsText}
-                onChange={(e) => setMetricsText(e.target.value)}
-                className="w-full px-3 py-2 text-xs rounded-lg border border-edge bg-white text-ink focus:border-sage focus:outline-none"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-ink mb-1">能力标签 (逗号分隔)</label>
-              <input
-                type="text"
-                value={tagsText}
-                onChange={(e) => setTagsText(e.target.value)}
-                className="w-full px-3 py-2 text-xs rounded-lg border border-edge bg-white text-ink focus:border-sage focus:outline-none"
-              />
-            </div>
+          <div>
+            <label className="block text-xs font-semibold text-ink mb-1">能力标签 (逗号分隔)</label>
+            <input
+              type="text"
+              value={tagsText}
+              onChange={(e) => setTagsText(e.target.value)}
+              className="w-full px-3 py-2 text-xs rounded-lg border border-edge bg-white text-ink focus:border-sage focus:outline-none"
+            />
           </div>
 
           <div className="pt-3 border-t border-edge flex items-center justify-end gap-2">
