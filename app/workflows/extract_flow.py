@@ -2,8 +2,9 @@
 结构化成就抽取 & 标签推荐 Workflow
 
 分别包装 agent 为单节点 StateGraph：
-- run_extract_structured_workflow: raw_text → CardStructuredCache
-- run_recommend_tags_workflow: raw_text → 标签列表
+- run_extract_structured_workflow: raw_text → {"cache": ..., "tags": [...]}
+  （STAR 与标签同一次 LLM 调用，§26）
+- run_recommend_tags_workflow: raw_text → 标签列表（规则标签池优先，无候选才 LLM）
 - run_parse_resume_entries_workflow: resume_text → 经历条目
 - run_backfill_workflow: 单卡装整份简历的旧数据拆卡（Agent + DB，单次上限 MAX_BACKFILL_CARDS + 单卡失败容忍）
 """
@@ -19,6 +20,7 @@ from app.agents.extract_agent import (
     RecommendTagsAgent,
 )
 from app.tools import db_tools
+from app.tools.tag_pool import recommend_tags_from_pool
 
 logger = logging.getLogger(__name__)
 
@@ -46,12 +48,23 @@ class BackfillState(TypedDict):
 
 def _run_extract_structured(state: Dict[str, Any]) -> Dict[str, Any]:
     out = ExtractStructuredAgent().run({"raw_text": state["raw_text"]})
-    return {"result": out["cache"]}
+    return {"result": {"cache": out["cache"], "tags": out.get("tags", [])}}
+
+
+def _run_rule_recommend_tags(state: Dict[str, Any]) -> Dict[str, Any]:
+    """规则标签池先行（零 LLM），命中即返回。"""
+    return {"result": recommend_tags_from_pool(state["raw_text"])}
 
 
 def _run_recommend_tags(state: Dict[str, Any]) -> Dict[str, Any]:
+    """规则标签池无候选时的 LLM 兜底。"""
     out = RecommendTagsAgent().run({"raw_text": state["raw_text"]})
     return {"result": out["tags"]}
+
+
+def _needs_llm(state: Dict[str, Any]) -> str:
+    """条件边：规则池有候选 → 直接结束；否则进 LLM 兜底节点。"""
+    return "llm" if not state.get("result") else "done"
 
 
 def _run_parse_resume_entries(state: Dict[str, Any]) -> Dict[str, Any]:
@@ -100,7 +113,7 @@ def _run_backfill(state: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def run_extract_structured_workflow(raw_text: str) -> Optional[Dict[str, Any]]:
-    """抽取结构化成就缓存"""
+    """抽取结构化成就缓存 + 扁平标签（单次 LLM 调用）"""
     workflow = StateGraph(ExtractStructuredState)
     workflow.add_node("extract", _run_extract_structured)
     workflow.add_edge(START, "extract")
@@ -113,11 +126,17 @@ def run_extract_structured_workflow(raw_text: str) -> Optional[Dict[str, Any]]:
 
 
 def run_recommend_tags_workflow(raw_text: str) -> List[str]:
-    """推荐标签"""
+    """推荐标签（规则标签池优先，无候选才 LLM 兜底）"""
     workflow = StateGraph(RecommendTagsState)
-    workflow.add_node("recommend", _run_recommend_tags)
-    workflow.add_edge(START, "recommend")
-    workflow.add_edge("recommend", END)
+    workflow.add_node("rule", _run_rule_recommend_tags)
+    workflow.add_node("llm", _run_recommend_tags)
+    workflow.add_edge(START, "rule")
+    workflow.add_conditional_edges(
+        "rule",
+        _needs_llm,
+        {"llm": "llm", "done": END},
+    )
+    workflow.add_edge("llm", END)
 
     app = workflow.compile()
     initial_state: RecommendTagsState = {"raw_text": raw_text, "result": None}

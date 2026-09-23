@@ -281,22 +281,25 @@ async def jobcraft_experience_upload_confirm(
             }
             card_id = db_tools.insert_card(card_data)
 
-            # AI 结构化抽取
+            # AI 结构化抽取（STAR + 标签同一次 LLM，§26：规则标签池优先）
             if raw_text and len(raw_text.strip()) >= 20:
                 try:
+                    from app.tools.tag_pool import recommend_tags_from_pool
                     from app.workflows.extract_flow import (
                         run_extract_structured_workflow,
-                        run_recommend_tags_workflow,
                     )
 
-                    cache = run_extract_structured_workflow(raw_text.strip())
-                    if cache:
-                        db_tools.update_card(
-                            card_id, {"ai_structured": cache}, current_user
-                        )
-                    tags = run_recommend_tags_workflow(raw_text.strip())
+                    out = run_extract_structured_workflow(raw_text.strip())
+                    updates: Dict[str, Any] = {}
+                    if out and out["cache"]:
+                        updates["ai_structured"] = out["cache"]
+                    tags = recommend_tags_from_pool(raw_text.strip())
+                    if not tags and out:
+                        tags = out.get("tags", [])
                     if tags:
-                        db_tools.update_card(card_id, {"tags": tags}, current_user)
+                        updates["tags"] = tags
+                    if updates:
+                        db_tools.update_card(card_id, updates, current_user)
                 except Exception:
                     logger.warning("AI 结构化抽取失败，卡片 id=%s", card_id)
 
@@ -430,19 +433,22 @@ async def jobcraft_experience_upload(
             card = db_tools.get_card(card_id, current_user)
             if card:
                 try:
+                    from app.tools.tag_pool import recommend_tags_from_pool
                     from app.workflows.extract_flow import (
                         run_extract_structured_workflow,
-                        run_recommend_tags_workflow,
                     )
 
-                    cache = run_extract_structured_workflow(resume_text.strip())
-                    if cache:
-                        db_tools.update_card(
-                            card_id, {"ai_structured": cache}, current_user
-                        )
-                    tags = run_recommend_tags_workflow(resume_text.strip())
+                    out = run_extract_structured_workflow(resume_text.strip())
+                    updates: Dict[str, Any] = {}
+                    if out and out["cache"]:
+                        updates["ai_structured"] = out["cache"]
+                    tags = recommend_tags_from_pool(resume_text.strip())
+                    if not tags and out:
+                        tags = out.get("tags", [])
                     if tags:
-                        db_tools.update_card(card_id, {"tags": tags}, current_user)
+                        updates["tags"] = tags
+                    if updates:
+                        db_tools.update_card(card_id, updates, current_user)
                 except Exception:
                     logger.warning("自动结构化抽取失败")
                 created_cards.append(card)
@@ -644,13 +650,13 @@ def jobcraft_experience_structure(
             )
         from app.workflows.extract_flow import run_extract_structured_workflow
 
-        cache = run_extract_structured_workflow(raw_text)
-        if not cache:
+        out = run_extract_structured_workflow(raw_text)
+        if not out or not out.get("cache"):
             raise HTTPException(
                 status_code=500,
                 detail="AI 结构化抽取失败，请检查经历内容是否清晰完整",
             )
-        db_tools.update_card(card_id, {"ai_structured": cache}, current_user)
+        db_tools.update_card(card_id, {"ai_structured": out["cache"]}, current_user)
         return db_tools.get_card(card_id, current_user)
     except HTTPException:
         raise

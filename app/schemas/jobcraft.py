@@ -41,6 +41,12 @@ class CardStructuredCache(BaseModel):
     achievements: List[Achievement] = Field(default_factory=list)
 
 
+class CardStructuredCacheWithTags(CardStructuredCache):
+    """STAR 抽取同一次 LLM 调用的输出（含扁平标签，EXPERIENCE_SPEC §26/§55）"""
+
+    tags: List[str] = Field(default_factory=list, description="扁平标签（3-5 个）")
+
+
 class ResumeExperience(BaseModel):
     """从简历中解析出的一段经历（对应一张经历卡）"""
 

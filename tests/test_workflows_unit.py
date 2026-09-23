@@ -493,7 +493,7 @@ class TestExtractFlow:
     """结构化抽取 Workflow 测试"""
 
     def test_extract_structured_normal(self, monkeypatch):
-        """正常抽取结构化成就"""
+        """正常抽取结构化成就 + 标签"""
         from app.workflows.extract_flow import run_extract_structured_workflow
 
         def fake_run(self, data):
@@ -501,7 +501,8 @@ class TestExtractFlow:
                 "cache": {
                     "summary": "负责推荐系统",
                     "achievements": [{"title": "重构召回", "result": "CTR+20%"}],
-                }
+                },
+                "tags": ["推荐系统", "Python"],
             }
 
         monkeypatch.setattr(
@@ -510,38 +511,60 @@ class TestExtractFlow:
 
         result = run_extract_structured_workflow(raw_text="我负责推荐系统")
         assert result is not None
-        assert result["summary"] == "负责推荐系统"
+        assert result["cache"]["summary"] == "负责推荐系统"
+        assert result["tags"] == ["推荐系统", "Python"]
 
     def test_extract_structured_empty_input(self, monkeypatch):
         """空输入抽取"""
         from app.workflows.extract_flow import run_extract_structured_workflow
 
         def fake_run(self, data):
-            return {"cache": None}
+            return {"cache": None, "tags": []}
 
         monkeypatch.setattr(
             "app.workflows.extract_flow.ExtractStructuredAgent.run", fake_run
         )
 
         result = run_extract_structured_workflow(raw_text="")
-        assert result is None
+        assert result is not None
+        assert result["cache"] is None
+        assert result["tags"] == []
 
-    def test_recommend_tags_normal(self, monkeypatch):
-        """正常推荐标签"""
+    def test_recommend_tags_rule_pool_hit_skips_llm(self, monkeypatch):
+        """规则标签池命中时不再调 LLM（§26 规则先行）"""
+        from app.workflows.extract_flow import run_recommend_tags_workflow
+
+        def _fail(*args, **kwargs):
+            raise AssertionError("规则池命中不应触发 LLM")
+
+        monkeypatch.setattr("app.workflows.extract_flow.RecommendTagsAgent.run", _fail)
+
+        # "Python/机器学习" 在 technical_skills 词典中 → 规则命中
+        result = run_recommend_tags_workflow(
+            raw_text="我负责推荐系统开发，使用 Python 进行机器学习建模。"
+        )
+        assert "Python" in result
+        assert "机器学习" in result
+        # 规则外部词不应出现（未调 LLM，不补词典外标签）
+        assert "推荐系统" not in result
+
+    def test_recommend_tags_rule_pool_miss_falls_back_to_llm(self, monkeypatch):
+        """规则标签池无候选时走 LLM 兜底"""
         from app.workflows.extract_flow import run_recommend_tags_workflow
 
         def fake_run(self, data):
-            return {"tags": ["推荐系统", "Python", "机器学习"]}
+            return {"tags": ["推荐系统", "搜索"]}
 
         monkeypatch.setattr(
             "app.workflows.extract_flow.RecommendTagsAgent.run", fake_run
         )
 
+        # 文本不含任何词典词 → 规则空 → LLM 兜底
         result = run_recommend_tags_workflow(raw_text="我做推荐系统开发")
-        assert result == ["推荐系统", "Python", "机器学习"]
+        assert result == ["推荐系统", "搜索"]
 
     def test_recommend_tags_empty(self, monkeypatch):
-        """空输入标签推荐"""
+        """空输入标签推荐（规则空 → LLM 兜底，兜底逻辑返回空）"""
         from app.workflows.extract_flow import run_recommend_tags_workflow
 
         def fake_run(self, data):

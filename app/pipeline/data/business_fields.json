@@ -1,0 +1,25 @@
+{
+  "purpose": "业务领域/行业候选标签（规则标签池 EXP-P1-06c 专用；tag + keywords 同义词匹配，关键词命中即推荐该 tag）",
+  "business_fields": [
+    { "tag": "电商", "keywords": ["电商", "电子商务", "跨境电商", "ecommerce", "e-commerce"] },
+    { "tag": "教育", "keywords": ["教育", "在线教育", "培训", "教培", "edtech"] },
+    { "tag": "金融", "keywords": ["金融", "银行", "支付", "信贷", "证券", "保险", "风控", "finance"] },
+    { "tag": "医疗健康", "keywords": ["医疗", "健康", "医院", "医药", "医疗健康", "healthcare"] },
+    { "tag": "游戏", "keywords": ["游戏", "手游", "端游", "gaming"] },
+    { "tag": "社交", "keywords": ["社交", "社区", "social", "sns"] },
+    { "tag": "内容", "keywords": ["内容", "短视频", "视频", "媒体", "内容平台", "content"] },
+    { "tag": "企业服务", "keywords": ["企业服务", "SaaS", "B2B", "ToB", "to b", "enterprise"] },
+    { "tag": "本地生活", "keywords": ["本地生活", "外卖", "本地服务", "到店"] },
+    { "tag": "出行", "keywords": ["出行", "网约车", "打车", "物流", "仓配"] },
+    { "tag": "AI", "keywords": ["AI", "人工智能", "大模型", "LLM", "AIGC", "机器学习", "深度学习"] },
+    { "tag": "大数据", "keywords": ["大数据", "数据平台", "数据仓库", "数据湖", "实时计算"] },
+    { "tag": "云计算", "keywords": ["云计算", "云服务", "云平台", "K8s", "Kubernetes", "Docker", "容器化"] },
+    { "tag": "广告营销", "keywords": ["广告", "营销", "投放", "增长", "增长黑客", "marketing"] },
+    { "tag": "工业制造", "keywords": ["工业", "制造", "智能制造", "IoT", "物联网", "机器人"] },
+    { "tag": "汽车", "keywords": ["汽车", "整车", "自动驾驶", "智能驾驶", "车联网"] },
+    { "tag": "文娱", "keywords": ["文娱", "影视", "音乐", "娱乐", "直播"] },
+    { "tag": "招聘HR", "keywords": ["招聘", "HR", "人力资源", "人才"] },
+    { "tag": "安全", "keywords": ["安全", "网络安全", "信息安全", "数据安全", "security"] },
+    { "tag": "通讯", "keywords": ["通讯", "通信", "5G", "telecom"] }
+  ]
+}

@@ -594,19 +594,22 @@ def _patch_confirm_upload_deps(monkeypatch):
     def fake_extract(raw_text):
         captured["extract_calls"] += 1
         return {
-            "summary": "自动抽取",
-            "achievements": [
-                {
-                    "title": "重构召回",
-                    "situation": "",
-                    "action": {
-                        "main": "引入向量召回",
-                        "difficulty": "",
-                        "resolution": "",
-                    },
-                    "result": "点击率提升 20%",
-                }
-            ],
+            "cache": {
+                "summary": "自动抽取",
+                "achievements": [
+                    {
+                        "title": "重构召回",
+                        "situation": "",
+                        "action": {
+                            "main": "引入向量召回",
+                            "difficulty": "",
+                            "resolution": "",
+                        },
+                        "result": "点击率提升 20%",
+                    }
+                ],
+            },
+            "tags": ["推荐系统", "Python"],
         }
 
     monkeypatch.setattr(
@@ -617,9 +620,6 @@ def _patch_confirm_upload_deps(monkeypatch):
     monkeypatch.setattr("app.api.experience.db_tools.update_card", fake_update)
     monkeypatch.setattr(
         "app.workflows.extract_flow.run_extract_structured_workflow", fake_extract
-    )
-    monkeypatch.setattr(
-        "app.workflows.extract_flow.run_recommend_tags_workflow", lambda *a: None
     )
     return captured
 

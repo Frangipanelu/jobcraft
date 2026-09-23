@@ -156,6 +156,17 @@ def test_extract_structured_v2_anti_fabrication():
     assert "尽量包含量化" not in text
 
 
+def test_extract_structured_v3_tags_output():
+    """EXP-P1-06c：extract_structured_v3 在反编造基础上升级为「STAR + 标签一次输出」。"""
+    text = (PROMPTS_DIR / "experience" / "extract_structured_v3.txt").read_text(
+        encoding="utf-8"
+    )
+    assert "禁止编造量化" in text
+    assert "tags" in text
+    assert "技术栈 / 业务领域 / 能力维度 / 行业" in text
+    assert "禁止编造原文没有的标签" in text
+
+
 def test_parse_resume_entries_v2_no_forced_percent():
     """EXP-P1-04：parse_resume_entries_v2 移除强制 'xx%' 格式。"""
     text = (PROMPTS_DIR / "experience" / "parse_resume_entries_v2.txt").read_text(

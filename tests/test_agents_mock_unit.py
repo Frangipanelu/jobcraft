@@ -40,6 +40,7 @@ def test_extract_structured_with_mock_llm(monkeypatch):
                 "result": "点击率提升 20%",
             }
         ],
+        "tags": ["推荐系统", "Python"],
     }
 
     def _fake_invoke(model, schema, prompt, **kwargs):
@@ -49,33 +50,37 @@ def test_extract_structured_with_mock_llm(monkeypatch):
     out = ExtractStructuredAgent().run({"raw_text": "我负责推荐系统"})
     assert out["cache"]["summary"] == "负责推荐系统"
     assert out["cache"]["achievements"][0]["result"] == "点击率提升 20%"
+    assert out["tags"] == ["推荐系统", "Python"]
 
 
 def test_extract_structured_empty_achievements_returns_none(monkeypatch):
     from app.agents.extract_agent import ExtractStructuredAgent
 
     def _fake_invoke(model, schema, prompt, **kwargs):
-        return schema(summary="", achievements=[])
+        return schema(summary="", achievements=[], tags=[])
 
     monkeypatch.setattr("app.agents.extract_agent.invoke_structured", _fake_invoke)
     out = ExtractStructuredAgent().run({"raw_text": "无成果的经历"})
     assert out["cache"] is None
+    assert out["tags"] == []
 
 
-def test_extract_structured_uses_v2_prompt_anti_fabrication(monkeypatch):
-    """EXP-P1-04：ExtractStructuredAgent 加载 v2 prompt（禁止编造量化/留空规则）。"""
+def test_extract_structured_uses_v3_prompt_anti_fabrication(monkeypatch):
+    """EXP-P1-06c：ExtractStructuredAgent 加载 v3 prompt（禁止编造量化/留空 + tags 输出）。"""
     from app.agents.extract_agent import ExtractStructuredAgent
 
     captured = {}
 
     def _fake_invoke(model, schema, prompt, **kwargs):
         captured["prompt"] = prompt
-        return schema(summary="x", achievements=[])
+        return schema(summary="x", achievements=[], tags=[])
 
     monkeypatch.setattr("app.agents.extract_agent.invoke_structured", _fake_invoke)
     ExtractStructuredAgent().run({"raw_text": "一段经历"})
     assert "禁止编造量化" in captured["prompt"]
     assert "留空" in captured["prompt"]
+    # v3 增加 labels/tags 输出（§26 标签并入 STAR 一次调用）
+    assert "tags" in captured["prompt"]
 
 
 # ---------- ParseResumeEntriesAgent ----------
