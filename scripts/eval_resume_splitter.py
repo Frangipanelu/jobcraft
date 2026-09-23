@@ -23,7 +23,7 @@ def _assert_no_invention(got, raw_text: str, base: str) -> None:
             v = g.get(field) or ""
             if not v or v == _PLACEHOLDER:
                 continue
-            assert v in raw_text, f"{base}: 编造 {field}={v}"
+            assert v in raw_text, f"{base}: 编造 {field}={v}"  # noqa: S101 评测脚本断言
 
 
 def main() -> None:
