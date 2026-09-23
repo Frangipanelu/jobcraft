@@ -39,6 +39,17 @@
 - [x] **测试**：`test_prompts.py` 注册 `("experience", "expression_standardized")` 占位符 + 语义断言（content 输出 / 中性化 / 反虚构）。**pytest 646 passed / 12 skipped** + ruff 全绿 + check_encoding 353 文件 0 错。
 - [ ] **待续（EXP-P2-04）**：生成端点 `POST /cards/{card_id}/expressions`（调 expression_standardized_v1 + db_expression.create，仅自动进 candidate）。
 
+## Standardized Expression 生成端点（EXP-P2-04，2026-09-23）
+
+> 依据 EXPERIENCE_SPEC §9 / §2.2 + DATA_MODEL §6：输入经历原文 → 1 次 LLM（expression_standardized_v1）→ 落库为标准化表达（仅 candidate，U2 手动确认后才可复用）。
+
+- [x] **`app/tools/expression_generate.py`**：单次 LLM 调用的工具封装（无状态）——
+  - `StandardizedExpressionOutput{content}` pydantic 输出模型 + `generate_standardized_expression(raw_text, company, role)` 走 `invoke_structured` 统一出口（审计/缓存/观测），debug_label=`expression_standardized`
+  - 输入校验：空内容/过短（<10 字符）抛 `ValueError`；空输出抛 `RuntimeError`
+- [x] **API 端点**：`POST /cards/{card_id}/expressions`——卡片不存在 404 / 内容过短 400 / `ValueError`→400 / 兜底 500；生成成功即 `create_expression`（type=standardized, direction/job 恒空, source_refs=[], status 默认 candidate），返回 `ExpressionRead`
+- [x] **测试**：`test_tools_extra_unit.py::TestExpressionGenerate`（5 条：统一出口 / v1 prompt 契约 / 输入校验 / 空输出 / LLM 失败）+ `test_api_routes_unit.py::TestExpressionGenerate`（5 条：正常生成落库 candidate / 404 / 400 / 400 / 500）。**pytest 656 passed / 12 skipped** + ruff 全绿 + check_encoding 354 文件 0 错。
+- [ ] **待续（EXP-P2-05）**：版本端点 `POST /expressions/{id}/versions`（调 create_expression_version，新行不覆盖，仍 candidate）。
+
 ## Expression/Consumer Chain 基础（EXP-P1-08，2026-09-23）
 
 > 依据 EXPERIENCE_SPEC §32/§30.5：统一消费入口 `get_card_render_text()`（优先版本链 → 结构化 STAR → raw_text → summary/title），下游 `_get_card_text` / `_card_text` / gap_polish 收敛至该函数，不再各自拼。§30.5 场景参数（排序/字段权重）归 P2。
