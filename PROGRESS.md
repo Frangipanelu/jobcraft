@@ -27,6 +27,18 @@
 - [x] **测试**：`tests/test_expression_db_unit.py`（15 条：row mapper / 枚举校验 / 组内 version+1 / INSERT 参数 / by-id 所有权 / 过滤+排序 / 新版本基于原行 / 未知表达 LookupError / status 校验 / delete）+ `test_api_routes_unit.py` 新增 2 类 10 条路由测试（列表、404、400、过滤透传、创建、422、500）。**pytest 645 passed / 12 skipped** + ruff 全绿 + check_encoding 351 文件 0 错。
 - [ ] **待续（EXP-P2-03）**：标准化表达生成 Prompt（基于 polish_v2 中性化，版本化 `prompts/experience/expression_standardized_v1.txt`）。
 
+## 标准化表达生成 Prompt（EXP-P2-03，2026-09-23）
+
+> 依据 EXPERIENCE_SPEC §2.2 / §6.2 + DATA_MODEL §6：以 polish_v2 为基线调整，产出供 EXP-P2-04 生成端点复用的 Standardized Expression Prompt。
+
+- [x] **`prompts/experience/expression_standardized_v1.txt`**：基于 polish_v2 结构调整——
+  - 中性化：显式"不针对任何特定岗位/JD 定向改写"，跨岗位可公允理解（§6.2）
+  - 事实完整：`保持原始事实不变` + `保留事实完整性（职责、方法、困难、结果、数据、工具/技能）` + 保留 STAR 强化 & 量化保留（口径标注）
+  - 输出契约：直接输出 JSON `{"content": "标准化表达文本"}`（对齐 DATA_MODEL §6 `Expression.content`），禁止解释/前缀/Markdown 代码块
+  - 占位符 `{company}/{role}/{raw_text}` 对齐 polish
+- [x] **测试**：`test_prompts.py` 注册 `("experience", "expression_standardized")` 占位符 + 语义断言（content 输出 / 中性化 / 反虚构）。**pytest 646 passed / 12 skipped** + ruff 全绿 + check_encoding 353 文件 0 错。
+- [ ] **待续（EXP-P2-04）**：生成端点 `POST /cards/{card_id}/expressions`（调 expression_standardized_v1 + db_expression.create，仅自动进 candidate）。
+
 ## Expression/Consumer Chain 基础（EXP-P1-08，2026-09-23）
 
 > 依据 EXPERIENCE_SPEC §32/§30.5：统一消费入口 `get_card_render_text()`（优先版本链 → 结构化 STAR → raw_text → summary/title），下游 `_get_card_text` / `_card_text` / gap_polish 收敛至该函数，不再各自拼。§30.5 场景参数（排序/字段权重）归 P2。
