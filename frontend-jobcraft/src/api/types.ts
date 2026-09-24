@@ -99,6 +99,26 @@ export interface ExperienceCardVersionList {
 // 标准化表达（Expression，EXP-P2-02 §8 / DATA_MODEL §6 wire 层）
 // ============================================================
 
+/** 来源引用（对齐后端 SourceRef，DATA_MODEL §3.2，EXP-P2-06） */
+export interface SourceRef {
+  id: string
+  source_type:
+    | 'user_input'
+    | 'resume'
+    | 'experience'
+    | 'expression'
+    | 'job'
+    | 'jd'
+    | 'jd_analysis'
+    | 'interview'
+    | 'transcript'
+    | 'review'
+    | 'external_source'
+    | 'user_confirmation'
+  source_id: string
+  locator?: string | null
+}
+
 /** 一条标准化表达（对齐后端 ExpressionRead，EXP-P2-08） */
 export interface Expression {
   id: number
@@ -112,7 +132,7 @@ export interface Expression {
   version: number
   validation_level: number
   usage_count: number
-  source_refs: Record<string, unknown>[]
+  source_refs: SourceRef[]
   /** candidate / active / deprecated */
   status: string
   created_at?: string | null

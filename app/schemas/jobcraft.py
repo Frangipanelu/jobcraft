@@ -4,7 +4,7 @@ JobCraft 求职助手 Pydantic 数据模型
 所有 LLM 结构化输出、API 请求/响应共用此模块，确保字段一致。
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -248,6 +248,33 @@ class CardVersionListResponse(BaseModel):
 # ============================================================
 
 
+class SourceRef(BaseModel):
+    """来源引用（DATA_MODEL §3.2，U7；Traceability first 契约）。
+
+    AI 产物（含标准化表达）必须能追溯到其事实来源。EXPERIENCE_SPEC §7
+    旧定义（type 6 值）作废，统一以本模型为准（2026-09-24 裁决）。
+    wire 层用 snake_case（source_type/source_id/locator，与项目契约一致）。
+    """
+
+    id: str = Field(..., description="来源引用唯一 id")
+    source_type: Literal[
+        "user_input",
+        "resume",
+        "experience",
+        "expression",
+        "job",
+        "jd",
+        "jd_analysis",
+        "interview",
+        "transcript",
+        "review",
+        "external_source",
+        "user_confirmation",
+    ] = Field(..., description="来源对象类型")
+    source_id: str = Field(..., description="来源对象 id")
+    locator: Optional[str] = Field(None, description="来源内定位（行号/区间/路径）")
+
+
 class ExpressionCreate(BaseModel):
     """创建标准化表达的请求体（EXPERIENCE_SPEC §8.2 / DATA_MODEL §6）"""
 
@@ -263,8 +290,8 @@ class ExpressionCreate(BaseModel):
     job_id: Optional[int] = Field(
         None, description="所属岗位 id（岗位表达用，P2 暂留空）"
     )
-    source_refs: List[Dict[str, Any]] = Field(
-        default_factory=list, description="来源引用（复用现有 SourceRef schema，U7）"
+    source_refs: List[SourceRef] = Field(
+        default_factory=list, description="来源引用（DATA_MODEL §3.2，U7）"
     )
 
 
@@ -272,7 +299,7 @@ class ExpressionVersionCreate(BaseModel):
     """创建表达新版本的请求体（EXPERIENCE_SPEC §8.3：新行不覆盖旧行）"""
 
     content: str = Field(..., description="新版本表达内容")
-    source_refs: Optional[List[Dict[str, Any]]] = Field(
+    source_refs: Optional[List[SourceRef]] = Field(
         None, description="新版本来源引用（缺省继承原行）"
     )
 
@@ -290,7 +317,7 @@ class ExpressionRead(BaseModel):
     version: int = 1
     validation_level: int = 0
     usage_count: int = 0
-    source_refs: List[Dict[str, Any]] = Field(default_factory=list)
+    source_refs: List[SourceRef] = Field(default_factory=list)
     status: str = "candidate"
     created_at: Optional[str] = None
     updated_at: Optional[str] = None

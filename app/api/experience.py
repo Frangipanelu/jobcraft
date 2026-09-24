@@ -699,7 +699,9 @@ def jobcraft_expression_create(
                 "job_id": payload.job_id,
                 "type": payload.type,
                 "content": payload.content,
-                "source_refs": payload.source_refs,
+                "source_refs": [
+                    r.model_dump(exclude_none=True) for r in payload.source_refs
+                ],
             }
         )
         return get_expression(expression_id, current_user)
@@ -746,7 +748,13 @@ def jobcraft_expression_generate(
                 "job_id": None,
                 "type": "standardized",
                 "content": content,
-                "source_refs": [],
+                "source_refs": [
+                    {
+                        "id": f"experience:{card_id}",
+                        "source_type": "experience",
+                        "source_id": str(card_id),
+                    }
+                ],
             }
         )
         return get_expression(expression_id, current_user)
@@ -779,7 +787,11 @@ def jobcraft_expression_version(
             expression_id,
             payload.content.strip(),
             current_user,
-            source_refs=payload.source_refs,
+            source_refs=(
+                None
+                if payload.source_refs is None
+                else [r.model_dump(exclude_none=True) for r in payload.source_refs]
+            ),
         )
         return get_expression(new_id, current_user)
     except HTTPException:

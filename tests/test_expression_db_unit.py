@@ -165,6 +165,53 @@ class TestRowMapper:
         assert mod._row_to_expression(row)["source_refs"] == []
 
 
+class TestSourceRefNormalize:
+    """source_refs 契约规整（DATA_MODEL §3.2，P2C-06）。"""
+
+    def test_legacy_card_shape_maps_to_experience(self):
+        refs = [{"type": "card", "card_id": 10}]
+        out = mod._normalize_source_refs(refs)
+        assert out == [
+            {
+                "id": "experience:10",
+                "source_type": "experience",
+                "source_id": "10",
+                "locator": None,
+            }
+        ]
+
+    def test_canonical_shape_passes_through(self):
+        refs = [
+            {
+                "id": "experience:10",
+                "source_type": "experience",
+                "source_id": "10",
+            }
+        ]
+        assert mod._normalize_source_refs(refs) == [
+            {
+                "id": "experience:10",
+                "source_type": "experience",
+                "source_id": "10",
+                "locator": None,
+            }
+        ]
+
+    def test_missing_id_gets_inferred(self):
+        refs = [{"source_type": "experience", "source_id": "10", "locator": "v1"}]
+        out = mod._normalize_source_refs(refs)
+        assert out[0]["id"] == "experience:10"
+        assert out[0]["locator"] == "v1"
+
+    def test_unrecognized_entries_dropped(self):
+        refs = [{"foo": "bar"}, "junk", None]
+        assert mod._normalize_source_refs(refs) == []
+
+    def test_non_list_input_returns_empty(self):
+        assert mod._normalize_source_refs(None) == []
+        assert mod._normalize_source_refs("oops") == []
+
+
 class TestCreateValidation:
     def test_invalid_type_rejected(self, fake_db):
         with pytest.raises(ValueError, match="type 仅允许"):

@@ -27,6 +27,45 @@ logger = logging.getLogger("jobcraft.db.expression")
 EXPRESSION_TYPES = ("standardized", "direction", "job_specific")
 EXPRESSION_STATUSES = ("candidate", "active", "deprecated")
 
+_SOURCEREF_LEGACY_TYPE_MAP = {"card": "experience"}
+
+
+def _normalize_source_refs(refs: Any) -> List[Dict[str, Any]]:
+    """把 JSON 的 source_refs 规整为 SourceRef 契约（DATA_MODEL §3.2）。
+
+    - 已是源引用形态的条目透传（缺 id 时补 "{source_type}:{source_id}"）；
+    - 兼容旧形态 ``{"type": "card", "card_id": N}``（2026-09-24 前入库）→
+      ``{"id": "experience:N", "source_type": "experience", "source_id": "N"}``；
+    - 无法识别的条目直接丢弃（不污染响应契约，2026-09-24 裁决）。
+    """
+    out: List[Dict[str, Any]] = []
+    if not isinstance(refs, list):
+        return out
+    for ref in refs:
+        if not isinstance(ref, dict):
+            continue
+        if ref.get("source_type") and ref.get("source_id") is not None:
+            out.append(
+                {
+                    "id": ref.get("id") or f"{ref['source_type']}:{ref['source_id']}",
+                    "source_type": str(ref["source_type"]),
+                    "source_id": str(ref["source_id"]),
+                    "locator": ref.get("locator"),
+                }
+            )
+            continue
+        target = _SOURCEREF_LEGACY_TYPE_MAP.get(ref.get("type"))
+        if target and ref.get("card_id") is not None:
+            out.append(
+                {
+                    "id": f"{target}:{ref['card_id']}",
+                    "source_type": target,
+                    "source_id": str(ref["card_id"]),
+                    "locator": None,
+                }
+            )
+    return out
+
 
 def _row_to_expression(row: Dict[str, Any]) -> Dict[str, Any]:
     """数据库行 → API 友好结构（snake_case wire 契约）。"""
@@ -41,7 +80,7 @@ def _row_to_expression(row: Dict[str, Any]) -> Dict[str, Any]:
         "version": int(row["version"]),
         "validation_level": int(row.get("validation_level") or 0),
         "usage_count": int(row.get("usage_count") or 0),
-        "source_refs": _parse_json(row.get("source_refs")) or [],
+        "source_refs": _normalize_source_refs(_parse_json(row.get("source_refs"))),
         "status": row["status"],
         "created_at": row["created_at"].isoformat() if row.get("created_at") else None,
         "updated_at": row["updated_at"].isoformat() if row.get("updated_at") else None,

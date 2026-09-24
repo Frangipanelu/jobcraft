@@ -595,6 +595,83 @@ class TestExpressionCreate:
         )
         assert resp.status_code == 422
 
+    def test_create_passes_source_refs_as_dicts(self, monkeypatch):
+        """合法 source_refs 应以 dict 形式入库（P2C-06 SourceRef 契约）。"""
+        captured = {}
+        monkeypatch.setattr(
+            "app.api.experience.db_tools.get_card", lambda *a, **k: {"id": 10}
+        )
+
+        def fake_create(data):
+            captured["source_refs"] = data["source_refs"]
+            return 5
+
+        monkeypatch.setattr("app.tools.db_expression.create_expression", fake_create)
+        monkeypatch.setattr(
+            "app.tools.db_expression.get_expression",
+            lambda *a, **k: {
+                "id": 5,
+                "user_id": 7,
+                "experience_id": 10,
+                "direction_id": None,
+                "job_id": None,
+                "type": "standardized",
+                "content": "新表达",
+                "version": 1,
+                "validation_level": 0,
+                "usage_count": 0,
+                "source_refs": [
+                    {
+                        "id": "experience:10",
+                        "source_type": "experience",
+                        "source_id": "10",
+                    }
+                ],
+                "status": "candidate",
+                "created_at": None,
+                "updated_at": None,
+            },
+        )
+        resp = client.post(
+            "/api/jobcraft/experience/expressions",
+            json={
+                "experience_id": 10,
+                "type": "standardized",
+                "content": "新表达",
+                "source_refs": [
+                    {
+                        "id": "experience:10",
+                        "source_type": "experience",
+                        "source_id": "10",
+                    }
+                ],
+            },
+        )
+        assert resp.status_code == 200
+        assert captured["source_refs"] == [
+            {
+                "id": "experience:10",
+                "source_type": "experience",
+                "source_id": "10",
+            }
+        ]
+
+    def test_create_invalid_source_refs_returns_422(self, monkeypatch):
+        """source_ref 缺 source_type/source_id 应被 schema 校验拒绝。"""
+        monkeypatch.setattr(
+            "app.api.experience.db_tools.get_card", lambda *a, **k: {"id": 10}
+        )
+        resp = client.post(
+            "/api/jobcraft/experience/expressions",
+            json={
+                "experience_id": 10,
+                "type": "standardized",
+                "content": "新表达",
+                "source_refs": [{"type": "card", "card_id": 10}],
+            },
+        )
+        assert resp.status_code == 422
+
     def test_create_db_error_returns_500(self, monkeypatch):
         monkeypatch.setattr(
             "app.api.experience.db_tools.get_card", lambda *a, **k: {"id": 10}
@@ -643,6 +720,7 @@ class TestExpressionGenerate:
             captured["type"] = data["type"]
             captured["content"] = data["content"]
             captured["status"] = data.get("status")
+            captured["source_refs"] = data.get("source_refs")
             return 5
 
         monkeypatch.setattr("app.tools.db_expression.create_expression", fake_create)
@@ -671,6 +749,13 @@ class TestExpressionGenerate:
         assert data["id"] == 5
         assert data["status"] == "candidate"
         assert captured["type"] == "standardized"
+        assert captured["source_refs"] == [
+            {
+                "id": "experience:10",
+                "source_type": "experience",
+                "source_id": "10",
+            }
+        ]
 
     def test_generate_card_not_found_returns_404(self, monkeypatch):
         self._mock_card(monkeypatch, card=None)
@@ -771,11 +856,23 @@ class TestExpressionVersion:
             "/api/jobcraft/experience/expressions/5/versions",
             json={
                 "content": "新版本内容",
-                "source_refs": [{"card_id": 10, "type": "raw_text"}],
+                "source_refs": [
+                    {
+                        "id": "experience:10",
+                        "source_type": "experience",
+                        "source_id": "10",
+                    }
+                ],
             },
         )
         assert resp.status_code == 200
-        assert captured["source_refs"] == [{"card_id": 10, "type": "raw_text"}]
+        assert captured["source_refs"] == [
+            {
+                "id": "experience:10",
+                "source_type": "experience",
+                "source_id": "10",
+            }
+        ]
 
     def test_version_empty_content_returns_400(self, monkeypatch):
         self._mock_version(monkeypatch)
