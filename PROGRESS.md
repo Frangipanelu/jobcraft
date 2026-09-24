@@ -87,7 +87,16 @@
 - [x] **API 函数 `api/experience.ts`**：`listExpressions(cardId, {type?, directionId?, jobId?})`（GET /cards/{id}/expressions，带过滤查询串）/ `generateExpression(cardId)`（POST /cards/{id}/expressions，手动触发单次 LLM）/ `activateExpression(id)` / `deprecateExpression(id)`（POST /expressions/{id}/actions/activate|deprecate）。
 - [x] **hooks `features/experiences/expressionHooks.ts`**：`useExpressionsQuery(cardId)`（同链 version 降序，返回 items 或空数组兜底）/ `useGenerateExpressionMutation(cardId)` / `useActivateExpressionMutation(cardId)` / `useDeprecateExpressionMutation(cardId)`；三类 mutation 成功均 `invalidateQueries(['expressions', cardId])` 触发回流。
 - [x] **测试**：`expressionHooks.test.tsx` 6 条（query 拉取返回列表 / 空数组兜底 / generate 返回候选态 / activate 调端点 / deprecate 调端点 / 激活后 invalidate 触发重新拉取）。**vitest 23 files/136 tests 全过** + tsc 0 错 + build 通过（仅既有 chunk 大小 warning）。
-- [ ] **待续（EXP-P2-09）**：前端 Expression 面板（ExperiencesPage）：版本链展示 + raw_text vs content diff 对比 + 生成/激活/弃用按钮（U4 确认闸门）。
+
+## ExperiencesPage 标准化表达面板（EXP-P2-09，2026-09-24）
+
+> 依据 EXPERIENCE_SPEC §8/§9/§12/§24.9 + U4 确认闸门：版本链展示 + raw_text vs content diff 对比 + 生成/激活/弃用按钮。
+
+- [x] **面板组件 `components/experiences/ExpressionPanel.tsx`**：`useExpressionsQuery(cardId)` 拉取版本链（同链 version 降序）。行内展示 V 编号 + 状态徽标（候选/已激活/已弃用）+ 时间 + content 摘要；`toCardId(exp.id)` 兼容旧 `exp-123` 前缀。空态引导生成新表达。
+- [x] **U4 确认闸门**：生成落候选态；「对比原文」展开行级 LCS diff（绿 + / 红 − / 灰 =，无第三方依赖），确认后再「激活」（同链其它 active 自动降级 candidate）；「弃用」从 active/candidate → deprecated；active 行不显示激活按钮。文案与提示遵循中文优先 + 明确状态流转。
+- [x] **接线 `ExperiencesView`**：卡片操作区新增「标准化表达」折叠按钮（与「版本演进」并列），展开渲染 ExpressionPanel；新增 `expandedExpressionExpIds` 本地展开态。
+- [x] **测试**：`test/expression-panel.test.tsx` 6 条（空态生成 + toast / 候选链 + 徽标 / 激活调端点 / 弃用调端点 / active 行隐藏激活钮 / diff 行级对比）。**vitest 24 files/142 tests 全过** + tsc 0 错 + build 通过。
+- [ ] **待续（EXP-P2-10）**：前端 Experience 类型对齐：`Experience.versionHistory` 接后端 expression 消费；`ExperienceVersionRecord.source` 增 `standardized`（§30.4）。
 
 ## Expression/Consumer Chain 基础（EXP-P1-08，2026-09-23）
 
