@@ -324,6 +324,50 @@ export interface DimensionQuestion {
   card_ids: number[]
 }
 
+/**
+ * 公司背调结构（后端 company_research JSON 的消费子集）。
+ * 与 app/schemas/jobcraft.py CompanyResearchInfo 对齐，字段均可选（AI 生成结果可能缺项）。
+ */
+export interface CompanyResearchShape {
+  basic?: {
+    name?: string
+    full_name?: string
+    description?: string
+    industry?: string
+    founded?: string
+    headquarters?: string
+    size?: string
+    stage?: string
+    website?: string
+  }
+  business?: {
+    main_business?: string
+    product_names?: string[]
+    main_products?: string | string[]
+    business_model?: string
+    target_customers?: string
+    competitors?: string
+  }
+  funding?: {
+    latest_round?: string
+    investors?: string
+    valuation?: string
+  }
+  team?: {
+    founders?: string
+    key_executives?: string
+  }
+  industry?: {
+    sector?: string
+    trends?: string
+    opportunities?: string
+    risks?: string
+  }
+  news?: (string | { title?: string; date?: string; summary?: string })[]
+  ai_hiring?: string
+  sources?: string[]
+}
+
 export interface InterviewPrepResult {
   id?: number
   job_analysis_id: number
@@ -334,7 +378,7 @@ export interface InterviewPrepResult {
   full_version: string
   html_content: string
   created_at: string | null
-  company_research?: Record<string, unknown> | null
+  company_research?: CompanyResearchShape | null
 }
 
 export interface InterviewPrepRecord extends InterviewPrepResult {

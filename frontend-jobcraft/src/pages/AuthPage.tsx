@@ -44,8 +44,8 @@ export const AuthPage: React.FC = () => {
       } else {
         await register(username.trim(), password, email.trim() || undefined);
       }
-    } catch (err: any) {
-      setError(err?.message || '操作失败，请稍后重试');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '操作失败，请稍后重试');
     }
   };
 

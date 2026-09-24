@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useToastActions } from '../../context/JobCraftContext';
 import { useTabNavigate } from '../../router/tabPaths';
 import { useInterviewsQuery } from '../../features/interview/hooks';
+import { CompanyResearchShape } from '../../api/types';
 import {
   ArrowLeft,
   Sparkles,
@@ -9,6 +10,22 @@ import {
   FileText,
   Users
 } from 'lucide-react';
+
+interface NewsItemShape {
+  title?: string;
+  date?: string;
+  summary?: string;
+}
+
+// 后端维度题 / 前端高亮题 的消费子集（两者形似，按需归并）
+interface DqShape {
+  dimension?: string;
+  question?: string;
+  answer_points?: string[] | null;
+  evaluationFocus?: string;
+  isPrepared?: boolean;
+  preparedAnswer?: { aiReference?: string } | null;
+}
 
 interface InterviewPrepWorkspaceViewProps {
   interviewId?: string;
@@ -82,7 +99,7 @@ export const InterviewPrepWorkspaceView: React.FC<InterviewPrepWorkspaceViewProp
   const currentInterview = interviews.find((i) => i.id === interviewId);
   const src = currentInterview?.prepSource;
   const prep = currentInterview?.preparation;
-  const cr = (src?.company_research || {}) as Record<string, any>;
+  const cr = src?.company_research || ({} as CompanyResearchShape);
 
   const [activeSection, setActiveSection] = useState<SectionType>('公司调研');
   const [selectedQIdForAnswer, setSelectedQIdForAnswer] = useState<string>('');
@@ -90,18 +107,18 @@ export const InterviewPrepWorkspaceView: React.FC<InterviewPrepWorkspaceViewProp
 
   // 真实维度题 -> 本地问题形状
   const questions: LocalQuestion[] = useMemo(() => {
-    const dims = src?.dimension_questions || prep?.highFreqQuestions || [];
-    return (dims as any[]).map((dq: any, idx: number) => {
+    const dims = (src?.dimension_questions || prep?.highFreqQuestions || []) as DqShape[];
+    return dims.map((dq, idx) => {
       const answerTxt = Array.isArray(dq.answer_points)
-        ? (dq.answer_points as string[]).join(' → ')
-        : ((dq.preparedAnswer?.aiReference as string) || String(dq.answer_points || ''));
-      const dimName = dq.dimension || (dq.evaluationFocus as string) || `维度 D${idx + 1}`;
+        ? dq.answer_points.join(' → ')
+        : (dq.preparedAnswer?.aiReference || String(dq.answer_points || ''));
+      const dimName = dq.dimension || dq.evaluationFocus || `维度 D${idx + 1}`;
       return {
         id: `q-${idx}`,
         q: dq.question || `第 ${idx + 1} 题`,
         type: String(dimName).replace(/^D\d+\s*/, ''),
         difficulty: 'medium',
-        prepared: !!(dq as any).isPrepared,
+        prepared: !!dq.isPrepared,
         starSuggestion: answerTxt || '根据自身经历准备 STAR 应答（背景→任务→行动→结果）。',
         defaultDraft: ''
       };
@@ -141,7 +158,10 @@ export const InterviewPrepWorkspaceView: React.FC<InterviewPrepWorkspaceViewProp
     const funding = cr?.funding || {};
     const team = cr?.team || {};
     const industry = cr?.industry || {};
-    const news: any[] = cr?.news || prep?.companyResearch?.recentNews?.map((t: string) => ({ title: t })) || [];
+    const news: NewsItemShape[] = [
+      ...(cr?.news || []).map((n) => (typeof n === 'string' ? { title: n } : n)),
+      ...((prep?.companyResearch?.recentNews as string[]) || []).map((t) => ({ title: t }))
+    ];
     const products = basic?.name
       ? [
           ...(Array.isArray(business?.main_products)
@@ -237,7 +257,7 @@ export const InterviewPrepWorkspaceView: React.FC<InterviewPrepWorkspaceViewProp
                   </span>
                   <div>
                     <p className="text-[#1B2721] font-semibold leading-relaxed m-0">
-                      {n?.title || n}
+                      {n?.title || ''}
                       {n?.date && <span className="text-[#8D9A92] font-medium ml-2">{n.date}</span>}
                     </p>
                     {n?.summary && (
@@ -286,7 +306,7 @@ export const InterviewPrepWorkspaceView: React.FC<InterviewPrepWorkspaceViewProp
     };
     const focusAreas = keyFocus.length
       ? keyFocus
-      : (src?.dimension_questions || []).map((dq: any) => ({
+      : (src?.dimension_questions || []).map((dq) => ({
           name: dtTitle(dq.dimension, dimensionTitles),
           importance: '★★★★★',
           desc: dq.question
@@ -317,7 +337,7 @@ export const InterviewPrepWorkspaceView: React.FC<InterviewPrepWorkspaceViewProp
           <div className="text-sm font-extrabold text-[#111814] mb-3.5">核心考察方向拆解</div>
           {Array.isArray(focusAreas) && focusAreas.length ? (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {focusAreas.map((item: any, i: number) => (
+              {focusAreas.map((item, i) => (
                 <div
                   key={i}
                   className="bg-white p-5 rounded-2xl border-2 border-[#CCD8D1] shadow-2xs hover:border-[#204E3F] transition space-y-2"

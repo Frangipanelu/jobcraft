@@ -1,3 +1,4 @@
+import { CompanyResearchShape } from '../../api/types';
 import { Interview, InterviewPrepRecord, InterviewPreparation } from '../../types/jobcraft';
 
 /** Interviews 查询缓存 key（react-query 唯读源）。 */
@@ -67,13 +68,13 @@ export function buildInterviewFromPrep(
       answer_points: string[]
       card_ids: number[]
     }[]
-    company_research?: Record<string, unknown> | null
+    company_research?: CompanyResearchShape | null
     created_at?: string | null
   },
   meta: { id: string; jobId?: string; company: string; role: string; prepSource?: InterviewPrepRecord }
 ): Interview {
   const roundName = prep.round_type ? `面试准备 · ${prep.round_type}` : '面试准备'
-  const cr = (prep.company_research || {}) as Record<string, any>
+  const cr = prep.company_research || {}
   const highFreqQuestions: InterviewPreparation['highFreqQuestions'] = (
     prep.dimension_questions || []
   ).map((dq, idx) => ({
@@ -110,7 +111,7 @@ export function buildInterviewFromPrep(
         coreBusiness: cr?.business?.main_business || '',
         keyProducts: cr?.business?.product_names || [],
         relevantBusiness: cr?.basic?.industry || '',
-        recentNews: (cr?.news || []).slice(0, 3).map((n: any) => n?.title).filter(Boolean) || [],
+        recentNews: (cr?.news || []).slice(0, 3).map((n) => (typeof n === 'string' ? n : (n?.title ?? ''))).filter(Boolean) || [],
         aiHiringIntent: cr?.ai_hiring || ''
       },
       aiStrategy: {
