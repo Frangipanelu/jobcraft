@@ -39,6 +39,7 @@ import {
   useAddExperienceVersionMutation
 } from '../../features/experiences/hooks';
 import { NewExperienceModal } from './NewExperienceModal';
+import { ExpressionPanel } from './ExpressionPanel';
 
 interface ExperiencesViewProps {
   initialSelectedExpId?: string;
@@ -58,6 +59,7 @@ export const ExperiencesView: React.FC<ExperiencesViewProps> = ({ initialSelecte
   const [isNewModalOpen, setIsNewModalOpen] = useState(false);
   const [editingExp, setEditingExp] = useState<Experience | null>(null);
   const [expandedVersionExpIds, setExpandedVersionExpIds] = useState<Record<string, boolean>>({});
+  const [expandedExpressionExpIds, setExpandedExpressionExpIds] = useState<Record<string, boolean>>({});
   const [autoOpenedExpId, setAutoOpenedExpId] = useState<string | null>(null);
 
   // Deep link /experiences/:experienceId → 自动打开对应经历的编辑弹窗（FE-ROUTE-03）
@@ -72,6 +74,13 @@ export const ExperiencesView: React.FC<ExperiencesViewProps> = ({ initialSelecte
 
   const toggleVersionHistory = (expId: string) => {
     setExpandedVersionExpIds((prev) => ({
+      ...prev,
+      [expId]: !prev[expId]
+    }));
+  };
+
+  const toggleExpressionPanel = (expId: string) => {
+    setExpandedExpressionExpIds((prev) => ({
       ...prev,
       [expId]: !prev[expId]
     }));
@@ -282,6 +291,7 @@ export const ExperiencesView: React.FC<ExperiencesViewProps> = ({ initialSelecte
       <div className="space-y-6">
         {filteredExperiences.map((exp) => {
           const isVersionExpanded = !!expandedVersionExpIds[exp.id];
+          const isExpressionExpanded = !!expandedExpressionExpIds[exp.id];
           const historyList = exp.versionHistory || [];
 
           return (
@@ -346,6 +356,24 @@ export const ExperiencesView: React.FC<ExperiencesViewProps> = ({ initialSelecte
                     <History className="w-3.5 h-3.5" />
                     <span>版本演进 ({historyList.length || 1})</span>
                     {isVersionExpanded ? (
+                      <ChevronUp className="w-3.5 h-3.5" />
+                    ) : (
+                      <ChevronDown className="w-3.5 h-3.5" />
+                    )}
+                  </button>
+
+                  <button
+                    onClick={() => toggleExpressionPanel(exp.id)}
+                    className={`flex items-center gap-1 px-3 py-1.5 rounded-lg border text-xs font-semibold transition cursor-pointer ${
+                      isExpressionExpanded
+                        ? 'bg-ink text-white border-ink'
+                        : 'bg-white text-ink border-edge hover:bg-page'
+                    }`}
+                    title="标准化表达版本链 · diff 对比 · 生成/激活/弃用"
+                  >
+                    <Sparkles className="w-3.5 h-3.5" />
+                    <span>标准化表达</span>
+                    {isExpressionExpanded ? (
                       <ChevronUp className="w-3.5 h-3.5" />
                     ) : (
                       <ChevronDown className="w-3.5 h-3.5" />
@@ -471,6 +499,9 @@ export const ExperiencesView: React.FC<ExperiencesViewProps> = ({ initialSelecte
                   </div>
                 </div>
               )}
+
+              {/* Expression Panel (if expanded) */}
+              {isExpressionExpanded && <ExpressionPanel exp={exp} />}
 
               {/* Card Body: Verified Metrics */}
               <div className="p-5 md:p-6 space-y-5">
