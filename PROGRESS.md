@@ -50,6 +50,16 @@
 - [x] **测试**：`test_tools_extra_unit.py::TestExpressionGenerate`（5 条：统一出口 / v1 prompt 契约 / 输入校验 / 空输出 / LLM 失败）+ `test_api_routes_unit.py::TestExpressionGenerate`（5 条：正常生成落库 candidate / 404 / 400 / 400 / 500）。**pytest 656 passed / 12 skipped** + ruff 全绿 + check_encoding 354 文件 0 错。
 - [ ] **待续（EXP-P2-05）**：版本端点 `POST /expressions/{id}/versions`（调 create_expression_version，新行不覆盖，仍 candidate）。
 
+## 表达版本端点（EXP-P2-05，2026-09-23）
+
+> 依据 EXPERIENCE_SPEC §8.3 / §31：`POST /expressions/:expressionId/versions` 创建新版本而非覆盖旧版本；新行继承原行组归属，version 取组内 max+1，默认仍 candidate。
+
+- [x] **`db_expression.create_expression_version` 简化**：直接返回 `create_expression` 的 lastrowid（原实现二次查询 `query_group_max_version_id` 冗余，已消除；该 helper 保留供 P2-06 latest-lookup）。仍基于原行（experience/type/direction/job）复制新版本行，`source_refs` 缺省继承，status 默认 candidate。
+- [x] **Schema**：`ExpressionVersionCreate{content, source_refs?}`（§8.3 请求体）
+- [x] **API 端点**：`POST /expressions/{expression_id}/versions`——空内容 400 / `LookupError`→404（不存在或不属当前用户）/ `ValueError`→400 / 兜底 500；返回新行 `ExpressionRead`
+- [x] **测试**：`test_api_routes_unit.py::TestExpressionVersion`（5 条：正常新版本 candidate / source_refs 透传 / 空内容 400 / 不存在 404 / db 500）；既有 DB 单测 keep green（create_expression_version 语义不变）。**pytest 661 passed / 12 skipped** + ruff 全绿 + check_encoding 355 文件 0 错。
+- [ ] **待续（EXP-P2-06）**：状态机端点 `POST /expressions/{id}/actions/activate|deprecate`（§8.4 + EXPERIENCE_SPEC 状态机）。
+
 ## Expression/Consumer Chain 基础（EXP-P1-08，2026-09-23）
 
 > 依据 EXPERIENCE_SPEC §32/§30.5：统一消费入口 `get_card_render_text()`（优先版本链 → 结构化 STAR → raw_text → summary/title），下游 `_get_card_text` / `_card_text` / gap_polish 收敛至该函数，不再各自拼。§30.5 场景参数（排序/字段权重）归 P2。
