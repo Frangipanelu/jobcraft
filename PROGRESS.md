@@ -78,7 +78,16 @@
 - [x] **统一入口增强 `card_render.get_card_render_text`**：新增 `active_expression: Optional[str] = None` 关键字参数，位于版本链之后、结构化 STAR 之前；若未显式传入则读卡上预载字段 `card.get('active_expression')`。空白值视同无。
 - [x] **消费点接线 `workflows/job_analysis_flow._run_legacy_ats`**：加载卡片时（已有 user_id/card_ids）为每张卡预载 `c['active_expression'] = get_active_expression_content(cid, user_id)`；`score_match_agent`/`gap_polish_agent` 经统一入口自动生效，无需改动 agent。resume/interview 消费点留 P6/P8。
 - [x] **测试**：`test_card_render_unit.py` 新增 5 条（active 优先于 STAR / markdown 模式生效 / 卡上预载字段 / 空白回退 / include_tags 追加）+ `test_expression_db_unit.py::TestActiveExpressionContent` 3 条（取最新 active content / 无激活返回 None / 默认 standardized type）。**pytest 680 passed / 12 skipped** + ruff 全绿 + check_encoding 355 文件 0 错。
-- [ ] **待续（EXP-P2-08）**：前端数据层（`useExpressionsQuery` / `useGenerateExpressionMutation` / `useActivateExpressionMutation` / `useDeprecateExpressionMutation`）。
+
+## 前端 Expression 数据层（EXP-P2-08，2026-09-24）
+
+> 依据 EXPERIENCE_SPEC §8/§24.9 + DATA_MODEL §6：前端新增 Expression wire 类型、API 函数与四个 hooks，作为 P2-09 面板的数据层。
+
+- [x] **wire 类型 `api/types.ts`**：`Expression`（对齐后端 ExpressionRead：id/user_id/experience_id/direction_id/job_id/type/content/version/validation_level/usage_count/source_refs/status/created_at/updated_at）+ `ExpressionListResponse`（§8.1）。
+- [x] **API 函数 `api/experience.ts`**：`listExpressions(cardId, {type?, directionId?, jobId?})`（GET /cards/{id}/expressions，带过滤查询串）/ `generateExpression(cardId)`（POST /cards/{id}/expressions，手动触发单次 LLM）/ `activateExpression(id)` / `deprecateExpression(id)`（POST /expressions/{id}/actions/activate|deprecate）。
+- [x] **hooks `features/experiences/expressionHooks.ts`**：`useExpressionsQuery(cardId)`（同链 version 降序，返回 items 或空数组兜底）/ `useGenerateExpressionMutation(cardId)` / `useActivateExpressionMutation(cardId)` / `useDeprecateExpressionMutation(cardId)`；三类 mutation 成功均 `invalidateQueries(['expressions', cardId])` 触发回流。
+- [x] **测试**：`expressionHooks.test.tsx` 6 条（query 拉取返回列表 / 空数组兜底 / generate 返回候选态 / activate 调端点 / deprecate 调端点 / 激活后 invalidate 触发重新拉取）。**vitest 23 files/136 tests 全过** + tsc 0 错 + build 通过（仅既有 chunk 大小 warning）。
+- [ ] **待续（EXP-P2-09）**：前端 Expression 面板（ExperiencesPage）：版本链展示 + raw_text vs content diff 对比 + 生成/激活/弃用按钮（U4 确认闸门）。
 
 ## Expression/Consumer Chain 基础（EXP-P1-08，2026-09-23）
 
