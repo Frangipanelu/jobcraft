@@ -1215,3 +1215,22 @@
 - [x] **测试**：`mappers.test.ts` +3 组（dutiesText/requirementsText、structuredResultToJD＋subtext_decoded＋空兜底）；`jd-query.test.tsx` +4（结构化自动建岗、复用显式 jobId、原始文本 fire-and-forget、结构化失败 reject）+ tasks mock + CreateHarness；全量 `npx vitest run` **17 文件 / 81 测试通过**（72→81），`npx tsc --noEmit` exit 0，`npm run build` exit 0，`scripts/check_encoding.py` 0 错误
 - [x] spec 落盘 `tasks/FE-JD-02.md`（设计决策 JD-C1..C5、Scope、Non-Goals）
 - [ ] **本段标记完成前需执行**：TODO.md 已勾选 FE-JD-02；提交（`feat(jd)` + `docs` 两支，PROGRESS.md 走 `git add -f`）+ 推 origin/main（代理 7890 需开启）
+
+### P2 收尾批 0：标准化表达契约闭环（2026-09-25，本轮）
+
+> 依据 5 域 spec 对齐审计 + P2 逐字段核对（TODO.md「P2 收尾批 0」）。执行前已核实：EXP-P2-01~07 后端实质落地（V0009 + db_expression + 5 端点），原标记过期；真实缺失=SourceRef 契约/归属校验/消费链/usage 自增/前端版本编辑。6+ 个 commit，均未推送。
+
+- [x] **P2C-06 SourceRef 模型落地** `38a6636`：`SourceRef` Pydantic（DATA_MODEL §3.2 12 值联合，wire snake_case）替代 `List[Dict]`；生成端点回填 `source_type=experience/source_id=card_id`；DB 层 `_normalize_source_refs` 前向兼容旧 `{type:'card',card_id}`；前端 `Expression.source_refs: SourceRef[]`；DB 规整 5 用例 + cli 层校验 3 用例。
+- [x] **P2C-07 direction_id 归属校验** `c3eab90`：新建 `app/tools/db_direction.py` 最小只读模块（V0009 建表，P3 在此扩展）；`POST /expressions` 携带 direction_id 时校验存在且归属当前用户（404「方向不存在」）。
+- [x] **P2C-01 §32 消费链接通** `abd4c79`：`interview_prep_flow._generate_prep` 与 `jobcraft_resume.generate_resume` 附加 `c["active_expression"]`（沿用 job_analysis_flow 模式）；渲染优先级版本链→激活表达→STAR 单入口保证；2 条 wiring 测试。
+- [x] **P2C-02 usage_count 自增** `1e226a2`：新增 `increment_active_expression_usage`（仅 active 最新版本，get 保持只读零副作用）；三处消费点显式自增；DB SQL 断言 + 正/负路径测试。
+- [x] **P2C-03 前端版本编辑链路** `56b59a6`：`api/experience.ts::updateExpression`（POST /expressions/{id}/versions）+ `useExpressionVersionMutation`（成功失效回流）+ ExpressionPanel「编辑新版本」行内编辑（沿用 source_refs，version+1 入候选态）；hooks + panel 测试（含 source_refs 透传）。
+- [x] **P2C-04 双入口决策**（无代码）：保留 `POST /expressions`（§8.2 手动录入路径）+ AI 生成双入口，前端 UI 编辑一律走 `/expressions/{id}/versions`。
+- [x] **P2C-05 API 层测试确认**：`TestExperienceExpressions` 已覆盖 5 端点（404/400/状态机非法迁移/组内 max+1/激活唯一 active）；批内增补 SourceRef/direction 归属用例。
+- [x] **P2C-08 验证（全量绿）**：check_encoding 360 文件 0 错；ruff 全绿；`pytest tests/ -q` **694 passed/12 skipped**（原 687，+7）；tsc 0 错；vitest **146 passed**（原 143，+3）；npm run build 通过。`job_id` 归属校验归 P4（P2D-01）。
+- [x] **批次 A — Spec 基线追认 ADR（2026-09-25，纯文档、无代码变更）**：新建 `docs/design-decisions/ADR-spec-alignment-2026-09-25.md`，落盘 4 条裁决：
+  - **ADR-A1 DB→MySQL 追认**：记录库实际为 Docker MySQL 8.4.9（`db_conn.py` 统一建连），ENGINEERING_SPEC §2.3 及架构图 "PostgreSQL*" 已加注失效，pgvector 无适用场景（向量检索现阶段无需求）；若未来引入向量存储需独立 ADR，不得替换记录库。
+  - **ADR-A2 Base URL→`/api/jobcraft` 追认**：API_SPEC §1.1 旧值 `/api/v1` 作废（历史上从未存在），全部端点以 `/api/jobcraft/**` 为准。
+  - **ADR-A3 UI 栈→Tailwind CSS 4 + lucide 追认**：AGENTS.md §3.2「纯原生 Ant Design」红线替换为「无第三方 UI 框架」（零 antd import）；ARCHITECTURE.md 两处 AntD 引用同步更正。
+  - **ADR-A4 SourceRef→DATA_MODEL §3.2**：EXPERIENCE_SPEC §7 已加作废注（P2C-06 配套，12 值 `source_type` 联合/snake_case wire）。
+- [ ] 后续：批次 B（P0-6 JD↔Submission 关联持久化）→ 批次 C（V0010 收 runtime DDL + 撤 MODIFY）→ 批次 D（错误码/幂等键/cursor 分页）→ 批次 E（langgraph Checkpointer）。
