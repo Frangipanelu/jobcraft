@@ -345,3 +345,26 @@ class TestDelete:
             "DELETE FROM expression" in s and "AND user_id=%s" in s
             for s, _ in fake_db["cursor"].executed
         )
+
+
+class TestActiveExpressionContent:
+    def test_returns_latest_active_content(self, fake_db):
+        """get_active_expression_content 取 active 链中最新 version 的 content。"""
+        fake_db["cursor"]._row = {"content": "激活表达 v2"}
+        out = mod.get_active_expression_content(10, user_id=7)
+        assert out == "激活表达 v2"
+        assert any(
+            "status='active'" in s and "ORDER BY version DESC" in s
+            for s, _ in fake_db["cursor"].executed
+        )
+
+    def test_returns_none_when_no_active(self, fake_db):
+        fake_db["cursor"]._row = None
+        assert mod.get_active_expression_content(10, user_id=7) is None
+
+    def test_uses_standardized_type_by_default(self, fake_db):
+        fake_db["cursor"]._row = {"content": "x"}
+        mod.get_active_expression_content(10, user_id=7)
+        sql, params = fake_db["cursor"].executed[-1]
+        assert "type=%s" in sql
+        assert params[2] == "standardized"

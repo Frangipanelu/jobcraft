@@ -345,3 +345,27 @@ def query_group_max_version_id(
     if not row:
         raise LookupError("expression 版本链为空")
     return int(row["id"])
+
+
+def get_active_expression_content(
+    experience_id: int, user_id: int, expr_type: str = "standardized"
+) -> Optional[str]:
+    """返回某经历卡当前激活表达的内容（EXP-P2-07 §32 消费链）。
+
+    取 type=standardized 且 status='active' 的版本链中最新 version 的 content；
+    无激活表达时返回 None（调用方回退现有渲染链）。
+
+    :param experience_id: 经历卡 id。
+    :param user_id: 归属用户。
+    :param expr_type: 表达类型，默认 standardized。
+    :return: 激活表达文本，或 None。
+    """
+    row = query_one(
+        "SELECT content FROM expression "
+        "WHERE experience_id=%s AND user_id=%s AND type=%s AND status='active' "
+        "ORDER BY version DESC LIMIT 1",
+        (experience_id, user_id, expr_type),
+    )
+    if not row:
+        return None
+    return row["content"]

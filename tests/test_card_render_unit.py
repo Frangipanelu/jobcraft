@@ -55,6 +55,42 @@ def test_version_has_highest_priority():
     assert get_card_render_text(card, versions={1: "终稿"}) == "终稿"
 
 
+# ---------- 激活表达（active Expression，EXP-P2-07 §32） ----------
+
+
+def test_active_expression_beats_star():
+    card = _star_card()
+    assert (
+        get_card_render_text(card, active_expression="激活表达文本") == "激活表达文本"
+    )
+
+
+def test_active_expression_used_in_markdown_mode():
+    text = get_card_render_text(_star_card(), markdown=True, active_expression="激活")
+    assert text == "激活"
+    assert "###" not in text
+
+
+def test_card_preloaded_active_expression_field():
+    card = _star_card()
+    card["active_expression"] = "预载激活表达"
+    assert get_card_render_text(card) == "预载激活表达"
+
+
+def test_blank_active_expression_falls_through():
+    card = _star_card()
+    assert get_card_render_text(card, active_expression="   ") == (
+        "背景A 行动B 困难C 解决D 结果E"
+    )
+
+
+def test_active_expression_appends_tags():
+    text = get_card_render_text(
+        _star_card(), active_expression="激活", include_tags=True
+    )
+    assert text == "激活 Python 后端"
+
+
 # ---------- 结构化 STAR ----------
 
 

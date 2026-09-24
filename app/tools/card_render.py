@@ -2,7 +2,8 @@
 经历卡统一消费入口（§32 Consumer Chain）
 
 get_card_render_text() 定义所有下游消费方读取经历卡文本的唯一入口，
-优先级：版本链 → 结构化 STAR → raw_text → content → summary → title。
+优先级：版本链 → 激活表达（active Expression，EXP-P2-07 §32）→ 结构化 STAR
+→ raw_text → content → summary → title。
 
 下游 resume 生成 / 面试准备 / 缺口分析 / 匹配打分均收敛至此，不再各自拼装。
 """
@@ -61,6 +62,7 @@ def get_card_render_text(
     *,
     markdown: bool = False,
     include_tags: bool = False,
+    active_expression: Optional[str] = None,
 ) -> str:
     """
     获取经历卡渲染文本（统一消费入口）。
@@ -69,21 +71,28 @@ def get_card_render_text(
     :param versions: {card_id: 用户编辑终稿}，命中直接返回
     :param markdown: True 时结构化 STAR 渲染为 markdown（简历用）；False 纯文本
     :param include_tags: 结果末尾拼接扁平标签（关键词匹配 / LLM 提示词用）
+    :param active_expression: 该卡的激活表达文本（type=standardized 的 active
+        版本 content，EXP-P2-07）；有则优先于结构化 STAR，无则回退现有链
     :return: 渲染文本
     """
     if versions and card.get("id") in versions:
         return versions[card["id"]]
 
-    ai_struct = card.get("ai_structured")
-    text = ""
-    if ai_struct and isinstance(ai_struct, dict):
-        text = _star_markdown(ai_struct) if markdown else _star_plain(ai_struct)
-    if not text:
-        for key in ("raw_text", "content", "summary", "title"):
-            value = card.get(key)
-            if value:
-                text = str(value)
-                break
+    if not active_expression:
+        active_expression = card.get("active_expression")
+    if active_expression and str(active_expression).strip():
+        text = str(active_expression)
+    else:
+        ai_struct = card.get("ai_structured")
+        text = ""
+        if ai_struct and isinstance(ai_struct, dict):
+            text = _star_markdown(ai_struct) if markdown else _star_plain(ai_struct)
+        if not text:
+            for key in ("raw_text", "content", "summary", "title"):
+                value = card.get(key)
+                if value:
+                    text = str(value)
+                    break
 
     if include_tags:
         tags = card.get("tags") or []
