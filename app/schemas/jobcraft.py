@@ -268,6 +268,15 @@ class ExpressionCreate(BaseModel):
     )
 
 
+class ExpressionVersionCreate(BaseModel):
+    """创建表达新版本的请求体（EXPERIENCE_SPEC §8.3：新行不覆盖旧行）"""
+
+    content: str = Field(..., description="新版本表达内容")
+    source_refs: Optional[List[Dict[str, Any]]] = Field(
+        None, description="新版本来源引用（缺省继承原行）"
+    )
+
+
 class ExpressionRead(BaseModel):
     """标准化表达响应结构（DATA_MODEL §6 的满足子集）"""
 

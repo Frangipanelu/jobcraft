@@ -710,6 +710,106 @@ class TestExpressionGenerate:
         assert resp.status_code == 500
 
 
+class TestExpressionVersion:
+    """POST /api/jobcraft/experience/expressions/{expression_id}/versions（EXP-P2-05 §8.3）"""
+
+    def _mock_version(self, monkeypatch):
+        """mock create_expression_version + get_expression 的正常路径。"""
+        captured = {}
+
+        def fake_create(
+            expression_id, content, user_id, source_refs=None, status="candidate"
+        ):
+            captured["expression_id"] = expression_id
+            captured["content"] = content
+            captured["source_refs"] = source_refs
+            captured["status"] = status
+            return 9
+
+        monkeypatch.setattr(
+            "app.tools.db_expression.create_expression_version", fake_create
+        )
+        monkeypatch.setattr(
+            "app.tools.db_expression.get_expression",
+            lambda *a, **k: {
+                "id": 9,
+                "user_id": 7,
+                "experience_id": 10,
+                "direction_id": None,
+                "job_id": None,
+                "type": "standardized",
+                "content": "新版本内容",
+                "version": 2,
+                "validation_level": 0,
+                "usage_count": 0,
+                "source_refs": [],
+                "status": "candidate",
+                "created_at": None,
+                "updated_at": None,
+            },
+        )
+        return captured
+
+    def test_version_normal(self, monkeypatch):
+        captured = self._mock_version(monkeypatch)
+        resp = client.post(
+            "/api/jobcraft/experience/expressions/5/versions",
+            json={"content": "新版本内容"},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["id"] == 9
+        assert data["version"] == 2
+        assert data["status"] == "candidate"
+        assert captured["expression_id"] == 5
+        assert captured["content"] == "新版本内容"
+        assert captured["source_refs"] is None
+
+    def test_version_with_source_refs(self, monkeypatch):
+        captured = self._mock_version(monkeypatch)
+        resp = client.post(
+            "/api/jobcraft/experience/expressions/5/versions",
+            json={
+                "content": "新版本内容",
+                "source_refs": [{"card_id": 10, "type": "raw_text"}],
+            },
+        )
+        assert resp.status_code == 200
+        assert captured["source_refs"] == [{"card_id": 10, "type": "raw_text"}]
+
+    def test_version_empty_content_returns_400(self, monkeypatch):
+        self._mock_version(monkeypatch)
+        resp = client.post(
+            "/api/jobcraft/experience/expressions/5/versions",
+            json={"content": "   "},
+        )
+        assert resp.status_code == 400
+
+    def test_version_missing_expression_returns_404(self, monkeypatch):
+        def not_found(*a, **k):
+            raise LookupError("expression 不存在或不属于用户: 999")
+
+        monkeypatch.setattr(
+            "app.tools.db_expression.create_expression_version", not_found
+        )
+        resp = client.post(
+            "/api/jobcraft/experience/expressions/999/versions",
+            json={"content": "新版本"},
+        )
+        assert resp.status_code == 404
+
+    def test_version_db_error_returns_500(self, monkeypatch):
+        def boom(*a, **k):
+            raise Exception("db down")
+
+        monkeypatch.setattr("app.tools.db_expression.create_expression_version", boom)
+        resp = client.post(
+            "/api/jobcraft/experience/expressions/5/versions",
+            json={"content": "新版本"},
+        )
+        assert resp.status_code == 500
+
+
 # ============================================================
 # 2. job_analysis.py — 岗位分析路由
 # ============================================================

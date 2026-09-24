@@ -126,7 +126,7 @@ def create_expression_version(
     base = get_expression(expression_id, user_id)
     if not base:
         raise LookupError(f"expression 不存在或不属于用户: {expression_id}")
-    create_expression(
+    return create_expression(
         {
             "user_id": user_id,
             "experience_id": base["experience_id"],
@@ -141,13 +141,6 @@ def create_expression_version(
             ),
             "status": status,
         }
-    )
-    return query_group_max_version_id(
-        base["experience_id"],
-        base["type"],
-        base["direction_id"],
-        base["job_id"],
-        user_id,
     )
 
 

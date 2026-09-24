@@ -16,6 +16,7 @@ from app.schemas.jobcraft import (
     ExpressionCreate,
     ExpressionListResponse,
     ExpressionRead,
+    ExpressionVersionCreate,
 )
 from app.tools import db_tools
 from app.tools.upload_file_read_tool import read_file_content
@@ -756,6 +757,40 @@ def jobcraft_expression_generate(
     except Exception as e:
         logger.exception("标准化表达生成失败")
         raise HTTPException(status_code=500, detail=f"标准化表达生成失败: {e}")
+
+
+@router.post("/expressions/{expression_id}/versions", response_model=ExpressionRead)
+def jobcraft_expression_version(
+    expression_id: int,
+    payload: ExpressionVersionCreate,
+    current_user: int = Depends(get_current_user),
+):
+    """在既有表达基础上创建新版本行（§8.3，EXP-P2-05）。
+
+    新行继承原行组归属（experience/type/direction/job），新版本不覆盖旧行，
+    version 取组内 max+1，状态默认 candidate（U2 确认后才可复用）。
+    """
+    from app.tools.db_expression import create_expression_version, get_expression
+
+    try:
+        if not payload.content or not payload.content.strip():
+            raise HTTPException(status_code=400, detail="表达内容不能为空")
+        new_id = create_expression_version(
+            expression_id,
+            payload.content.strip(),
+            current_user,
+            source_refs=payload.source_refs,
+        )
+        return get_expression(new_id, current_user)
+    except HTTPException:
+        raise
+    except LookupError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.exception("表达版本创建失败")
+        raise HTTPException(status_code=500, detail=f"表达版本创建失败: {e}")
 
 
 @router.post("/cards/{card_id}/structure")
