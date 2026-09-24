@@ -96,7 +96,16 @@
 - [x] **U4 确认闸门**：生成落候选态；「对比原文」展开行级 LCS diff（绿 + / 红 − / 灰 =，无第三方依赖），确认后再「激活」（同链其它 active 自动降级 candidate）；「弃用」从 active/candidate → deprecated；active 行不显示激活按钮。文案与提示遵循中文优先 + 明确状态流转。
 - [x] **接线 `ExperiencesView`**：卡片操作区新增「标准化表达」折叠按钮（与「版本演进」并列），展开渲染 ExpressionPanel；新增 `expandedExpressionExpIds` 本地展开态。
 - [x] **测试**：`test/expression-panel.test.tsx` 6 条（空态生成 + toast / 候选链 + 徽标 / 激活调端点 / 弃用调端点 / active 行隐藏激活钮 / diff 行级对比）。**vitest 24 files/142 tests 全过** + tsc 0 错 + build 通过。
-- [ ] **待续（EXP-P2-10）**：前端 Experience 类型对齐：`Experience.versionHistory` 接后端 expression 消费；`ExperienceVersionRecord.source` 增 `standardized`（§30.4）。
+
+## 前端 Experience 类型对齐（EXP-P2-10，2026-09-24）
+
+> 依据 EXPERIENCE_SPEC §30.4/§32：`ExperienceVersionRecord` 类型与映射对齐后端 expression 消费链，标准化表达来源可被版本历史正确识别。
+
+- [x] **类型**：`types/jobcraft.ts` 的 `ExperienceVersionRecord.source` 联合增 `standardized`（§30.4 契约对齐）。
+- [x] **映射**：`features/experiences/mappers.ts` 的 `versionTypeReason`/`versionTypeSource` 增 `version_type='standardized'` 识别 → `source='standardized'`，reason=「标准化表达确认（AI 中性化改写）」。
+- [x] **展示**：`ExperiencesView.getSourceBadge` 增 `standardized` →「标准化表达」徽标。
+- [x] **测试**：`mappers.test.ts` 增 1 条（standardized 映射）。**vitest 24 files/143 tests 全过** + tsc 0 错 + build 通过。
+- [ ] **待续（EXP-P2-11）**：验证全绿：`python scripts/check_encoding.py` + ruff + pytest + `cd frontend-jobcraft && npm run build`。
 
 ## Expression/Consumer Chain 基础（EXP-P1-08，2026-09-23）
 
