@@ -156,8 +156,7 @@ def execute_export_pdf(params: Dict[str, Any]) -> Dict[str, Any]:
             user_id=user_id,
         )
 
-        # TODO: 将内容转换为PDF并保存到文件
-        # 暂时返回生成的内容
+        # PDF 落地暂未实现：回传简历内容，导出提示待完善
         result = {
             "content": resume_content,
             "message": "PDF导出功能待完善",
