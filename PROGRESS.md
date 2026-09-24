@@ -60,6 +60,17 @@
 - [x] **测试**：`test_api_routes_unit.py::TestExpressionVersion`（5 条：正常新版本 candidate / source_refs 透传 / 空内容 400 / 不存在 404 / db 500）；既有 DB 单测 keep green（create_expression_version 语义不变）。**pytest 661 passed / 12 skipped** + ruff 全绿 + check_encoding 355 文件 0 错。
 - [ ] **待续（EXP-P2-06）**：状态机端点 `POST /expressions/{id}/actions/activate|deprecate`（§8.4 + EXPERIENCE_SPEC 状态机）。
 
+## 表达状态机动作端点（EXP-P2-06，2026-09-23）
+
+> 依据 EXPERIENCE_SPEC §8.4 + §12 Versioning：`POST /expressions/:id/actions/activate|deprecate`。状态机：candidate→active/deprecated，active→deprecated，deprecated→active。
+
+- [x] **`db_expression.transition_status`**：状态机全量校验（非法迁移抛 `ValueError`），事务内执行——
+  - `activate` 时先把同版本链（experience_id/type/direction/job）其它 active 全部降级为 candidate，保证任一组内唯一 active（"当前 active version 可明确识别" §12）
+  - 返回迁移后的表达行；保留 `update_status` 仅作低层直写（P2-06 之上校验）
+- [x] **API 端点**：`POST /expressions/{expression_id}/actions/{action}`——action 白名单 activate/deprecate（其它 400）/ `LookupError`→404 / `ValueError`→400（非法迁移）/ 兜底 500
+- [x] **测试**：`test_expression_db_unit.py::TestTransitionStatus`（5 条：activate 降级同链 + 双 UPDATE / deprecate 单 UPDATE / 非法迁移 400 / 不存在 404 / 非法 status）+ `test_api_routes_unit.py::TestExpressionAction`（6 条：activate/deprecate 正常 / 未知 action 400 / 404 / 非法迁移 400 / db 500）。**pytest 672 passed / 12 skipped** + ruff 全绿 + check_encoding 355 文件 0 错。
+- [ ] **待续（EXP-P2-07）**：消费链接入（card_render 消费 active 表达）。
+
 ## Expression/Consumer Chain 基础（EXP-P1-08，2026-09-23）
 
 > 依据 EXPERIENCE_SPEC §32/§30.5：统一消费入口 `get_card_render_text()`（优先版本链 → 结构化 STAR → raw_text → summary/title），下游 `_get_card_text` / `_card_text` / gap_polish 收敛至该函数，不再各自拼。§30.5 场景参数（排序/字段权重）归 P2。
