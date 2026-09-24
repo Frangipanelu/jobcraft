@@ -69,7 +69,16 @@
   - 返回迁移后的表达行；保留 `update_status` 仅作低层直写（P2-06 之上校验）
 - [x] **API 端点**：`POST /expressions/{expression_id}/actions/{action}`——action 白名单 activate/deprecate（其它 400）/ `LookupError`→404 / `ValueError`→400（非法迁移）/ 兜底 500
 - [x] **测试**：`test_expression_db_unit.py::TestTransitionStatus`（5 条：activate 降级同链 + 双 UPDATE / deprecate 单 UPDATE / 非法迁移 400 / 不存在 404 / 非法 status）+ `test_api_routes_unit.py::TestExpressionAction`（6 条：activate/deprecate 正常 / 未知 action 400 / 404 / 非法迁移 400 / db 500）。**pytest 672 passed / 12 skipped** + ruff 全绿 + check_encoding 355 文件 0 错。
-- [ ] **待续（EXP-P2-07）**：消费链接入（card_render 消费 active 表达）。
+
+## 消费链优先读取 active expression（EXP-P2-07，2026-09-24）
+
+> 依据 EXPERIENCE_SPEC §32/§12：统一消费入口 `get_card_render_text()` 优先读 type=standardized 且 status='active' 的表达；无则回退现有链（版本链 → 结构化 STAR → raw_text → content → summary → title）。resume/interview 消费点留 P6/P8。
+
+- [x] **DB helper `db_expression.get_active_expression_content`**：按 experience_id + user_id 查 `type='standardized' AND status='active'` 链中最新 version 的 content；无激活表达返回 `None`（调用方自动回退）。语句保留 `(direction_id<=>%s)/(job_id<=>%s)` 兼容语义之外仅按 experience 定位。
+- [x] **统一入口增强 `card_render.get_card_render_text`**：新增 `active_expression: Optional[str] = None` 关键字参数，位于版本链之后、结构化 STAR 之前；若未显式传入则读卡上预载字段 `card.get('active_expression')`。空白值视同无。
+- [x] **消费点接线 `workflows/job_analysis_flow._run_legacy_ats`**：加载卡片时（已有 user_id/card_ids）为每张卡预载 `c['active_expression'] = get_active_expression_content(cid, user_id)`；`score_match_agent`/`gap_polish_agent` 经统一入口自动生效，无需改动 agent。resume/interview 消费点留 P6/P8。
+- [x] **测试**：`test_card_render_unit.py` 新增 5 条（active 优先于 STAR / markdown 模式生效 / 卡上预载字段 / 空白回退 / include_tags 追加）+ `test_expression_db_unit.py::TestActiveExpressionContent` 3 条（取最新 active content / 无激活返回 None / 默认 standardized type）。**pytest 680 passed / 12 skipped** + ruff 全绿 + check_encoding 355 文件 0 错。
+- [ ] **待续（EXP-P2-08）**：前端数据层（`useExpressionsQuery` / `useGenerateExpressionMutation` / `useActivateExpressionMutation` / `useDeprecateExpressionMutation`）。
 
 ## Expression/Consumer Chain 基础（EXP-P1-08，2026-09-23）
 
