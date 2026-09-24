@@ -7,6 +7,7 @@ import {
   useGenerateExpressionMutation,
   useActivateExpressionMutation,
   useDeprecateExpressionMutation,
+  useExpressionVersionMutation,
 } from './expressionHooks';
 import type { Expression } from '../../api/types';
 
@@ -15,6 +16,7 @@ const api = vi.hoisted(() => ({
   generateExpression: vi.fn(),
   activateExpression: vi.fn(),
   deprecateExpression: vi.fn(),
+  updateExpression: vi.fn(),
 }));
 
 vi.mock('../../api/experience', () => ({ ...api }));
@@ -54,6 +56,13 @@ const EXPRESSION_DEPRECATED: Expression = {
   id: 8,
   version: 0,
   status: 'deprecated',
+};
+
+const EXPRESSION_NEW_VERSION: Expression = {
+  ...EXPRESSION_CANDIDATE,
+  id: 12,
+  version: 3,
+  content: '编辑后新内容',
 };
 
 describe('expression hooks（EXP-P2-08）', () => {
@@ -122,6 +131,27 @@ describe('expression hooks（EXP-P2-08）', () => {
     });
     expect(api.deprecateExpression).toHaveBeenCalledWith(8);
     expect(out.status).toBe('deprecated');
+  });
+
+  it('useExpressionVersionMutation 调版本端点并透传内容与来源', async () => {
+    api.updateExpression.mockResolvedValue(EXPRESSION_NEW_VERSION);
+    const { wrapper } = createWrapper();
+    const { result } = renderHook(() => useExpressionVersionMutation(7), { wrapper });
+
+    let out!: Expression;
+    await act(async () => {
+      out = await result.current.mutateAsync({
+        expressionId: 11,
+        content: '编辑后新内容',
+        source_refs: [{ id: 'experience:7', source_type: 'experience', source_id: '7' }],
+      });
+    });
+    expect(api.updateExpression).toHaveBeenCalledWith(11, {
+      content: '编辑后新内容',
+      source_refs: [{ id: 'experience:7', source_type: 'experience', source_id: '7' }],
+    });
+    expect(out.version).toBe(3);
+    expect(out.status).toBe('candidate');
   });
 
   it('激活成功后使表达列表失活（触发回流）', async () => {

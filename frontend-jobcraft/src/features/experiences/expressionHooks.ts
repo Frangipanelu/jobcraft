@@ -9,7 +9,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as experienceApi from '../../api/experience';
-import type { Expression } from '../../api/types';
+import type { Expression, SourceRef } from '../../api/types';
 
 /** 某张经历卡的表达列表缓存 key。 */
 export const expressionQueryKey = (cardId: number) => ['expressions', cardId] as const;
@@ -58,6 +58,23 @@ export function useDeprecateExpressionMutation(cardId: number) {
 
   return useMutation<Expression, unknown, number>({
     mutationFn: async (expressionId) => experienceApi.deprecateExpression(expressionId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: expressionQueryKey(cardId) });
+    },
+  });
+}
+
+/** 基于既有表达新建版本（EXP-P2-03 §8.3，version+1，返回新版本行并刷新列表）。 */
+export function useExpressionVersionMutation(cardId: number) {
+  const queryClient = useQueryClient();
+
+  return useMutation<
+    Expression,
+    unknown,
+    { expressionId: number; content: string; source_refs?: SourceRef[] }
+  >({
+    mutationFn: async ({ expressionId, content, source_refs }) =>
+      experienceApi.updateExpression(expressionId, { content, source_refs }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: expressionQueryKey(cardId) });
     },

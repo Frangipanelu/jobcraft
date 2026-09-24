@@ -13,6 +13,7 @@ const api = vi.hoisted(() => ({
   generateExpression: vi.fn(),
   activateExpression: vi.fn(),
   deprecateExpression: vi.fn(),
+  updateExpression: vi.fn(),
 }));
 
 vi.mock('../api/experience', () => ({ ...api }));
@@ -138,5 +139,55 @@ describe('ExpressionPanel（EXP-P2-09）', () => {
     // 原文基线四槽位文本应出现在 diff 中
     expect(screen.getAllByText(/建立量产评估体系/).length).toBeGreaterThan(0);
     await waitFor(() => expect(screen.queryByText('对比原文')).toBeInTheDocument());
+  });
+
+  it('编辑新版本：输入内容保存后调用 update 端点（P2C-03）', async () => {
+    api.listExpressions.mockResolvedValue({ experience_id: 7, items: [CANDIDATE] });
+    api.updateExpression.mockResolvedValue({
+      ...CANDIDATE,
+      id: 12,
+      version: 3,
+      content: '编辑后新内容',
+    });
+    const { wrapper } = createWrapper();
+
+    render(<ExpressionPanel exp={EXP} />, { wrapper });
+
+    fireEvent.click(await screen.findByText('编辑新版本'));
+    fireEvent.change(screen.getByPlaceholderText(/输入新版本内容/), {
+      target: { value: '编辑后新内容' },
+    });
+    fireEvent.click(screen.getByText('保存为新版本'));
+    await waitFor(() =>
+      expect(api.updateExpression).toHaveBeenCalledWith(11, {
+        content: '编辑后新内容',
+        source_refs: undefined,
+      })
+    );
+    expect(await screen.findByText('已新建 V3')).toBeInTheDocument();
+  });
+
+  it('编辑新版本沿用既有 source_refs（P2C-03）', async () => {
+    const WITH_SRC: Expression = {
+      ...CANDIDATE,
+      source_refs: [{ id: 'experience:7', source_type: 'experience', source_id: '7' }],
+    };
+    api.listExpressions.mockResolvedValue({ experience_id: 7, items: [WITH_SRC] });
+    api.updateExpression.mockResolvedValue({ ...WITH_SRC, version: 3 });
+    const { wrapper } = createWrapper();
+
+    render(<ExpressionPanel exp={EXP} />, { wrapper });
+
+    fireEvent.click(await screen.findByText('编辑新版本'));
+    fireEvent.change(screen.getByPlaceholderText(/输入新版本内容/), {
+      target: { value: '新内容' },
+    });
+    fireEvent.click(screen.getByText('保存为新版本'));
+    await waitFor(() =>
+      expect(api.updateExpression).toHaveBeenCalledWith(11, {
+        content: '新内容',
+        source_refs: [{ id: 'experience:7', source_type: 'experience', source_id: '7' }],
+      })
+    );
   });
 });

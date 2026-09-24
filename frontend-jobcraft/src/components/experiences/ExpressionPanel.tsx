@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Check, ChevronDown, ChevronUp, FileText, Sparkles, Ban, Layers } from 'lucide-react';
+import { Check, ChevronDown, ChevronUp, FileText, Sparkles, Ban, Layers, Pencil, X } from 'lucide-react';
 import { useToastActions } from '../../context/JobCraftContext';
 import type { Experience } from '../../types/jobcraft';
 import type { Expression } from '../../api/types';
@@ -8,6 +8,7 @@ import {
   useGenerateExpressionMutation,
   useActivateExpressionMutation,
   useDeprecateExpressionMutation,
+  useExpressionVersionMutation,
 } from '../../features/experiences/expressionHooks';
 
 interface ExpressionPanelProps {
@@ -82,7 +83,9 @@ export const ExpressionPanel: React.FC<ExpressionPanelProps> = ({ exp }) => {
   const generate = useGenerateExpressionMutation(cardId);
   const activate = useActivateExpressionMutation(cardId);
   const deprecate = useDeprecateExpressionMutation(cardId);
+  const updateVersion = useExpressionVersionMutation(cardId);
   const [diffExpanded, setDiffExpanded] = useState<Record<number, boolean>>({});
+  const [editState, setEditState] = useState<Record<number, string | undefined>>({});
 
   // 原文基线：与 handleAIRefine 同构（四槽位拼接），作为 diff 左侧
   const rawTextBaseline = [
@@ -136,9 +139,46 @@ export const ExpressionPanel: React.FC<ExpressionPanelProps> = ({ exp }) => {
     setDiffExpanded((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
+  const handleStartEdit = (id: number, current: string) => {
+    setEditState((prev) => ({ ...prev, [id]: current ?? '' }));
+  };
+
+  const handleCancelEdit = (id: number) => {
+    setEditState((prev) => {
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
+  };
+
+  const handleSaveVersion = async (expr: Expression) => {
+    const content = editState[expr.id]?.trim();
+    if (!content) {
+      showToast({ type: 'error', title: '内容为空', message: '新版本内容不能为空' });
+      return;
+    }
+    try {
+      const out = await updateVersion.mutateAsync({
+        expressionId: expr.id,
+        content,
+        source_refs: expr.source_refs?.length ? expr.source_refs : undefined,
+      });
+      showToast({
+        type: 'success',
+        title: `已新建 V${out.version}`,
+        message: '版本 +1 已入链，diff 确认后可激活。',
+      });
+      handleCancelEdit(expr.id);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : '新建版本失败';
+      showToast({ type: 'error', title: '新建版本失败', message: msg });
+    }
+  };
+
   const renderRow = (expr: Expression) => {
     const meta = STATUS_META[expr.status] || STATUS_META.candidate;
     const expanded = !!diffExpanded[expr.id];
+    const editing = editState[expr.id] !== undefined;
     const canActivate = expr.status !== 'active';
     const canDeprecate = expr.status !== 'deprecated';
     const diff = expanded ? diffLines(rawTextBaseline, expr.content) : [];
@@ -189,12 +229,48 @@ export const ExpressionPanel: React.FC<ExpressionPanelProps> = ({ exp }) => {
                 <span>弃用</span>
               </button>
             )}
+
+            <button
+              onClick={() =>
+                editing ? handleCancelEdit(expr.id) : handleStartEdit(expr.id, expr.content)
+              }
+              className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white text-ink border border-edge text-[11px] font-semibold cursor-pointer hover:bg-page"
+              title="基于该表达新建版本（version +1，不覆盖旧行）"
+            >
+              {editing ? <X className="w-3 h-3" /> : <Pencil className="w-3 h-3" />}
+              <span>{editing ? '取消' : '编辑新版本'}</span>
+            </button>
           </div>
         </div>
 
         <p className="text-ink text-xs leading-relaxed font-medium whitespace-pre-line line-clamp-3">
           {expr.content}
         </p>
+
+        {editing && (
+          <div className="space-y-2 rounded-lg border border-sage-soft bg-white p-3 animate-in fade-in">
+            <textarea
+              value={editState[expr.id] ?? ''}
+              onChange={(e) =>
+                setEditState((prev) => ({ ...prev, [expr.id]: e.target.value }))
+              }
+              rows={4}
+              className="w-full rounded-lg border border-edge bg-page px-3 py-2 text-xs text-ink focus:outline-none focus:ring-1 focus:ring-sage"
+              placeholder="输入新版本内容（保存后 version +1，不覆盖当前版本）"
+            />
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => handleSaveVersion(expr)}
+                disabled={updateVersion.isPending}
+                className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-sage hover:bg-sage-dim text-white text-[11px] font-bold cursor-pointer disabled:opacity-50"
+              >
+                <Check className="w-3 h-3" />
+                <span>{updateVersion.isPending ? '保存中...' : '保存为新版本'}</span>
+              </button>
+              <span className="text-[11px] text-faint">保存后进入候选态，可 diff 确认后激活</span>
+            </div>
+          </div>
+        )}
 
         {expanded && (
           <div className="rounded-lg border border-edge bg-white overflow-hidden animate-in fade-in">

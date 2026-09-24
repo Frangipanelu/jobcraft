@@ -8,6 +8,7 @@ import type {
   ExperienceCardVersionList,
   Expression,
   ExpressionListResponse,
+  SourceRef,
 } from './types'
 
 /**
@@ -165,5 +166,19 @@ export async function deprecateExpression(expressionId: number): Promise<Express
   return request<Expression>(
     `/api/jobcraft/experience/expressions/${expressionId}/actions/deprecate`,
     { method: 'POST', body: JSON.stringify({}) }
+  )
+}
+
+/**
+ * 基于既有表达新建版本（EXP-P2-03 §8.3：version+1，不覆盖旧行，版本链可回溯）。
+ * content 必填；source_refs 缺省留空时后端沿用生成来源（source_type=experience）。
+ */
+export async function updateExpression(
+  expressionId: number,
+  payload: { content: string; source_refs?: SourceRef[] }
+): Promise<Expression> {
+  return request<Expression>(
+    `/api/jobcraft/experience/expressions/${expressionId}/versions`,
+    { method: 'POST', body: JSON.stringify(payload) }
   )
 }
