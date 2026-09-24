@@ -672,6 +672,74 @@ class TestExpressionCreate:
         )
         assert resp.status_code == 422
 
+    def test_create_owned_direction_passes(self, monkeypatch):
+        """direction_id 归属当前用户时应正常入库（P2C-07）。"""
+        captured = {}
+        monkeypatch.setattr(
+            "app.api.experience.db_tools.get_card", lambda *a, **k: {"id": 10}
+        )
+        monkeypatch.setattr(
+            "app.tools.db_direction.get_direction",
+            lambda *a, **k: {"id": 3, "user_id": 7},
+        )
+
+        def fake_create(data):
+            captured["direction_id"] = data["direction_id"]
+            return 5
+
+        monkeypatch.setattr("app.tools.db_expression.create_expression", fake_create)
+        monkeypatch.setattr(
+            "app.tools.db_expression.get_expression",
+            lambda *a, **k: {
+                "id": 5,
+                "user_id": 7,
+                "experience_id": 10,
+                "direction_id": 3,
+                "job_id": None,
+                "type": "direction",
+                "content": "方向表达",
+                "version": 1,
+                "validation_level": 0,
+                "usage_count": 0,
+                "source_refs": [],
+                "status": "candidate",
+                "created_at": None,
+                "updated_at": None,
+            },
+        )
+        resp = client.post(
+            "/api/jobcraft/experience/expressions",
+            json={
+                "experience_id": 10,
+                "type": "direction",
+                "content": "方向表达",
+                "direction_id": 3,
+            },
+        )
+        assert resp.status_code == 200
+        assert captured["direction_id"] == 3
+
+    def test_create_foreign_direction_returns_404(self, monkeypatch):
+        """direction_id 不属于当前用户（或不存在）时应返回 404（P2C-07）。"""
+        monkeypatch.setattr(
+            "app.api.experience.db_tools.get_card", lambda *a, **k: {"id": 10}
+        )
+        monkeypatch.setattr(
+            "app.tools.db_direction.get_direction", lambda *a, **k: None
+        )
+        resp = client.post(
+            "/api/jobcraft/experience/expressions",
+            json={
+                "experience_id": 10,
+                "type": "direction",
+                "content": "方向表达",
+                "direction_id": 999,
+            },
+        )
+        assert resp.status_code == 404
+        assert resp.json()["error"]["code"] == "NOT_FOUND"
+        assert "方向不存在" in resp.json()["error"]["message"]
+
     def test_create_db_error_returns_500(self, monkeypatch):
         monkeypatch.setattr(
             "app.api.experience.db_tools.get_card", lambda *a, **k: {"id": 10}

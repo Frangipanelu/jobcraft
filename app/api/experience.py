@@ -682,13 +682,19 @@ def jobcraft_expression_create(
     """创建标准化表达（§8.2，EXP-P2-02；U2 手动创建为 candidate 态）。
 
     新版本行 = 组内 version max+1（版本链可回溯，§31，不覆盖旧行）。
+    direction_id 归属校验（P2C-07）：提供时须存在且归属当前用户，否则 404。
     """
+    from app.tools.db_direction import get_direction
     from app.tools.db_expression import create_expression, get_expression
 
     try:
         card = db_tools.get_card(payload.experience_id, current_user)
         if not card:
             raise HTTPException(status_code=404, detail="卡片不存在")
+        if payload.direction_id is not None and not get_direction(
+            payload.direction_id, current_user
+        ):
+            raise HTTPException(status_code=404, detail="方向不存在")
         if not payload.content or not payload.content.strip():
             raise HTTPException(status_code=400, detail="表达内容不能为空")
         expression_id = create_expression(
