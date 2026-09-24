@@ -119,6 +119,8 @@ export const ExperiencesView: React.FC<ExperiencesViewProps> = ({ initialSelecte
         return { label: '面试实战反哺', color: 'bg-sage-soft text-sage border-sage-soft' };
       case 'jd_alignment':
         return { label: 'JD 深度对齐', color: 'bg-warning-bg text-warning border-warning-bg' };
+      case 'standardized':
+        return { label: '标准化表达', color: 'bg-sage-soft text-sage border-sage-soft' };
       default:
         return { label: '经历维护更新', color: 'bg-page text-muted border-edge' };
     }

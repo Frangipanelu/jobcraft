@@ -166,6 +166,17 @@ describe('versionsToHistory（EXP-P1-06b 后端版本回流）', () => {
     expect(history[2].reason).toBe('V1 哨兵基线（定稿原始内容）');
   });
 
+  it('EXP-P2-10：version_type=standardized → source standardized / reason 标准化表达', () => {
+    const history = versionsToHistory(
+      [
+        { ...SNAPSHOTS[0], id: 6, version_type: 'standardized', note: null, created_at: '2026-09-24' },
+      ],
+      4,
+    );
+    expect(history[0].source).toBe('standardized');
+    expect(history[0].reason).toBe('标准化表达确认（AI 中性化改写）');
+  });
+
   it('snapshots 数超过 currentVersion 时 V 编号下限收敛在 V1', () => {
     const history = versionsToHistory(SNAPSHOTS, 1);
     expect(history.map((v) => v.version)).toEqual(['V1', 'V1', 'V1']);

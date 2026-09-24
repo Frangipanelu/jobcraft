@@ -97,6 +97,8 @@ function versionTypeReason(version_type: string): string {
       return '面试复盘反哺';
     case 'jd_alignment':
       return 'JD 深度对齐';
+    case 'standardized':
+      return '标准化表达确认（AI 中性化改写）';
     default:
       return '版本快照';
   }
@@ -112,6 +114,8 @@ function versionTypeSource(
       return 'jd_alignment';
     case 'ai_polish':
       return 'ai_optimization';
+    case 'standardized':
+      return 'standardized';
     case 'original':
     case 'user_edit':
     case 'card_edit':

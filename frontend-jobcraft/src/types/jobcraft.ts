@@ -56,7 +56,7 @@ export interface ExperienceVersionRecord {
   version: string;
   date: string;
   reason: string;
-  source: 'manual' | 'interview_review' | 'jd_alignment' | 'ai_optimization';
+  source: 'manual' | 'interview_review' | 'jd_alignment' | 'ai_optimization' | 'standardized';
   changes: { field: string; from: string; to: string }[];
   /** 后端快照标题（rawText 回滚时一并恢复，EXP-P1-06b） */
   title?: string;
