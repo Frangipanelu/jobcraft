@@ -197,7 +197,7 @@ def get_all(user_id: int) -> List[Dict[str, Any]]:
 
 
 def update_status(expression_id: int, status: str, user_id: int) -> bool:
-    """更新表达状态（candidate → active / deprecated 等，转合法则由 P2-06 校验）。
+    """更新表达状态（仅直接写值，不动迁校验；状态机由 transition_status 负责）。
 
     :param expression_id: 表达 id。
     :param status: 目标状态。
@@ -215,6 +215,69 @@ def update_status(expression_id: int, status: str, user_id: int) -> bool:
                 (status, expression_id, user_id),
             )
             return cur.rowcount > 0
+
+
+def transition_status(expression_id: int, status: str, user_id: int) -> Dict[str, Any]:
+    """执行表达状态机迁移（§12 Versioning / EXPERIENCE_SPEC 状态机）。
+
+    允许迁移：
+    - candidate → active / deprecated
+    - active → deprecated
+    - deprecated → active（重新激活）
+
+    激活时会把同版本链（experience_id/type/direction_id/job_id）内其它 active
+    版本降级为 candidate，保证任一时刻组内唯一 active（"当前 active version 可明确识别"）。
+
+    :param expression_id: 表达 id。
+    :param status: 目标状态。
+    :param user_id: 归属用户。
+    :return: 迁移后的表达行。
+    :raises LookupError: 表达不存在或不属于用户。
+    :raises ValueError: 状态非法或迁移不被允许。
+    """
+    if status not in EXPRESSION_STATUSES:
+        raise ValueError(
+            f"status 仅允许 {'/'.join(EXPRESSION_STATUSES)}，收到: {status}"
+        )
+    base = get_expression(expression_id, user_id)
+    if not base:
+        raise LookupError(f"expression 不存在或不属于用户: {expression_id}")
+
+    # candidate: 可升级为 active 或弃用；active: 仅可弃用；deprecated: 可重新激活
+    allowed = {
+        "candidate": ("active", "deprecated"),
+        "active": ("deprecated",),
+        "deprecated": ("active",),
+    }.get(base["status"], ())
+    if status not in allowed:
+        raise ValueError(f"status 不允许从 {base['status']} 迁移到 {status}")
+
+    with transaction() as conn:
+        with conn.cursor() as cur:
+            if status == "active":
+                # 同链其它 active 全部降级，保证唯一 active
+                cur.execute(
+                    "UPDATE expression SET status=%s "
+                    "WHERE experience_id=%s AND user_id=%s AND type=%s "
+                    "AND (direction_id<=>%s) AND (job_id<=>%s) AND id<>%s",
+                    (
+                        "candidate",
+                        base["experience_id"],
+                        user_id,
+                        base["type"],
+                        base["direction_id"],
+                        base["job_id"],
+                        expression_id,
+                    ),
+                )
+            cur.execute(
+                "UPDATE expression SET status=%s WHERE id=%s AND user_id=%s",
+                (status, expression_id, user_id),
+            )
+    updated = get_expression(expression_id, user_id)
+    if not updated:
+        raise LookupError(f"expression 不存在或不属于用户: {expression_id}")
+    return updated
 
 
 def delete_expression(expression_id: int, user_id: int) -> bool:

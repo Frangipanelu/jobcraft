@@ -793,6 +793,42 @@ def jobcraft_expression_version(
         raise HTTPException(status_code=500, detail=f"表达版本创建失败: {e}")
 
 
+_ACTION_TARGETS = {"activate": "active", "deprecate": "deprecated"}
+
+
+@router.post(
+    "/expressions/{expression_id}/actions/{action}", response_model=ExpressionRead
+)
+def jobcraft_expression_action(
+    expression_id: int,
+    action: str,
+    current_user: int = Depends(get_current_user),
+):
+    """表达状态机动作（§8.4 + EXPERIENCE_SPEC：激活/停用，EXP-P2-06）。
+
+    - activate → active（同版本链其它 active 自动降级为 candidate，保证唯一 active）
+    - deprecate → deprecated
+    不允许迁移（如 active→active）抛 400；不存在或非同用户抛 404。
+    """
+    from app.tools.db_expression import transition_status
+
+    target = _ACTION_TARGETS.get(action)
+    if target is None:
+        raise HTTPException(
+            status_code=400,
+            detail=f"action 仅允许 activate / deprecate，收到: {action}",
+        )
+    try:
+        return transition_status(expression_id, target, current_user)
+    except LookupError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.exception("表达状态迁移失败")
+        raise HTTPException(status_code=500, detail=f"表达状态迁移失败: {e}")
+
+
 @router.post("/cards/{card_id}/structure")
 def jobcraft_experience_structure(
     card_id: int, current_user: int = Depends(get_current_user)

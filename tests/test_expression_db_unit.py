@@ -45,6 +45,14 @@ class _FakeCursor:
     def execute(self, sql, args=None):
         self.executed.append((sql, args))
         self._rowcount = 1
+        if (
+            isinstance(self._row, dict)
+            and args
+            and sql.strip().startswith("UPDATE expression SET status=")
+            and args
+            and args[0] in ("candidate", "active", "deprecated")
+        ):
+            self._row["status"] = args[0]
 
     def fetchone(self):
         return self._row
@@ -290,6 +298,44 @@ class TestStatusUpdate:
     def test_update_status_invalid_rejected(self, fake_db):
         with pytest.raises(ValueError, match="status 仅允许"):
             mod.update_status(1, "hacked", user_id=7)
+
+
+class TestTransitionStatus:
+    def _row(self, **over):
+        row = _fake_expression_row(experience_id=10, type="standardized")
+        row.update(over)
+        return row
+
+    def test_activate_demotes_chain_siblings(self, fake_db):
+        fake_db["cursor"]._row = self._row(status="candidate")
+        out = mod.transition_status(1, "active", user_id=7)
+        assert out["status"] == "active"
+        sqls = [s for s, _ in fake_db["cursor"].executed]
+        update_sqls = [s for s in sqls if s.strip().startswith("UPDATE")]
+        assert len(update_sqls) == 2
+        assert "AND id<>%s" in update_sqls[0]
+
+    def test_deprecate_allowed_from_active(self, fake_db):
+        fake_db["cursor"]._row = self._row(status="active")
+        out = mod.transition_status(1, "deprecated", user_id=7)
+        assert out["status"] == "deprecated"
+        sqls = [s for s, _ in fake_db["cursor"].executed]
+        assert len([s for s in sqls if s.strip().startswith("UPDATE")]) == 1
+
+    def test_illegal_transition_rejected(self, fake_db):
+        fake_db["cursor"]._row = self._row(status="active")
+        with pytest.raises(ValueError, match="不允许从 active 迁移到"):
+            mod.transition_status(1, "active", user_id=7)
+
+    def test_unknown_expression_raises(self, fake_db):
+        fake_db["cursor"]._row = None
+        with pytest.raises(LookupError, match="不存在或不属于用户"):
+            mod.transition_status(999, "deprecated", user_id=7)
+
+    def test_invalid_status_rejected(self, fake_db):
+        fake_db["cursor"]._row = self._row(status="candidate")
+        with pytest.raises(ValueError, match="status 仅允许"):
+            mod.transition_status(1, "hacked", user_id=7)
 
 
 class TestDelete:

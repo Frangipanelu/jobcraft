@@ -810,6 +810,83 @@ class TestExpressionVersion:
         assert resp.status_code == 500
 
 
+class TestExpressionAction:
+    """POST /api/jobcraft/experience/expressions/{expression_id}/actions/{action}（EXP-P2-06 §8.4）"""
+
+    def _tester(self, monkeypatch):
+        captured = {}
+
+        def fake_transition(expression_id, target, user_id):
+            captured["expression_id"] = expression_id
+            captured["target"] = target
+            return {
+                "id": expression_id,
+                "user_id": user_id,
+                "experience_id": 10,
+                "direction_id": None,
+                "job_id": None,
+                "type": "standardized",
+                "content": "内容",
+                "version": 2,
+                "validation_level": 0,
+                "usage_count": 0,
+                "source_refs": [],
+                "status": target,
+                "created_at": None,
+                "updated_at": None,
+            }
+
+        monkeypatch.setattr(
+            "app.tools.db_expression.transition_status", fake_transition
+        )
+        return captured
+
+    def test_activate_normal(self, monkeypatch):
+        captured = self._tester(monkeypatch)
+        resp = client.post("/api/jobcraft/experience/expressions/5/actions/activate")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "active"
+        assert data["id"] == 5
+        assert captured["target"] == "active"
+
+    def test_deprecate_normal(self, monkeypatch):
+        captured = self._tester(monkeypatch)
+        resp = client.post("/api/jobcraft/experience/expressions/5/actions/deprecate")
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "deprecated"
+        assert captured["target"] == "deprecated"
+
+    def test_unknown_action_returns_400(self, monkeypatch):
+        self._tester(monkeypatch)
+        resp = client.post("/api/jobcraft/experience/expressions/5/actions/freeze")
+        assert resp.status_code == 400
+
+    def test_missing_expression_returns_404(self, monkeypatch):
+        def not_found(*a, **k):
+            raise LookupError("expression 不存在或不属于用户: 999")
+
+        monkeypatch.setattr("app.tools.db_expression.transition_status", not_found)
+        resp = client.post("/api/jobcraft/experience/expressions/999/actions/activate")
+        assert resp.status_code == 404
+
+    def test_illegal_transition_returns_400(self, monkeypatch):
+        def illegal(*a, **k):
+            raise ValueError("status 不允许从 active 迁移到 active")
+
+        monkeypatch.setattr("app.tools.db_expression.transition_status", illegal)
+        resp = client.post("/api/jobcraft/experience/expressions/5/actions/activate")
+        assert resp.status_code == 400
+
+    def test_db_error_returns_500(self, monkeypatch):
+        def boom(*a, **k):
+            raise Exception("db down")
+
+        monkeypatch.setattr("app.tools.db_expression.transition_status", boom)
+        resp = client.post("/api/jobcraft/experience/expressions/5/actions/activate")
+        assert resp.status_code == 500
+
+
 # ============================================================
 # 2. job_analysis.py — 岗位分析路由
 # ============================================================
