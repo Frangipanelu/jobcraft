@@ -51,6 +51,12 @@ def generate_resume(
     for cid in selected_card_ids:
         c = db_tools.get_card(cid, user_id)
         if c and c.get("is_active"):
+            try:
+                from app.tools.db_expression import get_active_expression_content
+
+                c["active_expression"] = get_active_expression_content(cid, user_id)
+            except Exception:
+                c["active_expression"] = None
             cards.append(c)
     if not cards:
         raise ValueError("无可用经历卡")

@@ -200,6 +200,54 @@ class TestJobcraftResume:
             with pytest.raises(ValueError):
                 generate_resume(1, [1])
 
+    def test_generate_resume_attaches_active_expression(self, tmp_path):
+        """P2C-01：简历消费链应将激活表达附加到经验卡供渲染优先使用。"""
+        from app.tools.jobcraft_resume import generate_resume
+
+        captured_md = {}
+        captured_html = {}
+
+        def fake_md(**kwargs):
+            captured_md["cards"] = kwargs["cards"]
+            return "resume-md"
+
+        def fake_html(**kwargs):
+            captured_html["cards"] = kwargs["cards"]
+            return "resume-html"
+
+        with (
+            patch("app.tools.jobcraft_resume.db_tools") as mock_db,
+            patch("app.tools.jobcraft_resume.generate_resume_markdown", fake_md),
+            patch("app.tools.jobcraft_resume.generate_resume_html", fake_html),
+            patch("app.tools.jobcraft_resume.OUTPUT_ROOT", tmp_path),
+            patch(
+                "app.tools.db_submission.get_submission_by_analysis",
+                lambda *a, **k: None,
+            ),
+            patch("app.tools.db_submission.insert_submission", lambda *a, **k: 99),
+            patch(
+                "app.tools.db_expression.get_active_expression_content",
+                lambda cid, user_id, expr_type="standardized": "激活表达",
+            ),
+        ):
+            mock_db.get_job_analysis.return_value = {
+                "user_id": 7,
+                "company": "C",
+                "position": "P",
+                "jd_text": "JD",
+            }
+            mock_db.get_card.return_value = {
+                "id": 3,
+                "is_active": True,
+                "raw_text": "原始",
+            }
+            result = generate_resume(1, [3], user_id=7)
+
+        assert captured_md["cards"][0]["id"] == 3
+        assert captured_md["cards"][0]["active_expression"] == "激活表达"
+        assert captured_html["cards"][0]["active_expression"] == "激活表达"
+        assert result["submission_id"] == 99
+
 
 # ============================================================
 # 3. upload_file_read_tool.py — _read_pdf

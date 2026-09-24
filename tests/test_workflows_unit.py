@@ -754,6 +754,11 @@ class TestInterviewPrepFlow:
             "app.workflows.interview_prep_flow.db_tools.get_card_versions_by_source",
             lambda source, jid: [],
         )
+        # P2C-01：消费链拉卡时须附加绑定《激活表达》，单测中 mock 掉避免真库查询
+        monkeypatch.setattr(
+            "app.tools.db_expression.get_active_expression_content",
+            lambda cid, user_id, expr_type="standardized": None,
+        )
 
     def test_prep_workflow_normal(self, monkeypatch):
         """正常面试准备"""
@@ -806,6 +811,54 @@ class TestInterviewPrepFlow:
         assert result["duration"] == "15 分钟"
         assert result["round_type"] == "技术面"
         assert result["job_analysis_id"] == 10
+
+    def test_prep_flow_attaches_active_expression(self, monkeypatch):
+        """P2C-01：面试准备消费链应携带每个活跃卡片的激活表达供渲染优先使用。"""
+        from app.workflows.interview_prep_flow import run_interview_prep_workflow
+
+        self._mock_prep_deps(monkeypatch)
+        captured = {}
+
+        def fake_build_prompt(**kwargs):
+            captured["cards"] = kwargs["cards"]
+            return "prompt"
+
+        monkeypatch.setattr(
+            "app.workflows.interview_prep_flow.interview_pre._build_interview_prompt",
+            fake_build_prompt,
+        )
+        monkeypatch.setattr(
+            "app.tools.db_expression.get_active_expression_content",
+            lambda cid, user_id, expr_type="standardized": "激活表达内容",
+        )
+
+        def fake_agent_run(self, data):
+            return {
+                "prep_result": {
+                    "job_analysis_id": 10,
+                    "round_type": "技术面",
+                    "duration": "15 分钟",
+                    "elevator_pitch": "pitch",
+                    "dimension_questions": [],
+                    "full_version": "完整版本",
+                    "html_content": "<div>预览</div>",
+                }
+            }
+
+        monkeypatch.setattr(
+            "app.workflows.interview_prep_flow.InterviewPrepAgent.run", fake_agent_run
+        )
+        monkeypatch.setattr(
+            "app.workflows.interview_prep_flow.db_tools.insert_interview_prep",
+            lambda data: 1,
+        )
+
+        run_interview_prep_workflow(
+            job_analysis_id=10, round_type="技术面", card_ids=[1]
+        )
+        assert captured["cards"]
+        assert captured["cards"][0]["id"] == 1
+        assert captured["cards"][0]["active_expression"] == "激活表达内容"
 
     def test_prep_workflow_analysis_not_found(self, monkeypatch):
         """job_analysis 不存在"""

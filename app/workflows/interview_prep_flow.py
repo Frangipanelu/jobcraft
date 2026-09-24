@@ -54,6 +54,12 @@ def _generate_prep(state: Dict[str, Any]) -> Dict[str, Any]:
     for cid in card_ids:
         c = db_tools.get_card(cid, user_id)
         if c and c.get("is_active"):
+            try:
+                from app.tools.db_expression import get_active_expression_content
+
+                c["active_expression"] = get_active_expression_content(cid, user_id)
+            except Exception:
+                c["active_expression"] = None
             cards.append(c)
     for version in db_tools.get_card_versions_by_source(
         "job_analysis", job_analysis_id
