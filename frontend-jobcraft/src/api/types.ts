@@ -96,6 +96,36 @@ export interface ExperienceCardVersionList {
 }
 
 // ============================================================
+// 标准化表达（Expression，EXP-P2-02 §8 / DATA_MODEL §6 wire 层）
+// ============================================================
+
+/** 一条标准化表达（对齐后端 ExpressionRead，EXP-P2-08） */
+export interface Expression {
+  id: number
+  user_id: number
+  experience_id: number
+  direction_id?: number | null
+  job_id?: number | null
+  /** standardized / direction / job_specific（P2 仅 standardized 生效） */
+  type: string
+  content: string
+  version: number
+  validation_level: number
+  usage_count: number
+  source_refs: Record<string, unknown>[]
+  /** candidate / active / deprecated */
+  status: string
+  created_at?: string | null
+  updated_at?: string | null
+}
+
+/** 经历卡表达列表响应（§8.1） */
+export interface ExpressionListResponse {
+  experience_id: number
+  items: Expression[]
+}
+
+// ============================================================
 // JD / ATS
 // ============================================================
 

@@ -3,7 +3,12 @@
  */
 
 import { request, requestFormData } from './client'
-import type { ExperienceCard, ExperienceCardVersionList } from './types'
+import type {
+  ExperienceCard,
+  ExperienceCardVersionList,
+  Expression,
+  ExpressionListResponse,
+} from './types'
 
 /**
  * 获取经历卡列表
@@ -112,5 +117,53 @@ export async function listCardVersions(
 ): Promise<ExperienceCardVersionList> {
   return request<ExperienceCardVersionList>(
     `/api/jobcraft/experience/cards/${cardId}/versions`
+  )
+}
+
+/**
+ * 列出经历卡的标准化表达（§8.1，EXP-P2-02）。
+ * 同版本链按 version 降序（最新在前）；支持 type/direction/job 过滤。
+ */
+export async function listExpressions(
+  cardId: number,
+  params?: { type?: string; directionId?: number; jobId?: number }
+): Promise<ExpressionListResponse> {
+  const qs = new URLSearchParams()
+  if (params?.type) qs.append('type', params.type)
+  if (params?.directionId !== undefined) qs.append('direction_id', String(params.directionId))
+  if (params?.jobId !== undefined) qs.append('job_id', String(params.jobId))
+  const suffix = qs.toString() ? `?${qs.toString()}` : ''
+  return request<ExpressionListResponse>(
+    `/api/jobcraft/experience/cards/${cardId}/expressions${suffix}`
+  )
+}
+
+/**
+ * AI 生成标准化表达并入库（EXP-P2-04：手动触发，返回 candidate 态新表达）。
+ */
+export async function generateExpression(cardId: number): Promise<Expression> {
+  return request<Expression>(
+    `/api/jobcraft/experience/cards/${cardId}/expressions`,
+    { method: 'POST', body: JSON.stringify({}) }
+  )
+}
+
+/**
+ * 激活标准化表达（EXP-P2-06 状态机：同版本链其它 active 自动降级为 candidate）。
+ */
+export async function activateExpression(expressionId: number): Promise<Expression> {
+  return request<Expression>(
+    `/api/jobcraft/experience/expressions/${expressionId}/actions/activate`,
+    { method: 'POST', body: JSON.stringify({}) }
+  )
+}
+
+/**
+ * 弃用标准化表达（EXP-P2-06 状态机：active/candidate → deprecated）。
+ */
+export async function deprecateExpression(expressionId: number): Promise<Expression> {
+  return request<Expression>(
+    `/api/jobcraft/experience/expressions/${expressionId}/actions/deprecate`,
+    { method: 'POST', body: JSON.stringify({}) }
   )
 }
