@@ -105,7 +105,15 @@
 - [x] **映射**：`features/experiences/mappers.ts` 的 `versionTypeReason`/`versionTypeSource` 增 `version_type='standardized'` 识别 → `source='standardized'`，reason=「标准化表达确认（AI 中性化改写）」。
 - [x] **展示**：`ExperiencesView.getSourceBadge` 增 `standardized` →「标准化表达」徽标。
 - [x] **测试**：`mappers.test.ts` 增 1 条（standardized 映射）。**vitest 24 files/143 tests 全过** + tsc 0 错 + build 通过。
-- [ ] **待续（EXP-P2-11）**：验证全绿：`python scripts/check_encoding.py` + ruff + pytest + `cd frontend-jobcraft && npm run build`。
+
+## P2 验证全绿（EXP-P2-11，2026-09-24）
+
+- [x] `python scripts/check_encoding.py`：**359 文件 0 错**。
+- [x] `uv run ruff check --fix .` + `uv run ruff format .`：全部通过（140 files left unchanged）。
+- [x] `uv run pytest tests/ -q`：**680 passed / 12 skipped**（41.1s）。
+- [x] `cd frontend-jobcraft && npm run build`：构建通过（仅既有 chunk>500kB warning）。
+- [x] `npx tsc --noEmit`：0 错；`npx vitest run`：**24 files / 143 tests 全过**。
+- **P2（标准化表达与版本系列，EXP-P2-01..11）全链路完成。**
 
 ## Expression/Consumer Chain 基础（EXP-P1-08，2026-09-23）
 
