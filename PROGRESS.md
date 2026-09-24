@@ -1234,3 +1234,15 @@
   - **ADR-A3 UI 栈→Tailwind CSS 4 + lucide 追认**：AGENTS.md §3.2「纯原生 Ant Design」红线替换为「无第三方 UI 框架」（零 antd import）；ARCHITECTURE.md 两处 AntD 引用同步更正。
   - **ADR-A4 SourceRef→DATA_MODEL §3.2**：EXPERIENCE_SPEC §7 已加作废注（P2C-06 配套，12 值 `source_type` 联合/snake_case wire）。
 - [ ] 后续：批次 B（P0-6 JD↔Submission 关联持久化）→ 批次 C（V0010 收 runtime DDL + 撤 MODIFY）→ 批次 D（错误码/幂等键/cursor 分页）→ 批次 E（langgraph Checkpointer）。
+- [x] **P2–P11 功能线梳理（2026-09-25，纯文档）**：按用户指定顺序整条梳理落盘 `docs/functional-review-p2-p11-2026-09-25.md`（docs/ 本地，不入库）。要点：
+  - **P2（唯一契约闭环域）**：19 项字段/wire 已对齐；剩余待定 U-P2a（expression 补 submission_id vs 等 P6 ResumeVersion）、U-P2b（消费是否自动落表达行，倾向不自动）、U-P2c（job_specific 生产入口挂 P4）。缺口：resumeVersionId 缺列、strategyId 缺、direction/job_specific 无生产链路、validation_level 恒 0。
+  - **P3**：V0009 使 09-23 审计部分过期 →「表+最小只读，逻辑层零实现」；六维分类/Knowledge/API/前端全缺。
+  - **P4**：无 Job 实体（job_analysis+resume_submission 二分），分析物不持久化（刷新丢 ats_profile，违反 §12.2），RawJD 无快照，JobProfile 缺。
+  - **P5**：匹配=卡级数值分（非 requirementId 语义）、分类=5 类条目级（非六维）、capabilityGaps 无结构化、无版本化/stage/task 契约。
+  - **P6**：差距最大——无 resume/resume_version 表，四层表达仅枚举，简历=单 markdown 快照覆写 + 不消费表达式层 + 无版本追溯。
+  - **P7**：公司级 7 天缓存（非 per-job），无 status/sourceRefs 列/独立端点，仅 Prep 内嵌触发。
+  - **P8**：无 interviews 表（interview=interview_preps 行），round_type 自由串，单节点工作流，前端 readiness/status/probabilityStars 为伪造常量。
+  - **P9**：无 Review/Transcript 域表；低价值问题丢弃非打标（违反"过滤不删除"）；intent 自由文本；前端四维同分伪造；详情前端不回读。
+  - **P10**：validation_level 空转恒 0；无 FeedbackCandidate/Validation/UserConfirmation；复盘反馈绕过确认闸门直写定稿（数据质量最高风险）。
+  - **P11**：delivered 已落地，但 status=APPLIED 与 delivered=0 语义分裂、终止仅前端本地、多轮封顶 ROUND_2。
+  - **跨域**：契约偏移普遍（无 /jobs/:id/actions、/interviews、/resumes、/reviews、/validations 等，与现有 /api/jobcraft/** 并存，遵循 ADR 追认原则）；修复优先级建议先落 P4 小步（持久化分析物 + rawJD 快照 + 去占位 id）。
