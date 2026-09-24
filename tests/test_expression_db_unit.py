@@ -415,3 +415,20 @@ class TestActiveExpressionContent:
         sql, params = fake_db["cursor"].executed[-1]
         assert "type=%s" in sql
         assert params[2] == "standardized"
+
+
+class TestIncrementUsage:
+    def test_increments_active_version_usage_count(self, fake_db):
+        """P2C-02：只对 active 最新版本自增 usage_count。"""
+        mod.increment_active_expression_usage(10, user_id=7)
+        sql, params = fake_db["cursor"].executed[-1]
+        assert "usage_count = usage_count + 1" in sql
+        assert "status='active'" in sql
+        assert "ORDER BY version DESC LIMIT 1" in sql
+        assert params == (10, 7, "standardized")
+
+    def test_uses_standardized_type_by_default(self, fake_db):
+        mod.increment_active_expression_usage(10, user_id=7)
+        sql, params = fake_db["cursor"].executed[-1]
+        assert "type=%s" in sql
+        assert params[2] == "standardized"

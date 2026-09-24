@@ -52,9 +52,14 @@ def generate_resume(
         c = db_tools.get_card(cid, user_id)
         if c and c.get("is_active"):
             try:
-                from app.tools.db_expression import get_active_expression_content
+                from app.tools.db_expression import (
+                    get_active_expression_content,
+                    increment_active_expression_usage,
+                )
 
                 c["active_expression"] = get_active_expression_content(cid, user_id)
+                if c["active_expression"]:
+                    increment_active_expression_usage(cid, user_id)
             except Exception:
                 c["active_expression"] = None
             cards.append(c)

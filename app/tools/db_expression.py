@@ -408,3 +408,24 @@ def get_active_expression_content(
     if not row:
         return None
     return row["content"]
+
+
+def increment_active_expression_usage(
+    experience_id: int, user_id: int, expr_type: str = "standardized"
+) -> None:
+    """对某经历卡当前激活表达的使用次数自增（P2C-02，§32 消费指标）。
+
+    下游消费链（岗位分析/面试准备/简历生成）仅取 active 版本的表达，
+    candidate/expired 版本不会被消费，故此处只对激活版本 usage_count 自增；
+    调用方须先确认存在激活表达（见 get_active_expression_content）。
+
+    :param experience_id: 经历卡 id。
+    :param user_id: 归属用户。
+    :param expr_type: 表达类型，默认 standardized。
+    """
+    execute(
+        "UPDATE expression SET usage_count = usage_count + 1 "
+        "WHERE experience_id=%s AND user_id=%s AND type=%s AND status='active' "
+        "ORDER BY version DESC LIMIT 1",
+        (experience_id, user_id, expr_type),
+    )

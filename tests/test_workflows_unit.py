@@ -831,6 +831,11 @@ class TestInterviewPrepFlow:
             "app.tools.db_expression.get_active_expression_content",
             lambda cid, user_id, expr_type="standardized": "激活表达内容",
         )
+        incremented = []
+        monkeypatch.setattr(
+            "app.tools.db_expression.increment_active_expression_usage",
+            lambda cid, user_id, expr_type="standardized": incremented.append(cid),
+        )
 
         def fake_agent_run(self, data):
             return {
@@ -859,6 +864,44 @@ class TestInterviewPrepFlow:
         assert captured["cards"]
         assert captured["cards"][0]["id"] == 1
         assert captured["cards"][0]["active_expression"] == "激活表达内容"
+        assert incremented == [1]
+
+    def test_prep_flow_skips_increment_without_active(self, monkeypatch):
+        """P2C-02：无激活表达时不触发 usage 自增。"""
+        from app.workflows.interview_prep_flow import run_interview_prep_workflow
+
+        self._mock_prep_deps(monkeypatch)
+        incremented = []
+        monkeypatch.setattr(
+            "app.tools.db_expression.increment_active_expression_usage",
+            lambda cid, user_id, expr_type="standardized": incremented.append(cid),
+        )
+
+        def fake_agent_run(self, data):
+            return {
+                "prep_result": {
+                    "job_analysis_id": 10,
+                    "round_type": "技术面",
+                    "duration": "15 分钟",
+                    "elevator_pitch": "pitch",
+                    "dimension_questions": [],
+                    "full_version": "完整版本",
+                    "html_content": "<div>预览</div>",
+                }
+            }
+
+        monkeypatch.setattr(
+            "app.workflows.interview_prep_flow.InterviewPrepAgent.run", fake_agent_run
+        )
+        monkeypatch.setattr(
+            "app.workflows.interview_prep_flow.db_tools.insert_interview_prep",
+            lambda data: 1,
+        )
+
+        run_interview_prep_workflow(
+            job_analysis_id=10, round_type="技术面", card_ids=[1]
+        )
+        assert incremented == []
 
     def test_prep_workflow_analysis_not_found(self, monkeypatch):
         """job_analysis 不存在"""

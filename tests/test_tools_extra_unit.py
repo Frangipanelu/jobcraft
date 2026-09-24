@@ -206,6 +206,7 @@ class TestJobcraftResume:
 
         captured_md = {}
         captured_html = {}
+        incremented = []
 
         def fake_md(**kwargs):
             captured_md["cards"] = kwargs["cards"]
@@ -229,6 +230,10 @@ class TestJobcraftResume:
                 "app.tools.db_expression.get_active_expression_content",
                 lambda cid, user_id, expr_type="standardized": "激活表达",
             ),
+            patch(
+                "app.tools.db_expression.increment_active_expression_usage",
+                lambda cid, user_id, expr_type="standardized": incremented.append(cid),
+            ),
         ):
             mock_db.get_job_analysis.return_value = {
                 "user_id": 7,
@@ -246,6 +251,7 @@ class TestJobcraftResume:
         assert captured_md["cards"][0]["id"] == 3
         assert captured_md["cards"][0]["active_expression"] == "激活表达"
         assert captured_html["cards"][0]["active_expression"] == "激活表达"
+        assert incremented == [3]
         assert result["submission_id"] == 99
 
 
