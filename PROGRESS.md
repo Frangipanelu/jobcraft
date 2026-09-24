@@ -2,6 +2,16 @@
 
 > 本文件用于追踪项目整体进度。AI 在每次会话结束或完成子任务时，必须更新本文件的对应板块。
 
+## 全局健康扫描与技术债修复（2026-09-24）
+
+> 对全项目执行健康扫描（编码 / ruff / pytest / build / tsc / vitest / 红线），结论 GREEN 无阻断；三项低优先技术债随后修复。
+
+- [x] **扫描基线**：check_encoding 359 文件 0 错；ruff check/format 全绿；pytest 680 passed/12 skipped；前端 build ✅ + tsc 0 错 + vitest 24 files/143 tests 全过；红线 0 命中（硬编码密钥/裸 except/业务 print/.env 提交）；S-select 11 项 S608/S104/S105 均在 CI `--ignore` 白名单内且逐点复核为**白名单动态列名 + 参数化值**（非真实注入）。
+- [x] **修复 1：`datetime.utcnow()` 弃用**（`app/auth/__init__.py:53,55`）→ `datetime.now(timezone.utc)`；pytest 警告 7 → 1（余 1 为第三方 langgraph pending deprecation）。
+- [x] **修复 2：TODO 注释清理**（`app/tasks/handlers.py:159`）→ 描述性中文注释（PDF 落地仍未实现，行为不变）。
+- [x] **修复 3：前端 `any` 收敛 13 → 4**：新增 `api/types.ts` `CompanyResearchShape` wire 类型（对齐后端 CompanyResearchInfo 消费子集）；`interview/mappers.ts` / `interview/InterviewPrepWorkspaceView.tsx` 移除全部 `Record<string, any>`/`as any`/`(dq: any)`（新增本地 `DqShape`/`NewsItemShape` 消费子集）；`AuthPage.tsx` catch 改 `err instanceof Error` 守卫。残余 4 处 `any` 均为测试 `expect.any(Function)`（合法断言）。
+- [x] **验证全绿**：pytest 680 passed/12 skipped（1 warning）；ruff check/format 全绿；tsc 0 错；vitest 24 files/143 tests 全过；build ✅（仅既有 chunk warning）；check_encoding 359 文件 0 错。
+
 ## 标准化表达与方向新表（EXP-P2-01，2026-09-23）
 
 > 依据 EXPERIENCE_SPEC §31 + DATA_MODEL §6/§7 + DIRECTION_SPEC §3（U8：V0009 是 direction/expression 新表的唯一落点）。前向兼容只加表（AGENTS §4.4），不 ALTER 既有表。
