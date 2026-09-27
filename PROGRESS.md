@@ -1254,3 +1254,18 @@
   - **P10**：validation_level 空转恒 0；无 FeedbackCandidate/Validation/UserConfirmation；复盘反馈绕过确认闸门直写定稿（数据质量最高风险）。
   - **P11**：delivered 已落地，但 status=APPLIED 与 delivered=0 语义分裂、终止仅前端本地、多轮封顶 ROUND_2。
   - **跨域**：契约偏移普遍（无 /jobs/:id/actions、/interviews、/resumes、/reviews、/validations 等，与现有 /api/jobcraft/** 并存，遵循 ADR 追认原则）；修复优先级建议先落 P4 小步（持久化分析物 + rawJD 快照 + 去占位 id）。
+
+### M1 基础设施批次收口（2026-09-27，本轮，全部未推送）
+
+> 范围仅 M1 基础设施/持久化补齐（P2-btn、P10-b-lite、P4-1、P4-2、P11-a、P11-b、P4-4a）。功能板块 P3/P5–P9 逻辑层与批次 B 唯一键策略均不在本轮。
+
+- [x] **P2-btn 消费结果溯源卡「存为候选表达」** `fffeb3c`：简历编辑器溯源卡加显式按钮（非自动落库，遵循 U-P2b）；落 candidate 表达待用户 activate。
+- [x] **P10-b-lite 复盘反哺轻闸门** `06318da`：写回前二次确认 + 追加版本不强制定稿，堵住「反馈绕过确认闸门直写定稿」的数据质量风险。
+- [x] **P4-1 分析物五列持久化** `ff72cd9`：V0011 为 `job_analysis` 增加 `ats_profile`/`suggestions`/`per_card_scores`/`match_level`/`analysis_version`；覆盖 legacy workflow、DB insert/read 与单测，刷新不再丢分析物（§12.2）。
+- [x] **P4-2 RawJD 不可变快照** `3d6973c`：V0012 `raw_jd` 表 + 分析落库同步快照；`PATCH /api/jobcraft/submission` 对 `jd_text` 覆写返回 400，权威原文只认快照。
+- [x] **P11-a 投递状态语义对齐** `127a037`：新增 `PREPARED`（待投递），创建 ≠ 投递；`APPLIED` 仅在 `delivered=1` 时成立，读路径把存量 `APPLIED + delivered=0` 投影为「待投递」。
+- [x] **P11-b 终态持久化与恢复** `22f8c5d`：终止落库 `CLOSED`（原仅前端本地）；恢复按 `delivered` 回到 `PREPARED`/`APPLIED`，非法流转 400。
+- [x] **P4-4a Job 实体（岗位聚合根）** `3b0d9b5`：V0013 新建 `job` 表（`raw_jd_id`/`job_analysis_id`/`submission_id`/`status`）+ `job_analysis.job_id` 幂等加列；新增 `db_job_entity` 提供 find-or-create（键 `user_id+company+position`）；分析/投递/快照三处写入均挂到同一岗位，投递状态变更同步岗位状态；`get_submission` LEFT JOIN 暴露 `job_id`，前端 `Job.jobId` 创建即缓存。
+- [x] **测试隔离修复** `4199d39`：岗位分析工作流单测补 mock `ScoreMatchAgent`，消除真实 LLM 调用（429 波动导致 3 例偶发失败）；后端全量 752 passed/12 skipped。
+- [x] **唯一键策略延后**：`job` 表暂不加唯一键（`submission_id` vs `company+position` 二选一属批次 B），find-or-create 先走 SELECT，并发重复由批次 B 收敛。
+- [ ] **本段遗留**（批次 B 及以后）：job 唯一键与并发去重；`/jobs/:id/actions` 等契约对齐；JD↔Submission 关联持久化（P0-6）；批次 D 错误码/幂等键/cursor 分页；批次 E langgraph Checkpointer。真实 MySQL（localhost:3308）未启动，V0011–V0013 仅经迁移 runner 单测验证，重复执行待环境恢复后补验。
