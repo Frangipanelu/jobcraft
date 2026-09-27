@@ -64,6 +64,31 @@ export function useDeprecateExpressionMutation(cardId: number) {
   });
 }
 
+/**
+ * 手动创建标准化表达（U2b「存为表达」：把消费产物保存为 candidate 表达）。
+ * 目标卡由调用方传入（溯源卡动态），返回新表达行并使该卡表达列表失活刷新。
+ */
+export function useCreateExpressionMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation<
+    Expression,
+    unknown,
+    { cardId: number; content: string; source_refs?: SourceRef[] }
+  >({
+    mutationFn: async ({ cardId, content, source_refs }) =>
+      experienceApi.createExpression({
+        experience_id: cardId,
+        type: 'standardized',
+        content,
+        source_refs,
+      }),
+    onSuccess: (_data, vars) => {
+      queryClient.invalidateQueries({ queryKey: expressionQueryKey(vars.cardId) });
+    },
+  });
+}
+
 /** 基于既有表达新建版本（EXP-P2-03 §8.3，version+1，返回新版本行并刷新列表）。 */
 export function useExpressionVersionMutation(cardId: number) {
   const queryClient = useQueryClient();

@@ -140,6 +140,24 @@ export async function listExpressions(
 }
 
 /**
+ * 手动创建标准化表达（U2b：消费结果「存为表达」入口，P2C-04 双入口之一）。
+ * 落 candidate 态，等待用户激活；新版本行 = 组内 version max+1（§31，不覆盖旧行）。
+ */
+export async function createExpression(payload: {
+  experience_id: number
+  type?: string
+  content: string
+  direction_id?: number
+  job_id?: number
+  source_refs?: SourceRef[]
+}): Promise<Expression> {
+  return request<Expression>('/api/jobcraft/experience/expressions', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+/**
  * AI 生成标准化表达并入库（EXP-P2-04：手动触发，返回 candidate 态新表达）。
  */
 export async function generateExpression(cardId: number): Promise<Expression> {

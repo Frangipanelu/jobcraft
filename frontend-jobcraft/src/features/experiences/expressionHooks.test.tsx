@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
   useExpressionsQuery,
   useGenerateExpressionMutation,
+  useCreateExpressionMutation,
   useActivateExpressionMutation,
   useDeprecateExpressionMutation,
   useExpressionVersionMutation,
@@ -14,6 +15,7 @@ import type { Expression } from '../../api/types';
 const api = vi.hoisted(() => ({
   listExpressions: vi.fn(),
   generateExpression: vi.fn(),
+  createExpression: vi.fn(),
   activateExpression: vi.fn(),
   deprecateExpression: vi.fn(),
   updateExpression: vi.fn(),
@@ -105,6 +107,56 @@ describe('expression hooks（EXP-P2-08）', () => {
     expect(api.generateExpression).toHaveBeenCalledWith(7);
     expect(out.id).toBe(EXPRESSION_CANDIDATE.id);
     expect(out.status).toBe('candidate');
+  });
+
+  it('useCreateExpressionMutation 手动创建 candidate 表达（U2b 存为表达）', async () => {
+    api.createExpression.mockResolvedValue(EXPRESSION_CANDIDATE);
+    const { wrapper } = createWrapper();
+    const { result } = renderHook(() => useCreateExpressionMutation(), { wrapper });
+
+    let out!: Expression;
+    await act(async () => {
+      out = await result.current.mutateAsync({
+        cardId: 7,
+        content: '负责端侧大模型量化评测，建立量产评估体系。',
+        source_refs: [{ id: 'resume:3', source_type: 'resume', source_id: '3' }],
+      });
+    });
+    expect(api.createExpression).toHaveBeenCalledWith({
+      experience_id: 7,
+      type: 'standardized',
+      content: '负责端侧大模型量化评测，建立量产评估体系。',
+      source_refs: [{ id: 'resume:3', source_type: 'resume', source_id: '3' }],
+    });
+    expect(out.status).toBe('candidate');
+  });
+
+  it('useCreateExpressionMutation 成功后使目标卡表达列表失活', async () => {
+    api.listExpressions.mockResolvedValue({
+      experience_id: 7,
+      items: [EXPRESSION_CANDIDATE],
+    });
+    api.createExpression.mockResolvedValue(EXPRESSION_CANDIDATE);
+    const { wrapper } = createWrapper();
+
+    const { result } = renderHook(
+      () => ({
+        query: useExpressionsQuery(7),
+        create: useCreateExpressionMutation(),
+      }),
+      { wrapper },
+    );
+
+    await waitFor(() => expect(result.current.query.isSuccess).toBe(true));
+    const callsBefore = api.listExpressions.mock.calls.length;
+
+    await act(async () => {
+      await result.current.create.mutateAsync({ cardId: 7, content: '内容' });
+    });
+
+    await waitFor(() => {
+      expect(api.listExpressions.mock.calls.length).toBeGreaterThan(callsBefore);
+    });
   });
 
   it('useActivateExpressionMutation 调激活端点', async () => {

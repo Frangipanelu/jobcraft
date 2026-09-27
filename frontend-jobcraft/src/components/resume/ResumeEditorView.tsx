@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useJobCraft, useToastActions } from '../../context/JobCraftContext';
 import { useJobsQuery } from '../../features/jobs/hooks';
 import { useExperiencesQuery } from '../../features/experiences/hooks';
+import { useCreateExpressionMutation } from '../../features/experiences/expressionHooks';
 import {
   useResumesQuery,
   useApplyResumeAiSuggestionMutation,
@@ -58,6 +59,7 @@ export const ResumeEditorView: React.FC<ResumeEditorViewProps> = ({
   const editBullet = useUpdateResumeBulletTextMutation();
   const deleteBullet = useDeleteResumeBulletMutation();
   const saveResume = useSaveResumeMutation();
+  const saveExpression = useCreateExpressionMutation();
 
   // active 简历 id 为编辑器局部状态（legacy context.activeResumeId 仅本视图消费）
   const [activeResumeId, setActiveResumeId] = useState<string | null>(null);
@@ -154,6 +156,47 @@ export const ResumeEditorView: React.FC<ResumeEditorViewProps> = ({
       title: '正在生成高保真单页 PDF...',
       message: '已按 1:1 招聘标准排版，导出准备完毕。'
     });
+  };
+
+  // U2b「存为表达」：把选中 bullet 的定制文本保存为目标经历卡的标准化表达（candidate 态）
+  const handleSaveExpression = () => {
+    if (!activeBullet || !linkedExp) return;
+    const targetCardId = parseInt(String(linkedExp.id), 10);
+    if (!Number.isFinite(targetCardId)) {
+      showToast({
+        type: 'error',
+        title: '保存失败',
+        message: '目标经历资产 ID 无效'
+      });
+      return;
+    }
+    saveExpression
+      .mutateAsync({
+        cardId: targetCardId,
+        content: activeBullet.text,
+        source_refs: [
+          {
+            id: rid,
+            source_type: 'resume',
+            source_id: rid,
+            locator: activeBullet.id
+          }
+        ]
+      })
+      .then(() => {
+        showToast({
+          type: 'success',
+          title: '已保存为候选表达',
+          message: `已存入「${linkedExp?.title}」表达库，可在经历资产库中激活。`
+        });
+      })
+      .catch((error: unknown) => {
+        showToast({
+          type: 'error',
+          title: '保存失败',
+          message: (error as Error).message || '请稍后重试'
+        });
+      });
   };
 
   // Find linked experience for selected bullet
@@ -517,6 +560,21 @@ export const ResumeEditorView: React.FC<ResumeEditorViewProps> = ({
                   >
                     <span>在经历资产库中查看与维护</span>
                     <ArrowRight className="w-3.5 h-3.5 text-sage" />
+                  </button>
+                  <button
+                    onClick={handleSaveExpression}
+                    disabled={saveExpression.isPending || !linkedExp}
+                    className="mt-2 w-full flex items-center justify-center gap-1.5 py-2 rounded-lg border border-sage/20 bg-sage-soft hover:bg-sage/10 text-sage font-semibold text-xs transition disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                    title={`把当前要点另存为「${linkedExp?.title ?? ''}」的候选表达（可在经历资产库中激活复用）`}
+                  >
+                    {saveExpression.isPending ? (
+                      <span>正在保存…</span>
+                    ) : (
+                      <>
+                        <Save className="w-3.5 h-3.5" />
+                        <span>存为候选表达</span>
+                      </>
+                    )}
                   </button>
                 </div>
               </div>
