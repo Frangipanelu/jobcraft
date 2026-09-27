@@ -73,6 +73,9 @@ class _FakeConn:
     def commit(self):
         return None
 
+    def close(self):
+        return None
+
 
 def _capture(cursor_holder):
     def fake_connect(**kwargs):
@@ -134,7 +137,8 @@ def _patch_ensure_helper(monkeypatch, module_path, holder):
             "get_submission",
             (100,),
             {"user_id": 7},
-            "AND user_id=%s",
+            # P4-4a：get_submission 走 LEFT JOIN job，列名带表别名 s.
+            "AND s.user_id=%s",
         ),
         (
             "app.tools.db_submission",
@@ -257,8 +261,13 @@ def test_update_submission_appends_user_id_filter(monkeypatch):
     with patch("app.tools.db_conn.connect", fake_connect):
         update_submission(100, {"status": "x"}, user_id=7)
 
-    assert "AND user_id=%s" in cursor.last_sql
-    assert 7 in cursor.last_args
+    # P4-4a：状态更新后还会同步 Job 实体，故校验「存在」带过滤的 UPDATE
+    assert any(
+        sql.strip().upper().startswith("UPDATE RESUME_SUBMISSION")
+        and "AND user_id=%s" in sql
+        and 7 in (args or ())
+        for sql, args in cursor.executed
+    ), f"未找到带 user_id 过滤的 UPDATE: {[s for s, _ in cursor.executed]}"
 
 
 def test_get_interview_prep_by_job_appends_user_id_filter(monkeypatch):

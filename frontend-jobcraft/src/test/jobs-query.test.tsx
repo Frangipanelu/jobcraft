@@ -47,6 +47,7 @@ const SUBMISSIONS = [
     company: '字节跳动',
     status: 'APPLIED',
     job_analysis_id: null,
+    job_id: 11,
     has_analysis: false,
     card_version_count: 0,
     card_count: 0,
@@ -81,13 +82,15 @@ const MIRROR_JOB = {
   id: 99,
   user_id: 1,
   job_analysis_id: null,
+  // P4-4a：创建岗位后后端返回岗位实体 id，前端缓存为 Job.jobId
+  job_id: 42,
   position: 'AI 策略产品',
   company: '快手',
   jd_text: '',
   resume_markdown: '',
   resume_file_path: null,
   card_version_ids: [],
-  status: 'APPLIED',
+  status: 'PREPARED',
   notes: '',
   delivered: false,
   created_at: null,
@@ -96,7 +99,12 @@ const MIRROR_JOB = {
 
 const CacheSpy = () => {
   const { data: jobs = [] } = useJobsQuery();
-  return <span data-testid="cache-count">{jobs.length}</span>;
+  return (
+    <>
+      <span data-testid="cache-count">{jobs.length}</span>
+      <span data-testid="cache-job-ids">{jobs.map((j) => j.jobId ?? '-').join(',')}</span>
+    </>
+  );
 };
 
 beforeEach(() => {
@@ -150,6 +158,8 @@ describe('useJobsQuery 迁移视图', () => {
       position: 'AI 策略产品',
       company: '快手',
     });
+    // P4-4a：创建成功后缓存岗位实体 id
+    expect(screen.getByTestId('cache-job-ids').textContent).toContain('42');
     await screen.findByTestId('cache-count');
     expect(screen.getByTestId('cache-count').textContent).toBe('3');
   });
@@ -164,6 +174,8 @@ describe('useJobsQuery 迁移视图', () => {
 
     await screen.findByText('字节跳动');
     expect(screen.getByTestId('cache-count').textContent).toBe('2');
+    // P4-4a：刷新（query 重建）后岗位实体 id 仍可从 dashboard 映射
+    expect(screen.getByTestId('cache-job-ids').textContent).toContain('11');
 
     fireEvent.click(screen.getAllByText('标记已结束')[0]);
     expect(await screen.findByText('恢复处理')).toBeInTheDocument();

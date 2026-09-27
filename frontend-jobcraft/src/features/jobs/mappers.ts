@@ -35,6 +35,8 @@ export function submissionToJob(sub: DashboardItem): Job {
     currentStage: SUBMISSION_STATUS_CN[sub.status] || '待处理',
     nextAction: '',
     steps,
+    // P4-4a：岗位实体 id（缓存到前端 Job，刷新后仍可定位岗位）
+    jobId: sub.job_id ?? undefined,
     jdAnalysisId: sub.job_analysis_id ? String(sub.job_analysis_id) : undefined,
     resumeId: String(sub.id),
     interviewIds: []

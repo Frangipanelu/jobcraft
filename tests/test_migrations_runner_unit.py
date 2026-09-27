@@ -585,3 +585,45 @@ def test_v0012_migrate_is_applied_via_runner(fake_conn):
         if e[0].strip().startswith("INSERT INTO schema_migrations")
     ]
     assert "0012" in inserted
+
+
+def test_v0013_creates_job_table_and_links_job_analysis():
+    """P4-4a：V0013 新建 job 表（岗位聚合根）+ job_analysis.job_id 归属列，
+    幂等（IF NOT EXISTS + information_schema 探测），且不改/删既有表。"""
+    v0013 = os.path.join(runner.MIGRATIONS_DIR, "V0013__job_entity.sql")
+    assert os.path.exists(v0013)
+    with open(v0013, encoding="utf-8") as fh:
+        sql = fh.read()
+    assert "CREATE TABLE IF NOT EXISTS job" in sql
+    for col in (
+        "company",
+        "position",
+        "raw_jd_id",
+        "job_analysis_id",
+        "submission_id",
+        "status",
+        "is_active",
+    ):
+        assert col in sql, f"V0013 job 表缺少 {col} 列"
+    # 唯一键策略属批次 B 待定项：不得提前加 UNIQUE
+    assert "UNIQUE" not in sql.upper()
+    assert "ADD COLUMN job_id" in sql
+    assert "information_schema.COLUMNS" in sql
+    assert "PREPARE" in sql and "EXECUTE" in sql
+    # 前向兼容：只新建表 + 加列，禁止改/删既有表
+    for stmt in sql.split(";--SPLIT--"):
+        upper = stmt.strip().upper()
+        assert not upper.startswith(("DROP", "RENAME", "TRUNCATE")), (
+            f"V0013 不得含破坏性 DDL: {stmt[:50]}"
+        )
+
+
+def test_v0013_migrate_is_applied_via_runner(fake_conn):
+    """P4-4a：V0013 与既有迁移共存，runner.migrate() 不抛错且入库。"""
+    runner.migrate()
+    inserted = [
+        e[1][0]
+        for e in fake_conn.cursor_obj.executed
+        if e[0].strip().startswith("INSERT INTO schema_migrations")
+    ]
+    assert "0013" in inserted

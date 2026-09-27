@@ -352,6 +352,8 @@ export type { InterviewPrepRecord };
 export interface Job {
   id: string;
   backendId?: number;
+  /** P4-4a：岗位实体 id（后端 Job 聚合根，submission.job_id） */
+  jobId?: number;
   company: string;
   role: string;
   direction?: string;

@@ -103,7 +103,7 @@ def insert_submission(data: Dict[str, Any]) -> int:
     status = normalize_status(data.get("status", "PREPARED"))
     if status is None:
         status = normalize_status("PREPARED")
-    return execute_lastrowid(
+    submission_id = execute_lastrowid(
         """
         INSERT INTO resume_submission
             (user_id, job_analysis_id, position, company, jd_text,
@@ -125,18 +125,61 @@ def insert_submission(data: Dict[str, Any]) -> int:
             data.get("delivered", 0),
         ),
     )
+    # P4-4a：投递记录挂到 Job 实体（find-or-create，前端据此缓存 jobId）
+    _attach_job_entity(data, submission_id, status.value)
+    return submission_id
+
+
+def _attach_job_entity(
+    data: Dict[str, Any], submission_id: int, status_value: str
+) -> Optional[int]:
+    """P4-4a：find-or-create 岗位并回填投递/分析归属（失败降级，不阻断创建）。"""
+    from app.tools import db_job_entity
+
+    try:
+        job_id = db_job_entity.find_or_create_job(
+            user_id=data.get("user_id", 1),
+            position=data.get("position") or "",
+            company=data.get("company"),
+            job_analysis_id=data.get("job_analysis_id"),
+            submission_id=submission_id,
+        )
+        if job_id and status_value:
+            from app.tools.db_conn import execute
+
+            execute("UPDATE job SET status=%s WHERE id=%s", (status_value, job_id))
+        return job_id
+    except Exception as e:
+        logger.warning("Job 实体归属失败（submission_id=%s）: %s", submission_id, e)
+        return None
 
 
 def get_submission(
     submission_id: int, user_id: Optional[int] = None
 ) -> Optional[Dict[str, Any]]:
     _ensure_resume_submission_table()
-    sql = "SELECT * FROM resume_submission WHERE id=%s AND is_active=1"
+    # P4-4a：LEFT JOIN job 取岗位 id（旧库无 job 表时降级为原查询）
+    sql = (
+        "SELECT s.*, j.id AS job_id FROM resume_submission s "
+        "LEFT JOIN job j ON j.submission_id = s.id AND j.is_active = 1 "
+        "WHERE s.id=%s AND s.is_active=1"
+    )
     params: List[Any] = [submission_id]
     if user_id is not None:
-        sql += " AND user_id=%s"
+        sql += " AND s.user_id=%s"
         params.append(user_id)
-    row = query_one(sql, tuple(params))
+    try:
+        row = query_one(sql, tuple(params))
+    except Exception as e:
+        logger.warning(
+            "岗位关联读取失败（submission_id=%s，回落无 job_id）: %s", submission_id, e
+        )
+        fallback = "SELECT * FROM resume_submission WHERE id=%s AND is_active=1"
+        fallback_params: List[Any] = [submission_id]
+        if user_id is not None:
+            fallback += " AND user_id=%s"
+            fallback_params.append(user_id)
+        row = query_one(fallback, tuple(fallback_params))
     if not row:
         return None
     return {
@@ -150,6 +193,8 @@ def get_submission(
         "resume_file_path": row["resume_file_path"],
         "card_version_ids": _parse_json(row["card_version_ids"]) or [],
         "status": effective_status(row["status"], bool(row.get("delivered"))),
+        # P4-4a：岗位实体 id（前端创建岗位后缓存用）
+        "job_id": row.get("job_id"),
         "notes": row["notes"] or "",
         "is_manual": bool(row.get("is_manual")),
         "delivered": bool(row.get("delivered")),
@@ -267,7 +312,44 @@ def update_submission(
     if user_id is not None:
         sql += " AND user_id=%s"
         values.append(user_id)
-    return execute(sql, tuple(values)) > 0
+    updated = execute(sql, tuple(values)) > 0
+    if updated:
+        # P4-4a：状态/投递标记变更同步到 Job 实体（岗位聚合根状态不落后于投递记录）
+        _sync_job_entity(submission_id, updates)
+    return updated
+
+
+def _sync_job_entity(submission_id: int, updates: Dict[str, Any]) -> Optional[int]:
+    """把投递状态与分析归属同步到 Job 实体（失败降级，不阻断更新）。"""
+    from app.tools import db_job_entity
+
+    status = updates.get("status")
+    delivered = updates.get("delivered")
+    job_analysis_id = updates.get("job_analysis_id")
+    if status is None and delivered is None and job_analysis_id is None:
+        return None
+    status_value: Optional[str] = None
+    if status is not None:
+        normalized = normalize_status(status)
+        status_value = normalized.value if normalized else str(status)
+    elif delivered is not None:
+        # 仅确认投递标记时，按存量状态 + delivered 推导岗位状态（P11-a 语义）
+        row = query_one(
+            "SELECT status FROM resume_submission WHERE id=%s", (submission_id,)
+        )
+        if row and row.get("status"):
+            current = normalize_status(row["status"])
+            current_value = current.value if current else str(row["status"])
+            status_value = effective_status(current_value, bool(delivered))
+    try:
+        return db_job_entity.sync_submission_job(
+            submission_id,
+            status=status_value,
+            job_analysis_id=job_analysis_id,
+        )
+    except Exception as e:
+        logger.warning("Job 实体状态同步失败（submission_id=%s）: %s", submission_id, e)
+        return None
 
 
 def delete_submission(submission_id: int, user_id: Optional[int] = None) -> bool:
@@ -367,6 +449,8 @@ def get_dashboard(user_id: int = 1) -> List[Dict[str, Any]]:
                 "company": full["company"],
                 "status": full["status"],
                 "job_analysis_id": ja_id,
+                # P4-4a：岗位实体 id（前端缓存 jobId）
+                "job_id": full.get("job_id"),
                 "has_analysis": ja_id is not None,
                 "card_version_count": cv_count,
                 "card_count": card_count,

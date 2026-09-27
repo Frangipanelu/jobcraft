@@ -445,6 +445,8 @@ export interface Submission {
   id: number
   user_id: number
   job_analysis_id: number | null
+  /** P4-4a：岗位实体 id（Job 聚合根），创建岗位后用于缓存与后续归属 */
+  job_id?: number | null
   position: string
   company: string
   jd_text: string
@@ -464,6 +466,8 @@ export interface DashboardItem {
   company: string
   status: SubmissionStatus
   job_analysis_id: number | null
+  /** P4-4a：岗位实体 id */
+  job_id?: number | null
   has_analysis: boolean
   card_version_count: number
   card_count: number

@@ -35,6 +35,8 @@ def _ensure_job_analysis_columns() -> None:
         ("per_card_scores", "JSON"),
         ("match_level", "VARCHAR(32)"),
         ("analysis_version", "VARCHAR(32)"),
+        # P4-4a：分析记录归属岗位（V0013 加列，runtime 兜底同步）
+        ("job_id", "INT"),
     )
     with connection() as conn:
         with conn.cursor() as cur:
@@ -53,9 +55,12 @@ def insert_job_analysis(data: Dict[str, Any]) -> int:
     P4-1：ats_profile / suggestions / per_card_scores / match_level /
     analysis_version 五列随插入落库，使历史列表（list_job_analyses）与
     单条读取（get_job_analysis）都能还原完整分析物。
+
+    P4-4a：插入后按 (user_id, company, position) find-or-create Job 实体并回填
+    ``job_analysis.job_id``；岗位归属失败不阻断分析落库（降级告警）。
     """
     _ensure_job_analysis_columns()
-    return execute_lastrowid(
+    analysis_id = execute_lastrowid(
         """
         INSERT INTO job_analysis
             (user_id, company, position, jd_text,
@@ -81,6 +86,29 @@ def insert_job_analysis(data: Dict[str, Any]) -> int:
             data.get("analysis_version"),
         ),
     )
+    _attach_job_entity(data, analysis_id)
+    return analysis_id
+
+
+def _attach_job_entity(data: Dict[str, Any], analysis_id: int) -> Optional[int]:
+    """P4-4a：把分析记录挂到 Job 实体（find-or-create + 回填 job_id）。"""
+    from app.tools import db_job_entity
+
+    try:
+        job_id = db_job_entity.find_or_create_job(
+            user_id=data.get("user_id", 1),
+            position=data.get("position") or "",
+            company=data.get("company"),
+            job_analysis_id=analysis_id,
+            submission_id=data.get("submission_id"),
+            raw_jd_id=data.get("raw_jd_id"),
+        )
+        if job_id:
+            db_job_entity.set_job_analysis_job_id(analysis_id, job_id)
+        return job_id
+    except Exception as e:
+        logger.warning("Job 实体归属失败（analysis_id=%s）: %s", analysis_id, e)
+        return None
 
 
 def get_job_analysis(
@@ -118,6 +146,8 @@ def _job_analysis_to_dict(row: Dict[str, Any]) -> Dict[str, Any]:
         else None,
         "match_level": row.get("match_level"),
         "analysis_version": row.get("analysis_version"),
+        # P4-4a：分析记录归属岗位（V0013 新增列）
+        "job_id": row.get("job_id"),
         "ats_profile": _parse_json(row.get("ats_profile")) or {},
         "suggestions": _parse_json(row.get("suggestions")) or [],
         "per_card_scores": _parse_json(row.get("per_card_scores")) or [],
@@ -135,7 +165,7 @@ def list_job_analyses(user_id: int, limit: int = 20) -> List[Dict[str, Any]]:
     _ensure_job_analysis_columns()
     rows = query_all(
         "SELECT id, user_id, company, position, jd_text, jd_requirements, "
-        "match_score, match_level, analysis_version, "
+        "match_score, match_level, analysis_version, job_id, "
         "ats_profile, suggestions, per_card_scores, "
         "gap_analysis, dimension_requirements, created_at "
         "FROM job_analysis WHERE user_id=%s AND is_active=1 "

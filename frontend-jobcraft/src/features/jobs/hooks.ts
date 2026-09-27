@@ -67,6 +67,8 @@ export function useCreateJobMutation() {
         });
         newJob.id = 'job-' + sub.id;
         newJob.backendId = sub.id;
+        // P4-4a：缓存岗位实体 id（后续分析/投递归属同一岗位）
+        if (sub.job_id != null) newJob.jobId = sub.job_id;
       } catch {
         // 后端不可用时仅保留本地状态
       }

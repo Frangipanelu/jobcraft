@@ -880,6 +880,7 @@ class TestDbJob:
         with (
             patch("app.tools.db_job._ensure_job_analysis_columns"),
             patch("app.tools.db_job.execute_lastrowid", return_value=5) as mock_insert,
+            patch("app.tools.db_job._attach_job_entity", return_value=None),
         ):
             job_id = insert_job_analysis(
                 {
@@ -909,6 +910,32 @@ class TestDbJob:
         assert json.loads(params[10]) == [{"card_id": 1, "score": 85}]
         assert params[11] == "值得投递"
         assert params[12] == "v1"
+
+    def test_insert_job_analysis_attaches_job_entity(self):
+        """P4-4a：insert 后 find-or-create Job 并回填 job_analysis.job_id。"""
+        from app.tools.db_job import insert_job_analysis
+
+        with (
+            patch("app.tools.db_job._ensure_job_analysis_columns"),
+            patch("app.tools.db_job.execute_lastrowid", return_value=5),
+            patch("app.tools.db_job._attach_job_entity", return_value=9) as mock_attach,
+        ):
+            assert (
+                insert_job_analysis(
+                    {"user_id": 1, "company": "Co", "position": "Eng", "jd_text": "JD"}
+                )
+                == 5
+            )
+        mock_attach.assert_called_once()
+
+    def test_attach_job_entity_degrades_on_error(self):
+        """P4-4a：岗位归属异常不阻断分析落库（返回 None）。"""
+        from app.tools.db_job import _attach_job_entity
+
+        with patch(
+            "app.tools.db_job_entity.find_or_create_job", side_effect=Exception("无表")
+        ):
+            assert _attach_job_entity({"user_id": 1, "position": "Eng"}, 5) is None
 
 
 # ============================================================
@@ -1009,8 +1036,56 @@ class TestDbSubmission:
 
         with patch("app.tools.db_conn.connect", return_value=mock_conn):
             assert update_submission(1, {"jd_text": "改写后的 JD"}) is False
-        sqls = [c[0].strip().upper() for c in mock_conn.cursor_obj.executed]
-        assert not any(s.startswith("UPDATE RESUME_SUBMISSION") for s in sqls)
+        executed = [c[0][0].strip().upper() for c in mock_cursor.execute.call_args_list]
+        assert executed, "应至少执行一次 schema 检查"
+        assert not any(s.startswith("UPDATE RESUME_SUBMISSION") for s in executed)
+
+    def test_update_submission_syncs_job_status(self):
+        """P4-4a：状态更新成功后同步 Job 实体状态（CLOSED → PREPARED）。"""
+        from app.tools.db_submission import update_submission
+
+        with (
+            patch("app.tools.db_submission._ensure_resume_submission_table"),
+            patch("app.tools.db_submission.execute", return_value=1),
+            patch(
+                "app.tools.db_submission._sync_job_entity", return_value=12
+            ) as mock_sync,
+        ):
+            assert update_submission(1, {"status": "PREPARED"}) is True
+        mock_sync.assert_called_once_with(1, {"status": "PREPARED"})
+
+    def test_sync_job_entity_derives_status_from_delivered_only(self):
+        """P4-4a：仅翻转 delivered 时按存量状态推导岗位状态（P11-a 语义）。"""
+        from app.tools.db_submission import _sync_job_entity
+
+        with (
+            patch(
+                "app.tools.db_submission.query_one",
+                return_value={"status": "APPLIED"},
+            ),
+            patch(
+                "app.tools.db_job_entity.sync_submission_job", return_value=12
+            ) as mock_sync,
+        ):
+            assert _sync_job_entity(1, {"delivered": 1}) == 12
+        mock_sync.assert_called_once_with(1, status="APPLIED", job_analysis_id=None)
+
+    def test_sync_job_entity_ignores_unrelated_updates(self):
+        """P4-4a：notes 等无关字段不触发岗位同步。"""
+        from app.tools.db_submission import _sync_job_entity
+
+        with patch("app.tools.db_job_entity.sync_submission_job") as mock_sync:
+            assert _sync_job_entity(1, {"notes": "备注"}) is None
+        mock_sync.assert_not_called()
+
+    def test_sync_job_entity_degrades_on_error(self):
+        """P4-4a：岗位同步异常不阻断投递记录更新。"""
+        from app.tools.db_submission import _sync_job_entity
+
+        with patch(
+            "app.tools.db_job_entity.sync_submission_job", side_effect=Exception("无表")
+        ):
+            assert _sync_job_entity(1, {"status": "APPLIED"}) is None
 
     def test_get_submission_projects_legacy_applied_to_prepared(self):
         """P11-a：存量 `APPLIED + delivered=0` 读取时投影为「待投递」。"""
@@ -1052,10 +1127,89 @@ class TestDbSubmission:
             patch(
                 "app.tools.db_submission.execute_lastrowid", return_value=1
             ) as mock_insert,
+            patch(
+                "app.tools.db_submission._attach_job_entity", return_value=3
+            ) as mock_attach,
         ):
             insert_submission({"position": "PM"})
         params = mock_insert.call_args[0][1]
         assert params[8] == "PREPARED"
+        # P4-4a：创建后 find-or-create 岗位并挂上投递记录
+        mock_attach.assert_called_once()
+
+    def test_get_submission_returns_job_id(self):
+        """P4-4a：单条读取暴露岗位实体 id（LEFT JOIN job）。"""
+        from app.tools.db_submission import get_submission
+
+        mock_cursor = MagicMock()
+        mock_cursor.fetchone.return_value = {
+            "id": 1,
+            "user_id": 1,
+            "job_analysis_id": 7,
+            "position": "PM",
+            "company": "X",
+            "jd_text": "",
+            "resume_markdown": "",
+            "resume_file_path": None,
+            "card_version_ids": "[]",
+            "status": "PREPARED",
+            "job_id": 12,
+            "notes": "",
+            "is_manual": 0,
+            "delivered": 0,
+            "created_at": SimpleNamespace(isoformat=lambda: "2024-01-01"),
+            "updated_at": SimpleNamespace(isoformat=lambda: "2024-01-02"),
+        }
+        mock_cursor.fetchall.return_value = []
+        mock_conn = _make_mock_conn(mock_cursor)
+
+        with patch("app.tools.db_conn.connect", return_value=mock_conn):
+            result = get_submission(1)
+        assert result is not None
+        assert result["job_id"] == 12
+        executed = [c[0][0] for c in mock_cursor.execute.call_args_list]
+        assert any("LEFT JOIN job" in sql for sql in executed)
+
+    def test_get_submission_falls_back_when_job_table_missing(self):
+        """P4-4a：旧库无 job 表时 JOIN 失败回落原查询，不阻断读取。"""
+        from app.tools.db_submission import get_submission
+
+        row = {
+            "id": 1,
+            "user_id": 1,
+            "job_analysis_id": None,
+            "position": "PM",
+            "company": "X",
+            "jd_text": "",
+            "resume_markdown": "",
+            "resume_file_path": None,
+            "card_version_ids": "[]",
+            "status": "PREPARED",
+            "notes": "",
+            "is_manual": 0,
+            "delivered": 0,
+            "created_at": SimpleNamespace(isoformat=lambda: "2024-01-01"),
+            "updated_at": SimpleNamespace(isoformat=lambda: "2024-01-02"),
+        }
+        calls: list = []
+
+        def fake_query_one(sql, params):
+            calls.append(sql)
+            if "LEFT JOIN job" in sql:
+                raise Exception("Table 'job' doesn't exist")
+            return row
+
+        mock_cursor = MagicMock()
+        mock_cursor.fetchall.return_value = []
+        mock_conn = _make_mock_conn(mock_cursor)
+        with (
+            patch("app.tools.db_conn.connect", return_value=mock_conn),
+            patch("app.tools.db_submission.query_one", side_effect=fake_query_one),
+        ):
+            result = get_submission(1)
+        assert result is not None
+        assert result["job_id"] is None
+        assert len(calls) == 2
 
 
 # ============================================================
@@ -1367,3 +1521,192 @@ class TestDbRawJd:
         sql, params = mock_query.call_args[0]
         assert "AND job_analysis_id=%s" in sql
         assert params == (1, 7)
+
+
+# ============================================================
+# 11. db_job_entity.py — Job 实体（岗位聚合根，P4-4a）
+# ============================================================
+
+
+class TestDbJobEntity:
+    def test_find_or_create_skips_empty_position(self):
+        """P4-4a：岗位名为空不落库（无法定位岗位）。"""
+        from app.tools import db_job_entity
+
+        with (
+            patch("app.tools.db_job_entity._ensure_job_table"),
+            patch("app.tools.db_job_entity.execute_lastrowid") as mock_insert,
+        ):
+            assert db_job_entity.find_or_create_job(1, "  ", "字节") is None
+        mock_insert.assert_not_called()
+
+    def test_find_or_create_reuses_existing_job(self):
+        """P4-4a：同 (user, company, position) 复用岗位并回填关联。"""
+        from app.tools import db_job_entity
+
+        with (
+            patch("app.tools.db_job_entity._ensure_job_table"),
+            patch(
+                "app.tools.db_job_entity.query_one", return_value={"id": 12}
+            ) as mock_query,
+            patch("app.tools.db_job_entity.link_job") as mock_link,
+        ):
+            job_id = db_job_entity.find_or_create_job(
+                1, " 后端 ", " 字节 ", job_analysis_id=7, submission_id=3
+            )
+        assert job_id == 12
+        assert mock_query.call_args[0][1] == (1, "字节", "后端")
+        mock_link.assert_called_once_with(
+            12, job_analysis_id=7, submission_id=3, raw_jd_id=None
+        )
+
+    def test_find_or_create_creates_with_associations(self):
+        """P4-4a：岗位不存在则创建并带上分析/投递/快照关联。"""
+        from app.tools import db_job_entity
+
+        with (
+            patch("app.tools.db_job_entity._ensure_job_table"),
+            patch("app.tools.db_job_entity.query_one", return_value=None),
+            patch(
+                "app.tools.db_job_entity.execute_lastrowid", return_value=21
+            ) as mock_insert,
+        ):
+            job_id = db_job_entity.find_or_create_job(
+                1, "后端", "字节", job_analysis_id=7, submission_id=3, raw_jd_id=2
+            )
+        assert job_id == 21
+        sql, params = mock_insert.call_args[0]
+        assert "INSERT INTO job" in sql
+        assert params == (1, "字节", "后端", 7, 3, 2)
+
+    def test_find_or_create_skips_backfill_when_no_associations(self):
+        """P4-4a：复用既有岗位且无关联信息时不发 UPDATE。"""
+        from app.tools import db_job_entity
+
+        with (
+            patch("app.tools.db_job_entity._ensure_job_table"),
+            patch("app.tools.db_job_entity.query_one", return_value={"id": 5}),
+            patch("app.tools.db_job_entity.link_job") as mock_link,
+        ):
+            assert db_job_entity.find_or_create_job(1, "后端", "字节") == 5
+        mock_link.assert_not_called()
+
+    def test_link_job_only_sets_provided_fields(self):
+        from app.tools import db_job_entity
+
+        with (
+            patch("app.tools.db_job_entity._ensure_job_table"),
+            patch("app.tools.db_job_entity.execute", return_value=1) as mock_exec,
+        ):
+            assert db_job_entity.link_job(5, submission_id=9) is True
+        sql, params = mock_exec.call_args[0]
+        assert "submission_id=%s" in sql
+        assert "job_analysis_id" not in sql
+        assert params == (9, 5)
+
+    def test_link_job_without_fields_returns_false(self):
+        from app.tools import db_job_entity
+
+        with patch("app.tools.db_job_entity._ensure_job_table"):
+            assert db_job_entity.link_job(5) is False
+
+    def test_link_raw_jd_by_analysis(self):
+        """P4-4a：按分析记录回链 RawJD 快照（不需先查岗位 id）。"""
+        from app.tools import db_job_entity
+
+        with (
+            patch("app.tools.db_job_entity._ensure_job_table"),
+            patch("app.tools.db_job_entity.execute", return_value=1) as mock_exec,
+        ):
+            assert db_job_entity.link_raw_jd_by_analysis(7, 2) is True
+        sql, params = mock_exec.call_args[0]
+        assert "raw_jd_id=%s" in sql
+        assert "job_analysis_id=%s" in sql
+        assert params == (2, 7)
+
+    def test_sync_submission_job_updates_status(self):
+        """P4-4a：投递状态变更后同步 Job 状态与分析归属。"""
+        from app.tools import db_job_entity
+
+        with (
+            patch("app.tools.db_job_entity._ensure_job_table"),
+            patch(
+                "app.tools.db_job_entity.query_one", return_value={"id": 12}
+            ) as mock_query,
+            patch("app.tools.db_job_entity.link_job") as mock_link,
+            patch("app.tools.db_job_entity.execute", return_value=1) as mock_exec,
+        ):
+            assert (
+                db_job_entity.sync_submission_job(
+                    3, status="APPLIED", job_analysis_id=7
+                )
+                == 12
+            )
+        assert mock_query.call_args[0][1] == (3,)
+        mock_link.assert_called_once_with(12, job_analysis_id=7)
+        sql, params = mock_exec.call_args[0]
+        assert "status=%s" in sql
+        assert params == ("APPLIED", 12)
+
+    def test_sync_submission_job_noop_without_fields(self):
+        from app.tools import db_job_entity
+
+        with patch("app.tools.db_job_entity._ensure_job_table"):
+            assert db_job_entity.sync_submission_job(3) is None
+
+    def test_sync_submission_job_missing_job_returns_none(self):
+        """P4-4a：投递记录尚未建岗时不报错（返回 None）。"""
+        from app.tools import db_job_entity
+
+        with (
+            patch("app.tools.db_job_entity._ensure_job_table"),
+            patch("app.tools.db_job_entity.query_one", return_value=None),
+        ):
+            assert db_job_entity.sync_submission_job(3, status="APPLIED") is None
+
+    def test_set_job_analysis_job_id_degrades_on_error(self):
+        """P4-4a：旧库无 job_id 列时不抛错（降级 False）。"""
+        from app.tools import db_job_entity
+
+        with patch(
+            "app.tools.db_job_entity.execute", side_effect=Exception("列不存在")
+        ):
+            assert db_job_entity.set_job_analysis_job_id(7, 5) is False
+
+    def test_get_job_by_submission(self):
+        from app.tools import db_job_entity
+
+        row = {
+            "id": 12,
+            "user_id": 1,
+            "company": "字节",
+            "position": "后端",
+            "raw_jd_id": 2,
+            "job_analysis_id": 7,
+            "submission_id": 3,
+            "status": "PREPARED",
+            "is_active": 1,
+            "created_at": SimpleNamespace(isoformat=lambda: "2024-01-01"),
+            "updated_at": SimpleNamespace(isoformat=lambda: "2024-01-02"),
+        }
+        with (
+            patch("app.tools.db_job_entity._ensure_job_table"),
+            patch("app.tools.db_job_entity.query_one", return_value=row),
+        ):
+            result = db_job_entity.get_job_by_submission(3, user_id=1)
+        assert result is not None
+        assert result["id"] == 12
+        assert result["submission_id"] == 3
+        assert result["is_active"] is True
+
+    def test_list_jobs_filters_owner_and_active(self):
+        from app.tools import db_job_entity
+
+        with (
+            patch("app.tools.db_job_entity._ensure_job_table"),
+            patch("app.tools.db_job_entity.query_all", return_value=[]) as mock_query,
+        ):
+            assert db_job_entity.list_jobs(1) == []
+        sql, params = mock_query.call_args[0]
+        assert "user_id=%s AND is_active=1" in sql
+        assert params == (1,)

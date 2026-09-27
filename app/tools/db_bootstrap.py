@@ -30,6 +30,7 @@ _BOOTSTRAP_STEPS: Tuple[Tuple[str, str], ...] = (
     ("app.tools.db_experience", "_ensure_card_versions_table"),
     ("app.tools.db_job", "_ensure_job_analysis_columns"),
     ("app.tools.db_raw_jd", "_ensure_raw_jd_table"),
+    ("app.tools.db_job_entity", "_ensure_job_table"),
     ("app.tools.db_submission", "_ensure_resume_submission_table"),
     ("app.tools.db_interview", "_ensure_interview_preps_table"),
     ("app.tools.db_interview", "_ensure_interview_records_table"),

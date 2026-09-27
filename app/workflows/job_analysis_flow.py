@@ -20,7 +20,7 @@ from app.schemas.jobcraft import (
     StructuredRequirementItem,
     SuggestionsResult,
 )
-from app.tools import db_raw_jd, db_tools, jobcraft_analyze
+from app.tools import db_job_entity, db_raw_jd, db_tools, jobcraft_analyze
 
 logger = logging.getLogger(__name__)
 
@@ -156,7 +156,7 @@ def _run_legacy_collate(state: Dict[str, Any]) -> Dict[str, Any]:
     # job_analysis.jd_text 仅作展示副本，后续不再被覆写。
     # 快照写入失败不阻断分析（辅助链路，降级告警）。
     try:
-        db_raw_jd.insert_raw_jd(
+        raw_jd_id = db_raw_jd.insert_raw_jd(
             jd_text=jd_text,
             user_id=state["user_id"],
             job_analysis_id=job_id,
@@ -164,6 +164,13 @@ def _run_legacy_collate(state: Dict[str, Any]) -> Dict[str, Any]:
         )
     except Exception as e:
         logger.warning("RawJD 快照写入失败（分析已落库，快照缺失）: %s", e)
+        raw_jd_id = None
+    # P4-4a：快照 id 回链 Job 实体，使岗位直接持有权威原文（失败仅告警）
+    if raw_jd_id:
+        try:
+            db_job_entity.link_raw_jd_by_analysis(job_id, raw_jd_id)
+        except Exception as e:
+            logger.warning("RawJD 快照回链岗位失败（analysis_id=%s）: %s", job_id, e)
 
     for c in cards:
         db_tools.upsert_job_mapping(job_id, c["id"])
