@@ -1233,7 +1233,15 @@
   - **ADR-A2 Base URL→`/api/jobcraft` 追认**：API_SPEC §1.1 旧值 `/api/v1` 作废（历史上从未存在），全部端点以 `/api/jobcraft/**` 为准。
   - **ADR-A3 UI 栈→Tailwind CSS 4 + lucide 追认**：AGENTS.md §3.2「纯原生 Ant Design」红线替换为「无第三方 UI 框架」（零 antd import）；ARCHITECTURE.md 两处 AntD 引用同步更正。
   - **ADR-A4 SourceRef→DATA_MODEL §3.2**：EXPERIENCE_SPEC §7 已加作废注（P2C-06 配套，12 值 `source_type` 联合/snake_case wire）。
-- [ ] 后续：批次 B（P0-6 JD↔Submission 关联持久化）→ 批次 C（V0010 收 runtime DDL + 撤 MODIFY）→ 批次 D（错误码/幂等键/cursor 分页）→ 批次 E（langgraph Checkpointer）。
+- [ ] 后续：批次 B（P0-6 JD↔Submission 关联持久化）→ 批次 D（错误码/幂等键/cursor 分页）→ 批次 E（langgraph Checkpointer）。
+- [x] **批次 C1/C2：收编 runtime DDL + 撤 MODIFY（2026-09-25）`3b8a7e0`**：
+  - **C1** 新建 `migrations/versions/V0010__consolidate_runtime_ddl.sql`：收编唯一迁移缺口（历史 docker `experience_card` 缺 `raw_text`/`ai_structured`，V0001 为 CREATE IF NOT EXISTS 不补旧表列），采用 information_schema + PREPARE/EXECUTE 幂等模式（DB-02）。其余 runtime 补列（V0008/V0006/V0007/V0001）已覆盖无需重复。
+  - **C2** `db_experience.py` 移除 `MODIFY COLUMN source`（ENUM→VARCHAR）。AGENTS §4.4 只加列/表禁止类型修改；V0001/V0008/V0010 已固化。runtime `_ensure_*` 保留为未迁移库降级兜底（仅 ADD COLUMN）。
+  - 新增 3 防漂移单测：V0010 幂等格式（无 MODIFY/DROP 语句）、runtime 无 MODIFY、V0010 入库。**697 passed/12 skipped**（原 694 +3）。
+- [x] **P2D：P2 三待定定案（2026-09-25，纯决策，本地文档）**：
+  - **U-P2a = 等 P6 建 `resume_version_id`**：本期不加 `submission_id`，避免 ID 双轨；P6 前 `job_id` 保持"未启用归属"占位语义（P2D-01 延续）。
+  - **U-P2b = 消费结果旁加「存为表达」显式按钮**（非自动落库、非纯编辑）：简历保存/面试准备消费结果 → `POST /expressions` 落 candidate → 用户 activate；表达库只收用户显式确认内容（§9 严格化）。
+  - **U-P2c = job_specific 生产入口随 P4（Job 实体）闭合**：本期不开发按岗位定制表达入口。
 - [x] **P2–P11 功能线梳理（2026-09-25，纯文档）**：按用户指定顺序整条梳理落盘 `docs/functional-review-p2-p11-2026-09-25.md`（docs/ 本地，不入库）。要点：
   - **P2（唯一契约闭环域）**：19 项字段/wire 已对齐；剩余待定 U-P2a（expression 补 submission_id vs 等 P6 ResumeVersion）、U-P2b（消费是否自动落表达行，倾向不自动）、U-P2c（job_specific 生产入口挂 P4）。缺口：resumeVersionId 缺列、strategyId 缺、direction/job_specific 无生产链路、validation_level 恒 0。
   - **P3**：V0009 使 09-23 审计部分过期 →「表+最小只读，逻辑层零实现」；六维分类/Knowledge/API/前端全缺。
