@@ -376,6 +376,10 @@ class TestJobAnalysisFlow:
             fake_compute_match,
         )
 
+        monkeypatch.setattr(
+            "app.workflows.job_analysis_flow.ScoreMatchAgent.run", fake_sm_run
+        )
+
         def fake_sug_run(self, data):
             return {
                 "suggestions": {
@@ -473,6 +477,10 @@ class TestJobAnalysisFlow:
             }
 
         monkeypatch.setattr(
+            "app.workflows.job_analysis_flow.ScoreMatchAgent.run",
+            lambda self, data: {"llm_match_items": {}},
+        )
+        monkeypatch.setattr(
             "app.workflows.job_analysis_flow.SugAgent.run", fake_sug_run
         )
 
@@ -562,6 +570,10 @@ class TestJobAnalysisFlow:
             },
         )
         monkeypatch.setattr(
+            "app.workflows.job_analysis_flow.ScoreMatchAgent.run",
+            lambda self, data: {"llm_match_items": {}},
+        )
+        monkeypatch.setattr(
             "app.workflows.job_analysis_flow.SugAgent.run",
             lambda self, data: {
                 "suggestions": {
@@ -582,7 +594,14 @@ class TestJobAnalysisFlow:
         snapshots: list = []
         monkeypatch.setattr(
             "app.workflows.job_analysis_flow.db_raw_jd.insert_raw_jd",
-            lambda **kwargs: snapshots.append(kwargs) or 1,
+            lambda **kwargs: snapshots.append(kwargs) or 5,
+        )
+        relinked: list = []
+        monkeypatch.setattr(
+            "app.workflows.job_analysis_flow.db_job_entity.link_raw_jd_by_analysis",
+            lambda analysis_id, raw_jd_id: (
+                relinked.append((analysis_id, raw_jd_id)) or True
+            ),
         )
 
         run_job_analysis_workflow(
@@ -601,6 +620,96 @@ class TestJobAnalysisFlow:
                 "source": "job_analysis",
             }
         ]
+        # P4-4a：快照 id 回链 Job 实体（岗位直接持有权威原文）
+        assert relinked == [(77, 5)]
+
+    def test_legacy_workflow_survives_raw_jd_link_failure(self, monkeypatch):
+        """P4-4a：RawJD 回链失败不阻断分析（仅告警，raw_jd_id 仍为空链路）。"""
+        from app.schemas.jobcraft import PerCardScore
+        from app.workflows.job_analysis_flow import run_job_analysis_workflow
+
+        monkeypatch.setattr(
+            "app.workflows.job_analysis_flow.db_tools.get_card",
+            lambda cid, user_id=None: {
+                "id": cid,
+                "title": f"卡{cid}",
+                "raw_text": "负责后端开发",
+                "is_active": True,
+            },
+        )
+        monkeypatch.setattr(
+            "app.workflows.job_analysis_flow.JdAtsAgent.run",
+            lambda self, data: {
+                "ats": {
+                    "job_title": "后端",
+                    "ats_keywords": {"hard_skills": ["Go"], "soft_skills": []},
+                    "core_requirements": [],
+                    "dimension_requirements": [],
+                },
+                "requirements": {"requirements": [], "categories": {}},
+            },
+        )
+        monkeypatch.setattr(
+            "app.workflows.job_analysis_flow.jobcraft_analyze.compute_match",
+            lambda *args, **kwargs: {
+                "overall": 85,
+                "per_card": [
+                    PerCardScore(
+                        card_id=1,
+                        score=85,
+                        local_score=85,
+                        llm_score=85,
+                        matched=["Go"],
+                        missing=[],
+                    )
+                ],
+                "gap": {"missing": []},
+            },
+        )
+        monkeypatch.setattr(
+            "app.workflows.job_analysis_flow.ScoreMatchAgent.run",
+            lambda self, data: {"llm_match_items": {}},
+        )
+        monkeypatch.setattr(
+            "app.workflows.job_analysis_flow.SugAgent.run",
+            lambda self, data: {
+                "suggestions": {
+                    "gap_analysis": "无明显缺口",
+                    "gap_items": [],
+                    "suggestions": [],
+                }
+            },
+        )
+        monkeypatch.setattr(
+            "app.workflows.job_analysis_flow.db_tools.insert_job_analysis",
+            lambda data: 77,
+        )
+        monkeypatch.setattr(
+            "app.workflows.job_analysis_flow.db_tools.upsert_job_mapping",
+            lambda jid, cid: None,
+        )
+        monkeypatch.setattr(
+            "app.workflows.job_analysis_flow.db_raw_jd.insert_raw_jd",
+            lambda **kwargs: 5,
+        )
+
+        def boom(analysis_id, raw_jd_id):
+            raise Exception("job 表未迁移")
+
+        monkeypatch.setattr(
+            "app.workflows.job_analysis_flow.db_job_entity.link_raw_jd_by_analysis",
+            boom,
+        )
+
+        result = run_job_analysis_workflow(
+            user_id=1,
+            company="字节",
+            position="后端",
+            jd_text="负责后端开发",
+            card_ids=[1],
+        )
+
+        assert result["job_analysis_id"] == 77
 
     def test_legacy_workflow_no_cards(self, monkeypatch):
         """旧版分析：所有卡片不可用"""
