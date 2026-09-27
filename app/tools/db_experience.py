@@ -55,13 +55,8 @@ def _ensure_experience_card_columns() -> None:
                     cur.execute(
                         "ALTER TABLE experience_card ADD COLUMN %s %s" % (col, dtype)
                     )
-            # 修复 source 列类型（旧库是 ENUM，新代码需要 VARCHAR）
-            cur.execute("SHOW COLUMNS FROM experience_card LIKE 'source'")
-            col_info = cur.fetchone()
-            if col_info and col_info[1].startswith("enum("):
-                cur.execute(
-                    "ALTER TABLE experience_card MODIFY COLUMN source VARCHAR(50) DEFAULT 'manual'"
-                )
+            # 批次 C2：移除 source 列 MODIFY（ENUM→VARCHAR）。AGENTS §4.4 只加列/表、
+            # 不改/删列；V0001/V0008/V0010 已固化 source/新列，runtime 不再做类型修改。
 
             # 回填: 已有 content 但 raw_text 为空的卡, 用 content 填充
             cur.execute(

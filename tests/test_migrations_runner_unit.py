@@ -469,3 +469,52 @@ def test_v0009_migrate_is_applied_via_runner(fake_conn):
         if e[0].strip().startswith("INSERT INTO schema_migrations")
     ]
     assert "0009" in inserted
+
+
+def test_v0010_consolidates_runtime_ddl_idempotent():
+    """批次 C1：V0010 应收编历史 docker 库缺列（experience_card raw_text/ai_structured），
+    采用 information_schema + PREPARE/EXECUTE 幂等模式，且不含 MODIFY/DROP。"""
+    v0010 = os.path.join(runner.MIGRATIONS_DIR, "V0010__consolidate_runtime_ddl.sql")
+    assert os.path.exists(v0010)
+    with open(v0010, encoding="utf-8") as fh:
+        sql = fh.read()
+    assert "ALTER TABLE experience_card ADD COLUMN raw_text LONGTEXT" in sql
+    assert "ALTER TABLE experience_card ADD COLUMN ai_structured JSON" in sql
+    assert "information_schema.COLUMNS" in sql
+    assert "PREPARE" in sql and "EXECUTE" in sql
+    # 前向兼容：只加列，禁止 MODIFY/DROP 形式的 DDL 语句（注释提及字样不影响）
+    for stmt in sql.split(";--SPLIT--"):
+        stmt = stmt.strip()
+        assert not stmt.upper().startswith(("MODIFY", "DROP")), (
+            f"V0010 不得含 MODIFY/DROP 语句: {stmt[:50]}"
+        )
+    for stmt in sql.split(";--SPLIT--"):
+        stmt = stmt.strip()
+        assert stmt == "" or not stmt.endswith(";"), (
+            f"V0010 语句块含尾分号: {stmt[:50]}"
+        )
+
+
+def test_runtime_ddl_has_no_modify():
+    """批次 C2：runtime `_ensure_*` 不得再执行 MODIFY（ENUM→VARCHAR）类型修改。"""
+    exp_path = os.path.join(
+        os.path.dirname(runner.__file__),
+        "..",
+        "app",
+        "tools",
+        "db_experience.py",
+    )
+    with open(os.path.normpath(exp_path), encoding="utf-8") as fh:
+        src = fh.read()
+    assert "MODIFY COLUMN" not in src, "runtime 不得包含 MODIFY COLUMN 类型修改"
+
+
+def test_v0010_migrate_is_applied_via_runner(fake_conn):
+    """批次 C1：V0010 与既有迁移共存，runner.migrate() 不抛错且全量入库。"""
+    runner.migrate()
+    inserted = [
+        e[1][0]
+        for e in fake_conn.cursor_obj.executed
+        if e[0].strip().startswith("INSERT INTO schema_migrations")
+    ]
+    assert "0010" in inserted
