@@ -1012,6 +1012,51 @@ class TestDbSubmission:
         sqls = [c[0].strip().upper() for c in mock_conn.cursor_obj.executed]
         assert not any(s.startswith("UPDATE RESUME_SUBMISSION") for s in sqls)
 
+    def test_get_submission_projects_legacy_applied_to_prepared(self):
+        """P11-a：存量 `APPLIED + delivered=0` 读取时投影为「待投递」。"""
+        from app.tools.db_submission import get_submission
+
+        mock_cursor = MagicMock()
+        mock_cursor.fetchone.return_value = {
+            "id": 1,
+            "user_id": 1,
+            "job_analysis_id": None,
+            "position": "PM",
+            "company": "X",
+            "jd_text": "",
+            "resume_markdown": "",
+            "resume_file_path": None,
+            "card_version_ids": "[]",
+            "status": "APPLIED",
+            "notes": "",
+            "is_manual": 0,
+            "delivered": 0,
+            "created_at": SimpleNamespace(isoformat=lambda: "2024-01-01"),
+            "updated_at": SimpleNamespace(isoformat=lambda: "2024-01-02"),
+        }
+        mock_cursor.fetchall.return_value = []
+        mock_conn = _make_mock_conn(mock_cursor)
+
+        with patch("app.tools.db_conn.connect", return_value=mock_conn):
+            result = get_submission(1)
+        assert result is not None
+        assert result["status"] == "PREPARED"
+        assert result["delivered"] is False
+
+    def test_insert_submission_defaults_to_prepared(self):
+        """P11-a：创建投递记录默认「待投递」（创建 ≠ 投递）。"""
+        from app.tools.db_submission import insert_submission
+
+        with (
+            patch("app.tools.db_conn.connect"),
+            patch(
+                "app.tools.db_submission.execute_lastrowid", return_value=1
+            ) as mock_insert,
+        ):
+            insert_submission({"position": "PM"})
+        params = mock_insert.call_args[0][1]
+        assert params[8] == "PREPARED"
+
 
 # ============================================================
 # 9. db_interview.py — mock DB

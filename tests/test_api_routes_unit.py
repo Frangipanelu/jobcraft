@@ -1358,7 +1358,7 @@ class TestSubmissionUpdate:
         )
         monkeypatch.setattr(
             "app.api.submission.db_tools.get_submission",
-            lambda *a: {"id": 1, "status": "APPLIED"},
+            lambda *a: {"id": 1, "status": "APPLIED", "delivered": True},
         )
         resp = client.patch("/api/jobcraft/submission/1", json={"status": "INVITED"})
         assert resp.status_code == 200
@@ -1380,6 +1380,61 @@ class TestSubmissionUpdate:
         )
         assert resp.status_code == 400
         assert "不可变" in resp.json()["error"]["message"]
+        assert called == []
+
+    def test_update_delivered_confirms_applied(self, monkeypatch):
+        """P11-a：用户确认投递（delivered=1）时，状态由待投递推进为已投递。"""
+        captured: list = []
+        monkeypatch.setattr(
+            "app.api.submission.db_tools.update_submission",
+            lambda sid, updates, uid=None: captured.append(dict(updates)) or True,
+        )
+        monkeypatch.setattr(
+            "app.api.submission.db_tools.get_submission",
+            lambda *a: {
+                "id": 1,
+                "status": "PREPARED",
+                "delivered": True,
+            },
+        )
+        resp = client.patch("/api/jobcraft/submission/1", json={"delivered": True})
+        assert resp.status_code == 200
+        assert captured[0]["delivered"] is True
+        assert captured[0]["status"] == "APPLIED"
+
+    def test_update_delivered_false_keeps_prepared(self, monkeypatch):
+        """P11-a：取消投递确认不推进状态（保持待投递）。"""
+        captured: list = []
+        monkeypatch.setattr(
+            "app.api.submission.db_tools.update_submission",
+            lambda sid, updates, uid=None: captured.append(dict(updates)) or True,
+        )
+        monkeypatch.setattr(
+            "app.api.submission.db_tools.get_submission",
+            lambda *a: {"id": 1, "status": "PREPARED", "delivered": False},
+        )
+        resp = client.patch("/api/jobcraft/submission/1", json={"delivered": False})
+        assert resp.status_code == 200
+        assert "status" not in captured[0]
+
+    def test_update_invited_requires_delivered(self, monkeypatch):
+        """P11-a：未确认投递不得推进到面试邀约（面试/offer 隐含已投递）。"""
+        called: list = []
+        monkeypatch.setattr(
+            "app.api.submission.db_tools.update_submission",
+            lambda *a: called.append(a) or True,
+        )
+        monkeypatch.setattr(
+            "app.api.submission.db_tools.get_submission",
+            lambda *a: {
+                "id": 1,
+                "status": "PREPARED",
+                "delivered": False,
+            },
+        )
+        resp = client.patch("/api/jobcraft/submission/1", json={"status": "INVITED"})
+        assert resp.status_code == 400
+        assert "确认已投递" in resp.json()["error"]["message"]
         assert called == []
 
     def test_update_illegal_transition_returns_400(self, monkeypatch):

@@ -414,10 +414,15 @@ export interface InterviewPrepRecord extends InterviewPrepResult {
 
 /**
  * 投递记录状态机（后端英文枚举，中文仅前端显示）
- * 合法流转：APPLIED → INVITED → ROUND_1 → ROUND_2 → OFFER / CLOSED，
+ * 合法流转：PREPARED → APPLIED → INVITED → ROUND_1 → ROUND_2 → OFFER / CLOSED，
  * 任一步骤均可提前 CLOSED。
+ *
+ * P11-a：创建投递记录 ≠ 提交投递，故区分两态：
+ * - PREPARED（待投递）：已创建记录 / 已保存简历，用户尚未确认投递；
+ * - APPLIED（已投递）：必须由用户主动确认投递（delivered=1）才成立。
  */
 export type SubmissionStatus =
+  | 'PREPARED'
   | 'APPLIED'
   | 'INVITED'
   | 'ROUND_1'
@@ -427,6 +432,7 @@ export type SubmissionStatus =
 
 /** 后端状态码 → 中文显示 */
 export const SUBMISSION_STATUS_CN: Record<SubmissionStatus, string> = {
+  PREPARED: '待投递',
   APPLIED: '已投递',
   INVITED: '面试邀约',
   ROUND_1: '一面',

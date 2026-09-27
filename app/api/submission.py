@@ -9,8 +9,10 @@ from pydantic import BaseModel
 from app.api.context import set_session_context, reset_session_context
 from app.auth.dependencies import get_current_user
 from app.schemas.submission_status import (
+    SubmissionStatus,
     is_valid_transition,
     normalize_status,
+    requires_delivered,
     status_to_cn,
 )
 from app.tools import db_tools
@@ -28,7 +30,8 @@ class CreateSubmissionPayload(BaseModel):
     jd_text: str = ""
     resume_markdown: Optional[str] = None
     is_manual: bool = False
-    status: str = "APPLIED"
+    # P11-a：创建 ≠ 投递，默认「待投递」；「已投递」需用户确认（delivered=1）
+    status: str = "PREPARED"
 
 
 class UpdateSubmissionPayload(BaseModel):
@@ -97,6 +100,7 @@ def jobcraft_submission_update(
                 status_code=400,
                 detail="jd_text 为不可变快照，不支持覆写；请新增岗位分析以记录新的 JD 原文",
             )
+        current = None
         if "status" in updates:
             if normalize_status(updates["status"]) is None:
                 raise HTTPException(
@@ -115,6 +119,24 @@ def jobcraft_submission_update(
                             f"→ {status_to_cn(updates['status'])}"
                         ),
                     )
+                # P11-a：面试/offer 类状态隐含「已投递」，未确认投递时不自洽
+                if requires_delivered(updates["status"]) and not current.get(
+                    "delivered"
+                ):
+                    raise HTTPException(
+                        status_code=400,
+                        detail=(
+                            f"{status_to_cn(updates['status'])} 需先确认已投递（delivered=1）"
+                        ),
+                    )
+        if updates.get("delivered") is True and "status" not in updates:
+            # P11-a：用户确认投递 → 状态推进为「已投递」（仅从待投递推进）
+            current = db_tools.get_submission(submission_id, current_user)
+            if (
+                current
+                and normalize_status(current.get("status")) is SubmissionStatus.PREPARED
+            ):
+                updates["status"] = SubmissionStatus.APPLIED.value
         ok = db_tools.update_submission(submission_id, updates, current_user)
         if not ok:
             raise HTTPException(status_code=404, detail="投递记录不存在或无变化")

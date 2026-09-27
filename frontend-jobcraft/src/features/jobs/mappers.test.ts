@@ -7,7 +7,7 @@ function makeItem(overrides: Partial<DashboardItem> = {}): DashboardItem {
     id: 5,
     position: 'AI 产品经理',
     company: '字节跳动',
-    status: 'APPLIED',
+    status: 'PREPARED',
     job_analysis_id: null,
     has_analysis: false,
     card_version_count: 0,
@@ -20,17 +20,17 @@ function makeItem(overrides: Partial<DashboardItem> = {}): DashboardItem {
     created_at: '2026-09-10T10:00:00',
     updated_at: '2026-09-11T08:00:00',
     ...overrides,
-  };
+  }
 }
 
 describe('submissionToJob 映射', () => {
-  it('基础 APPLIED 项 → pending / 已投递 / 相关字段归一', () => {
+  it('基础 PREPARED 项 → pending / 待投递 / 相关字段归一', () => {
     const job = submissionToJob(makeItem());
     expect(job.id).toBe('5');
     expect(job.company).toBe('字节跳动');
     expect(job.role).toBe('AI 产品经理');
     expect(job.status).toBe('pending');
-    expect(job.currentStage).toBe('已投递');
+    expect(job.currentStage).toBe('待投递');
     expect(job.applyDate).toBe('2026-09-10');
     expect(job.lastUpdated).toBe('2026-09-11T08:00:00');
     expect(job.steps).toMatchObject({
@@ -46,9 +46,10 @@ describe('submissionToJob 映射', () => {
   });
 
   it('用户确认已投递（delivered）→ applied=true，状态降为 submitted', () => {
-    const job = submissionToJob(makeItem({ delivered: true }));
+    const job = submissionToJob(makeItem({ delivered: true, status: 'APPLIED' }));
     expect(job.steps.applied).toBe(true);
     expect(job.status).toBe('submitted');
+    expect(job.currentStage).toBe('已投递');
     expect(job.backendId).toBe(5);
   });
 

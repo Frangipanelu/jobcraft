@@ -116,13 +116,14 @@ def generate_resume(
 
         sub = get_submission_by_analysis(job_analysis_id, user_id)
         if sub:
+            # P11-a：保存简历不改变投递状态（不传 status，避免把已确认
+            # 投递的记录退回「待投递」）
             update_submission(
                 sub["id"],
                 {
                     "resume_markdown": md,
                     "resume_file_path": str(md_path),
                     "card_version_ids": selected_card_ids,
-                    "status": "APPLIED",
                 },
             )
             submission_id = sub["id"]
@@ -137,7 +138,8 @@ def generate_resume(
                     "resume_markdown": md,
                     "resume_file_path": str(md_path),
                     "card_version_ids": selected_card_ids,
-                    "status": "APPLIED",
+                    # P11-a：创建 ≠ 投递，默认「待投递」
+                    "status": "PREPARED",
                 }
             )
     except Exception:

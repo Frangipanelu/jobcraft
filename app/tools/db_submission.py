@@ -4,7 +4,7 @@ import json
 import logging
 from typing import Any, Dict, List, Optional
 
-from app.schemas.submission_status import normalize_status
+from app.schemas.submission_status import effective_status, normalize_status
 from app.tools.db_conn import (
     connection,
     execute,
@@ -45,7 +45,7 @@ def _ensure_resume_submission_table() -> None:
                     resume_markdown  LONGTEXT,
                     resume_file_path VARCHAR(500),
                     card_version_ids JSON,
-                    status           VARCHAR(32) DEFAULT 'APPLIED',
+                    status           VARCHAR(32) DEFAULT 'PREPARED',
                     notes            TEXT,
                     is_manual        TINYINT(1) DEFAULT 0,
                     delivered        TINYINT(1) DEFAULT 0,
@@ -93,11 +93,16 @@ def _ensure_interview_submission_columns() -> None:
 
 
 def insert_submission(data: Dict[str, Any]) -> int:
+    """创建投递记录。
+
+    P11-a：创建 ≠ 投递，默认状态为 `PREPARED`（待投递）；仅用户确认投递
+    （delivered=1）后状态才是 `APPLIED`（已投递）。
+    """
     _ensure_resume_submission_table()
     _ensure_interview_submission_columns()
-    status = normalize_status(data.get("status", "APPLIED"))
+    status = normalize_status(data.get("status", "PREPARED"))
     if status is None:
-        status = normalize_status("APPLIED")
+        status = normalize_status("PREPARED")
     return execute_lastrowid(
         """
         INSERT INTO resume_submission
@@ -144,7 +149,7 @@ def get_submission(
         "resume_markdown": row["resume_markdown"] or "",
         "resume_file_path": row["resume_file_path"],
         "card_version_ids": _parse_json(row["card_version_ids"]) or [],
-        "status": _normalize_or_raw(row["status"]),
+        "status": effective_status(row["status"], bool(row.get("delivered"))),
         "notes": row["notes"] or "",
         "is_manual": bool(row.get("is_manual")),
         "delivered": bool(row.get("delivered")),
@@ -156,7 +161,8 @@ def get_submission(
 def list_submissions(user_id: int = 1, limit: int = 50) -> List[Dict[str, Any]]:
     _ensure_resume_submission_table()
     rows = query_all(
-        "SELECT id, position, company, status, job_analysis_id, created_at, updated_at "
+        "SELECT id, position, company, status, delivered, job_analysis_id, "
+        "created_at, updated_at "
         "FROM resume_submission WHERE user_id=%s AND is_active=1 "
         "ORDER BY updated_at DESC LIMIT %s",
         (user_id, limit),
@@ -168,7 +174,8 @@ def list_submissions(user_id: int = 1, limit: int = 50) -> List[Dict[str, Any]]:
                 "id": r["id"],
                 "position": r["position"],
                 "company": r["company"] or "",
-                "status": _normalize_or_raw(r["status"]),
+                "status": effective_status(r["status"], bool(r.get("delivered"))),
+                "delivered": bool(r.get("delivered")),
                 "job_analysis_id": r["job_analysis_id"],
                 "created_at": r["created_at"].isoformat()
                 if r.get("created_at")

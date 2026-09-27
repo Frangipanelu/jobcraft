@@ -11,13 +11,22 @@ def test_enum_values_are_english_codes():
     """枚举值应为英文码，不含中文。"""
     m = _mod()
     values = {s.value for s in m.SubmissionStatus}
-    assert values == {"APPLIED", "INVITED", "ROUND_1", "ROUND_2", "OFFER", "CLOSED"}
+    assert values == {
+        "PREPARED",
+        "APPLIED",
+        "INVITED",
+        "ROUND_1",
+        "ROUND_2",
+        "OFFER",
+        "CLOSED",
+    }
 
 
 def test_cn_map_covers_all_statuses():
     """每个枚举都有中文显示。"""
     m = _mod()
-    assert len(m.SUBMISSION_STATUS_CN) == 6
+    assert len(m.SUBMISSION_STATUS_CN) == 7
+    assert m.SUBMISSION_STATUS_CN[m.SubmissionStatus.PREPARED] == "待投递"
     assert m.SUBMISSION_STATUS_CN[m.SubmissionStatus.APPLIED] == "已投递"
     assert m.SUBMISSION_STATUS_CN[m.SubmissionStatus.INVITED] == "面试邀约"
     assert m.SUBMISSION_STATUS_CN[m.SubmissionStatus.ROUND_1] == "一面"
@@ -91,3 +100,47 @@ def test_status_to_cn():
     assert m.status_to_cn("Offer") == "Offer"
     assert m.status_to_cn("乱码") == "乱码"
     assert m.status_to_cn(None) == ""
+
+
+# ============================================================
+# P11-a：创建 ≠ 投递（PREPARED / APPLIED 语义对齐）
+# ============================================================
+
+
+def test_prepared_normalizes_from_legacy_cn():
+    """P11-a：中文「待投递」归一化为 PREPARED。"""
+    m = _mod()
+    assert m.normalize_status("待投递") is m.SubmissionStatus.PREPARED
+    assert m.normalize_status("PREPARED") is m.SubmissionStatus.PREPARED
+
+
+def test_prepared_transitions():
+    """P11-a：待投递可推进到已投递 / 面试邀约 / 已关闭。"""
+    m = _mod()
+    assert m.is_valid_transition("PREPARED", "APPLIED")
+    assert m.is_valid_transition("PREPARED", "INVITED")
+    assert m.is_valid_transition("PREPARED", "CLOSED")
+    # 未投递不可倒退为面试流程
+    assert not m.is_valid_transition("PREPARED", "ROUND_1")
+
+
+def test_effective_status_projects_legacy_applied_without_delivery():
+    """P11-a：存量 `APPLIED + delivered=0` 读时投影为「待投递」。"""
+    m = _mod()
+    assert m.effective_status("APPLIED", False) == "PREPARED"
+    assert m.effective_status("APPLIED", True) == "APPLIED"
+    assert m.effective_status("PREPARED", False) == "PREPARED"
+    assert m.effective_status("INVITED", False) == "INVITED"
+    assert m.effective_status("乱码", False) == "乱码"
+    assert m.effective_status(None, False) is None
+
+
+def test_requires_delivered():
+    """P11-a：面试/offer 类状态隐含已投递。"""
+    m = _mod()
+    for s in ("INVITED", "ROUND_1", "ROUND_2", "OFFER"):
+        assert m.requires_delivered(s)
+    for s in ("PREPARED", "APPLIED", "CLOSED"):
+        assert not m.requires_delivered(s)
+    assert not m.requires_delivered("乱码")
+    assert not m.requires_delivered(None)
