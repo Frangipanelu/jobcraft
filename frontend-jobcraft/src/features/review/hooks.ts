@@ -143,6 +143,8 @@ export interface ApplyReviewFeedbackArgs {
  * - 再从 listCardVersions 回流真实版本历史；currentVersion/versionHistory 以后端为准，
  * - 版本服务不可用时保留升级内容、逐级回退原有版本信息。
  * - 成功后 EXPERIENCES cache（内容 + 后端版本）+ INTERVIEWS cache（applied 标记）。
+ * P10-b-lite 轻闸门：反哺「只追加新版本、不强制定稿」（不传 is_confirmed），
+ * 写回确认由 UI 层二段确认承担（InterviewReviewDetailView）。
  */
 export function useApplyReviewFeedbackMutation() {
   const queryClient = useQueryClient();
@@ -179,6 +181,10 @@ export function useApplyReviewFeedbackMutation() {
           : applyFeedbackSuggestions(exp, feedback.suggestions || []);
 
       // EXP-P1-06b：内容变更持久化到后端（updateCard 自动版本化，§28）
+      // P10-b-lite 轻闸门：复盘反哺只「追加新版本」，不强制定稿——
+      // 不再透传 is_confirmed，避免绕过 §19.4/§19.6 用户确认闸门把草稿卡直接定稿；
+      // 已定稿卡的内容变更由后端同事务写 card_versions 快照 + version+1（历史可回溯），
+      // 未定稿卡保持草稿态，待用户在经历卡页显式确认。
       const cardId = parseInt(feedback.experienceId);
       if (!isNaN(cardId)) {
         await experienceApi.updateCard(cardId, {
@@ -186,8 +192,6 @@ export function useApplyReviewFeedbackMutation() {
           problem: base.problem,
           actions: base.actions,
           results: base.results,
-          // EXP-P1-03：复盘反哺亦视为定稿保存
-          is_confirmed: true,
         });
       }
 

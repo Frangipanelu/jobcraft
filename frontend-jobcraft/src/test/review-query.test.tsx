@@ -4,6 +4,7 @@ import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { useQueryClient } from '@tanstack/react-query';
 import { renderWithProviders } from './test-utils';
 import { InterviewReviewCenterView } from '../components/review/InterviewReviewCenterView';
+import { InterviewReviewDetailView } from '../components/review/InterviewReviewDetailView';
 import { useInterviewsQuery } from '../features/interview/hooks';
 import { useJobsQuery } from '../features/jobs/hooks';
 import { useExperiencesQuery } from '../features/experiences/hooks';
@@ -488,14 +489,17 @@ describe('useApplyReviewFeedbackMutation（反哺经历资产）', () => {
 
     // EXPERIENCES cache：字段变更 + 后端版本回流（versionHistory 来自 card_versions）
     await waitFor(() => expect(screen.getByTestId('cache-exp-version').textContent).toBe('V2'));
-    // 内容已持久化到后端 + 定稿（EXP-P1-06b §34.6）
+    // 内容已持久化到后端，且 P10-b-lite 轻闸门：只追加新版本、不强制定稿
     expect(experience.updateCard).toHaveBeenCalledWith(
       7,
       expect.objectContaining({
         problem: '新职责（含选型对比）',
         actions: ['旧动作A', '旧动作B'],
-        is_confirmed: true,
       }),
+    );
+    expect(experience.updateCard).not.toHaveBeenCalledWith(
+      7,
+      expect.objectContaining({ is_confirmed: true })
     );
     expect(screen.getByTestId('cache-exp-problem').textContent).toBe('新职责（含选型对比）');
     expect(screen.getByTestId('cache-exp-hist').textContent).toBe('2');
@@ -521,13 +525,16 @@ describe('useApplyReviewFeedbackMutation（反哺经历资产）', () => {
     fireEvent.click(screen.getByText('应用反馈'));
 
     await waitFor(() => expect(screen.getByTestId('cache-exp-version').textContent).toBe('V2'));
-    // suggestions 前置动作已持久化到后端
+    // suggestions 前置动作已持久化到后端（P10-b-lite：不再强制定稿）
     expect(experience.updateCard).toHaveBeenCalledWith(
       7,
       expect.objectContaining({
         actions: ['[面试复盘升级] 补充量化选型对比', '旧动作A', '旧动作B'],
-        is_confirmed: true,
       }),
+    );
+    expect(experience.updateCard).not.toHaveBeenCalledWith(
+      7,
+      expect.objectContaining({ is_confirmed: true })
     );
     expect(screen.getByTestId('cache-exp-action').textContent).toBe('[面试复盘升级] 补充量化选型对比');
     expect(screen.getByTestId('cache-exp-hist').textContent).toBe('2');
@@ -554,5 +561,94 @@ describe('InterviewReviewCenterView 读路径', () => {
       target: { value: '腾讯' },
     });
     expect(screen.getByText('未找到复盘记录')).toBeInTheDocument();
+  });
+});
+
+describe('P10-b-lite 轻闸门：复盘反哺写回前需二次确认', () => {
+  beforeEach(() => {
+    auth.getCurrentUser.mockResolvedValue(AUTH_USER);
+    job.getDashboard.mockResolvedValue({ submissions: [] });
+    interview.listInterviewPreps.mockResolvedValue([RECORD_YUAN, RECORD_TX]);
+    experience.listCards.mockResolvedValue([CARD_A]);
+    experience.updateCard.mockResolvedValue(CARD_A);
+    experience.listCardVersions.mockResolvedValue({
+      card_id: 7,
+      current_version: 2,
+      versions: [
+        {
+          id: 3,
+          card_id: 7,
+          version: 1,
+          content: '旧内容',
+          version_type: 'original',
+          source_type: 'experience',
+          source_id: 7,
+          note: null,
+          created_at: '2026-09-18',
+        },
+      ],
+    });
+  });
+
+  // 带 qaList（relatedExperienceId 命中经历卡 7）→ 渲染反哺入口
+  const REVIEW_QA: InterviewReview = {
+    ...REVIEW,
+    qaList: [
+      {
+        id: 'qa-1',
+        qIndex: 1,
+        question: '介绍端侧量化方案',
+        candidateAnswer: '答题内容',
+        interviewerIntent: { mainPoints: ['技术深度'], importanceStars: 4, productAbilityStars: 3, techDepthStars: 5 },
+        answerAnalysis: { completeness: 80, structure: 75, persuasiveness: 70, jobRelevance: 85 },
+        identifiedIssues: ['缺选型对比'],
+        suggestionAdvice: '补充量化对比',
+        relatedExperienceId: '7',
+      },
+    ],
+  };
+
+  const renderDetail = () =>
+    renderWithProviders(
+      <>
+        <Seeder interviews={[buildInt(RECORD_YUAN, REVIEW_QA)]} experiences={[EXP_V1]} jobs={[JOB_12]} />
+        <InterviewReviewDetailView interviewId="prep-7" />
+      </>,
+    );
+  it('首次点击仅进入确认态，不触发写回', async () => {
+    renderDetail();
+
+    fireEvent.click(await screen.findByText('沉淀至经历库'));
+
+    // 确认态出现（说明追加新版本 + 保留历史），且不写回
+    expect(await screen.findByText('确认写入')).toBeInTheDocument();
+    expect(screen.getByText(/保留历史/)).toBeInTheDocument();
+    expect(experience.updateCard).not.toHaveBeenCalled();
+  });
+
+  it('二次点击确认后才写回，且不强制定稿', async () => {
+    renderDetail();
+
+    fireEvent.click(await screen.findByText('沉淀至经历库'));
+    fireEvent.click(await screen.findByText('确认写入'));
+
+    await waitFor(() => expect(experience.updateCard).toHaveBeenCalledWith(
+      7,
+      expect.objectContaining({ problem: '新职责（含选型对比）' }),
+    ));
+    expect(experience.updateCard).not.toHaveBeenCalledWith(
+      7,
+      expect.objectContaining({ is_confirmed: true })
+    );
+  });
+
+  it('确认态点取消则不写回', async () => {
+    renderDetail();
+
+    fireEvent.click(await screen.findByText('沉淀至经历库'));
+    fireEvent.click(await screen.findByText('取消'));
+
+    await waitFor(() => expect(screen.getByText('沉淀至经历库')).toBeInTheDocument());
+    expect(experience.updateCard).not.toHaveBeenCalled();
   });
 });

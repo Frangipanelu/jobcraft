@@ -34,6 +34,8 @@ export const InterviewReviewDetailView: React.FC<InterviewReviewDetailViewProps>
   const review = currentInterview?.review;
 
   const [selectedQAIndex, setSelectedQAIndex] = useState<number>(0);
+  // P10-b-lite 轻闸门：写回经历资产前需用户二次确认（§19.4/§19.6）
+  const [pendingConfirmIndex, setPendingConfirmIndex] = useState<number | null>(null);
 
   if (!currentInterview || !review) {
     return (
@@ -58,10 +60,11 @@ export const InterviewReviewDetailView: React.FC<InterviewReviewDetailViewProps>
         interviewId: currentInterview.id,
         feedbackIndex
       });
+      setPendingConfirmIndex(null);
       showToast({
         type: 'success',
         title: '经历资产已升级',
-        message: '已将本次面试复盘的建议沉淀至经历资产库最新版本！'
+        message: '已把本次复盘建议追加为新版本，可在经历资产库回溯历史并确认定稿。'
       });
     } catch (e) {
       showToast({
@@ -346,9 +349,31 @@ export const InterviewReviewDetailView: React.FC<InterviewReviewDetailViewProps>
                   <CheckCircle2 className="w-3.5 h-3.5" />
                   <span>已同步</span>
                 </span>
+              ) : pendingConfirmIndex === feedbackIndex ? (
+                /* P10-b-lite 轻闸门确认态：明确告知「追加新版本、不覆盖已定稿」 */
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="text-[11px] text-muted max-w-[180px] leading-snug">
+                    将把本次建议追加为「{relatedFeedback.proposedVersion}」新版本（保留历史，可回溯），确认写入？
+                  </span>
+                  <button
+                    onClick={() => handleApplyFeedback(feedbackIndex)}
+                    disabled={applyFeedbackMutation.isPending}
+                    className="flex items-center gap-1 px-3 py-1.5 bg-sage hover:bg-sage-dim text-white text-xs font-bold rounded-lg transition shadow-xs cursor-pointer shrink-0 disabled:opacity-60"
+                  >
+                    <span>确认写入</span>
+                  </button>
+                  <button
+                    onClick={() => setPendingConfirmIndex(null)}
+                    className="px-2.5 py-1.5 bg-page hover:bg-edge text-muted text-xs font-semibold rounded-lg transition cursor-pointer shrink-0"
+                  >
+                    取消
+                  </button>
+                </div>
               ) : (
                 <button
-                  onClick={() => feedbackIndex !== undefined && feedbackIndex >= 0 && handleApplyFeedback(feedbackIndex)}
+                  onClick={() => {
+                    setPendingConfirmIndex(feedbackIndex);
+                  }}
                   disabled={applyFeedbackMutation.isPending}
                   className="flex items-center gap-1 px-3.5 py-1.5 bg-sage hover:bg-sage-dim text-white text-xs font-bold rounded-lg transition shadow-xs cursor-pointer shrink-0 disabled:opacity-60"
                 >
