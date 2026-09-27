@@ -9,6 +9,7 @@ Workflow 单元测试（无真实 LLM / DB 调用）
   5. question_table_flow     — 问题表生成 Workflow
 """
 
+import json
 import sys
 from pathlib import Path
 
@@ -407,6 +408,115 @@ class TestJobAnalysisFlow:
         assert result is not None
         assert result["job_analysis_id"] == 42
         assert result["match_score"] == 72
+
+    def test_legacy_workflow_persists_analysis_artifacts(self, monkeypatch):
+        """P4-1：collate 节点落库时写入分析物五列（ats_profile / suggestions /
+        per_card_scores / match_level / analysis_version），历史读取不再退化为空壳。"""
+        from app.schemas.jobcraft import PerCardScore
+        from app.workflows.job_analysis_flow import (
+            ANALYSIS_VERSION,
+            run_job_analysis_workflow,
+        )
+
+        monkeypatch.setattr(
+            "app.workflows.job_analysis_flow.db_tools.get_card",
+            lambda cid, user_id=None: {
+                "id": cid,
+                "title": f"卡{cid}",
+                "raw_text": "原始经历",
+                "is_active": True,
+            },
+        )
+        monkeypatch.setattr(
+            "app.workflows.job_analysis_flow.JdAtsAgent.run",
+            lambda self, data: {
+                "ats": {
+                    "job_title": "后端",
+                    "ats_keywords": {"hard_skills": ["Go"], "soft_skills": []},
+                    "core_requirements": [],
+                    "dimension_requirements": [],
+                },
+                "requirements": {"requirements": [], "categories": {}},
+            },
+        )
+
+        def fake_compute_match(*args, **kwargs):
+            return {
+                "overall": 85,
+                "per_card": [
+                    PerCardScore(
+                        card_id=1,
+                        score=85,
+                        local_score=85,
+                        llm_score=85,
+                        matched=["Go"],
+                        missing=[],
+                    )
+                ],
+                "gap": {"missing": []},
+            }
+
+        monkeypatch.setattr(
+            "app.workflows.job_analysis_flow.jobcraft_analyze.compute_match",
+            fake_compute_match,
+        )
+
+        def fake_sug_run(self, data):
+            return {
+                "suggestions": {
+                    "gap_analysis": "无明显缺口",
+                    "gap_items": [],
+                    "suggestions": [
+                        {"type": "rewrite", "message": "补充 Go 项目", "priority": 4}
+                    ],
+                }
+            }
+
+        monkeypatch.setattr(
+            "app.workflows.job_analysis_flow.SugAgent.run", fake_sug_run
+        )
+
+        captured: dict = {}
+
+        def fake_insert(data):
+            captured.update(data)
+            return 77
+
+        monkeypatch.setattr(
+            "app.workflows.job_analysis_flow.db_tools.insert_job_analysis",
+            fake_insert,
+        )
+        monkeypatch.setattr(
+            "app.workflows.job_analysis_flow.db_tools.upsert_job_mapping",
+            lambda jid, cid: None,
+        )
+
+        run_job_analysis_workflow(
+            user_id=1,
+            company="字节",
+            position="后端",
+            jd_text="负责后端开发",
+            card_ids=[1],
+        )
+
+        # 五列全部随插入落库（均已序列化为 dict，可直接 json.dumps）
+        assert captured["ats_profile"]["job_title"] == "后端"
+        assert captured["suggestions"] == [
+            {
+                "card_id": None,
+                "type": "rewrite",
+                "message": "补充 Go 项目",
+                "priority": 4,
+                "optimization": None,
+            }
+        ]
+        assert captured["per_card_scores"][0]["card_id"] == 1
+        assert captured["match_level"]
+        assert captured["analysis_version"] == ANALYSIS_VERSION
+        # 落库载荷必须可 JSON 序列化（防 Pydantic 对象混入）
+        json.dumps(captured["ats_profile"], ensure_ascii=False)
+        json.dumps(captured["suggestions"], ensure_ascii=False)
+        json.dumps(captured["per_card_scores"], ensure_ascii=False)
 
     def test_legacy_workflow_no_cards(self, monkeypatch):
         """旧版分析：所有卡片不可用"""

@@ -24,6 +24,10 @@ from app.tools import db_tools, jobcraft_analyze
 
 logger = logging.getLogger(__name__)
 
+# P4-1：分析产物版本标记（Prompt 版本化，AGENTS §7）。
+# 落库到 job_analysis.analysis_version，供历史分析回溯「哪一版分析逻辑产出」。
+ANALYSIS_VERSION = "v1"
+
 
 class JobAnalysisState(TypedDict):
     user_id: int
@@ -126,6 +130,7 @@ def _run_legacy_collate(state: Dict[str, Any]) -> Dict[str, Any]:
     company = state.get("company", "")
     position = state["position"]
     jd_text = state["jd_text"]
+    match_level = jobcraft_analyze._match_level(match["overall"])
 
     db_data = {
         "user_id": state["user_id"],
@@ -138,6 +143,12 @@ def _run_legacy_collate(state: Dict[str, Any]) -> Dict[str, Any]:
         "dimension_requirements": [
             d.model_dump() for d in (ats.dimension_requirements or [])
         ],
+        # P4-1：分析物随插入落库（V0011 五列），历史列表/单条读取不再退化为空壳
+        "ats_profile": ats.model_dump(),
+        "suggestions": [s.model_dump() for s in (suggestions.suggestions or [])],
+        "per_card_scores": [pc.model_dump() for pc in (match["per_card"] or [])],
+        "match_level": match_level,
+        "analysis_version": ANALYSIS_VERSION,
     }
     job_id = db_tools.insert_job_analysis(db_data)
 
@@ -154,7 +165,7 @@ def _run_legacy_collate(state: Dict[str, Any]) -> Dict[str, Any]:
         ats_profile=ats,
         company_context=None,
         match_score=match["overall"],
-        match_level=jobcraft_analyze._match_level(match["overall"]),
+        match_level=match_level,
         customization_needed=match["overall"] < 75,
         gap_analysis=suggestions.gap_analysis or match["gap"],
         gap_items=suggestions.gap_items,

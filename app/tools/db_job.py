@@ -18,33 +18,52 @@ logger = logging.getLogger("jobcraft.db.job")
 
 
 def _ensure_job_analysis_columns() -> None:
-    """为 job_analysis 表增加 dimension_requirements / is_active 字段（schema 已由启动引导保证时短路）"""
+    """为 job_analysis 表补齐运行期所需字段（schema 已由启动引导保证时短路）。
+
+    迁移基线：dimension_requirements / is_active 见 V0001/V0007；
+    P4-1 分析物五列（ats_profile / suggestions / per_card_scores / match_level /
+    analysis_version）见 V0011。此处保留 SHOW COLUMNS + ADD COLUMN 作为
+    未迁移环境的降级兜底（行为与迁移一致，只加不改，AGENTS §4.4）。
+    """
     if is_schema_ready():
         return
+    additive_columns = (
+        ("dimension_requirements", "JSON"),
+        ("is_active", "TINYINT(1) DEFAULT 1"),
+        ("ats_profile", "JSON"),
+        ("suggestions", "JSON"),
+        ("per_card_scores", "JSON"),
+        ("match_level", "VARCHAR(32)"),
+        ("analysis_version", "VARCHAR(32)"),
+    )
     with connection() as conn:
         with conn.cursor() as cur:
             cur.execute("SHOW COLUMNS FROM job_analysis")
             existing = {c[0] for c in cur.fetchall()}
-            if "dimension_requirements" not in existing:
-                cur.execute(
-                    "ALTER TABLE job_analysis ADD COLUMN dimension_requirements JSON"
-                )
-            if "is_active" not in existing:
-                cur.execute(
-                    "ALTER TABLE job_analysis ADD COLUMN is_active TINYINT(1) DEFAULT 1"
-                )
+            for column, ddl_type in additive_columns:
+                if column not in existing:
+                    cur.execute(
+                        f"ALTER TABLE job_analysis ADD COLUMN {column} {ddl_type}"
+                    )
 
 
 def insert_job_analysis(data: Dict[str, Any]) -> int:
-    """插入一条岗位分析记录,返回主键"""
+    """插入一条岗位分析记录,返回主键。
+
+    P4-1：ats_profile / suggestions / per_card_scores / match_level /
+    analysis_version 五列随插入落库，使历史列表（list_job_analyses）与
+    单条读取（get_job_analysis）都能还原完整分析物。
+    """
     _ensure_job_analysis_columns()
     return execute_lastrowid(
         """
         INSERT INTO job_analysis
             (user_id, company, position, jd_text,
              jd_requirements, match_score, gap_analysis,
-             dimension_requirements)
-        VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
+             dimension_requirements,
+             ats_profile, suggestions, per_card_scores, match_level,
+             analysis_version)
+        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
         """,
         (
             data.get("user_id", 1),
@@ -55,6 +74,11 @@ def insert_job_analysis(data: Dict[str, Any]) -> int:
             data.get("match_score"),
             json.dumps(data.get("gap_analysis") or [], ensure_ascii=False),
             json.dumps(data.get("dimension_requirements") or [], ensure_ascii=False),
+            json.dumps(data.get("ats_profile") or {}, ensure_ascii=False),
+            json.dumps(data.get("suggestions") or [], ensure_ascii=False),
+            json.dumps(data.get("per_card_scores") or [], ensure_ascii=False),
+            data.get("match_level"),
+            data.get("analysis_version"),
         ),
     )
 
@@ -92,6 +116,11 @@ def _job_analysis_to_dict(row: Dict[str, Any]) -> Dict[str, Any]:
         "match_score": float(row["match_score"])
         if row.get("match_score") is not None
         else None,
+        "match_level": row.get("match_level"),
+        "analysis_version": row.get("analysis_version"),
+        "ats_profile": _parse_json(row.get("ats_profile")) or {},
+        "suggestions": _parse_json(row.get("suggestions")) or [],
+        "per_card_scores": _parse_json(row.get("per_card_scores")) or [],
         "gap_analysis": _parse_json(row["gap_analysis"]) or [],
         "dimension_requirements": _parse_json(row["dimension_requirements"]) or [],
         "created_at": row["created_at"].isoformat() if row.get("created_at") else None,
@@ -106,7 +135,9 @@ def list_job_analyses(user_id: int, limit: int = 20) -> List[Dict[str, Any]]:
     _ensure_job_analysis_columns()
     rows = query_all(
         "SELECT id, user_id, company, position, jd_text, jd_requirements, "
-        "match_score, gap_analysis, dimension_requirements, created_at "
+        "match_score, match_level, analysis_version, "
+        "ats_profile, suggestions, per_card_scores, "
+        "gap_analysis, dimension_requirements, created_at "
         "FROM job_analysis WHERE user_id=%s AND is_active=1 "
         "ORDER BY created_at DESC LIMIT %s",
         (user_id, limit),

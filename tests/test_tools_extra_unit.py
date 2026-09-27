@@ -808,6 +808,107 @@ class TestDbJob:
         with patch("app.tools.db_conn.connect", return_value=mock_conn):
             assert delete_job_analysis(999) is False
 
+    def test_get_job_analysis_restores_p4_1_artifacts(self):
+        """P4-1：读取路径还原 ats_profile / suggestions / per_card_scores /
+        match_level / analysis_version 五列。"""
+        from app.tools.db_job import get_job_analysis
+
+        mock_cursor = MagicMock()
+        mock_cursor.fetchone.return_value = {
+            "id": 1,
+            "user_id": 1,
+            "company": "TestCo",
+            "position": "Engineer",
+            "jd_text": "JD text",
+            "jd_requirements": "{}",
+            "match_score": 85.5,
+            "match_level": "值得投递",
+            "analysis_version": "v1",
+            "ats_profile": '{"job_title": "Engineer"}',
+            "suggestions": '[{"type": "rewrite", "message": "补充 Go"}]',
+            "per_card_scores": '[{"card_id": 1, "score": 85}]',
+            "gap_analysis": "[]",
+            "dimension_requirements": "[]",
+            "created_at": SimpleNamespace(isoformat=lambda: "2024-01-01T00:00:00"),
+        }
+        mock_cursor.fetchall.return_value = []
+        mock_conn = _make_mock_conn(mock_cursor)
+
+        with patch("app.tools.db_conn.connect", return_value=mock_conn):
+            result = get_job_analysis(1)
+        assert result is not None
+        assert result["ats_profile"] == {"job_title": "Engineer"}
+        assert result["suggestions"] == [{"type": "rewrite", "message": "补充 Go"}]
+        assert result["per_card_scores"] == [{"card_id": 1, "score": 85}]
+        assert result["match_level"] == "值得投递"
+        assert result["analysis_version"] == "v1"
+
+    def test_get_job_analysis_tolerates_missing_p4_1_columns(self):
+        """P4-1：未迁移库（旧行无五列）读取时回落空值，不抛错。"""
+        from app.tools.db_job import get_job_analysis
+
+        mock_cursor = MagicMock()
+        mock_cursor.fetchone.return_value = {
+            "id": 1,
+            "user_id": 1,
+            "company": "TestCo",
+            "position": "Engineer",
+            "jd_text": "JD text",
+            "jd_requirements": "{}",
+            "match_score": 85.5,
+            "gap_analysis": "[]",
+            "dimension_requirements": "[]",
+            "created_at": SimpleNamespace(isoformat=lambda: "2024-01-01T00:00:00"),
+        }
+        mock_cursor.fetchall.return_value = []
+        mock_conn = _make_mock_conn(mock_cursor)
+
+        with patch("app.tools.db_conn.connect", return_value=mock_conn):
+            result = get_job_analysis(1)
+        assert result is not None
+        assert result["ats_profile"] == {}
+        assert result["suggestions"] == []
+        assert result["per_card_scores"] == []
+        assert result["match_level"] is None
+        assert result["analysis_version"] is None
+
+    def test_insert_job_analysis_writes_p4_1_columns(self):
+        """P4-1：insert 携带五列并按 JSON 序列化落库参数。"""
+        from app.tools.db_job import insert_job_analysis
+
+        with (
+            patch("app.tools.db_job._ensure_job_analysis_columns"),
+            patch("app.tools.db_job.execute_lastrowid", return_value=5) as mock_insert,
+        ):
+            job_id = insert_job_analysis(
+                {
+                    "user_id": 1,
+                    "company": "TestCo",
+                    "position": "Engineer",
+                    "jd_text": "JD",
+                    "ats_profile": {"job_title": "Engineer"},
+                    "suggestions": [{"type": "rewrite", "message": "补充 Go"}],
+                    "per_card_scores": [{"card_id": 1, "score": 85}],
+                    "match_level": "值得投递",
+                    "analysis_version": "v1",
+                }
+            )
+        assert job_id == 5
+        sql, params = mock_insert.call_args[0]
+        for col in (
+            "ats_profile",
+            "suggestions",
+            "per_card_scores",
+            "match_level",
+            "analysis_version",
+        ):
+            assert col in sql
+        assert json.loads(params[8]) == {"job_title": "Engineer"}
+        assert json.loads(params[9]) == [{"type": "rewrite", "message": "补充 Go"}]
+        assert json.loads(params[10]) == [{"card_id": 1, "score": 85}]
+        assert params[11] == "值得投递"
+        assert params[12] == "v1"
+
 
 # ============================================================
 # 8. db_submission.py — mock DB

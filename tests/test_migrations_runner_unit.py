@@ -518,3 +518,40 @@ def test_v0010_migrate_is_applied_via_runner(fake_conn):
         if e[0].strip().startswith("INSERT INTO schema_migrations")
     ]
     assert "0010" in inserted
+
+
+def test_v0011_adds_job_analysis_artifact_columns():
+    """P4-1：V0011 为 job_analysis 加分析物五列（ats_profile / suggestions /
+    per_card_scores / match_level / analysis_version），information_schema +
+    PREPARE/EXECUTE 幂等模式，且只加列不改/删。"""
+    v0011 = os.path.join(runner.MIGRATIONS_DIR, "V0011__job_analysis_artifacts.sql")
+    assert os.path.exists(v0011)
+    with open(v0011, encoding="utf-8") as fh:
+        sql = fh.read()
+    for col in (
+        "ats_profile",
+        "suggestions",
+        "per_card_scores",
+        "match_level",
+        "analysis_version",
+    ):
+        assert f"ADD COLUMN {col}" in sql, f"V0011 缺少 {col} 列"
+    assert "information_schema.COLUMNS" in sql
+    assert "PREPARE" in sql and "EXECUTE" in sql
+    # 前向兼容：只加列，禁止 MODIFY/DROP 形式 DDL（注释提及字样不影响）
+    for stmt in sql.split(";--SPLIT--"):
+        stmt = stmt.strip()
+        assert not stmt.upper().startswith(("MODIFY", "DROP")), (
+            f"V0011 不得含 MODIFY/DROP 语句: {stmt[:50]}"
+        )
+
+
+def test_v0011_migrate_is_applied_via_runner(fake_conn):
+    """P4-1：V0011 与既有迁移共存，runner.migrate() 不抛错且入库。"""
+    runner.migrate()
+    inserted = [
+        e[1][0]
+        for e in fake_conn.cursor_obj.executed
+        if e[0].strip().startswith("INSERT INTO schema_migrations")
+    ]
+    assert "0011" in inserted
