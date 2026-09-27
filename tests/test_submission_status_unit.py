@@ -66,14 +66,11 @@ def test_is_valid_transition_closed_from_any_stage():
 
 
 def test_is_valid_transition_illegal():
-    """非法流转被拒绝。"""
+    """非法流转被拒绝（P11-b：终态可 reopen 回投递主线，见下方专项用例）。"""
     m = _mod()
     assert not m.is_valid_transition("APPLIED", "OFFER")
     assert not m.is_valid_transition("APPLIED", "ROUND_2")
     assert not m.is_valid_transition("INVITED", "OFFER")
-    # 终态不可再流转
-    assert not m.is_valid_transition("OFFER", "CLOSED")
-    assert not m.is_valid_transition("CLOSED", "APPLIED")
     assert not m.is_valid_transition("unknown", "APPLIED")
     assert not m.is_valid_transition("APPLIED", None)
 
@@ -89,7 +86,11 @@ def test_next_statuses():
         m.SubmissionStatus.OFFER,
         m.SubmissionStatus.CLOSED,
     }
-    assert m.next_statuses("OFFER") == set()
+    assert m.next_statuses("OFFER") == {
+        m.SubmissionStatus.PREPARED,
+        m.SubmissionStatus.APPLIED,
+        m.SubmissionStatus.CLOSED,
+    }
     assert m.next_statuses("unknown") == set()
 
 
@@ -144,3 +145,27 @@ def test_requires_delivered():
         assert not m.requires_delivered(s)
     assert not m.requires_delivered("乱码")
     assert not m.requires_delivered(None)
+
+
+# ============================================================
+# P11-b：终态可恢复（reopen 回投递主线）
+# ============================================================
+
+
+def test_closed_can_reopen_to_delivery_mainline():
+    """P11-b：已结束（CLOSED）可恢复为待投递/已投递。"""
+    m = _mod()
+    assert m.is_valid_transition("CLOSED", "PREPARED")
+    assert m.is_valid_transition("CLOSED", "APPLIED")
+    # 不可跳过投递主线直接回到面试流程
+    assert not m.is_valid_transition("CLOSED", "INVITED")
+    assert not m.is_valid_transition("CLOSED", "ROUND_1")
+    assert not m.is_valid_transition("CLOSED", "OFFER")
+
+
+def test_offer_can_reopen_but_keeps_closed_available():
+    """P11-b：Offer 态同样可恢复处理流程（可再 CLOSED 归档）。"""
+    m = _mod()
+    assert m.is_valid_transition("OFFER", "PREPARED")
+    assert m.is_valid_transition("OFFER", "APPLIED")
+    assert m.is_valid_transition("OFFER", "CLOSED")

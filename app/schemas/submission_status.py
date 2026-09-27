@@ -54,8 +54,14 @@ _ALLOWED_TRANSITIONS: Dict[SubmissionStatus, FrozenSet[SubmissionStatus]] = {
     SubmissionStatus.ROUND_2: frozenset(
         {SubmissionStatus.OFFER, SubmissionStatus.CLOSED}
     ),
-    SubmissionStatus.OFFER: frozenset(),
-    SubmissionStatus.CLOSED: frozenset(),
+    SubmissionStatus.OFFER: frozenset(
+        {SubmissionStatus.PREPARED, SubmissionStatus.APPLIED, SubmissionStatus.CLOSED}
+    ),
+    # P11-b：终态可「恢复处理流程」，reopen 回到投递主线
+    # （PREPARED/APPLIED，落地时按 delivered 事实二选一）
+    SubmissionStatus.CLOSED: frozenset(
+        {SubmissionStatus.PREPARED, SubmissionStatus.APPLIED}
+    ),
 }
 
 # P11-a：这些状态隐含「已投递」事实（不可能先有面试/offer 而未投递）

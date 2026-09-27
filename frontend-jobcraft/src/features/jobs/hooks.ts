@@ -81,27 +81,32 @@ export function useCreateJobMutation() {
   });
 }
 
-interface TerminateArgs {
-  jobId: string;
-  steps: Job['steps'];
-  lastUpdated: string;
-}
-
 /**
- * 纯本地状态变更基类：把 cache 中目标 Job 的 steps/lastUpdated 替换为传入值。
+ * 标记岗位流程已结束（P11-b：持久化到后端 `status=CLOSED`，刷新后不再丢失）。
+ * 注意：P0-1 之后 applied（已投递）只能由用户确认，终止流程不再顺带标记投递。
  */
-function useLocalJobPatchMutation(patch: (j: Job) => TerminateArgs) {
+export function useTerminateJobMutation() {
   const queryClient = useQueryClient();
 
   return useMutation<string, unknown, string>({
-    mutationFn: async (jobId) => jobId,
+    mutationFn: async (jobId) => {
+      const prev = queryClient.getQueryData<Job[]>([...JOBS_QUERY_KEY]) || [];
+      const job = prev.find((j) => j.id === jobId);
+      if (job?.backendId != null) {
+        try {
+          await jobApi.updateSubmission(job.backendId, { status: 'CLOSED' });
+        } catch {
+          // 后端不可用时仅保留本地乐观状态
+        }
+      }
+      return jobId;
+    },
     onMutate: (jobId) => {
       const prev = queryClient.getQueryData<Job[]>([...JOBS_QUERY_KEY]) || [];
       const next = prev.map((j) => {
         if (j.id !== jobId) return j;
-        const applied = patch(j);
-        const steps = applied.steps;
-        return { ...j, lastUpdated: applied.lastUpdated, steps, status: deriveJobStatus(steps) } as Job;
+        const steps = { ...j.steps, terminated: true };
+        return { ...j, lastUpdated: '刚刚', steps, status: deriveJobStatus(steps) } as Job;
       });
       queryClient.setQueryData([...JOBS_QUERY_KEY], next);
     },
@@ -109,26 +114,37 @@ function useLocalJobPatchMutation(patch: (j: Job) => TerminateArgs) {
 }
 
 /**
- * 标记岗位流程已结束（纯本地状态更新，无后端调用）。
- * 注意：P0-1 之后 applied（已投递）只能由用户确认，终止流程不再顺带标记投递。
- */
-export function useTerminateJobMutation() {
-  return useLocalJobPatchMutation((j) => ({
-    jobId: j.id,
-    lastUpdated: '刚刚',
-    steps: { ...j.steps, terminated: true },
-  }));
-}
-
-/**
- * 恢复已结束岗位的处理流程（纯本地状态更新，无后端调用）。
+ * 恢复已结束岗位的处理流程（P11-b：后端 reopen 回投递主线，按 delivered 事实
+ * 落 `APPLIED`（已投递）或 `PREPARED`（待投递））。
  */
 export function useResumeJobMutation() {
-  return useLocalJobPatchMutation((j) => ({
-    jobId: j.id,
-    lastUpdated: '刚刚',
-    steps: { ...j.steps, terminated: false },
-  }));
+  const queryClient = useQueryClient();
+
+  return useMutation<string, unknown, string>({
+    mutationFn: async (jobId) => {
+      const prev = queryClient.getQueryData<Job[]>([...JOBS_QUERY_KEY]) || [];
+      const job = prev.find((j) => j.id === jobId);
+      if (job?.backendId != null) {
+        try {
+          await jobApi.updateSubmission(job.backendId, {
+            status: job.steps.applied ? 'APPLIED' : 'PREPARED',
+          });
+        } catch {
+          // 后端不可用时仅保留本地乐观状态
+        }
+      }
+      return jobId;
+    },
+    onMutate: (jobId) => {
+      const prev = queryClient.getQueryData<Job[]>([...JOBS_QUERY_KEY]) || [];
+      const next = prev.map((j) => {
+        if (j.id !== jobId) return j;
+        const steps = { ...j.steps, terminated: false };
+        return { ...j, lastUpdated: '刚刚', steps, status: deriveJobStatus(steps) } as Job;
+      });
+      queryClient.setQueryData([...JOBS_QUERY_KEY], next);
+    },
+  });
 }
 
 /**

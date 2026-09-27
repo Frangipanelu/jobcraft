@@ -1437,6 +1437,36 @@ class TestSubmissionUpdate:
         assert "确认已投递" in resp.json()["error"]["message"]
         assert called == []
 
+    def test_update_closed_terminate_persists(self, monkeypatch):
+        """P11-b：任意阶段可终止（CLOSED），刷新后不再丢失。"""
+        captured: list = []
+        monkeypatch.setattr(
+            "app.api.submission.db_tools.update_submission",
+            lambda sid, updates, uid=None: captured.append(dict(updates)) or True,
+        )
+        monkeypatch.setattr(
+            "app.api.submission.db_tools.get_submission",
+            lambda *a: {"id": 1, "status": "INVITED", "delivered": True},
+        )
+        resp = client.patch("/api/jobcraft/submission/1", json={"status": "CLOSED"})
+        assert resp.status_code == 200
+        assert captured[0]["status"] == "CLOSED"
+
+    def test_update_reopen_from_closed(self, monkeypatch):
+        """P11-b：已结束可恢复回投递主线。"""
+        captured: list = []
+        monkeypatch.setattr(
+            "app.api.submission.db_tools.update_submission",
+            lambda sid, updates, uid=None: captured.append(dict(updates)) or True,
+        )
+        monkeypatch.setattr(
+            "app.api.submission.db_tools.get_submission",
+            lambda *a: {"id": 1, "status": "CLOSED", "delivered": False},
+        )
+        resp = client.patch("/api/jobcraft/submission/1", json={"status": "PREPARED"})
+        assert resp.status_code == 200
+        assert captured[0]["status"] == "PREPARED"
+
     def test_update_illegal_transition_returns_400(self, monkeypatch):
         monkeypatch.setattr(
             "app.api.submission.db_tools.update_submission", lambda *a: True

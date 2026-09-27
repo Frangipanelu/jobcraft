@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { fireEvent, screen } from '@testing-library/react';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { renderWithProviders } from './test-utils';
 import { useJobsQuery } from '../features/jobs/hooks';
 import { JobsListView } from '../components/jobs/JobsListView';
@@ -154,7 +154,7 @@ describe('useJobsQuery 迁移视图', () => {
     expect(screen.getByTestId('cache-count').textContent).toBe('3');
   });
 
-  it('terminate/resume：乐观更新 cache', async () => {
+  it('terminate/resume：乐观更新 cache 并持久化到后端（P11-b）', async () => {
     renderWithProviders(
       <>
         <JobsListView onOpenNewJob={() => {}} />
@@ -170,10 +170,18 @@ describe('useJobsQuery 迁移视图', () => {
     expect(screen.getByText('已结束 (1)')).toBeInTheDocument();
     expect(screen.getByText('待处理 (0)')).toBeInTheDocument();
     expect(screen.getByTestId('cache-count').textContent).toBe('2');
+    // P11-b：终止持久化为后端 CLOSED（刷新后不丢）
+    await waitFor(() =>
+      expect(job.updateSubmission).toHaveBeenCalledWith(1, { status: 'CLOSED' }),
+    );
 
     fireEvent.click(screen.getByText('恢复处理'));
     expect(await screen.findByText('待处理 (1)')).toBeInTheDocument();
     expect(screen.getByText('已结束 (0)')).toBeInTheDocument();
+    // 恢复按 delivered 事实 reopen：未确认投递 → PREPARED
+    await waitFor(() =>
+      expect(job.updateSubmission).toHaveBeenCalledWith(1, { status: 'PREPARED' }),
+    );
   });
 });
 
