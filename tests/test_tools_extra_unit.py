@@ -11,6 +11,7 @@ Tools 额外单元测试
   7. db_job.py — mock DB 测试 get_job_analysis
   8. db_submission.py — mock DB 测试 get_submission
   9. db_interview.py — mock DB 测试 get_interview_prep_by_job
+ 10. db_raw_jd.py — RawJD 不可变快照（P4-2）
 """
 
 import json
@@ -999,6 +1000,18 @@ class TestDbSubmission:
             result = update_submission(1, {})
             assert result is False
 
+    def test_update_submission_ignores_jd_text(self):
+        """P4-2：db 层兜底——误传 jd_text 也不生成 UPDATE（快照不可覆写）。"""
+        from app.tools.db_submission import update_submission
+
+        mock_cursor = MagicMock()
+        mock_conn = _make_mock_conn(mock_cursor)
+
+        with patch("app.tools.db_conn.connect", return_value=mock_conn):
+            assert update_submission(1, {"jd_text": "改写后的 JD"}) is False
+        sqls = [c[0].strip().upper() for c in mock_conn.cursor_obj.executed]
+        assert not any(s.startswith("UPDATE RESUME_SUBMISSION") for s in sqls)
+
 
 # ============================================================
 # 9. db_interview.py — mock DB
@@ -1210,3 +1223,102 @@ class TestExpressionGenerate:
 
         with pytest.raises(RuntimeError, match="LLM 不可用"):
             eg.generate_standardized_expression("这是一段足够长的原始经历内容")
+
+
+# ============================================================
+# 10. db_raw_jd.py — RawJD 不可变快照（P4-2）
+# ============================================================
+
+
+class TestDbRawJd:
+    def test_insert_skips_empty_jd_text(self):
+        """P4-2：空 JD 原文不产生空快照。"""
+        from app.tools import db_raw_jd
+
+        with (
+            patch("app.tools.db_raw_jd._ensure_raw_jd_table"),
+            patch("app.tools.db_raw_jd.execute_lastrowid") as mock_insert,
+        ):
+            assert db_raw_jd.insert_raw_jd("   ") == 0
+        mock_insert.assert_not_called()
+
+    def test_insert_writes_snapshot_fields(self):
+        """P4-2：快照落 user/job_analysis/source/原文四要素。"""
+        from app.tools import db_raw_jd
+
+        with (
+            patch("app.tools.db_raw_jd._ensure_raw_jd_table"),
+            patch(
+                "app.tools.db_raw_jd.execute_lastrowid", return_value=9
+            ) as mock_insert,
+        ):
+            rid = db_raw_jd.insert_raw_jd(
+                "  岗位 JD 原文  ", user_id=3, job_analysis_id=7, source="split_jd"
+            )
+        assert rid == 9
+        sql, params = mock_insert.call_args[0]
+        assert "INSERT INTO raw_jd" in sql
+        assert params == (3, 7, "split_jd", "岗位 JD 原文")
+
+    def test_insert_falls_back_on_unknown_source(self):
+        """P4-2：非法 source 回落 job_analysis，避免脏值入列。"""
+        from app.tools import db_raw_jd
+
+        with (
+            patch("app.tools.db_raw_jd._ensure_raw_jd_table"),
+            patch(
+                "app.tools.db_raw_jd.execute_lastrowid", return_value=1
+            ) as mock_insert,
+        ):
+            db_raw_jd.insert_raw_jd("JD", source="unknown-source")
+        assert mock_insert.call_args[0][1][2] == "job_analysis"
+
+    def test_module_exposes_no_mutation_api(self):
+        """P4-2：快照只增不改，模块不提供 update/delete 写路径。"""
+        from app.tools import db_raw_jd
+
+        assert not hasattr(db_raw_jd, "update_raw_jd")
+        assert not hasattr(db_raw_jd, "delete_raw_jd")
+
+    def test_get_returns_none_when_not_found(self):
+        from app.tools import db_raw_jd
+
+        with (
+            patch("app.tools.db_raw_jd._ensure_raw_jd_table"),
+            patch("app.tools.db_raw_jd.query_one", return_value=None),
+        ):
+            assert db_raw_jd.get_raw_jd(999, user_id=1) is None
+
+    def test_get_maps_row_fields(self):
+        from app.tools import db_raw_jd
+
+        row = {
+            "id": 4,
+            "user_id": 1,
+            "job_analysis_id": 7,
+            "source": "job_analysis",
+            "jd_text": "JD 原文",
+            "created_at": SimpleNamespace(isoformat=lambda: "2024-01-01T00:00:00"),
+        }
+        with (
+            patch("app.tools.db_raw_jd._ensure_raw_jd_table"),
+            patch("app.tools.db_raw_jd.query_one", return_value=row) as mock_query,
+        ):
+            result = db_raw_jd.get_raw_jd(4, user_id=1)
+        assert result is not None
+        assert result["jd_text"] == "JD 原文"
+        assert result["source"] == "job_analysis"
+        assert result["job_analysis_id"] == 7
+        assert "AND user_id=%s" in mock_query.call_args[0][0]
+
+    def test_list_filters_by_job_analysis(self):
+        from app.tools import db_raw_jd
+
+        with (
+            patch("app.tools.db_raw_jd._ensure_raw_jd_table"),
+            patch("app.tools.db_raw_jd.query_all", return_value=[]) as mock_query,
+        ):
+            assert db_raw_jd.list_raw_jds(1, job_analysis_id=7) == []
+        sql, params = mock_query.call_args[0]
+        assert "AND job_analysis_id=%s" in sql
+        assert params == (1, 7)

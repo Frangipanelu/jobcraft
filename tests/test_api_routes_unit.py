@@ -1368,6 +1368,20 @@ class TestSubmissionUpdate:
         resp = client.patch("/api/jobcraft/submission/1", json={"status": "面试中"})
         assert resp.status_code == 400
 
+    def test_update_rejects_jd_text_overwrite(self, monkeypatch):
+        """P4-2：jd_text 为 RawJD 不可变快照，PATCH 传入即 400，不落库。"""
+        called: list = []
+        monkeypatch.setattr(
+            "app.api.submission.db_tools.update_submission",
+            lambda *a: called.append(a) or True,
+        )
+        resp = client.patch(
+            "/api/jobcraft/submission/1", json={"jd_text": "改写后的 JD 原文"}
+        )
+        assert resp.status_code == 400
+        assert "不可变" in resp.json()["error"]["message"]
+        assert called == []
+
     def test_update_illegal_transition_returns_400(self, monkeypatch):
         monkeypatch.setattr(
             "app.api.submission.db_tools.update_submission", lambda *a: True

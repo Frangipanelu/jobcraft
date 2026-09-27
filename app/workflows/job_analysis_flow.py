@@ -20,7 +20,7 @@ from app.schemas.jobcraft import (
     StructuredRequirementItem,
     SuggestionsResult,
 )
-from app.tools import db_tools, jobcraft_analyze
+from app.tools import db_raw_jd, db_tools, jobcraft_analyze
 
 logger = logging.getLogger(__name__)
 
@@ -151,6 +151,19 @@ def _run_legacy_collate(state: Dict[str, Any]) -> Dict[str, Any]:
         "analysis_version": ANALYSIS_VERSION,
     }
     job_id = db_tools.insert_job_analysis(db_data)
+
+    # P4-2：原始 JD 以不可变快照入库（raw_jd），权威原文以此为准；
+    # job_analysis.jd_text 仅作展示副本，后续不再被覆写。
+    # 快照写入失败不阻断分析（辅助链路，降级告警）。
+    try:
+        db_raw_jd.insert_raw_jd(
+            jd_text=jd_text,
+            user_id=state["user_id"],
+            job_analysis_id=job_id,
+            source="job_analysis",
+        )
+    except Exception as e:
+        logger.warning("RawJD 快照写入失败（分析已落库，快照缺失）: %s", e)
 
     for c in cards:
         db_tools.upsert_job_mapping(job_id, c["id"])

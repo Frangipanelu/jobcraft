@@ -555,3 +555,33 @@ def test_v0011_migrate_is_applied_via_runner(fake_conn):
         if e[0].strip().startswith("INSERT INTO schema_migrations")
     ]
     assert "0011" in inserted
+
+
+def test_v0012_creates_raw_jd_snapshot_table():
+    """P4-2：V0012 新建 raw_jd 不可变快照表（原始 JD 只增不改），
+    CREATE TABLE IF NOT EXISTS 幂等，且只新建表不改/删既有表。"""
+    v0012 = os.path.join(runner.MIGRATIONS_DIR, "V0012__raw_jd_snapshot.sql")
+    assert os.path.exists(v0012)
+    with open(v0012, encoding="utf-8") as fh:
+        sql = fh.read()
+    assert "CREATE TABLE IF NOT EXISTS raw_jd" in sql
+    for col in ("user_id", "job_analysis_id", "source", "jd_text", "created_at"):
+        assert col in sql, f"V0012 缺少 {col} 列"
+    assert "idx_raw_jd_job" in sql
+    # 前向兼容：只新建表，禁止 MODIFY/DROP/ALTER 既有表
+    for stmt in sql.split(";--SPLIT--"):
+        upper = stmt.strip().upper()
+        assert not upper.startswith(("MODIFY", "DROP", "ALTER", "RENAME")), (
+            f"V0012 不得含改/删既有表的 DDL: {stmt[:50]}"
+        )
+
+
+def test_v0012_migrate_is_applied_via_runner(fake_conn):
+    """P4-2：V0012 与既有迁移共存，runner.migrate() 不抛错且入库。"""
+    runner.migrate()
+    inserted = [
+        e[1][0]
+        for e in fake_conn.cursor_obj.executed
+        if e[0].strip().startswith("INSERT INTO schema_migrations")
+    ]
+    assert "0012" in inserted

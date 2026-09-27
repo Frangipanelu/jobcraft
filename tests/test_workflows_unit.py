@@ -518,6 +518,90 @@ class TestJobAnalysisFlow:
         json.dumps(captured["suggestions"], ensure_ascii=False)
         json.dumps(captured["per_card_scores"], ensure_ascii=False)
 
+    def test_legacy_workflow_writes_raw_jd_snapshot(self, monkeypatch):
+        """P4-2：分析落库同时写入 raw_jd 不可变快照（原文 + 归属 job_analysis_id）。"""
+        from app.schemas.jobcraft import PerCardScore
+        from app.workflows.job_analysis_flow import run_job_analysis_workflow
+
+        monkeypatch.setattr(
+            "app.workflows.job_analysis_flow.db_tools.get_card",
+            lambda cid, user_id=None: {
+                "id": cid,
+                "title": f"卡{cid}",
+                "raw_text": "负责后端开发",
+                "is_active": True,
+            },
+        )
+        monkeypatch.setattr(
+            "app.workflows.job_analysis_flow.JdAtsAgent.run",
+            lambda self, data: {
+                "ats": {
+                    "job_title": "后端",
+                    "ats_keywords": {"hard_skills": ["Go"], "soft_skills": []},
+                    "core_requirements": [],
+                    "dimension_requirements": [],
+                },
+                "requirements": {"requirements": [], "categories": {}},
+            },
+        )
+        monkeypatch.setattr(
+            "app.workflows.job_analysis_flow.jobcraft_analyze.compute_match",
+            lambda *args, **kwargs: {
+                "overall": 85,
+                "per_card": [
+                    PerCardScore(
+                        card_id=1,
+                        score=85,
+                        local_score=85,
+                        llm_score=85,
+                        matched=["Go"],
+                        missing=[],
+                    )
+                ],
+                "gap": {"missing": []},
+            },
+        )
+        monkeypatch.setattr(
+            "app.workflows.job_analysis_flow.SugAgent.run",
+            lambda self, data: {
+                "suggestions": {
+                    "gap_analysis": "无明显缺口",
+                    "gap_items": [],
+                    "suggestions": [],
+                }
+            },
+        )
+        monkeypatch.setattr(
+            "app.workflows.job_analysis_flow.db_tools.insert_job_analysis",
+            lambda data: 77,
+        )
+        monkeypatch.setattr(
+            "app.workflows.job_analysis_flow.db_tools.upsert_job_mapping",
+            lambda jid, cid: None,
+        )
+        snapshots: list = []
+        monkeypatch.setattr(
+            "app.workflows.job_analysis_flow.db_raw_jd.insert_raw_jd",
+            lambda **kwargs: snapshots.append(kwargs) or 1,
+        )
+
+        run_job_analysis_workflow(
+            user_id=1,
+            company="字节",
+            position="后端",
+            jd_text="负责后端开发",
+            card_ids=[1],
+        )
+
+        assert snapshots == [
+            {
+                "jd_text": "负责后端开发",
+                "user_id": 1,
+                "job_analysis_id": 77,
+                "source": "job_analysis",
+            }
+        ]
+
     def test_legacy_workflow_no_cards(self, monkeypatch):
         """旧版分析：所有卡片不可用"""
         from app.workflows.job_analysis_flow import run_job_analysis_workflow

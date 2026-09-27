@@ -34,6 +34,7 @@ class CreateSubmissionPayload(BaseModel):
 class UpdateSubmissionPayload(BaseModel):
     position: Optional[str] = None
     company: Optional[str] = None
+    # P4-2：jd_text 为 RawJD 不可变快照，传入即拒绝（见 PATCH 端点）
     jd_text: Optional[str] = None
     status: Optional[str] = None
     notes: Optional[str] = None
@@ -89,6 +90,13 @@ def jobcraft_submission_update(
 ):
     updates = {k: v for k, v in payload.model_dump().items() if v is not None}
     try:
+        if payload.jd_text is not None:
+            # P4-2：原始 JD 为不可变快照（raw_jd），不接受覆写。
+            # 权威原文请走 RawJD 快照，jd_text 仅作展示副本。
+            raise HTTPException(
+                status_code=400,
+                detail="jd_text 为不可变快照，不支持覆写；请新增岗位分析以记录新的 JD 原文",
+            )
         if "status" in updates:
             if normalize_status(updates["status"]) is None:
                 raise HTTPException(

@@ -217,11 +217,15 @@ def get_submission_by_analysis(
 def update_submission(
     submission_id: int, updates: Dict[str, Any], user_id: Optional[int] = None
 ) -> bool:
+    """更新投递记录。
+
+    P4-2：`jd_text` 已从可更新字段中移除——原始 JD 以 raw_jd 不可变快照为准，
+    覆写会使分析结果失去可复核依据；即使调用方误传也不落库。
+    """
     _ensure_resume_submission_table()
     field_map = {
         "position": "position",
         "company": "company",
-        "jd_text": "jd_text",
         "resume_markdown": "resume_markdown",
         "resume_file_path": "resume_file_path",
         "status": "status",
