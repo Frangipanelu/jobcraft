@@ -26,6 +26,7 @@ TASK_TYPE_INTERVIEW_REVIEW_ANALYZE = "interview_review_analyze"
 TASK_TYPE_QUESTION_TABLE = "question_table"
 TASK_TYPE_PARSE_PREVIEW = "parse_preview"
 TASK_TYPE_EXPERIENCE_POLISH = "experience_polish"
+TASK_TYPE_RESUME_SUGGEST = "resume_suggest"
 
 
 # ============================================================
@@ -405,6 +406,54 @@ def execute_experience_polish(params: Dict[str, Any]) -> Dict[str, Any]:
         raise
 
 
+def execute_resume_suggest(params: Dict[str, Any]) -> Dict[str, Any]:
+    """执行简历 AI 建议生成任务。
+
+    :param params: 任务参数（submission_id/user_id/bullets）
+    :return: {"suggestions": [记录, ...]}（含 id/status=pending，只算不写）
+    """
+    from app.tools.db_submission import get_submission
+    from app.tools.resume_suggest import load_suggest_context, suggest_resume_edits
+
+    task_id = params.get("task_id")
+    user_id = params.get("user_id", 1)
+    submission_id = params.get("submission_id")
+    bullets = params.get("bullets") or []
+
+    if not submission_id:
+        raise ValueError("submission_id 缺失，无法生成简历建议")
+    if not bullets:
+        raise ValueError("bullets 缺失，无法生成简历建议")
+
+    logger.info(f"开始执行简历建议生成任务: {task_id}")
+
+    try:
+        manager = get_task_manager()
+        manager.update_task_status(task_id, TaskStatus.RUNNING)
+
+        submission = get_submission(int(submission_id), user_id)
+        if not submission:
+            raise ValueError("投递记录不存在")
+
+        context = load_suggest_context(submission, user_id)
+        suggestions = suggest_resume_edits(
+            bullets,
+            jd_text=context["jd_text"],
+            ats=context["ats"],
+            gap_items=context["gap_items"],
+        )
+        result = {"suggestions": suggestions}
+
+        manager.update_task_status(task_id, TaskStatus.COMPLETED, result=result)
+        return result
+
+    except Exception as e:
+        logger.error(f"简历建议生成任务失败: {e}")
+        manager = get_task_manager()
+        manager.update_task_status(task_id, TaskStatus.FAILED, error=str(e))
+        raise
+
+
 # ============================================================
 #  任务注册表
 # ============================================================
@@ -418,6 +467,7 @@ TASK_REGISTRY = {
     TASK_TYPE_QUESTION_TABLE: execute_question_table,
     TASK_TYPE_PARSE_PREVIEW: execute_parse_preview,
     TASK_TYPE_EXPERIENCE_POLISH: execute_experience_polish,
+    TASK_TYPE_RESUME_SUGGEST: execute_resume_suggest,
 }
 
 

@@ -30,6 +30,7 @@ def test_registry_exposes_expected_types():
         "question_table",
         "parse_preview",
         "experience_polish",
+        "resume_suggest",
     }
 
 

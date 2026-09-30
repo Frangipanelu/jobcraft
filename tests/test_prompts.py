@@ -87,6 +87,7 @@ _REQUIRED_FIELDS = {
         "candidate_background",
     },
     ("core", "json_fallback_suffix"): {"schema_hint"},
+    ("resume", "suggest"): {"job_context", "bullets_section"},
 }
 
 
