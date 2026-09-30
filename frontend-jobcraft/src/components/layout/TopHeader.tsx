@@ -181,7 +181,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
           </>
         )}
 
-        {currentTab === 'interview_review_detail' && (
+        {currentTab === 'interview_review_detail' && currentInterview && (
           <>
             <ChevronRight className="w-3.5 h-3.5 text-faint shrink-0" />
             <button
@@ -191,8 +191,8 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
               面试复盘
             </button>
             <ChevronRight className="w-3.5 h-3.5 text-faint shrink-0" />
-            <span className="text-ink font-semibold">
-              字节跳动 · 第1面业务面 · 智能复盘报告
+            <span className="text-ink font-semibold truncate">
+              {currentInterview.company} · {currentInterview.roundName} · 智能复盘报告
             </span>
           </>
         )}
