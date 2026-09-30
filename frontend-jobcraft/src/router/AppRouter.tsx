@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { Navigate, Route, Routes } from 'react-router-dom';
 import { AppShell } from '../app/AppShell';
 import { ProfilePage } from '../features/profile/ProfilePage';
 import { WorkbenchPage } from '../features/jobs/pages/WorkbenchPage';
@@ -18,9 +18,10 @@ import { CreateReviewPage } from '../features/review/pages/CreateReviewPage';
 
 /**
  * 路由表（FE-ROUTE-02 / 组1-壳收口后）：
- * 所有 tab 均有 URL，全部走 AppShell 真实路由页（此前经 LegacyPageWrapper 的 6 条路由已收口为真实壳页）。
+ * 所有 tab 均有 URL，全部走 AppShell 真实路由页。
  * 中心 / 创建 / 简历编辑持有 URL（`/jd-analysis`、`/resume/:jobId`、`/interview/new/:jobId`、`/review/new/:jobId`），
- * 选中项经 URL 参数回填；遗留 MainLayout / LegacyPageWrapper / useSyncRouteTab 已移除（FE-ROUTE-04/05）。
+ * 选中项经 `useSyncRouteTab` 从 URL 回填 context（FE-TAB-01）。
+ * BrowserRouter 位于 `App.tsx` Provider 之上（FE-NAV-01），此处不再嵌套。
  */
 export const AppRoutes: React.FC = () => {
   return (
@@ -90,9 +91,5 @@ export const AppRoutes: React.FC = () => {
 };
 
 export const AppRouter: React.FC = () => {
-  return (
-    <BrowserRouter>
-      <AppRoutes />
-    </BrowserRouter>
-  );
+  return <AppRoutes />;
 };

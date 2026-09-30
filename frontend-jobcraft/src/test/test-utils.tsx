@@ -19,18 +19,18 @@ interface RenderWithProvidersOptions {
   queryClient?: QueryClient;
 }
 
-/** 默认包装：QueryClient + ToastProvider + JobCraftProvider + MemoryRouter。 */
+/** 默认包装：QueryClient + MemoryRouter + ToastProvider + JobCraftProvider（Provider 内 useNavigate 需 Router 在外层）。 */
 export function renderWithProviders(
   ui: ReactElement,
   { route = '/', queryClient = createTestQueryClient() }: RenderWithProvidersOptions = {},
 ) {
   return render(
     <QueryClientProvider client={queryClient}>
-      <ToastProvider>
-        <JobCraftProvider>
-          <MemoryRouter initialEntries={[route]}>{ui}</MemoryRouter>
-        </JobCraftProvider>
-      </ToastProvider>
+      <MemoryRouter initialEntries={[route]}>
+        <ToastProvider>
+          <JobCraftProvider>{ui}</JobCraftProvider>
+        </ToastProvider>
+      </MemoryRouter>
     </QueryClientProvider>,
   );
 }

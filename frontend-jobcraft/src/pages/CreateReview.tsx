@@ -42,6 +42,12 @@ export const CreateReview: React.FC<{ initialJobId?: string }> = ({ initialJobId
   const { data: interviews = [] } = useInterviewsQuery();
   const createReviewMutation = useCreateInterviewReviewMutation();
 
+  // FE-STATE-01：重新进入向导即作废上一次未消费的「JD 报告返回」意图，
+  // 避免残留 flag 让 JD 报告页底部横幅在后续无关访问时错乱出现。
+  useEffect(() => {
+    setJdAnalysisReturnTarget(null);
+  }, [setJdAnalysisReturnTarget]);
+
   const [step, setStep] = useState<0 | 1 | 2>(0);
 
   // Filter jobs in "completed / reviewing" stage

@@ -46,6 +46,12 @@ export const CreateInterview: React.FC<{ initialJobId?: string }> = ({ initialJo
   const { data: historicalResumes = [] } = useHistoricalResumesQuery();
   const addHistoricalResumeMutation = useAddHistoricalResumeMutation();
 
+  // FE-STATE-01：重新进入向导即作废上一次未消费的「JD 报告返回」意图，
+  // 避免残留 flag 让 JD 报告页底部横幅在后续无关访问时错乱出现。
+  useEffect(() => {
+    setJdAnalysisReturnTarget(null);
+  }, [setJdAnalysisReturnTarget]);
+
   // Filter jobs in "interview prep" stage
   const prepStageJobs = jobs.filter(
     (j) =>

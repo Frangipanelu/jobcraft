@@ -1,15 +1,23 @@
 import React from 'react';
+import { BrowserRouter } from 'react-router-dom';
 import { JobCraftProvider, ToastProvider, useJobCraft } from './context/JobCraftContext';
 import { AppRouter } from './router/AppRouter';
 import { AuthPage } from './pages/AuthPage';
 
+/**
+ * BrowserRouter 提升至 Provider 之上（FE-NAV-01）：
+ * JobCraftProvider 内的 `navigateTo` 需要 `useNavigate` 做真实路由跳转，
+ * 故路由上下文必须包住 Provider（测试侧 test-utils 的 MemoryRouter 同步外提）。
+ */
 export default function App() {
   return (
-    <ToastProvider>
-      <JobCraftProvider>
-        <AppShell />
-      </JobCraftProvider>
-    </ToastProvider>
+    <BrowserRouter>
+      <ToastProvider>
+        <JobCraftProvider>
+          <AppShell />
+        </JobCraftProvider>
+      </ToastProvider>
+    </BrowserRouter>
   );
 }
 
@@ -33,6 +41,6 @@ const AppShell: React.FC = () => {
     return <AuthPage />;
   }
 
-  // 已登录：进入路由层（AppRoutes 通过 LegacyPageWrapper 桥接遗留 MainLayout）
+  // 已登录：进入路由层（AppRoutes 全部为 AppShell 真实路由页）
   return <AppRouter />;
 };

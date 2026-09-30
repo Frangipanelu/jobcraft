@@ -1,8 +1,10 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, ReactNode } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   NavigationTab,
   InterviewDraft
 } from '../types/jobcraft';
+import { tabToPath, TabNavParams } from '../router/tabPaths';
 import * as authApi from '../api/auth'
 
 export interface ToastMessage {
@@ -26,17 +28,8 @@ interface JobCraftContextType {
   jobWorkspaceSubTab: 'jd' | 'resume' | 'interview';
   userProfileTab: 'resumes' | 'profile' | 'preferences' | 'settings';
   setUserProfileTab: (tab: 'resumes' | 'profile' | 'preferences' | 'settings') => void;
-  navigateTo: (
-    tab: NavigationTab,
-    params?: {
-      jobId?: string;
-      interviewId?: string;
-      jdId?: string;
-      expId?: string;
-      workspaceTab?: 'jd' | 'resume' | 'interview';
-      profileTab?: 'resumes' | 'profile' | 'preferences' | 'settings';
-    }
-  ) => void;
+  navigateTo: (tab: NavigationTab, params?: TabNavParams) => void;
+  syncTabState: (tab: NavigationTab, params?: TabNavParams) => void;
 
   // Transient UI state
   interviewDraft: InterviewDraft | null;
@@ -113,6 +106,7 @@ export const useToastActions = () => {
  */
 export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const { showToast } = useToastActions();
+  const navigate = useNavigate();
 
   const [currentTab, setCurrentTab] = useState<NavigationTab>('workbench');
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
@@ -209,29 +203,32 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
     setInterviewDraft(null);
   }, []);
 
-  const navigateTo = useCallback(
-    (
-      tab: NavigationTab,
-      params?: {
-        jobId?: string;
-        interviewId?: string;
-        jdId?: string;
-        expId?: string;
-        workspaceTab?: 'jd' | 'resume' | 'interview';
-        profileTab?: 'resumes' | 'profile' | 'preferences' | 'settings';
-      }
-    ) => {
+  /**
+   * 仅同步选中态到 context（不改 URL）。
+   * 供 `useSyncRouteTab` 做 URL → context 回填——回填若触发跳转会与当前路由打架
+   * （如 `/jobs/:jobId/jd/:jdId` 别名不能被重定向到 `/jd-report/:jdId`）。
+   */
+  const syncTabState = useCallback(
+    (tab: NavigationTab, params?: TabNavParams) => {
       if (params?.jobId !== undefined) setSelectedJobId(params.jobId);
       if (params?.interviewId !== undefined) setSelectedInterviewId(params.interviewId);
       if (params?.jdId !== undefined) setSelectedJDId(params.jdId);
       if (params?.expId !== undefined) setSelectedExperienceId(params.expId);
       if (params?.workspaceTab !== undefined) setJobWorkspaceSubTab(params.workspaceTab);
       if (params?.profileTab !== undefined) setUserProfileTab(params.profileTab);
-
       setCurrentTab(tab);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
     },
     [setSelectedJobId, setSelectedInterviewId, setSelectedJDId, setSelectedExperienceId, setJobWorkspaceSubTab, setUserProfileTab]
+  );
+
+  /** 真实导航（FE-NAV-01）：同步选中态 + 路由跳转，legacy 只改 state 的死按钮由此收口。 */
+  const navigateTo = useCallback(
+    (tab: NavigationTab, params?: TabNavParams) => {
+      syncTabState(tab, params);
+      navigate(tabToPath(tab, params));
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    },
+    [syncTabState, navigate]
   );
 
   const value = useMemo(
@@ -247,6 +244,7 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
       setSelectedExperienceId,
       jobWorkspaceSubTab,
       navigateTo,
+      syncTabState,
       userProfileTab,
       setUserProfileTab,
       interviewDraft,
@@ -274,6 +272,7 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
       setSelectedExperienceId,
       jobWorkspaceSubTab,
       navigateTo,
+      syncTabState,
       userProfileTab,
       setUserProfileTab,
       interviewDraft,
