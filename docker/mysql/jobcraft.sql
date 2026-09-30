@@ -103,6 +103,7 @@ CREATE TABLE IF NOT EXISTS resume_submission (
     resume_markdown  LONGTEXT,
     resume_file_path VARCHAR(500),
     card_version_ids JSON,
+    resume_suggestions JSON,
     status           VARCHAR(32) DEFAULT '已投递',
     notes            TEXT,
     is_manual        TINYINT(1) DEFAULT 0,

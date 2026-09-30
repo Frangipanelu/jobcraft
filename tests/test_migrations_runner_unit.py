@@ -279,6 +279,34 @@ def test_v0006_v0007_columns_matched_in_resume_submission_runtime_ddl():
     assert "is_active TINYINT(1) DEFAULT 1" in runtime_ddl
 
 
+def test_v0015_resume_suggestions_matched_in_runtime_ddl_and_baseline():
+    """FE-RESUME-02：V0015(resume_suggestions) 只加列，且迁移路径 / 运行时
+    _ensure_resume_submission_table 建表 / docker 基线三处收敛一致。"""
+    v0015 = os.path.join(runner.MIGRATIONS_DIR, "V0015__resume_suggestions.sql")
+    assert os.path.exists(v0015)
+    with open(v0015, encoding="utf-8") as fh:
+        sql = fh.read()
+    assert "ALTER TABLE resume_submission ADD COLUMN resume_suggestions JSON" in sql
+    assert "DROP" not in sql.upper(), "前向兼容：只加列，不得出现 DROP"
+    assert "MODIFY" not in sql.upper(), "前向兼容：不得改列类型"
+
+    from app.tools.db_submission import _ensure_resume_submission_table
+    import app.tools.db_submission as mod
+
+    runtime_ddl = _normalize_ddl(
+        _runtime_create_sql(_ensure_resume_submission_table, mod=mod)
+    )
+    assert "resume_suggestions JSON" in runtime_ddl
+
+    repo_root = os.path.dirname(os.path.dirname(runner.MIGRATIONS_DIR))
+    with open(
+        os.path.join(repo_root, "docker", "mysql", "jobcraft.sql"), encoding="utf-8"
+    ) as fh:
+        assert "resume_suggestions JSON" in fh.read(), (
+            "docker 基线缺 resume_suggestions 列"
+        )
+
+
 def test_v0007_soft_delete_follows_split_convention():
     """DB-04：V0007 语句块应遵守 SPLIT 约定（无尾分号），可被 runner 逐条执行。"""
     v0007 = os.path.join(runner.MIGRATIONS_DIR, "V0007__soft_delete.sql")

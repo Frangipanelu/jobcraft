@@ -548,6 +548,25 @@ class JobAnalysisResult(BaseModel):
     created_at: Optional[str] = None
 
 
+class ResumeSuggestionRecord(BaseModel):
+    """简历 AI 优化建议记录（resume_submission.resume_suggestions 数组元素）。
+
+    FE-RESUME-02：生成端产出 + 前端应用/忽略后原样回传 PATCH；
+    item_index/bullet_index 为主定位（对应简历结构化后的卡片/要点序号），
+    original_text 用于前端水合校验与防幻觉定位。
+    """
+
+    id: str = Field(..., min_length=1, max_length=64)
+    type: Literal["keyword", "metric", "order", "prune", "polish"]
+    title: str = Field("", max_length=200)
+    original_text: str = Field("", max_length=4000)
+    suggested_text: str = Field("", max_length=4000)
+    reason: str = Field("", max_length=1000)
+    item_index: int = Field(0, ge=0)
+    bullet_index: int = Field(0, ge=0)
+    status: Literal["pending", "applied", "rejected"] = "pending"
+
+
 # ============================================================
 # 面试复盘
 # ============================================================

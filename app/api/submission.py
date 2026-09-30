@@ -4,10 +4,11 @@ import uuid
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.api.context import set_session_context, reset_session_context
 from app.auth.dependencies import get_current_user
+from app.schemas.jobcraft import ResumeSuggestionRecord
 from app.schemas.submission_status import (
     SubmissionStatus,
     is_valid_transition,
@@ -42,6 +43,10 @@ class UpdateSubmissionPayload(BaseModel):
     status: Optional[str] = None
     notes: Optional[str] = None
     resume_markdown: Optional[str] = None
+    # FE-RESUME-02：AI 优化建议列表（逐条 Schema 校验；[] 清空，字段缺省不更新）
+    resume_suggestions: Optional[List[ResumeSuggestionRecord]] = Field(
+        default=None, max_length=50
+    )
     job_analysis_id: Optional[int] = None
     card_version_ids: Optional[List[int]] = None
     delivered: Optional[bool] = None

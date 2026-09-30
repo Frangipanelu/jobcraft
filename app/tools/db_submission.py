@@ -45,6 +45,7 @@ def _ensure_resume_submission_table() -> None:
                     resume_markdown  LONGTEXT,
                     resume_file_path VARCHAR(500),
                     card_version_ids JSON,
+                    resume_suggestions JSON,
                     status           VARCHAR(32) DEFAULT 'PREPARED',
                     notes            TEXT,
                     is_manual        TINYINT(1) DEFAULT 0,
@@ -192,6 +193,8 @@ def get_submission(
         "resume_markdown": row["resume_markdown"] or "",
         "resume_file_path": row["resume_file_path"],
         "card_version_ids": _parse_json(row["card_version_ids"]) or [],
+        # FE-RESUME-02：AI 优化建议列表（列缺失/为空时回退 []，旧库行兼容）
+        "resume_suggestions": _parse_json(row.get("resume_suggestions")) or [],
         "status": effective_status(row["status"], bool(row.get("delivered"))),
         # P4-4a：岗位实体 id（前端创建岗位后缓存用）
         "job_id": row.get("job_id"),
@@ -257,6 +260,7 @@ def get_submission_by_analysis(
         "resume_markdown": row["resume_markdown"] or "",
         "resume_file_path": row["resume_file_path"] or "",
         "card_version_ids": json.loads(row["card_version_ids"] or "[]"),
+        "resume_suggestions": _parse_json(row.get("resume_suggestions")) or [],
         "status": row["status"],
         "notes": row["notes"] or "",
         "is_manual": row.get("is_manual", 0),
@@ -298,6 +302,10 @@ def update_submission(
     if "card_version_ids" in updates:
         sets.append("card_version_ids=%s")
         values.append(json.dumps(updates["card_version_ids"], ensure_ascii=False))
+    if "resume_suggestions" in updates and updates["resume_suggestions"] is not None:
+        # FE-RESUME-02：JSON 序列化写入（同 card_version_ids）；[] 表示清空，仅拒 None
+        sets.append("resume_suggestions=%s")
+        values.append(json.dumps(updates["resume_suggestions"], ensure_ascii=False))
     if "job_analysis_id" in updates:
         sets.append("job_analysis_id=%s")
         values.append(updates["job_analysis_id"])
