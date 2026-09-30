@@ -2,6 +2,25 @@
 
 > 本文件用于追踪项目整体进度。AI 在每次会话结束或完成子任务时，必须更新本文件的对应板块。
 
+## BE-EXPR-01 真实 MySQL 复核：非法 SQL 判定为误报（2026-09-30）
+
+> 缺陷清单原判断：`increment_active_expression_usage` 的 `UPDATE ... ORDER BY version DESC LIMIT 1` 违反「MySQL 单表 UPDATE 禁止 ORDER BY/LIMIT」，方案拟改子查询。复核结论：**前提不成立，误报关闭，代码行为无需变更**。
+
+- [x] **官方文档核实**：MySQL UPDATE 语句语法（5.7 / 8.0 / 8.4 / 9.x 四版手册一致）——**单表 UPDATE 明确支持 `[ORDER BY ...] [LIMIT row_count]`**（"If the ORDER BY clause is specified, the rows are updated in the order that is specified. The LIMIT clause places a limit on the number of rows that can be updated."）；`ORDER BY`/`LIMIT` 禁令**仅针对多表 UPDATE**。
+- [x] **真实 MySQL 验收**（jobcraft 容器 `mysql:8.4.9`，端口 3308）：以 V0009 `expression` 表结构建探针库，原样执行生产 SQL——退出码 0 无报错、`ROW_COUNT()=1`，仅目标链 active 最新版本（version=2）`usage_count +1`；candidate 行 / 他卡（experience 11）/ 他类型（direction）全部为 0 不受影响；对照组（去 ORDER BY/LIMIT）会误伤同链多行，证明两子句真实生效。
+- [x] **不采纳原方案**：子查询写法 `WHERE id=(SELECT id FROM expression ...)` 反而可能触发 MySQL ERROR 1093（You can't specify target table for update in FROM clause），属引入新风险。
+- [x] **落地**：`db_expression.increment_active_expression_usage` docstring 补复核结论（防缺陷清单再开）；`tests/test_expression_db_unit.py` 新增 `test_single_table_update_keeps_order_by_limit_legal` 锁定「单表 UPDATE、无 JOIN、单条 UPDATE、ORDER BY version DESC LIMIT 1」语义。
+- [ ] **顺带发现（归 DB-VERIFY-01 / T-M10-5）**：本地 `jobcraft` 库尚不存在 `expression` 表——V0009 迁移未对该库执行（`db_expression` 零运行时 DDL，强依赖 migrate），后续起库验证时需 `python -m migrations.runner migrate` 双跑。
+
+## BE-CARD-01 经历卡内容编辑 500 修复 + e2e STAR 预期裁决（2026-09-30）
+
+> 起因：BE-EXPR-01 真实 MySQL 验收需启动 docker 栈，e2e 首次在真实后端上执行，暴露两个自 EXP-P1-03/06 起被「假游标单测 + skip 的 e2e」双重掩盖的问题。
+
+- [x] **BE-CARD-01 `update_card` 事务 cursor 缺 `dictionary=True`**（`app/tools/db_experience.py`）：`pre = cur.fetchone()` 默认返回 tuple，而 `pre["is_confirmed"]`/`pre.get("version")` 与 `_insert_version_snapshot`/`insert_original_baseline`（`card["raw_text"]`/`card.get("tags")`）全部按列名索引 → 任何内容变更 PATCH 必 `TypeError: tuple indices must be integers`（真实 MySQL 500）。修复：`conn.cursor(dictionary=True)`；新增回归单测 `test_update_card_transaction_cursor_is_dictionary`（断言显式开启——既有假游标恒返回 dict，掩盖了该差异）。
+- [x] **E2E-STAR-01 STAR 槽位 e2e 预期裁决**：`test_update_experience_card_star_slots` patch1 断言「actions 2 条变 3 条（保留旧第 3 条）」与 patch2 断言「results 精确等于提供的 1 条（截断）」在任何统一合并语义下不可同时成立，且该 e2e 自 7481b68 写入起从未成功执行过（当时无后端服务即 skip）。**裁决：保留实现（提供数组为权威，`total=max(len(actions),len(results))`）并修正 patch1 预期**——与前端一致（`toUpdateCardPayload` 每次保存发送完整 actions+results，保留旧条目将导致用户无法删除 action）。
+- [x] **环境与验证**：重建 `jobcraft-backend`/`jobcraft-worker` 镜像（原镜像停在 2 周前旧代码）；**终态全量验证**：check_encoding 378 文件 0 错 + ruff check/format 全绿 + **pytest 789 passed / 6 skipped / 0 failed**（781 基线 + 2 新单测；6 skipped 为需真实 LLM 的用例，原 12 skipped 中 6 个 e2e 因 docker 就绪转为真实执行且全过）。前端无改动，未跑 FE 门禁。
+
+
 ## FE-RESUME-02 简历「AI 优化建议」全链路（2026-09-30）
 
 > 修复缺陷：建议链路无生产者（`markdownToResume` 恒 `aiSuggestions: []`，面板生产恒 0、apply/reject 不可达）+ 6 个 resume mutation 纯 cache 刷新即丢 +「要点内容已保存」假 toast。已确认方案：**生成时机 B**（JD 生成简历后自动 fire 一次 + 编辑器按钮兜底/重生成，编辑器打开不自动触发）；**AI 输入 = JD 分析产物**（`ats_profile`/`jd_text`/`gap_items` 服务端自取，前端不传 JD，无 JD 时 prompt 降级通用优化）；**落库单一写入点 = PATCH `/submission/{id}`**（suggest 端点只算不写）。
