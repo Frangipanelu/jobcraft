@@ -2,6 +2,16 @@
 
 > 本文件用于追踪项目整体进度。AI 在每次会话结束或完成子任务时，必须更新本文件的对应板块。
 
+## FE-RESUME-02 简历「AI 优化建议」全链路（2026-09-30）
+
+> 修复缺陷：建议链路无生产者（`markdownToResume` 恒 `aiSuggestions: []`，面板生产恒 0、apply/reject 不可达）+ 6 个 resume mutation 纯 cache 刷新即丢 +「要点内容已保存」假 toast。已确认方案：**生成时机 B**（JD 生成简历后自动 fire 一次 + 编辑器按钮兜底/重生成，编辑器打开不自动触发）；**AI 输入 = JD 分析产物**（`ats_profile`/`jd_text`/`gap_items` 服务端自取，前端不传 JD，无 JD 时 prompt 降级通用优化）；**落库单一写入点 = PATCH `/submission/{id}`**（suggest 端点只算不写）。
+
+- [x] **V0015 列与 PATCH 契约**（commit `e92d199`）：`resume_submission` 加 `resume_suggestions JSON`（前向兼容只加列，V0014 留给 BE-INDEX-01/T-M7-4）；`docker/mysql/jobcraft.sql` 基线同步；`db_submission` CREATE DDL + `get_submission`/`get_submission_by_analysis` mapper（旧库行回退 `[]`）+ `update_submission` 独立 JSON 分支（`[]` 可清空、拒 None）；`ResumeSuggestionRecord` Schema（type/status Literal、`item_index ge=0`、长度上限）；`UpdateSubmissionPayload.resume_suggestions` `Field(max_length=50)`。
+- [x] **生成工具 / 同步端点 / 任务**（commit `dea0f0d`）：`app/tools/resume_suggest.py`——`suggest_resume_edits`（1 次 `invoke_structured` + 防御清洗：越界 index 剔除、`original_text` 与输入原文不符剔除（幻觉定位）、空改写剔除、≤12 条、记录补 `sg_<hex8>`/`status=pending`）+ `load_suggest_context`（submission → `job_analysis.jd_text/ats_profile/gap_items`，读取失败降级不阻断）；`prompts/resume/suggest_v1.txt`（注册表 `test_prompts` 补字段校验）；`POST /api/jobcraft/submission/{id}/resume-suggest`（归属 404、bullets 空 400、LLM 失败 502、只算不写）；`TASK_TYPE_RESUME_SUGGEST`/`execute_resume_suggest`/`TASK_REGISTRY` 接入 + auth 路由表补端点。
+- [x] **FE 全链路**（commit `181ff2d`）：`ResumeSuggestionWire` + `Submission.resume_suggestions`；`suggestResume` API；新 `utils/resumeSuggestionMapper.ts`（sections→items→bullets 展平索引契约，生成/水合共用；水合 = index 主定位且原文一致 → 全文兜底 → 双不中 `stale`）；`AISuggestion` 加 `itemIndex/bulletIndex/stale`；`useResumesQuery` 挂载存量建议；新 `useGenerateResumeSuggestionsMutation`（`runTaskOrSync('resume_suggest', {submission_id,user_id,bullets})` 降级 `suggestResume`，替换 pending 保留 applied/rejected 历史，PATCH 落库）；6 个 mutation 统一 `persistResumePatch`（apply→`{resume_markdown,resume_suggestions}`、reject→`{resume_suggestions}`、编辑/增删→`{resume_markdown}`，NaN 本地示例跳过 `synced:false`，失败上抛）；apply 运行时防错位（目标已删/原文已变→抛错，编辑/删除即时标 `stale`）；`ResumeEditorView` 空态生成 CTA/「重新生成」/「已失效」徽标（禁应用）/4 处 `.mutate`→`mutateAsync`+按 `synced` 分 success/local toast（修假 toast）；`JDReportDetailView.handleGoToResume` 生成简历成功后 `upsertResume.mutateAsync().then(自动 fire)` 失败仅 warning toast 不阻断。
+- [x] **测试与终态验证**：BE 新 `test_resume_suggestions_unit.py`（10）+ `test_migrations_runner_unit.py`（V0015 前向兼容 1）+ 既有扩展；FE 新 `resume-suggest.test.tsx`（5：水合应用 PATCH 双字段 / stale 徽标禁用 / 生成链 runTaskOrSync→降级端点→PATCH 落库 / 忽略仅 PATCH suggestions / 编辑真实落库）。**终态验证**：check_encoding 376 文件 0 错 + ruff 全绿 + **pytest 781 passed/12 skipped** + tsc 0 错 + **vitest 30 files/197 tests** + build ✅（仅既有 chunk warning）。
+- [ ] **已知边界（后续观察）**：生成即 PATCH——LLM 成功但 PATCH 失败时建议不落 cache（整体上抛，用户重试）；建议在编辑器外（非生成流程）无手动触发点；`original_text` 精确 trim 比对，markdown 往返若重排文本会落 `stale`（安全降级，重新生成即可）。
+
 ## P0 真实性批次：FE-API-01 / FE-MOCK-01 / FE-FAKE-01 / FE-UPLOAD-01（2026-09-30）
 
 > 依据 TODO「全量功能逻辑复核」P0 缺陷链执行序第二、三环（真实性/落地）。至此 **P0 缺陷链 7 项全部修复**（导航批次见下节）。
