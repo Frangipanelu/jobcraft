@@ -187,16 +187,16 @@ def test_create_experience_card(sample_card: Dict[str, Any]):
 
 def test_update_experience_card_star_slots(sample_card: Dict[str, Any]):
     card_id = sample_card["id"]
-    # 只更新 actions：按索引合并，保留已有 result / title / situation
+    # 只更新 actions：提供的数组为权威（合并长度=其长度，允许删减），
+    # 未提供的槽位按索引保留已有值（title/situation/result/difficulty/resolution）
     updated = req(
         "PATCH",
         f"/api/jobcraft/experience/cards/{card_id}",
         json={"actions": ["重构召回链路，引入双塔召回模型", "搭建离线评估体系"]},
     )
-    assert len(updated["actions"]) == 3
+    assert len(updated["actions"]) == 2
     assert updated["actions"][0] == "重构召回链路，引入双塔召回模型"
     assert updated["actions"][1] == "搭建离线评估体系"
-    assert updated["actions"][2] == "基于数据复盘迭代排序策略"
     assert len(updated["results"]) == 2
     cache = updated["ai_structured"]
     ach = cache["achievements"]
