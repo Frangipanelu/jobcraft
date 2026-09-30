@@ -42,6 +42,7 @@ export const MockInterviewModal: React.FC<MockInterviewModalProps> = ({
   const [isStarting, setIsStarting] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [isCompleting, setIsCompleting] = useState(false);
+  const [startError, setStartError] = useState<string | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const startedRef = useRef(false);
@@ -50,28 +51,34 @@ export const MockInterviewModal: React.FC<MockInterviewModalProps> = ({
   const position = currentInterview?.role || '';
   const roundType = currentInterview?.roundName || '技术面';
 
-  // 打开弹窗即向后端发起首轮对话，由 AI 面试官开场
+  // 打开弹窗即向后端发起首轮对话，由 AI 面试官开场；失败进入显式错误态（FE-MOCK-01），不伪造开场白
+  const startInterview = async () => {
+    setStartError(null);
+    setIsStarting(true);
+    try {
+      const res = await interviewApi.mockChat({ messages: [], company, position, round_type: roundType });
+      setMessages([{ role: 'interviewer', content: res.reply }]);
+    } catch (err) {
+      const message = (err as Error).message || '请稍后重试';
+      setStartError(message);
+      showToast({
+        type: 'error',
+        title: '模拟面试启动失败',
+        message
+      });
+    } finally {
+      setIsStarting(false);
+    }
+  };
+
   useEffect(() => {
     if (!isOpen) return;
     if (startedRef.current) return;
     startedRef.current = true;
     setMessages([]);
     setCandidateInput('');
-    setIsStarting(true);
-    interviewApi
-      .mockChat({ messages: [], company, position, round_type: roundType })
-      .then((res) => {
-        setMessages([{ role: 'interviewer', content: res.reply }]);
-      })
-      .catch((err) => {
-        showToast({
-          type: 'error',
-          title: '模拟面试启动失败',
-          message: (err as Error).message || '请稍后重试'
-        });
-        setMessages([{ role: 'interviewer', content: '你好，请做一个简短的自我介绍，然后我们开始本场面试。' }]);
-      })
-      .finally(() => setIsStarting(false));
+    setStartError(null);
+    startInterview();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
 
@@ -85,7 +92,7 @@ export const MockInterviewModal: React.FC<MockInterviewModalProps> = ({
 
   const handleSend = async () => {
     const text = candidateInput.trim();
-    if (!text || isSending || isStarting) return;
+    if (!text || isSending || isStarting || startError) return;
 
     const nextMessages: ChatMsg[] = [...messages, { role: 'user', content: text }];
     setMessages(nextMessages);
@@ -175,6 +182,19 @@ export const MockInterviewModal: React.FC<MockInterviewModalProps> = ({
               </div>
               <span className="text-xs text-muted">面试官正在准备开场...</span>
             </div>
+          ) : startError && messages.length === 0 ? (
+            <div className="space-y-3">
+              <div className="p-4 rounded-2xl border border-error/30 bg-white text-error text-sm font-medium leading-relaxed">
+                模拟面试启动失败：{startError}
+              </div>
+              <button
+                type="button"
+                onClick={startInterview}
+                className="px-4 py-1.5 rounded-lg border border-edge hover:border-sage text-xs font-semibold text-ink hover:text-sage bg-white transition cursor-pointer"
+              >
+                重试连接
+              </button>
+            </div>
           ) : (
             messages.map((m, idx) =>
               m.role === 'interviewer' ? (
@@ -252,7 +272,7 @@ export const MockInterviewModal: React.FC<MockInterviewModalProps> = ({
               <button
                 type="button"
                 onClick={handleSend}
-                disabled={!candidateInput.trim() || isSending || isStarting}
+                disabled={!candidateInput.trim() || isSending || isStarting || !!startError}
                 className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-sage hover:bg-sage-dim disabled:bg-edge-deep text-white text-xs font-semibold shadow-xs transition cursor-pointer"
               >
                 <Send className="w-3.5 h-3.5" />
