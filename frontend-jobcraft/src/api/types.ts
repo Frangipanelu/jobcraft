@@ -406,6 +406,8 @@ export interface InterviewPrepRecord extends InterviewPrepResult {
   company: string
   position: string
   submission_id?: number | null
+  /** 备战应答草稿（题号 -> 文本），FE-PREP-01 落库于 interview_preps.drafts */
+  drafts?: Record<string, string>
 }
 
 // ============================================================

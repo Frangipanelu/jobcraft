@@ -1,7 +1,7 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useToastActions } from '../../context/JobCraftContext';
 import { useTabNavigate } from '../../router/tabPaths';
-import { useInterviewsQuery } from '../../features/interview/hooks';
+import { useInterviewsQuery, useSavePrepDraftsMutation } from '../../features/interview/hooks';
 import { CompanyResearchShape } from '../../api/types';
 import {
   ArrowLeft,
@@ -104,6 +104,17 @@ export const InterviewPrepWorkspaceView: React.FC<InterviewPrepWorkspaceViewProp
   const [activeSection, setActiveSection] = useState<SectionType>('公司调研');
   const [selectedQIdForAnswer, setSelectedQIdForAnswer] = useState<string>('');
   const [answerDrafts, setAnswerDrafts] = useState<Record<string, string>>({});
+  const saveDrafts = useSavePrepDraftsMutation();
+  const syncedPrepIdRef = useRef<number | null>(null);
+
+  // 服务端已落库草稿 -> 本地编辑态（每份准备稿只灌入一次；
+  // 保存成功后的 cache 回写不冲掉用户尚未保存的编辑）
+  useEffect(() => {
+    const prepId = src?.id;
+    if (prepId === undefined || syncedPrepIdRef.current === prepId) return;
+    syncedPrepIdRef.current = prepId;
+    setAnswerDrafts(src?.drafts || {});
+  }, [src?.id, src?.drafts]);
 
   // 真实维度题 -> 本地问题形状
   const questions: LocalQuestion[] = useMemo(() => {
@@ -141,13 +152,30 @@ export const InterviewPrepWorkspaceView: React.FC<InterviewPrepWorkspaceViewProp
     readiness: currentInterview?.readinessPercent || 0
   };
 
-  const handleSaveAnswer = () => {
-    if (!selectedQIdForAnswer) return;
-    showToast({
-      type: 'success',
-      title: '回答草稿已保存',
-      message: '已记录你的应答思路。'
-    });
+  const handleSaveAnswer = async () => {
+    const prepId = src?.id;
+    if (prepId === undefined || prepId <= 0) {
+      showToast({
+        type: 'error',
+        title: '草稿无法保存',
+        message: '当前面试稿尚未落库，请稍后重试。'
+      });
+      return;
+    }
+    try {
+      await saveDrafts.mutateAsync({ prepId, drafts: answerDrafts });
+      showToast({
+        type: 'success',
+        title: '回答草稿已保存',
+        message: '已记录你的应答思路，刷新与切换页面不丢失。'
+      });
+    } catch {
+      showToast({
+        type: 'error',
+        title: '草稿保存失败',
+        message: '网络或服务异常，请稍后重试。'
+      });
+    }
   };
 
   const currentQObj = questions.find((q) => q.id === selectedQIdForAnswer) || questions[0];
@@ -439,10 +467,11 @@ export const InterviewPrepWorkspaceView: React.FC<InterviewPrepWorkspaceViewProp
                     <button
                       type="button"
                       onClick={handleSaveAnswer}
-                      className="px-3.5 py-1.5 bg-[#204E3F] hover:bg-[#16382D] text-white rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-xs transition"
+                      disabled={saveDrafts.isPending}
+                      className="px-3.5 py-1.5 bg-[#204E3F] hover:bg-[#16382D] disabled:opacity-60 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-xs transition"
                     >
                       <Save className="w-3.5 h-3.5" />
-                      <span>保存草稿</span>
+                      <span>{saveDrafts.isPending ? '保存中…' : '保存草稿'}</span>
                     </button>
                   </div>
                   <textarea

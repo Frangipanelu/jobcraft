@@ -149,3 +149,33 @@ export function useCreateInterviewMutation() {
     },
   });
 }
+
+export interface SavePrepDraftsArgs {
+  prepId: number;
+  drafts: Record<string, string>;
+}
+
+/**
+ * 保存备战应答草稿（FE-PREP-01）：
+ * - PATCH /api/jobcraft/interview-prep/{id} 整体覆盖 interview_preps.drafts；
+ * - 成功后就地更新 INTERVIEWS cache 的 prepSource.drafts（与 useCreateInterviewMutation 同 setQueryData 模式）；
+ * - 失败原样抛出由视图层弹错误 toast，不上报假成功。
+ */
+export function useSavePrepDraftsMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation<{ id: number; drafts: Record<string, string> }, unknown, SavePrepDraftsArgs>({
+    mutationFn: ({ prepId, drafts }) => interviewApi.saveInterviewPrepDrafts(prepId, drafts),
+    onSuccess: ({ id, drafts }) => {
+      const prev = queryClient.getQueryData<Interview[]>([...INTERVIEWS_QUERY_KEY]) || [];
+      queryClient.setQueryData(
+        [...INTERVIEWS_QUERY_KEY],
+        prev.map((iv) =>
+          iv.prepSource?.id === id
+            ? { ...iv, prepSource: { ...iv.prepSource, drafts } }
+            : iv
+        )
+      );
+    },
+  });
+}

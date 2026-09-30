@@ -49,6 +49,19 @@ export async function listInterviewPreps(
   return request<{ records: InterviewPrepRecord[] }>(`/api/jobcraft/interview-prep${qs}`)
 }
 
+export async function saveInterviewPrepDrafts(
+  prepId: number,
+  drafts: Record<string, string>
+): Promise<{ id: number; drafts: Record<string, string> }> {
+  return request<{ id: number; drafts: Record<string, string> }>(
+    `/api/jobcraft/interview-prep/${prepId}`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify({ drafts }),
+    }
+  )
+}
+
 // ============================================================
 // 面试复盘
 // ============================================================
