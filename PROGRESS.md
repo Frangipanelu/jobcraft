@@ -2,6 +2,16 @@
 
 > 本文件用于追踪项目整体进度。AI 在每次会话结束或完成子任务时，必须更新本文件的对应板块。
 
+## P0 真实性批次：FE-API-01 / FE-MOCK-01 / FE-FAKE-01 / FE-UPLOAD-01（2026-09-30）
+
+> 依据 TODO「全量功能逻辑复核」P0 缺陷链执行序第二、三环（真实性/落地）。至此 **P0 缺陷链 7 项全部修复**（导航批次见下节）。
+
+- [x] **FE-API-01 简历下载路径对齐后端 prefix**（commit `d2a9020`）：`api/job.ts:249` `/api/jobcraft/resume/download` → `/api/jobcraft/job/resume/download`（`job_analysis` router prefix）；以后端为准改前端不加 alias，记 ADR-A5（`docs/design-decisions/`，按 `.gitignore:77` 留本地）；`api-paths.test.ts` 锁 URL 契约。注：函数当前零消费者，接线属 FE-RESUME-03。
+- [x] **FE-MOCK-01 模拟面试失败不再伪造台词**（commit `18423ef`）：`MockInterviewModal.tsx` 移除失败注入的假开场白，改 `startError` 显式错误态（错误块 + 重试连接 + 发送禁用）；`mock-interview-modal.test.tsx` 断言「失败不出现假台词 / 重试成功恢复」。
+- [x] **FE-FAKE-01 硬编码假数据清理**（commit `20a3fda`）：`InterviewReviewCenterView` 假指标改 reviews 实算（无数据显 `—`，删「100% 反哺率」）；`CreateInterview` 删 `'hr-1'` 幽灵 id、`res-tailored-1` ATS 假选项、假默认值 → 空 + 占位符 + step2 必填校验；`UserProfileView` 删假徽标、目标公司默认 `[]`；`InterviewPrepCenterView` 5 处假兜底改 `—`；`features/profile/hooks.ts` role 回落链清理。验收：`fake-data-cleanup.test.tsx` absence 断言。
+- [x] **FE-UPLOAD-01 两条上传路径接入真实接口**（commit `f5009a1`）：① 复盘 `CreateReview` → `POST /interview-review/upload`（`CreateReviewArgs` 拆 file/transcript 分支、皆缺抛错；`resumeFileError` 对齐后端 `SUPPORTED_EXTS` txt/md/pdf/docx ≤10MB；真实 `dataTransfer.files` 拖拽，删 `handleSimulatedDrop` 与「已载入示例速记对话」假提示）；② 历史简历 → `previewResume → confirmUpload → createBaseResume` 三步链（新增 `useUploadResumeMutation` 任一步失败上抛；硬化 `useAddHistoricalResumeMutation` serverId 回填 `hr-<serverId>`；`CreateInterview`/`ResumeStep` 用真实 id 选中、删 `hr-upload-${Date.now()}` 幽灵 id、「浏览文件」按钮接真实 onClick）；③ `UserProfileView.handleConfirmUpload` 改 `await mutateAsync`（落库失败上抛）。**残余 follow-up（B2）**：wizard `resumeMode`/`selectedResumeId` 选择仍不入 prep payload（后端仅收 `card_ids`/`resume_markdown`），需 ADR + 后端契约另立项。
+- [x] **测试**：`review-query.test.tsx`（+7：multipart 分支/皆缺抛错/断网上抛 + CreateReview 上传页 4 例）、`resume-step.test.tsx`（重写 8 例：真实列表/选中/非法文件/成功链/断网/元数据失败）、`historical-resumes-query.test.tsx`（+4：链成功/preview 失败/confirm 空/元数据失败上抛）。**终态验证**：check_encoding 371 文件 0 错 + ruff 全绿 + **pytest 752 passed/12 skipped** + tsc 0 错 + **vitest 29 files/192 tests** + build ✅。
+
 ## P0 导航地基批次：FE-NAV-01 / FE-TAB-01 / FE-STATE-01（2026-09-30，T-M10-1）
 
 > 依据 TODO「全量功能逻辑复核」P0 缺陷链执行序第一环（= 功能任务总表 T-M10-1 导航收口）。修复类：`navigateTo` 只改 state 不改 URL 导致约 19 个按钮静默失效。
