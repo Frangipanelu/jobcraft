@@ -246,5 +246,5 @@ export async function deleteBaseResume(resumeId: number): Promise<{ ok: boolean 
 }
 
 export function getResumeDownloadUrl(path: string): string {
-  return `/api/jobcraft/resume/download?path=${encodeURIComponent(path)}`
+  return `/api/jobcraft/job/resume/download?path=${encodeURIComponent(path)}`
 }
