@@ -1269,3 +1269,16 @@
 - [x] **测试隔离修复** `4199d39`：岗位分析工作流单测补 mock `ScoreMatchAgent`，消除真实 LLM 调用（429 波动导致 3 例偶发失败）；后端全量 752 passed/12 skipped。
 - [x] **唯一键策略延后**：`job` 表暂不加唯一键（`submission_id` vs `company+position` 二选一属批次 B），find-or-create 先走 SELECT，并发重复由批次 B 收敛。
 - [ ] **本段遗留**（批次 B 及以后）：job 唯一键与并发去重；`/jobs/:id/actions` 等契约对齐；JD↔Submission 关联持久化（P0-6）；批次 D 错误码/幂等键/cursor 分页；批次 E langgraph Checkpointer。真实 MySQL（localhost:3308）未启动，V0011–V0013 仅经迁移 runner 单测验证，重复执行待环境恢复后补验。
+
+---
+
+## 功能对齐矩阵 M1-M10 全量裁决 + PRD（2026-09-28，文档批次，未提交）
+
+> 方法：逐功能模块六栏卡片（页面布局/数据流/spec 对照/挂靠缺陷/用户新需求/裁决+待建任务）→ 用户逐条拍板。产出三件套：矩阵 `docs/feature-alignment-matrix-2026-09-28.md`、PRD `docs/PRD-jobcraft-2026-09-28.md`、`TODO.md` 顶部待建任务总表（63 项 ≈52-60 人天）。
+
+- [x] **10 模块全部裁决完成**：M1 个人资产（P1 裁决 5 任务）→ M2 表达（U-P2a/a′/b/c）→ M4 JD 分析（Q1-Q5：结构化注入 §14.2、**缺口重构=改写任务清单**、方向并入报告页）→ M3 方向体系（Q6-Q8：B 切片、六维两级分离 direction+jd_classification、knowledge 后置）→ M5 岗位投递（Q1-Q5：六态词表、Job 先行、状态去轮次化）→ M6 简历版本（Q1-Q6：resume_version 表、**三栏布局左缺口/中A4/右编辑面板**、打印/另存 PDF 下线假导出）→ M7 面试准备（Q1'-Q5：删 /interview/new、5→3 tab、预建场次、上传诚实化）→ M8 复盘题库（Q1-Q6：**feedback_candidates 闸门**、聚合题库、解除 8 题限制）→ P7 公司调研深化（D1-D6：拿下面试唯一目的、6 维结构化+逐条来源、7 条 query 配方、降级矩阵）→ M9 反馈验证（Q1-Q4：validations 表 Level 0-4、回流按 level/usage 排序、BE-EXPR-01 必修）→ M10 平台基础（Q1-Q5：navigateTo 真导航、队列 TTL/重试/幂等+user_id 服务端注入、死代码先分派后清、DB-VERIFY 双跑）。
+- [x] **全局术语统一**（用户拍板，矩阵顶部）：原始版本（version_type=original）/ 经历版本（jd_alignment，随简历版本归档，命名 `方向-公司-日期`）/ 简历版本（resume_version 表）/ 表达（candidate→confirmed，source_refs 记来源）；expression 更新来源扩为 prep+复盘。
+- [x] **方法论落地裁决**：《结构化汇报》黄漫宇 → `docs/methodology/structured-expression.md`（待建 T-P7-4），三处 prompt 统一引用+版本化（简历建议/面试表达/复盘标准）。
+- [x] **PRD v0.6 产出**（按用户模板）：文档更新记录/需求背景/需求目标/需求概述（一句话+**Mermaid 总流程图**+10 模块交互逻辑）/**接口说明**（62 端点全量+12 个待建）/**数据库说明**（ER Mermaid+18 表+V0001-V0013+V0014 合并批）/**时序图**（Mermaid sequenceDiagram ×5：JD 链/准备链/复盘链/反馈闸门/异步任务）/**埋点**（13 事件设计，P0=task_fallback+feedback_*）/**AB 测试**（5 假设+单用户期同构对照替代）/**产品 Sense**（7 条产品判断）。
+- [x] **TODO 回写**：顶部新增「待建任务总表」63 项（T-M1-1…T-M10-8）+ 并入/后置清单 + 功能与缺陷双链并行序；状态区勾选本次产出。
+- [ ] **本批次未 commit**（纯文档变更 4 件：矩阵、PRD、TODO、PROGRESS），待用户裁决提交；后续执行从 T-M5-1/T-M6-1（基础链）或缺陷 P0 导航（与 T-M10-1 同批）起步。
