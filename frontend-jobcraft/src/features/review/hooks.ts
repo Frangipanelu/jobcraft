@@ -3,7 +3,7 @@ import * as authApi from '../../api/auth';
 import * as experienceApi from '../../api/experience';
 import * as interviewApi from '../../api/interview';
 import * as tasksApi from '../../api/tasks';
-import type { InterviewReviewResult } from '../../api/types';
+import type { InterviewReviewCreateResult, InterviewReviewResult } from '../../api/types';
 import { Experience, Interview, InterviewReview, Job } from '../../types/jobcraft';
 import { EXPERIENCES_QUERY_KEY, versionsToHistory } from '../experiences/mappers';
 import { JOBS_QUERY_KEY } from '../jobs/mappers';
@@ -27,14 +27,19 @@ export interface CreateReviewMutationResult {
 
 export interface CreateReviewArgs {
   interviewId: string;
-  transcript: string;
+  /** 粘贴速记文本（与 file 二选一） */
+  transcript?: string;
+  /** 转录文档文件（与 transcript 二选一；FE-UPLOAD-01 真实 multipart 路径） */
+  file?: File;
 }
 
 /**
  * 创建面试复盘。与 legacy `JobCraftContext.createReviewFromTranscript` 行为等价：
  * - 从 INTERVIEWS cache 解析目标 interview（缺则抛错，由视图 toast）；
- * - `createInterviewReview` 落库 → `runTaskOrSync('interview_review_analyze')` 降级 `analyzeInterviewReview`；
- * - 分析失败容忍（保留 base patch），不抛出；`createInterviewReview` 硬失败向上抛；
+ * - FE-UPLOAD-01：`file` 走 `uploadInterviewReview`（multipart），`transcript` 走
+ *   `createInterviewReview`（JSON），两者皆缺则抛错（不提交空记录）；
+ * - 落库 → `runTaskOrSync('interview_review_analyze')` 降级 `analyzeInterviewReview`；
+ * - 分析失败容忍（保留 base patch），不抛出；落库硬失败向上抛；
  * - 成功后 INTERVIEWS cache（review + status completed）+ 跨域 JOBS cache（steps done）；
  * - 不内置 toast / activities（toast 归视图层；activities 无消费者）。
  */
@@ -43,7 +48,7 @@ export function useCreateInterviewReviewMutation() {
 
 
   return useMutation<CreateReviewMutationResult, unknown, CreateReviewArgs>({
-    mutationFn: async ({ interviewId, transcript }) => {
+    mutationFn: async ({ interviewId, transcript, file }) => {
       const interviews =
         queryClient.getQueryData<Interview[]>([...INTERVIEWS_QUERY_KEY]) || [];
       const targetInterview = interviews.find((i) => i.id === interviewId);
@@ -52,13 +57,23 @@ export function useCreateInterviewReviewMutation() {
       }
 
       const user = await authApi.getCurrentUser();
-      const result = await interviewApi.createInterviewReview({
+      const common = {
         user_id: user.id,
         company: targetInterview.company,
         position: targetInterview.role,
         round_type: targetInterview.roundType,
-        raw_text: transcript,
-      });
+      };
+      let result: InterviewReviewCreateResult;
+      if (file) {
+        result = await interviewApi.uploadInterviewReview(file, common);
+      } else if (transcript && transcript.trim()) {
+        result = await interviewApi.createInterviewReview({
+          ...common,
+          raw_text: transcript,
+        });
+      } else {
+        throw new Error('请粘贴面试速记文本或上传转录文档');
+      }
 
       let analysis: InterviewReviewResult | null = null;
       try {

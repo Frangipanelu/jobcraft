@@ -32,6 +32,22 @@ const analysisSteps = [
   '复盘报告生成中...'
 ];
 
+// FE-UPLOAD-01：与后端 POST /interview-review/upload 同契约（TXT/MD/PDF/DOCX，≤10MB）
+const REVIEW_UPLOAD_EXTS = ['txt', 'md', 'pdf', 'docx'];
+const REVIEW_UPLOAD_MAX_BYTES = 10 * 1024 * 1024;
+
+/** 校验复盘转录文档；合法返回 null，非法返回错误文案（视图层 toast）。 */
+function reviewFileError(file: File): string | null {
+  const ext = (file.name.split('.').pop() || '').toLowerCase();
+  if (!REVIEW_UPLOAD_EXTS.includes(ext)) {
+    return `不支持「${ext ? '.' + ext : '无后缀'}」格式，请使用 TXT / MD / PDF / DOCX。`;
+  }
+  if (file.size > REVIEW_UPLOAD_MAX_BYTES) {
+    return `文件过大（${(file.size / 1024 / 1024).toFixed(1)}MB > 10MB）。`;
+  }
+  return null;
+}
+
 export const CreateReview: React.FC<{ initialJobId?: string }> = ({ initialJobId = '' }) => {
   const {
     navigateTo,
@@ -83,10 +99,10 @@ export const CreateReview: React.FC<{ initialJobId?: string }> = ({ initialJobId
     interviewer: '业务技术面试官'
   });
 
-  // Step 2 - Upload
+  // Step 2 - Upload（FE-UPLOAD-01：持有真实 File，提交时走 multipart 上传）
   const [uploadMode, setUploadMode] = useState<'paste' | 'file'>('paste');
   const [pasteText, setPasteText] = useState('');
-  const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Standalone AI Analysis state (image 3)
@@ -143,27 +159,27 @@ export const CreateReview: React.FC<{ initialJobId?: string }> = ({ initialJobId
     navigateTo('jd_analysis_center');
   };
 
-  // Handle local file upload
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      setUploadedFileName(file.name);
-      showToast({
-        type: 'success',
-        title: '录音/记录上传成功',
-        message: `已解析「${file.name}」，准备开始智能复盘研判。`
-      });
+  // Handle local file upload（FE-UPLOAD-01：真实校验，选中即校验通过、不伪造成功 toast）
+  const applyUploadFile = (file: File): boolean => {
+    const err = reviewFileError(file);
+    if (err) {
+      showToast({ type: 'error', title: '文件无法导入', message: err });
+      return false;
     }
+    setUploadedFile(file);
+    return true;
   };
 
-  const handleSimulatedDrop = () => {
-    const defaultName = `${selectedJob?.company || '字节跳动'}_第1面录音与速记.m4a`;
-    setUploadedFileName(defaultName);
-    showToast({
-      type: 'success',
-      title: '文件已导入',
-      message: `已载入「${defaultName}」。`
-    });
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (file) applyUploadFile(file);
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const file = e.dataTransfer.files?.[0];
+    if (file) applyUploadFile(file);
   };
 
   // Trigger AI analysis
@@ -173,6 +189,14 @@ export const CreateReview: React.FC<{ initialJobId?: string }> = ({ initialJobId
         type: 'warning',
         title: '请输入面试速记文本',
         message: '请粘贴面试对话或速记记录以便 AI 进行深度复盘。'
+      });
+      return;
+    }
+    if (uploadMode === 'file' && !uploadedFile) {
+      showToast({
+        type: 'warning',
+        title: '请选择转录文档',
+        message: '请先选择或拖入 TXT / MD / PDF / DOCX 文件（≤10MB）。'
       });
       return;
     }
@@ -203,13 +227,15 @@ export const CreateReview: React.FC<{ initialJobId?: string }> = ({ initialJobId
         try {
           const { interviewId } = await createReviewMutation.mutateAsync({
             interviewId: selectedInterviewId,
-            transcript: pasteText
+            ...(uploadMode === 'file' && uploadedFile
+              ? { file: uploadedFile }
+              : { transcript: pasteText })
           });
 
           showToast({
             type: 'success',
             title: '面试复盘已生成',
-            message: `已完成「${selectedJob?.company || manualForm.company || '字节跳动'} ${manualForm.roundName}」的深度逐题诊断与经历库反哺。`
+            message: `已完成「${selectedJob?.company || manualForm.company || '当前岗位'} ${manualForm.roundName}」的深度逐题诊断与经历库反哺。`
           });
           navigateTo('interview_review_detail', { interviewId });
         } catch (error) {
@@ -629,7 +655,7 @@ export const CreateReview: React.FC<{ initialJobId?: string }> = ({ initialJobId
                 <h3 className="text-base font-bold text-ink">步骤 3: 上传记录</h3>
                 <div className="border-b border-edge/60 my-3" />
                 <p className="text-xs text-muted">
-                  支持直接粘贴面试速记文字，或上传音频文件（m4a/mp3/wav/txt），AI 将自动结构化提炼问答对与攻防诊断。
+                  支持直接粘贴面试速记文字，或上传转录文档（TXT / MD / PDF / DOCX，单文件 ≤10MB），AI 将自动结构化提炼问答对与攻防诊断。
                 </p>
               </div>
 
@@ -655,7 +681,7 @@ export const CreateReview: React.FC<{ initialJobId?: string }> = ({ initialJobId
                       : 'text-muted hover:text-ink'
                   }`}
                 >
-                  上传录音 / 转录文档
+                  上传转录文档
                 </button>
               </div>
 
@@ -666,7 +692,7 @@ export const CreateReview: React.FC<{ initialJobId?: string }> = ({ initialJobId
                       面试速记 / 对话记录文本 *
                     </label>
                     <span className="text-[11px] text-muted">
-                      已载入示例速记对话（可直接用于研判）
+                      {pasteText.trim() ? `已输入 ${pasteText.trim().length} 字` : '尚未输入文本'}
                     </span>
                   </div>
                   <textarea
@@ -683,16 +709,13 @@ export const CreateReview: React.FC<{ initialJobId?: string }> = ({ initialJobId
                     type="file"
                     ref={fileInputRef}
                     onChange={handleFileUpload}
-                    accept=".mp3,.m4a,.wav,.txt,.docx"
+                    accept=".txt,.md,.pdf,.docx"
                     className="hidden"
                   />
                   <div
                     onClick={() => fileInputRef.current?.click()}
                     onDragOver={(e) => e.preventDefault()}
-                    onDrop={(e) => {
-                      e.preventDefault();
-                      handleSimulatedDrop();
-                    }}
+                    onDrop={handleDrop}
                     className="p-8 border border-dashed border-[#A8ADA8]/70 hover:border-sage rounded-xl bg-[#f8f9f7]/60 hover:bg-sage-soft/10 flex flex-col items-center justify-center gap-3 transition cursor-pointer group text-center"
                   >
                     <div className="p-3 rounded-full bg-white border border-edge text-sage group-hover:scale-105 transition shadow-2xs">
@@ -700,10 +723,10 @@ export const CreateReview: React.FC<{ initialJobId?: string }> = ({ initialJobId
                     </div>
                     <div>
                       <div className="text-xs font-bold text-ink group-hover:text-sage transition">
-                        {uploadedFileName ? `已选择：${uploadedFileName}` : '点击上传录音或将音频文件拖拽至此处'}
+                        {uploadedFile ? `已选择：${uploadedFile.name}` : '点击上传转录文档或将文件拖拽至此处'}
                       </div>
                       <div className="text-[11px] text-muted mt-1">
-                        支持 MP3, M4A, WAV, TXT, DOCX 等格式，单文件最大 500MB
+                        支持 TXT、MD、PDF、DOCX 格式，单文件最大 10MB
                       </div>
                     </div>
                     <span className="text-xs font-semibold px-4 py-2 rounded-xl bg-white border border-edge text-ink group-hover:border-sage shadow-2xs">

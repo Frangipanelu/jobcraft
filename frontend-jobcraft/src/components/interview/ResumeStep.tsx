@@ -1,5 +1,11 @@
-import React, { useState } from 'react';
-import { useHistoricalResumesQuery } from '../../features/historical-resumes/hooks';
+import React, { useRef, useState } from 'react';
+import { useToastActions } from '../../context/JobCraftContext';
+import {
+  useHistoricalResumesQuery,
+  useUploadResumeMutation,
+  resumeFileError,
+} from '../../features/historical-resumes/hooks';
+import type { HistoricalResume } from '../../types/jobcraft';
 
 export type ResumeMode = 'existing' | 'upload' | 'none';
 
@@ -15,7 +21,8 @@ interface ResumeStepProps {
  * 关联简历步骤（standalone 第 3 步 / from-job 第 2 步）。
  * 自 NewInterviewModal 抽出并去除硬编码假简历：
  * 「从简历库选择」接真实底座简历（useHistoricalResumesQuery）；
- * 上传/暂不关联为纯本地 UI 态，保持原行为。
+ * FE-UPLOAD-01：上传接真实链（preview 解析 → confirm 入库 → base-resumes 元数据），
+ * 成功后回填真实 id（hr-<serverId>）并选中，失败报错、不出现假成功。
  */
 export const ResumeStep: React.FC<ResumeStepProps> = ({
   stepNumber,
@@ -25,10 +32,40 @@ export const ResumeStep: React.FC<ResumeStepProps> = ({
   onSelectedResumeIdChange,
 }) => {
   const { data: historicalResumes = [] } = useHistoricalResumesQuery();
+  const { showToast } = useToastActions();
+  const uploadResumeMutation = useUploadResumeMutation();
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
-  const [uploadedFile, setUploadedFile] = useState<{ name: string; size: string } | null>(null);
+  const [uploaded, setUploaded] = useState<HistoricalResume | null>(null);
 
   const selectedResume = historicalResumes.find((r) => r.id === selectedResumeId);
+
+  const handleUploadFile = async (file: File): Promise<void> => {
+    const err = resumeFileError(file);
+    if (err) {
+      showToast({ type: 'error', title: '简历无法导入', message: err });
+      return;
+    }
+    try {
+      const record = await uploadResumeMutation.mutateAsync(file);
+      setUploaded(record);
+      onSelectedResumeIdChange(record.id);
+      showToast({
+        type: 'success',
+        title: '简历上传成功',
+        message:
+          record.parsedExperiencesCount > 0
+            ? `已解析 ${record.parsedExperiencesCount} 段经历并自动选中「${file.name}」。`
+            : `已保存「${file.name}」，未解析出结构化经历。`
+      });
+    } catch (error) {
+      showToast({
+        type: 'error',
+        title: '简历上传失败',
+        message: (error as Error).message || '请检查网络后重试'
+      });
+    }
+  };
 
   return (
     <div className="space-y-4">
@@ -115,41 +152,52 @@ export const ResumeStep: React.FC<ResumeStepProps> = ({
           onDrop={(e) => {
             e.preventDefault();
             setIsDragging(false);
-            const file = e.dataTransfer.files[0];
-            if (file) {
-              const size = file.size < 1024 * 1024
-                ? `${(file.size / 1024).toFixed(1)} KB`
-                : `${(file.size / (1024 * 1024)).toFixed(1)} MB`;
-              setUploadedFile({ name: file.name, size });
-            }
+            const file = e.dataTransfer.files?.[0];
+            if (file) void handleUploadFile(file);
           }}
         >
+          <input
+            type="file"
+            ref={fileInputRef}
+            accept=".pdf,.docx,.md,.txt"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              e.target.value = '';
+              if (file) void handleUploadFile(file);
+            }}
+          />
           <div className="text-4xl mb-2">📄</div>
           <div className="text-sm font-semibold mb-1" style={{ color: '#202421' }}>
             拖入简历文件
           </div>
           <div className="text-xs mb-3" style={{ color: '#A8ADA8' }}>
-            支持 DOCX / PDF / TXT
+            支持 PDF / DOCX / MD / TXT，≤10MB
           </div>
           <button
             type="button"
-            className="px-4 py-[7px] text-[13px] rounded-lg"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploadResumeMutation.isPending}
+            className="px-4 py-[7px] text-[13px] rounded-lg disabled:opacity-60"
             style={{
               border: '1px solid #C8D8D1',
               background: '#FFFFFF',
               color: '#3E6256'
             }}
           >
-            浏览文件
+            {uploadResumeMutation.isPending ? '解析中...' : '浏览文件'}
           </button>
 
-          {uploadedFile && (
+          {uploaded && (
             <div className="mt-3 p-2 rounded-lg" style={{ background: '#F5FAF7' }}>
               <div className="text-[13px] font-medium" style={{ color: '#202421' }}>
-                {uploadedFile.name}
+                {uploaded.name}
               </div>
               <div className="text-xs" style={{ color: '#A8ADA8' }}>
-                {uploadedFile.size}
+                {uploaded.fileSize} ·{' '}
+                {uploaded.parsedExperiencesCount > 0
+                  ? `已解析 ${uploaded.parsedExperiencesCount} 段经历`
+                  : '未解析出结构化经历'}
               </div>
             </div>
           )}

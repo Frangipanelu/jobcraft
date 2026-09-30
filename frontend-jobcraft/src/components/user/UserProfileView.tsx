@@ -236,8 +236,8 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({ initialTab }) 
       const result = await jobApi.confirmUpload(previewItems, previewRawText || undefined);
       const count = result.cards?.length || 0;
 
-      // 同步更新历史简历列表
-      addHistoricalResumeMutation.mutate({
+      // 同步更新历史简历列表（FE-UPLOAD-01：落库失败上抛，不得假成功）
+      await addHistoricalResumeMutation.mutateAsync({
         name: lastUploadedFileName || '上传简历',
         fileSize: `${(lastUploadedFileSize / 1024 / 1024).toFixed(1)} MB`,
         isDefault: historicalResumes.length === 0,

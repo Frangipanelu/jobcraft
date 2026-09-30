@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useJobCraft, useToastActions } from '../context/JobCraftContext';
 import { useCreateInterviewMutation } from '../features/interview/hooks';
 import { useJobsQuery } from '../features/jobs/hooks';
-import { useHistoricalResumesQuery, useAddHistoricalResumeMutation } from '../features/historical-resumes/hooks';
+import { useHistoricalResumesQuery, useUploadResumeMutation, resumeFileError } from '../features/historical-resumes/hooks';
 import { InterviewRoundType, InterviewFormat } from '../types/jobcraft';
 import {
   ArrowLeft,
@@ -53,7 +53,7 @@ export const CreateInterview: React.FC<{ initialJobId?: string }> = ({ initialJo
   const createInterview = useCreateInterviewMutation();
   const { data: jobs = [] } = useJobsQuery();
   const { data: historicalResumes = [] } = useHistoricalResumesQuery();
-  const addHistoricalResumeMutation = useAddHistoricalResumeMutation();
+  const uploadResumeMutation = useUploadResumeMutation();
 
   // FE-STATE-01：重新进入向导即作废上一次未消费的「JD 报告返回」意图，
   // 避免残留 flag 让 JD 报告页底部横幅在后续无关访问时错乱出现。
@@ -201,47 +201,46 @@ export const CreateInterview: React.FC<{ initialJobId?: string }> = ({ initialJo
     navigateTo('jd_analysis_center');
   };
 
-  // Handle local file upload
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const newResumeId = `hr-upload-${Date.now()}`;
-      addHistoricalResumeMutation.mutate({
-        name: file.name,
-        fileSize: `${(file.size / (1024 * 1024)).toFixed(1)} MB`,
-        isDefault: false,
-        parsedExperiencesCount: 4,
-        format: file.name.endsWith('.docx') ? 'docx' : 'pdf',
-        tags: ['本地上传', '最新简历']
-      });
+  // FE-UPLOAD-01：真实上传链（preview 解析 → confirm 入库 → base-resumes 元数据），
+  // 成功才选中真实 id（hr-<serverId>），失败报错、不出现假成功。
+  const applyUploadResume = async (file: File): Promise<void> => {
+    const err = resumeFileError(file);
+    if (err) {
+      showToast({ type: 'error', title: '简历无法导入', message: err });
+      return;
+    }
+    try {
+      const record = await uploadResumeMutation.mutateAsync(file);
       setCustomUploadedFileName(file.name);
-      setSelectedResumeId(newResumeId);
+      setSelectedResumeId(record.id);
       showToast({
         type: 'success',
         title: '简历上传成功',
-        message: `已自动选择「${file.name}」用于本场面试推演。`
+        message:
+          record.parsedExperiencesCount > 0
+            ? `已解析 ${record.parsedExperiencesCount} 段经历并自动选择「${file.name}」。`
+            : `已保存「${file.name}」，未解析出结构化经历（可在经历页手动录入）。`
+      });
+    } catch (error) {
+      showToast({
+        type: 'error',
+        title: '简历上传失败',
+        message: (error as Error).message || '请检查网络后重试'
       });
     }
   };
 
-  const handleSimulatedDrop = () => {
-    const defaultUploadedName = `${selectedJob?.company || '定制'}_AI产品专家_2026最新简历.pdf`;
-    const newResumeId = `hr-upload-${Date.now()}`;
-    addHistoricalResumeMutation.mutate({
-      name: defaultUploadedName,
-      fileSize: '1.6 MB',
-      isDefault: false,
-      parsedExperiencesCount: 5,
-      format: 'pdf',
-      tags: ['本地上传', '最新简历', 'STAR已对齐']
-    });
-    setCustomUploadedFileName(defaultUploadedName);
-    setSelectedResumeId(newResumeId);
-    showToast({
-      type: 'success',
-      title: '简历已上传并解析',
-      message: `已自动选择「${defaultUploadedName}」。`
-    });
+  // Handle local file upload
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (file) void applyUploadResume(file);
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const file = e.dataTransfer.files?.[0];
+    if (file) void applyUploadResume(file);
   };
 
   // Trigger AI generation
@@ -581,7 +580,7 @@ export const CreateInterview: React.FC<{ initialJobId?: string }> = ({ initialJo
                   type="file"
                   ref={fileInputRef}
                   onChange={handleFileUpload}
-                  accept=".pdf,.doc,.docx,.txt"
+                  accept=".pdf,.docx,.md,.txt"
                   className="hidden"
                 />
 
@@ -589,10 +588,7 @@ export const CreateInterview: React.FC<{ initialJobId?: string }> = ({ initialJo
                 <div
                   onClick={() => fileInputRef.current?.click()}
                   onDragOver={(e) => e.preventDefault()}
-                  onDrop={(e) => {
-                    e.preventDefault();
-                    handleSimulatedDrop();
-                  }}
+                  onDrop={handleDrop}
                   className="p-4 border border-dashed border-[#A8ADA8]/70 hover:border-sage rounded-xl bg-[#f8f9f7]/60 hover:bg-sage-soft/10 flex items-center justify-between gap-3 transition cursor-pointer group"
                 >
                   <div className="flex items-center gap-3">
@@ -604,7 +600,7 @@ export const CreateInterview: React.FC<{ initialJobId?: string }> = ({ initialJo
                         {customUploadedFileName ? `已上传：${customUploadedFileName}` : '点击上传新简历或将文件拖拽至此处'}
                       </div>
                       <div className="text-[11px] text-muted">
-                        支持 PDF、DOCX 格式，AI 将自动解析项目经历并对齐本岗位考点
+                        支持 PDF、DOCX、MD、TXT 格式（≤10MB），AI 将自动解析项目经历并对齐本岗位考点
                       </div>
                     </div>
                   </div>

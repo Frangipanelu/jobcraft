@@ -1,10 +1,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { useEffect, useRef, useState } from 'react';
 import { fireEvent, screen, waitFor } from '@testing-library/react';
-import { useQueryClient } from '@tanstack/react-query';
+import { QueryClient, useQueryClient } from '@tanstack/react-query';
 import { renderWithProviders } from './test-utils';
 import { InterviewReviewCenterView } from '../components/review/InterviewReviewCenterView';
 import { InterviewReviewDetailView } from '../components/review/InterviewReviewDetailView';
+import { ToastContainer } from '../components/common/Toast';
+import { CreateReview } from '../pages/CreateReview';
 import { useInterviewsQuery } from '../features/interview/hooks';
 import { useJobsQuery } from '../features/jobs/hooks';
 import { useExperiencesQuery } from '../features/experiences/hooks';
@@ -42,6 +44,7 @@ const job = vi.hoisted(() => ({
 const interview = vi.hoisted(() => ({
   listInterviewPreps: vi.fn(),
   createInterviewReview: vi.fn(),
+  uploadInterviewReview: vi.fn(),
   analyzeInterviewReview: vi.fn(),
 }));
 
@@ -288,7 +291,13 @@ const CacheReader = () => {
   );
 };
 
-const CreateHarness = ({ interviewId = 'prep-7' }: { interviewId?: string }) => {
+const CreateHarness = ({
+  interviewId = 'prep-7',
+  args,
+}: {
+  interviewId?: string;
+  args?: { transcript?: string; file?: File };
+}) => {
   const createReview = useCreateInterviewReviewMutation();
   const [created, setCreated] = useState('');
   const [error, setError] = useState('');
@@ -299,7 +308,7 @@ const CreateHarness = ({ interviewId = 'prep-7' }: { interviewId?: string }) => 
           setCreated('');
           setError('');
           createReview
-            .mutateAsync({ interviewId, transcript: '面试逐字稿...' })
+            .mutateAsync({ interviewId, ...(args ?? { transcript: '面试逐字稿...' }) })
             .then((r) => setCreated(r.interviewId))
             .catch((e: unknown) => setError((e as Error).message));
         }}
@@ -374,7 +383,7 @@ beforeEach(() => {
     ],
   }));
   interview.listInterviewPreps.mockResolvedValue({ records: [] });
-  interview.createInterviewReview.mockResolvedValue({
+  const createResult = {
     record_id: 101,
     status: 'pending',
     qa_pairs: [{ sequence: 1, speaker: '面试官', question: '如何设计 RAG 评测体系？' }],
@@ -382,7 +391,9 @@ beforeEach(() => {
     dialogue: '',
     speaker_count: 1,
     role_counts: ['interviewer', 'candidate'],
-  });
+  };
+  interview.createInterviewReview.mockResolvedValue(createResult);
+  interview.uploadInterviewReview.mockResolvedValue(createResult);
   interview.analyzeInterviewReview.mockResolvedValue(ANALYSIS);
   tasks.runTaskOrSync.mockImplementation(async (_t: unknown, _p: unknown, fallback: () => unknown) =>
     fallback(),
@@ -470,6 +481,79 @@ describe('useCreateInterviewReviewMutation（生成复盘）', () => {
       expect(screen.getByTestId('create-error').textContent).toContain('未找到对应的面试记录'),
     );
     expect(interview.createInterviewReview).not.toHaveBeenCalled();
+    expect(tasks.runTaskOrSync).not.toHaveBeenCalled();
+  });
+
+  it('FE-UPLOAD-01：file 走真实 multipart uploadInterviewReview，不落 JSON create', async () => {
+    const file = new File(['面试逐字稿...'], '面试速记.txt', { type: 'text/plain' });
+    renderWithProviders(
+      <>
+        <Seeder {...seedProps} />
+        <CreateHarness args={{ file }} />
+        <CacheReader />
+      </>,
+    );
+
+    await screen.findByText('生成复盘');
+    await waitForSeed();
+    fireEvent.click(screen.getByText('生成复盘'));
+
+    await waitFor(() => expect(screen.getByTestId('created-id').textContent).toBe('prep-7'));
+    expect(interview.uploadInterviewReview).toHaveBeenCalledWith(
+      file,
+      {
+        user_id: 1,
+        company: '字节跳动',
+        position: 'AI 产品经理',
+        round_type: 'tech',
+      },
+    );
+    expect(interview.createInterviewReview).not.toHaveBeenCalled();
+    expect(screen.getByTestId('cache-status').textContent).toBe('completed');
+  });
+
+  it('FE-UPLOAD-01：file 与 transcript 皆缺时抛错，不提交空记录', async () => {
+    renderWithProviders(
+      <>
+        <Seeder {...seedProps} />
+        <CreateHarness args={{}} />
+        <CacheReader />
+      </>,
+    );
+
+    await screen.findByText('生成复盘');
+    await waitForSeed();
+    fireEvent.click(screen.getByText('生成复盘'));
+
+    await waitFor(() =>
+      expect(screen.getByTestId('create-error').textContent).toContain(
+        '请粘贴面试速记文本或上传转录文档',
+      ),
+    );
+    expect(interview.createInterviewReview).not.toHaveBeenCalled();
+    expect(interview.uploadInterviewReview).not.toHaveBeenCalled();
+    expect(tasks.runTaskOrSync).not.toHaveBeenCalled();
+  });
+
+  it('FE-UPLOAD-01：上传端点失败（断网）时向上抛，不产生成功结果', async () => {
+    interview.uploadInterviewReview.mockRejectedValue(new Error('Failed to fetch'));
+    const file = new File(['x'], '速记.txt', { type: 'text/plain' });
+    renderWithProviders(
+      <>
+        <Seeder {...seedProps} />
+        <CreateHarness args={{ file }} />
+        <CacheReader />
+      </>,
+    );
+
+    await screen.findByText('生成复盘');
+    await waitForSeed();
+    fireEvent.click(screen.getByText('生成复盘'));
+
+    await waitFor(() =>
+      expect(screen.getByTestId('create-error').textContent).toContain('Failed to fetch'),
+    );
+    expect(screen.getByTestId('created-id').textContent).toBe('');
     expect(tasks.runTaskOrSync).not.toHaveBeenCalled();
   });
 });
@@ -650,5 +734,82 @@ describe('P10-b-lite 轻闸门：复盘反哺写回前需二次确认', () => {
 
     await waitFor(() => expect(screen.getByText('沉淀至经历库')).toBeInTheDocument());
     expect(experience.updateCard).not.toHaveBeenCalled();
+  });
+});
+
+describe('FE-UPLOAD-01 CreateReview 上传路径（非法文件/缺文件不得成功）', () => {
+  const createSeededQueryClient = () => {
+    const qc = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false, staleTime: Infinity },
+        mutations: { retry: false },
+      },
+    });
+    qc.setQueryData([...JOBS_QUERY_KEY], [JOB_12]);
+    qc.setQueryData([...INTERVIEWS_QUERY_KEY], [INT_YUAN]);
+    return qc;
+  };
+
+  /** 进入向导第 3 步「上传记录」。 */
+  const gotoUploadStep = async () => {
+    renderWithProviders(
+      <>
+        <CreateReview />
+        <ToastContainer />
+      </>,
+      { queryClient: createSeededQueryClient() },
+    );
+    await screen.findByText('步骤 1: 关联岗位');
+    fireEvent.click(screen.getByText('下一步'));
+    await screen.findByText('步骤 2: 关联面试');
+    fireEvent.click(screen.getByText('下一步'));
+    await screen.findByText('步骤 3: 上传记录');
+  };
+
+  it('非法文件拖入 → 报错 toast、不选中、不触发上传接口', async () => {
+    await gotoUploadStep();
+    fireEvent.click(screen.getByText('上传转录文档'));
+
+    const zone = screen.getByText('选择本地文件').closest('div') as HTMLElement;
+    fireEvent.drop(zone, {
+      dataTransfer: { files: [new File(['x'], '录音.m4a', { type: 'audio/mp4' })] },
+    });
+
+    expect(await screen.findByText('文件无法导入')).toBeInTheDocument();
+    expect(screen.getByText(/不支持「\.m4a」格式/)).toBeInTheDocument();
+    expect(screen.queryByText(/已选择：录音\.m4a/)).not.toBeInTheDocument();
+    expect(interview.uploadInterviewReview).not.toHaveBeenCalled();
+    expect(interview.createInterviewReview).not.toHaveBeenCalled();
+  });
+
+  it('合法文件仅选中（真实校验通过，不伪造成功 toast）', async () => {
+    await gotoUploadStep();
+    fireEvent.click(screen.getByText('上传转录文档'));
+
+    const zone = screen.getByText('选择本地文件').closest('div') as HTMLElement;
+    fireEvent.drop(zone, {
+      dataTransfer: { files: [new File(['面试内容'], '速记.txt', { type: 'text/plain' })] },
+    });
+
+    expect(await screen.findByText('已选择：速记.txt')).toBeInTheDocument();
+    expect(screen.queryByText('文件无法导入')).not.toBeInTheDocument();
+    expect(interview.uploadInterviewReview).not.toHaveBeenCalled();
+  });
+
+  it('file 模式未选文件点开始 → 提示选择转录文档，不进入分析', async () => {
+    await gotoUploadStep();
+    fireEvent.click(screen.getByText('上传转录文档'));
+    fireEvent.click(screen.getByText('开始 AI 智能复盘研判'));
+
+    expect(await screen.findByText('请选择转录文档')).toBeInTheDocument();
+    expect(screen.queryByText('AI 正在生成复盘报告')).not.toBeInTheDocument();
+    expect(interview.uploadInterviewReview).not.toHaveBeenCalled();
+  });
+
+  it('粘贴模式不再显示「已载入示例速记对话」假提示', async () => {
+    await gotoUploadStep();
+
+    expect(screen.getByText('尚未输入文本')).toBeInTheDocument();
+    expect(screen.queryByText(/已载入示例速记对话/)).not.toBeInTheDocument();
   });
 });

@@ -33,9 +33,10 @@ export function useHistoricalResumesQuery() {
 }
 
 /**
- * 新增历史简历。与 legacy `addHistoricalResume` 等价：
- * - `createBaseResume` 落库成功 → 回填 `serverId`，onSuccess 前置插入 cache；
- * - 落库失败仅保留内存记录（继承 legacy fire-and-forget 容忍），持久化失败不影响本地列表；
+ * 新增历史简历（FE-UPLOAD-01 硬化）：
+ * - `createBaseResume` 落库失败必须上抛，由视图层报错——不再静默容忍假成功；
+ * - 成功后 id 与 `baseResumeToHistoricalResume` 回源映射一致（`hr-<serverId>`），
+ *   选中态在列表 refetch 后不悬空；onSuccess 前置插入 cache；
  * - 不写 activities（零消费者）、不打 console（AGENTS 红线）、toast 归视图层。
  * @param mutationFn 入参 Omit<HistoricalResume, 'id' | 'uploadDate'>；resolve 最终入列的 HistoricalResume
  */
@@ -44,24 +45,66 @@ export function useAddHistoricalResumeMutation() {
 
   return useMutation<HistoricalResume, unknown, Omit<HistoricalResume, 'id' | 'uploadDate'>>({
     mutationFn: async (resume) => {
-      const id = 'hr-' + Date.now();
-      const uploadDate = new Date().toISOString().replace('T', ' ').substring(0, 16);
-      const local: HistoricalResume = { ...resume, id, uploadDate };
-      try {
-        const record = await jobApi.createBaseResume({
-          name: resume.name,
-          file_size: resume.fileSize,
-          format: resume.format,
-          parsed_count: resume.parsedExperiencesCount,
-          tags: resume.tags,
-        });
-        return { ...local, serverId: record.id };
-      } catch {
-        return local;
-      }
+      const record = await jobApi.createBaseResume({
+        name: resume.name,
+        file_size: resume.fileSize,
+        format: resume.format,
+        parsed_count: resume.parsedExperiencesCount,
+        tags: resume.tags,
+      });
+      const mapped = baseResumeToHistoricalResume(record);
+      return { ...resume, id: mapped.id, serverId: mapped.serverId, uploadDate: mapped.uploadDate };
     },
     onSuccess: (newResume) => {
       writeHistoricalResumes(queryClient, [newResume, ...readHistoricalResumes(queryClient)]);
+    },
+  });
+}
+
+/** 简历文件大小展示（<1MB 显示 KB，否则 MB，一位小数）。 */
+function formatFileSize(bytes: number): string {
+  return bytes < 1024 * 1024
+    ? `${(bytes / 1024).toFixed(1)} KB`
+    : `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+/**
+ * 简历文件格式/体积校验（与后端 `/experience/upload/preview` 同契约：
+ * PDF / DOCX / MD / TXT，≤10MB）。合法返回 null，非法返回错误文案。
+ */
+export function resumeFileError(file: File): string | null {
+  const ext = (file.name.split('.').pop() || '').toLowerCase();
+  if (!['pdf', 'docx', 'md', 'txt'].includes(ext)) {
+    return `不支持「${ext ? '.' + ext : '无后缀'}」格式，请使用 PDF / DOCX / MD / TXT。`;
+  }
+  if (file.size > 10 * 1024 * 1024) {
+    return `文件过大（${(file.size / 1024 / 1024).toFixed(1)}MB > 10MB）。`;
+  }
+  return null;
+}
+
+/**
+ * 简历完整上传链（FE-UPLOAD-01）：
+ * `previewResume`（真实解析）→ `confirmUpload`（真实入库）→ `createBaseResume`（元数据），
+ * 任一步失败均向上抛，由视图层报错——断网/非法文件下不得出现成功提示。
+ * @returns 入列的 HistoricalResume（id 与列表回源后的 `hr-<serverId>` 一致，选中态不悬空）
+ */
+export function useUploadResumeMutation() {
+  const addMutation = useAddHistoricalResumeMutation();
+
+  return useMutation<HistoricalResume, unknown, File>({
+    mutationFn: async (file) => {
+      const preview = await jobApi.previewResume(file);
+      const confirmed = await jobApi.confirmUpload(preview.items, preview.raw_text || undefined);
+      const count = confirmed.cards?.length || 0;
+      return addMutation.mutateAsync({
+        name: file.name,
+        fileSize: formatFileSize(file.size),
+        isDefault: false,
+        parsedExperiencesCount: count,
+        format: file.name.toLowerCase().endsWith('.pdf') ? 'pdf' : 'docx',
+        tags: count > 0 ? ['已解析', 'AI 结构化'] : ['已上传'],
+      });
     },
   });
 }

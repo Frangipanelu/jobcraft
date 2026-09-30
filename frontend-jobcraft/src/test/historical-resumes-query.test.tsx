@@ -1,10 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { useState } from 'react';
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { renderWithProviders } from './test-utils';
 import { UserProfileView } from '../components/user/UserProfileView';
 import {
   useHistoricalResumesQuery,
   useAddHistoricalResumeMutation,
+  useUploadResumeMutation,
 } from '../features/historical-resumes/hooks';
 import type { BaseResumeRecord } from '../api/job';
 
@@ -26,6 +28,8 @@ const job = vi.hoisted(() => ({
   setDefaultBaseResume: vi.fn(),
   deleteBaseResume: vi.fn(),
   listJobAnalyses: vi.fn(),
+  previewResume: vi.fn(),
+  confirmUpload: vi.fn(),
 }));
 
 const experience = vi.hoisted(() => ({
@@ -90,6 +94,23 @@ beforeEach(() => {
   job.setDefaultBaseResume.mockResolvedValue({ ...REC_DEFAULT, id: 2, is_default: true });
   job.deleteBaseResume.mockResolvedValue({ ok: true });
   job.listJobAnalyses.mockResolvedValue([]);
+  job.previewResume.mockResolvedValue({
+    mode: 'structured',
+    items: [
+      {
+        title: '端侧大模型量化评测',
+        company: '未来智能实验室',
+        role: 'AI 产品经理',
+        period: '2025.01 - 2025.08',
+        card_type: 'work',
+        raw_text: '移动端端侧生成式体验的量产方案。',
+        summary: '量产方案',
+        selected: true,
+      },
+    ],
+    raw_text: '移动端端侧生成式体验的量产方案。',
+  });
+  job.confirmUpload.mockResolvedValue({ cards: [{ id: 5 }, { id: 6 }] });
   experience.listCards.mockResolvedValue([]);
   interview.listInterviewPreps.mockResolvedValue([]);
 });
@@ -97,22 +118,60 @@ beforeEach(() => {
 const AddHarness = () => {
   const add = useAddHistoricalResumeMutation();
   const { data = [] } = useHistoricalResumesQuery();
+  const [error, setError] = useState('');
   return (
     <div>
       <button
-        onClick={() =>
-          add.mutate({
-            name: '新上传.pdf',
-            fileSize: '1.0 MB',
-            isDefault: false,
-            parsedExperiencesCount: 4,
-            format: 'pdf',
-            tags: ['本地上传'],
-          })
-        }
+        onClick={() => {
+          setError('');
+          add.mutate(
+            {
+              name: '新上传.pdf',
+              fileSize: '1.0 MB',
+              isDefault: false,
+              parsedExperiencesCount: 4,
+              format: 'pdf',
+              tags: ['本地上传'],
+            },
+            { onError: (e) => setError((e as Error).message) },
+          );
+        }}
       >
         添加简历
       </button>
+      <span data-testid="add-error">{error}</span>
+      <ul>
+        {data.map((r) => (
+          <li key={r.id}>
+            {r.name}|{r.serverId ?? 'none'}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+};
+
+const UploadHarness = () => {
+  const upload = useUploadResumeMutation();
+  const { data = [] } = useHistoricalResumesQuery();
+  const [result, setResult] = useState('');
+  const [error, setError] = useState('');
+  return (
+    <div>
+      <button
+        onClick={() => {
+          setResult('');
+          setError('');
+          upload
+            .mutateAsync(new File(['简历内容'], '新简历.pdf', { type: 'application/pdf' }))
+            .then((r) => setResult(`${r.id}|${r.parsedExperiencesCount}`))
+            .catch((e: unknown) => setError((e as Error).message));
+        }}
+      >
+        上传简历
+      </button>
+      <span data-testid="upload-result">{result}</span>
+      <span data-testid="upload-error">{error}</span>
       <ul>
         {data.map((r) => (
           <li key={r.id}>
@@ -194,7 +253,7 @@ describe('FE-HISTORICAL-RESUMES-01 历史简历域迁移', () => {
     expect(screen.getAllByText('默认底座简历')).toHaveLength(1);
   });
 
-  it('新增：createBaseResume 落库回填 serverId 后前置入列', async () => {
+  it('新增：createBaseResume 落库回填 serverId 后前置入列（id 与回源映射一致）', async () => {
     job.listBaseResumes.mockResolvedValue([]);
     renderWithProviders(<AddHarness />);
     await screen.findByText('添加简历');
@@ -211,16 +270,80 @@ describe('FE-HISTORICAL-RESUMES-01 历史简历域迁移', () => {
       }),
     );
     expect(await screen.findByText('新上传.pdf|99')).toBeInTheDocument();
+    expect(screen.getByTestId('add-error').textContent).toBe('');
   });
 
-  it('新增落库失败：仅保留内存记录（无 serverId），不崩溃', async () => {
+  it('FE-UPLOAD-01 新增落库失败：错误上抛（不再静默容忍假成功），不入列', async () => {
     job.listBaseResumes.mockResolvedValue([]);
-    job.createBaseResume.mockRejectedValue(new Error('network'));
+    job.createBaseResume.mockRejectedValue(new Error('network down'));
     renderWithProviders(<AddHarness />);
     await screen.findByText('添加简历');
 
     fireEvent.click(screen.getByRole('button', { name: '添加简历' }));
 
-    expect(await screen.findByText('新上传.pdf|none')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId('add-error').textContent).toBe('network down'));
+    expect(screen.queryByText(/新上传\.pdf\|/)).not.toBeInTheDocument();
+  });
+});
+
+describe('FE-UPLOAD-01 useUploadResumeMutation 完整上传链', () => {
+  it('preview → confirm → createBaseResume 真实链，返回 hr-<serverId> 且入列', async () => {
+    job.listBaseResumes.mockResolvedValue([]);
+    renderWithProviders(<UploadHarness />);
+    await screen.findByText('上传简历');
+
+    fireEvent.click(screen.getByRole('button', { name: '上传简历' }));
+
+    await waitFor(() => expect(screen.getByTestId('upload-result').textContent).toBe('hr-99|2'));
+    expect(job.previewResume).toHaveBeenCalledTimes(1);
+    expect(job.confirmUpload).toHaveBeenCalledTimes(1);
+    expect(job.createBaseResume).toHaveBeenCalledWith({
+      name: '新简历.pdf',
+      file_size: '0.0 KB',
+      format: 'pdf',
+      parsed_count: 2,
+      tags: ['已解析', 'AI 结构化'],
+    });
+    // 调用顺序：preview 先于 confirm 先于 createBaseResume
+    expect(job.previewResume.mock.invocationCallOrder[0]).toBeLessThan(
+      job.confirmUpload.mock.invocationCallOrder[0],
+    );
+    expect(job.confirmUpload.mock.invocationCallOrder[0]).toBeLessThan(
+      job.createBaseResume.mock.invocationCallOrder[0],
+    );
+    expect(screen.getByTestId('upload-error').textContent).toBe('');
+    expect(await screen.findByText('新简历.pdf|99')).toBeInTheDocument();
+  });
+
+  it('断网（preview 失败）→ 错误上抛，不 confirm、不落元数据、不入列', async () => {
+    job.listBaseResumes.mockResolvedValue([]);
+    job.previewResume.mockRejectedValue(new Error('Failed to fetch'));
+    renderWithProviders(<UploadHarness />);
+    await screen.findByText('上传简历');
+
+    fireEvent.click(screen.getByRole('button', { name: '上传简历' }));
+
+    await waitFor(() =>
+      expect(screen.getByTestId('upload-error').textContent).toBe('Failed to fetch'),
+    );
+    expect(screen.getByTestId('upload-result').textContent).toBe('');
+    expect(job.confirmUpload).not.toHaveBeenCalled();
+    expect(job.createBaseResume).not.toHaveBeenCalled();
+    expect(screen.queryByText(/新简历\.pdf\|/)).not.toBeInTheDocument();
+  });
+
+  it('元数据落库失败（断网第二段）→ 错误上抛，不入列', async () => {
+    job.listBaseResumes.mockResolvedValue([]);
+    job.createBaseResume.mockRejectedValue(new Error('Failed to fetch'));
+    renderWithProviders(<UploadHarness />);
+    await screen.findByText('上传简历');
+
+    fireEvent.click(screen.getByRole('button', { name: '上传简历' }));
+
+    await waitFor(() =>
+      expect(screen.getByTestId('upload-error').textContent).toBe('Failed to fetch'),
+    );
+    expect(screen.getByTestId('upload-result').textContent).toBe('');
+    expect(screen.queryByText(/新简历\.pdf\|/)).not.toBeInTheDocument();
   });
 });
