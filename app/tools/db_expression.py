@@ -419,6 +419,11 @@ def increment_active_expression_usage(
     candidate/expired 版本不会被消费，故此处只对激活版本 usage_count 自增；
     调用方须先确认存在激活表达（见 get_active_expression_content）。
 
+    SQL 合法性（BE-EXPR-01 复核，2026-09-30）：单表 UPDATE 支持
+    ORDER BY + LIMIT（MySQL 官方 UPDATE 语法，仅多表 UPDATE 禁用该组合），
+    已在 MySQL 8.4.9 以 V0009 表结构实测——恰好命中 active 链最新版本
+    1 行，candidate / 他卡 / 他类型行不受影响，无需改为子查询写法。
+
     :param experience_id: 经历卡 id。
     :param user_id: 归属用户。
     :param expr_type: 表达类型，默认 standardized。

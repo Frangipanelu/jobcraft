@@ -432,3 +432,17 @@ class TestIncrementUsage:
         sql, params = fake_db["cursor"].executed[-1]
         assert "type=%s" in sql
         assert params[2] == "standardized"
+
+    def test_single_table_update_keeps_order_by_limit_legal(self, fake_db):
+        """BE-EXPR-01 复核（误报）：ORDER BY/LIMIT 仅多表 UPDATE 禁用。
+
+        语句必须保持单表 UPDATE（无 JOIN/逗号多表），ORDER BY version DESC
+        + LIMIT 1 才合法且只命中 active 链最新版本；MySQL 8.4.9 实测通过。
+        """
+        mod.increment_active_expression_usage(10, user_id=7)
+        sql, _ = fake_db["cursor"].executed[-1]
+        assert sql.lstrip().upper().startswith("UPDATE EXPRESSION SET")
+        upper = sql.upper()
+        assert "JOIN" not in upper
+        assert upper.count("UPDATE") == 1
+        assert "ORDER BY version DESC LIMIT 1" in sql
