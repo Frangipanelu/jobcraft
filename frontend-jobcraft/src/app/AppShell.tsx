@@ -17,8 +17,7 @@ export interface AppShellOutletContext {
 export const useAppShellOutlet = () => useOutletContext<AppShellOutletContext>();
 
 /**
- * 应用壳（迁移后真实路由页的统一宿主）。
- * 与遗留 MainLayout 并行存在：已迁移路由经本壳渲染，遗留路由仍经 MainLayout。
+ * 应用壳（全部真实路由页的统一宿主）。
  * 页面通过 <Outlet/> 注入；全局 Modal 与 Toast 在此统一挂载。
  */
 export const AppShell: React.FC = () => {

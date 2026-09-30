@@ -14,7 +14,7 @@ export interface TabNavParams {
 
 /**
  * tab → URL 的单一映射（FE-ROUTE-03）。
- * 已迁移 tab 用 AppShell 真实路由；中心 / 创建 / 简历编辑用 LegacyPageWrapper，但同样拥有 URL。
+ * 全部 tab 均为 AppShell 真实路由页，`navigateTo` 与 `useTabNavigate` 共用此映射做真实跳转（FE-NAV-01）。
  * 返回值恒为绝对路径，供 `useTabNavigate` 与直接 `navigate()` 共用。
  */
 export function tabToPath(tab: NavigationTab, params: TabNavParams = {}): string {
