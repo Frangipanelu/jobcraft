@@ -11,6 +11,7 @@ import {
   useUpdateResumeBulletTextMutation,
   useDeleteResumeBulletMutation,
   useSaveResumeMutation,
+  useGenerateResumeSuggestionsMutation,
 } from '../../features/resume/hooks';
 import {
   FileText,
@@ -59,6 +60,7 @@ export const ResumeEditorView: React.FC<ResumeEditorViewProps> = ({
   const editBullet = useUpdateResumeBulletTextMutation();
   const deleteBullet = useDeleteResumeBulletMutation();
   const saveResume = useSaveResumeMutation();
+  const generateSuggestions = useGenerateResumeSuggestionsMutation();
   const saveExpression = useCreateExpressionMutation();
 
   // active 简历 id 为编辑器局部状态（legacy context.activeResumeId 仅本视图消费）
@@ -114,13 +116,130 @@ export const ResumeEditorView: React.FC<ResumeEditorViewProps> = ({
   // resume 非空已由上方早退保证 → activeId 必非空（TS 需显式收窄）
   const rid = activeId as string;
 
-  const handleSaveBulletEdit = (sectionId: string, itemId: string, bulletId: string) => {
-    editBullet.mutate({ resumeId: rid, sectionId, itemId, bulletId, newText: tempBulletText });
-    setEditingBulletId(null);
-    showToast({
-      type: 'success',
-      title: '要点内容已保存'
-    });
+  // FE-RESUME-02：保存要点编辑 → 落库 PATCH resume_markdown（失败保留编辑态 + error toast）
+  const handleSaveBulletEdit = async (
+    sectionId: string,
+    itemId: string,
+    bulletId: string,
+  ) => {
+    try {
+      const result = await editBullet.mutateAsync({
+        resumeId: rid,
+        sectionId,
+        itemId,
+        bulletId,
+        newText: tempBulletText,
+      });
+      setEditingBulletId(null);
+      showToast(
+        result.synced
+          ? { type: 'success', title: '要点已保存', message: '修改已同步到投递记录。' }
+          : { type: 'warning', title: '本地示例已更新', message: '该简历为本地示例，未同步后端。' },
+      );
+    } catch (error: unknown) {
+      showToast({
+        type: 'error',
+        title: '保存失败',
+        message: (error as Error).message || '请稍后重试',
+      });
+    }
+  };
+
+  const persistToast = (synced: boolean, title: string, message: string) => {
+    showToast(
+      synced
+        ? { type: 'success', title, message }
+        : { type: 'warning', title, message: '本地示例未同步后端。' },
+    );
+  };
+
+  const handleApplySuggestion = (suggestionId: string) => {
+    applySuggestion
+      .mutateAsync({ resumeId: rid, suggestionId })
+      .then((result) => persistToast(result.synced, '已应用优化', '改写已同步保存。'))
+      .catch((error: unknown) => {
+        showToast({
+          type: 'error',
+          title: '应用失败',
+          message: (error as Error).message || '请稍后重试',
+        });
+      });
+  };
+
+  const handleRejectSuggestion = (suggestionId: string) => {
+    rejectSuggestion
+      .mutateAsync({ resumeId: rid, suggestionId })
+      .then((result) => persistToast(result.synced, '已忽略该建议', '状态已同步保存。'))
+      .catch((error: unknown) => {
+        showToast({
+          type: 'error',
+          title: '操作失败',
+          message: (error as Error).message || '请稍后重试',
+        });
+      });
+  };
+
+  const handleApplyAllSuggestions = () => {
+    applyAllSuggestions
+      .mutateAsync({ resumeId: rid })
+      .then((result) =>
+        persistToast(result.synced, '已应用全部优化', `共改写 ${result.appliedCount} 条要点。`),
+      )
+      .catch((error: unknown) => {
+        showToast({
+          type: 'error',
+          title: '批量应用失败',
+          message: (error as Error).message || '请稍后重试',
+        });
+      });
+  };
+
+  const handleDeleteBullet = (sectionId: string, itemId: string, bulletId: string) => {
+    deleteBullet
+      .mutateAsync({ resumeId: rid, sectionId, itemId, bulletId })
+      .then((result) => persistToast(result.synced, '要点已删除', '修改已同步到投递记录。'))
+      .catch((error: unknown) => {
+        showToast({
+          type: 'error',
+          title: '删除失败',
+          message: (error as Error).message || '请稍后重试',
+        });
+      });
+  };
+
+  // FE-RESUME-02：生成/重生成 AI 优化建议（fire-and-forget 不阻塞编辑）
+  const handleGenerateSuggestions = () => {
+    generateSuggestions.mutate(
+      { resumeId: rid },
+      {
+        onSuccess: (result) => {
+          if (!result.generated) {
+            showToast(
+              result.reason === 'local'
+                ? {
+                    type: 'warning',
+                    title: '本地示例不支持',
+                    message: '示例简历没有后端记录，无法生成建议。',
+                  }
+                : { type: 'info', title: '暂无可优化要点', message: '简历中没有可分析的要点。' },
+            );
+            return;
+          }
+          showToast(
+            result.count > 0
+              ? { type: 'success', title: '优化建议已生成', message: `已生成 ${result.count} 条建议并同步保存。` }
+              : { type: 'info', title: '未发现明显问题', message: '当前简历表达已较完善。' },
+          );
+        },
+        onError: (error: unknown) => {
+          showToast({
+            type: 'error',
+            title: '生成失败',
+            message: (error as Error).message || '请稍后重试',
+          });
+        },
+      },
+    );
   };
 
   const handleSave = (resumeId: string) => {
@@ -284,18 +403,48 @@ export const ResumeEditorView: React.FC<ResumeEditorViewProps> = ({
                   AI 针对性优化 ({pendingSuggestions.length})
                 </h3>
               </div>
-              {pendingSuggestions.length > 0 && (
-                <button
-                  onClick={() => applyAllSuggestions.mutate({ resumeId: rid })}
-                  className="text-xs font-semibold text-sage hover:text-sage-dim transition cursor-pointer"
-                >
-                  全部应用
-                </button>
-              )}
+              <div className="flex items-center gap-3">
+                {(resume.aiSuggestions || []).length > 0 && (
+                  <button
+                    onClick={handleGenerateSuggestions}
+                    disabled={generateSuggestions.isPending}
+                    title="结合岗位 JD 分析结论，根据当前简历重新生成优化建议"
+                    className="flex items-center gap-1 text-xs font-semibold text-sage hover:text-sage-dim transition disabled:opacity-50 cursor-pointer"
+                  >
+                    <RotateCcw className="w-3 h-3" />
+                    <span>{generateSuggestions.isPending ? '生成中…' : '重新生成'}</span>
+                  </button>
+                )}
+                {pendingSuggestions.length > 0 && (
+                  <button
+                    onClick={handleApplyAllSuggestions}
+                    className="text-xs font-semibold text-sage hover:text-sage-dim transition cursor-pointer"
+                  >
+                    全部应用
+                  </button>
+                )}
+              </div>
             </div>
 
             <div className="space-y-3 max-h-[calc(100vh-230px)] overflow-y-auto pr-1">
-              {(resume.aiSuggestions || []).map((sug, idx) => (
+              {(resume.aiSuggestions || []).length === 0 ? (
+                <div className="text-center py-6 space-y-2.5">
+                  <Sparkle className="w-5 h-5 text-sage mx-auto" />
+                  <p className="text-xs text-muted">尚未生成优化建议</p>
+                  <button
+                    onClick={handleGenerateSuggestions}
+                    disabled={generateSuggestions.isPending}
+                    className="mx-auto flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-sage hover:bg-sage-dim text-white text-xs font-semibold shadow-2xs transition disabled:opacity-50 cursor-pointer"
+                  >
+                    <Sparkles className="w-3.5 h-3.5" />
+                    <span>
+                      {generateSuggestions.isPending ? '正在生成…' : '生成 AI 优化建议'}
+                    </span>
+                  </button>
+                  <p className="text-[11px] text-faint">逐条给出可直接应用的改写建议</p>
+                </div>
+              ) : (
+                (resume.aiSuggestions || []).map((sug, idx) => (
                 <div
                   key={sug.id}
                   className={`p-3 rounded-xl border text-xs space-y-2 transition ${
@@ -316,6 +465,10 @@ export const ResumeEditorView: React.FC<ResumeEditorViewProps> = ({
                       </span>
                     ) : sug.rejected ? (
                       <span className="text-[10px] text-faint">已忽略</span>
+                    ) : sug.stale ? (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-warning-bg text-warning font-semibold border border-warning/20">
+                        已失效
+                      </span>
                     ) : null}
                   </div>
 
@@ -334,21 +487,29 @@ export const ResumeEditorView: React.FC<ResumeEditorViewProps> = ({
                   {!sug.applied && !sug.rejected && (
                     <div className="flex items-center gap-2 pt-1">
                       <button
-                        onClick={() => applySuggestion.mutate({ resumeId: rid, suggestionId: sug.id })}
-                        className="flex-1 py-1 rounded bg-sage hover:bg-sage-dim text-white text-xs font-semibold transition text-center shadow-2xs cursor-pointer"
+                        onClick={() => handleApplySuggestion(sug.id)}
+                        disabled={sug.stale || applySuggestion.isPending}
+                        title={
+                          sug.stale
+                            ? '对应要点已变更或删除，点击「重新生成」刷新建议'
+                            : undefined
+                        }
+                        className="flex-1 py-1 rounded bg-sage hover:bg-sage-dim text-white text-xs font-semibold transition text-center shadow-2xs disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
                       >
                         应用优化
                       </button>
                       <button
-                        onClick={() => rejectSuggestion.mutate({ resumeId: rid, suggestionId: sug.id })}
-                        className="px-2.5 py-1 rounded bg-page hover:bg-edge text-muted text-xs transition cursor-pointer"
+                        onClick={() => handleRejectSuggestion(sug.id)}
+                        disabled={rejectSuggestion.isPending}
+                        className="px-2.5 py-1 rounded bg-page hover:bg-edge text-muted text-xs transition disabled:opacity-40 cursor-pointer"
                       >
                         忽略
                       </button>
                     </div>
                   )}
                 </div>
-              ))}
+                ))
+              )}
             </div>
           </div>
         </div>
@@ -464,7 +625,7 @@ export const ResumeEditorView: React.FC<ResumeEditorViewProps> = ({
                                   <button
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      deleteBullet.mutate({ resumeId: rid, sectionId: section.id, itemId: item.id, bulletId: bullet.id });
+                                      handleDeleteBullet(section.id, item.id, bullet.id);
                                     }}
                                     className="p-1 text-faint hover:text-error rounded transition cursor-pointer"
                                     title="删除要点"

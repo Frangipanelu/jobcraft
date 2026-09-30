@@ -11,6 +11,7 @@ import type {
   DashboardItem,
   SaveResumeResult,
   ResumePersonalInfo,
+  ResumeSuggestionWire,
   ATSProfile,
   ExperienceCard,
 } from './types'
@@ -149,6 +150,7 @@ export async function updateSubmission(
     status?: string
     notes?: string
     resume_markdown?: string
+    resume_suggestions?: ResumeSuggestionWire[]
     job_analysis_id?: number
     card_version_ids?: number[]
     delivered?: boolean
@@ -157,6 +159,22 @@ export async function updateSubmission(
   return request<Submission>(`/api/jobcraft/submission/${id}`, {
     method: 'PATCH',
     body: JSON.stringify(payload),
+  })
+}
+
+/**
+ * FE-RESUME-02：同步生成简历 AI 优化建议（只算不写，落库走 PATCH resume_suggestions）。
+ * 任务系统不可用时由 runTaskOrSync 降级直接调用本端点。
+ * @param id 投递记录 id
+ * @param bullets 结构化要点 [{item_index, bullet_index, text}]
+ */
+export async function suggestResume(
+  id: number,
+  bullets: { item_index: number; bullet_index: number; text: string }[]
+): Promise<{ suggestions: ResumeSuggestionWire[] }> {
+  return request(`/api/jobcraft/submission/${id}/resume-suggest`, {
+    method: 'POST',
+    body: JSON.stringify({ bullets }),
   })
 }
 

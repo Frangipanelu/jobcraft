@@ -160,6 +160,11 @@ export interface AISuggestion {
   rejected?: boolean;
   reason: string;
   targetBulletId?: string;
+  /** FE-RESUME-02：wire 定位序号（生成时的 sections→items→bullets 展平索引） */
+  itemIndex?: number;
+  bulletIndex?: number;
+  /** FE-RESUME-02：水合定位失败（正文已变更/要点已删除）→ 禁止应用，需重新生成 */
+  stale?: boolean;
 }
 
 export interface ResumeVersion {

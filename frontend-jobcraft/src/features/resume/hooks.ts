@@ -1,8 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as authApi from '../../api/auth';
 import * as jobApi from '../../api/job';
+import * as tasksApi from '../../api/tasks';
+import type { ResumeSuggestionWire } from '../../api/types';
 import { ResumeVersion } from '../../types/jobcraft';
 import { markdownToResume, resumeToMarkdown } from '../../utils/resumeParser';
+import {
+  buildSuggestionBullets,
+  hydrateResumeSuggestions,
+  suggestionsToWire,
+} from '../../utils/resumeSuggestionMapper';
 import { RESUMES_QUERY_KEY } from './mappers';
 
 /**
@@ -23,6 +30,41 @@ function writeResumesMap(
   next: Record<string, ResumeVersion>,
 ): void {
   queryClient.setQueryData([...RESUMES_QUERY_KEY], next);
+}
+
+/**
+ * FE-RESUME-02：统一落库出口（PATCH /submission/{id}）。
+ * - resume_markdown：正文变更（生成/编辑/增删/应用改写）
+ * - resume_suggestions：建议状态变更（生成落库/应用/忽略）
+ * 本地示例（resumeId 非数字）跳过 API，返回 synced=false（调用方 toast 提示）。
+ * @returns 是否已同步后端；PATCH 失败上抛（调用方 error toast）
+ */
+async function persistResumePatch(
+  resumeId: string,
+  patch: {
+    resume_markdown?: string;
+    resume_suggestions?: ResumeSuggestionWire[];
+  },
+): Promise<boolean> {
+  const submissionId = Number(resumeId);
+  if (Number.isNaN(submissionId)) return false;
+  await jobApi.updateSubmission(submissionId, patch);
+  return true;
+}
+
+/** 按 bullet id 在 sections 中定位 bullet（apply 运行时防错位校验用）。 */
+function findBulletById(
+  sections: ResumeVersion['sections'],
+  bulletId: string,
+): { text: string } | null {
+  for (const sec of sections) {
+    for (const item of sec.items || []) {
+      for (const b of item.bullets || []) {
+        if (b.id === bulletId) return b;
+      }
+    }
+  }
+  return null;
 }
 
 /**
@@ -49,7 +91,13 @@ export function useResumesQuery() {
               company: detail.company,
               id: String(item.id),
             });
-            return resume ? ([String(item.id), resume] as const) : null;
+            if (!resume) return null;
+            // FE-RESUME-02：挂载存量 AI 建议（定位失败的 pending → stale）
+            resume.aiSuggestions = hydrateResumeSuggestions(
+              resume,
+              detail.resume_suggestions,
+            );
+            return [String(item.id), resume] as const;
           } catch {
             return null;
           }
@@ -70,13 +118,15 @@ export function useResumesQuery() {
 // ---------------------------------------------------------------------------
 
 /**
- * 应用单条 AI 优化建议：命中 `targetBulletId` 时改写 bullet 文本，并把建议标记 applied。
- * @param mutationFn 入参 { resumeId, suggestionId }；无对应建议时抛错（视图 toast）。
+ * 应用单条 AI 优化建议：命中 `targetBulletId` 时改写 bullet 文本，标记 applied，
+ * 并落库 PATCH {resume_markdown, resume_suggestions}（失败上抛 → 视图 error toast）。
+ * 运行时防错位：目标要点已删除 / 原文已变更 → 抛错（提示重新生成），不覆盖用户编辑。
+ * @param mutationFn 入参 { resumeId, suggestionId }；返回 { synced }（本地示例为 false）
  */
 export function useApplyResumeAiSuggestionMutation() {
   const queryClient = useQueryClient();
 
-  return useMutation<Record<string, ResumeVersion>, unknown, {
+  return useMutation<{ synced: boolean }, unknown, {
     resumeId: string;
     suggestionId: string;
   }>({
@@ -87,10 +137,17 @@ export function useApplyResumeAiSuggestionMutation() {
 
       const sug = (activeResume.aiSuggestions || []).find((s) => s.id === suggestionId);
       if (!sug) throw new Error('未找到该条优化建议');
+      if (sug.stale) throw new Error('该建议已失效（对应要点已变更），请重新生成');
 
       let updatedSections = [...activeResume.sections];
+      let textChanged = false;
 
       if (sug.targetBulletId) {
+        const target = findBulletById(activeResume.sections, sug.targetBulletId);
+        if (!target) throw new Error('建议对应要点已被删除，请重新生成建议');
+        if (target.text.trim() !== sug.originalText.trim()) {
+          throw new Error('要点原文已变更，请重新生成建议');
+        }
         updatedSections = updatedSections.map((sec) => ({
           ...sec,
           items: sec.items.map((item) => ({
@@ -100,34 +157,37 @@ export function useApplyResumeAiSuggestionMutation() {
             ),
           })),
         }));
+        textChanged = true;
       }
 
       const updatedSuggestions = (activeResume.aiSuggestions || []).map((s) =>
-        s.id === suggestionId ? { ...s, applied: true, rejected: false } : s,
+        s.id === suggestionId ? { ...s, applied: true, rejected: false, stale: undefined } : s,
       );
 
-      return {
-        ...prev,
-        [resumeId]: {
-          ...activeResume,
-          aiSuggestions: updatedSuggestions,
-          sections: updatedSections,
-          updatedAt: '刚刚',
-        },
+      const nextResume = {
+        ...activeResume,
+        aiSuggestions: updatedSuggestions,
+        sections: updatedSections,
+        updatedAt: '刚刚',
       };
+      const synced = await persistResumePatch(resumeId, {
+        ...(textChanged ? { resume_markdown: resumeToMarkdown(nextResume) } : {}),
+        resume_suggestions: suggestionsToWire(updatedSuggestions, nextResume),
+      });
+      writeResumesMap(queryClient, { ...prev, [resumeId]: nextResume });
+      return { synced };
     },
-    onSuccess: (next) => writeResumesMap(queryClient, next),
   });
 }
 
 /**
- * 忽略单条 AI 优化建议（标记 rejected，正文不变）。
- * @param mutationFn 入参 { resumeId, suggestionId }
+ * 忽略单条 AI 优化建议（标记 rejected，正文不变），落库 PATCH {resume_suggestions}。
+ * @param mutationFn 入参 { resumeId, suggestionId }；返回 { synced }
  */
 export function useRejectResumeAiSuggestionMutation() {
   const queryClient = useQueryClient();
 
-  return useMutation<Record<string, ResumeVersion>, unknown, {
+  return useMutation<{ synced: boolean }, unknown, {
     resumeId: string;
     suggestionId: string;
   }>({
@@ -140,74 +200,93 @@ export function useRejectResumeAiSuggestionMutation() {
         s.id === suggestionId ? { ...s, rejected: true, applied: false } : s,
       );
 
-      return {
-        ...prev,
-        [resumeId]: {
-          ...activeResume,
-          aiSuggestions: updatedSuggestions,
-        },
+      const nextResume = {
+        ...activeResume,
+        aiSuggestions: updatedSuggestions,
       };
+      const synced = await persistResumePatch(resumeId, {
+        resume_suggestions: suggestionsToWire(updatedSuggestions, nextResume),
+      });
+      writeResumesMap(queryClient, { ...prev, [resumeId]: nextResume });
+      return { synced };
     },
-    onSuccess: (next) => writeResumesMap(queryClient, next),
   });
 }
 
 /**
- * 全部应用 AI 优化建议：逐个改写 target bullet 文本（已 reject 的跳过），全部标记 applied。
- * @param mutationFn 入参 { resumeId }
+ * 全部应用 AI 优化建议：逐个改写 target bullet 文本（已 reject / stale 跳过，
+ * 目标已删或原文已变的条目标记 stale 并跳过），全部标记 applied，
+ * 落库 PATCH {resume_markdown, resume_suggestions}。
+ * @param mutationFn 入参 { resumeId }；返回 { synced, appliedCount }
  */
 export function useApplyAllResumeAiSuggestionsMutation() {
   const queryClient = useQueryClient();
 
-  return useMutation<Record<string, ResumeVersion>, unknown, { resumeId: string }>({
+  return useMutation<{ synced: boolean; appliedCount: number }, unknown, { resumeId: string }>({
     mutationFn: async ({ resumeId }) => {
       const prev = readResumesMap(queryClient);
       const activeResume = prev[resumeId];
       if (!activeResume) throw new Error('未找到对应的简历');
 
       let updatedSections = [...activeResume.sections];
+      let textChanged = false;
+      let appliedCount = 0;
 
-      (activeResume.aiSuggestions || []).forEach((sug) => {
-        if (sug.targetBulletId && !sug.rejected) {
+      const updatedSuggestions = (activeResume.aiSuggestions || []).map((sug) => {
+        if (sug.rejected || sug.applied || sug.stale) return sug;
+
+        const target = sug.targetBulletId
+          ? findBulletById(activeResume.sections, sug.targetBulletId)
+          : null;
+        if (sug.targetBulletId && (!target || target.text.trim() !== sug.originalText.trim())) {
+          // 目标失效：标记 stale，跳过改写（不阻断其余建议）
+          return { ...sug, stale: true };
+        }
+        if (sug.targetBulletId && target) {
+          const bulletId = sug.targetBulletId;
           updatedSections = updatedSections.map((sec) => ({
             ...sec,
             items: sec.items.map((item) => ({
               ...item,
               bullets: item.bullets.map((b) =>
-                b.id === sug.targetBulletId ? { ...b, text: sug.suggestedText } : b,
+                b.id === bulletId ? { ...b, text: sug.suggestedText } : b,
               ),
             })),
           }));
+          textChanged = true;
+          appliedCount += 1;
+          return { ...sug, applied: true, rejected: false, stale: undefined };
         }
+        // 无 targetBulletId（历史数据）：仅标记 applied，不改写正文
+        appliedCount += 1;
+        return { ...sug, applied: true };
       });
 
-      const updatedSuggestions = (activeResume.aiSuggestions || []).map((s) => ({
-        ...s,
-        applied: !s.rejected,
-      }));
-
-      return {
-        ...prev,
-        [resumeId]: {
-          ...activeResume,
-          aiSuggestions: updatedSuggestions,
-          sections: updatedSections,
-          updatedAt: '刚刚',
-        },
+      const nextResume = {
+        ...activeResume,
+        aiSuggestions: updatedSuggestions,
+        ...(textChanged ? { sections: updatedSections, updatedAt: '刚刚' } : {}),
       };
+      const synced = await persistResumePatch(resumeId, {
+        ...(textChanged ? { resume_markdown: resumeToMarkdown(nextResume) } : {}),
+        resume_suggestions: suggestionsToWire(updatedSuggestions, nextResume),
+      });
+      writeResumesMap(queryClient, { ...prev, [resumeId]: nextResume });
+      return { synced, appliedCount };
     },
-    onSuccess: (next) => writeResumesMap(queryClient, next),
   });
 }
 
 /**
  * 更新指定 bullet 的文本（section/item/bullet 逐层定位）。
- * @param mutationFn 入参 { resumeId, sectionId, itemId, bulletId, newText }
+ * 落库 PATCH {resume_markdown}（FE-RESUME-02：编辑即落库，修「假 toast」）；
+ * 命中该要点的 pending 建议同步标记 stale（原文已变，防止误覆盖）。
+ * @param mutationFn 入参 { resumeId, sectionId, itemId, bulletId, newText }；返回 { synced }
  */
 export function useUpdateResumeBulletTextMutation() {
   const queryClient = useQueryClient();
 
-  return useMutation<Record<string, ResumeVersion>, unknown, {
+  return useMutation<{ synced: boolean }, unknown, {
     resumeId: string;
     sectionId: string;
     itemId: string;
@@ -235,27 +314,36 @@ export function useUpdateResumeBulletTextMutation() {
         };
       });
 
-      return {
-        ...prev,
-        [resumeId]: {
-          ...activeResume,
-          sections: updatedSections,
-          updatedAt: '刚刚',
-        },
+      const updatedSuggestions = (activeResume.aiSuggestions || []).map((s) =>
+        s.targetBulletId === bulletId && !s.applied && !s.rejected
+          ? { ...s, stale: true }
+          : s,
+      );
+
+      const nextResume = {
+        ...activeResume,
+        sections: updatedSections,
+        aiSuggestions: updatedSuggestions,
+        updatedAt: '刚刚',
       };
+      const synced = await persistResumePatch(resumeId, {
+        resume_markdown: resumeToMarkdown(nextResume),
+      });
+      writeResumesMap(queryClient, { ...prev, [resumeId]: nextResume });
+      return { synced };
     },
-    onSuccess: (next) => writeResumesMap(queryClient, next),
   });
 }
 
 /**
  * 向指定 item 追加一条 bullet（legacy `addResumeBullet`，当前无 UI 消费，保留域能力）。
- * @param mutationFn 入参 { resumeId, sectionId, itemId, text, experienceId? }
+ * 落库 PATCH {resume_markdown}；存量建议靠 original_text 全文兜底重定位（索引后移不判 stale）。
+ * @param mutationFn 入参 { resumeId, sectionId, itemId, text, experienceId? }；返回 { synced }
  */
 export function useAddResumeBulletMutation() {
   const queryClient = useQueryClient();
 
-  return useMutation<Record<string, ResumeVersion>, unknown, {
+  return useMutation<{ synced: boolean }, unknown, {
     resumeId: string;
     sectionId: string;
     itemId: string;
@@ -288,27 +376,29 @@ export function useAddResumeBulletMutation() {
         };
       });
 
-      return {
-        ...prev,
-        [resumeId]: {
-          ...activeResume,
-          sections: updatedSections,
-          updatedAt: '刚刚',
-        },
+      const nextResume = {
+        ...activeResume,
+        sections: updatedSections,
+        updatedAt: '刚刚',
       };
+      const synced = await persistResumePatch(resumeId, {
+        resume_markdown: resumeToMarkdown(nextResume),
+      });
+      writeResumesMap(queryClient, { ...prev, [resumeId]: nextResume });
+      return { synced };
     },
-    onSuccess: (next) => writeResumesMap(queryClient, next),
   });
 }
 
 /**
- * 删除指定 bullet。
- * @param mutationFn 入参 { resumeId, sectionId, itemId, bulletId }
+ * 删除指定 bullet。落库 PATCH {resume_markdown}；
+ * 指向该要点的 pending 建议标记 stale（防止 dangling 应用）。
+ * @param mutationFn 入参 { resumeId, sectionId, itemId, bulletId }；返回 { synced }
  */
 export function useDeleteResumeBulletMutation() {
   const queryClient = useQueryClient();
 
-  return useMutation<Record<string, ResumeVersion>, unknown, {
+  return useMutation<{ synced: boolean }, unknown, {
     resumeId: string;
     sectionId: string;
     itemId: string;
@@ -333,16 +423,24 @@ export function useDeleteResumeBulletMutation() {
         };
       });
 
-      return {
-        ...prev,
-        [resumeId]: {
-          ...activeResume,
-          sections: updatedSections,
-          updatedAt: '刚刚',
-        },
+      const updatedSuggestions = (activeResume.aiSuggestions || []).map((s) =>
+        s.targetBulletId === bulletId && !s.applied && !s.rejected
+          ? { ...s, stale: true }
+          : s,
+      );
+
+      const nextResume = {
+        ...activeResume,
+        sections: updatedSections,
+        aiSuggestions: updatedSuggestions,
+        updatedAt: '刚刚',
       };
+      const synced = await persistResumePatch(resumeId, {
+        resume_markdown: resumeToMarkdown(nextResume),
+      });
+      writeResumesMap(queryClient, { ...prev, [resumeId]: nextResume });
+      return { synced };
     },
-    onSuccess: (next) => writeResumesMap(queryClient, next),
   });
 }
 
@@ -408,5 +506,72 @@ export function useUpsertResumeMutation() {
       return { ...prev, [resumeId]: resume };
     },
     onSuccess: (next) => writeResumesMap(queryClient, next),
+  });
+}
+
+export interface GenerateSuggestionsResult {
+  /** 是否完成生成（本地示例/无要点为 false） */
+  generated: boolean;
+  /** 本次生成的建议条数 */
+  count: number;
+  reason?: 'local' | 'empty';
+  /** 新建议是否已落库（PATCH resume_suggestions） */
+  synced: boolean;
+}
+
+/**
+ * FE-RESUME-02：生成简历 AI 优化建议（方案 B 触发点：JD 生成简历后自动 fire + 编辑器按钮）。
+ *
+ * - 输入：结构化 bullets（sections→items→bullets 展平，与水合共用索引契约）；
+ *   岗位上下文由服务端自取（JD 分析产物），前端不传 JD 数据；
+ * - 任务系统可用走 `resume_suggest` 任务，不可用降级同步端点 `suggestResume`；
+ * - 生成结果替换 pending 建议、保留 applied/rejected 历史，并 PATCH 落库；
+ * - 失败上抛（调用方 error toast）；本地示例返回 {generated:false, reason:'local'}。
+ * @param mutationFn 入参 { resumeId }
+ */
+export function useGenerateResumeSuggestionsMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation<GenerateSuggestionsResult, unknown, { resumeId: string }>({
+    mutationFn: async ({ resumeId }) => {
+      const prev = readResumesMap(queryClient);
+      const resume = prev[resumeId];
+      if (!resume) throw new Error('未找到对应的简历');
+
+      const submissionId = Number(resumeId);
+      if (Number.isNaN(submissionId)) {
+        return { generated: false, count: 0, reason: 'local', synced: false };
+      }
+      const bullets = buildSuggestionBullets(resume);
+      if (!bullets.length) {
+        return { generated: false, count: 0, reason: 'empty', synced: false };
+      }
+
+      const user = await authApi.getCurrentUser();
+      const result = await tasksApi.runTaskOrSync<{ suggestions?: ResumeSuggestionWire[] }>(
+        'resume_suggest',
+        { submission_id: submissionId, user_id: user.id, bullets },
+        () => jobApi.suggestResume(submissionId, bullets),
+        { timeout: 120_000 },
+      );
+      const wires = result?.suggestions || [];
+
+      const history = (resume.aiSuggestions || []).filter((s) => s.applied || s.rejected);
+      const updatedSuggestions = [
+        ...history,
+        ...hydrateResumeSuggestions(resume, wires),
+      ];
+      const nextResume = {
+        ...resume,
+        aiSuggestions: updatedSuggestions,
+        updatedAt: '刚刚',
+      };
+
+      const synced = await persistResumePatch(resumeId, {
+        resume_suggestions: suggestionsToWire(updatedSuggestions, nextResume),
+      });
+      writeResumesMap(queryClient, { ...prev, [resumeId]: nextResume });
+      return { generated: true, count: wires.length, synced };
+    },
   });
 }

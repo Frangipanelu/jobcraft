@@ -6,7 +6,7 @@ import { saveResume } from '../../api/job';
 import { useJdAnalysesQuery } from '../../features/jd/hooks';
 import { useJobsQuery } from '../../features/jobs/hooks';
 import { useExperiencesQuery } from '../../features/experiences/hooks';
-import { useUpsertResumeMutation } from '../../features/resume/hooks';
+import { useUpsertResumeMutation, useGenerateResumeSuggestionsMutation } from '../../features/resume/hooks';
 import {
   ArrowLeft,
   ArrowRight,
@@ -67,6 +67,7 @@ export const JDReportDetailView: React.FC<JDReportDetailViewProps> = ({
   const go = useTabNavigate();
 
   const upsertResume = useUpsertResumeMutation();
+  const generateSuggestions = useGenerateResumeSuggestionsMutation();
 
   const { data: jdAnalyses = [], isLoading } = useJdAnalysesQuery();
   const { data: jobs = [] } = useJobsQuery();
@@ -283,10 +284,25 @@ export const JDReportDetailView: React.FC<JDReportDetailViewProps> = ({
               id: String(result.submission_id),
             });
             if (resumeVersion) {
-              upsertResume.mutate({
-                resumeId: String(result.submission_id),
-                resume: resumeVersion,
-              });
+              const newResumeId = String(result.submission_id);
+              upsertResume
+                .mutateAsync({ resumeId: newResumeId, resume: resumeVersion })
+                .then(() => {
+                  // FE-RESUME-02 方案 B：简历生成成功后自动 fire 一次建议生成
+                  // （异步不阻塞跳转；失败只 toast，不回滚简历生成）
+                  generateSuggestions.mutate(
+                    { resumeId: newResumeId },
+                    {
+                      onError: (error) =>
+                        showToast({
+                          type: 'warning',
+                          title: '优化建议生成失败',
+                          message: `${(error as Error).message || '请稍后重试'}（可在简历编辑器手动重试）`,
+                        }),
+                    },
+                  );
+                })
+                .catch(() => undefined);
             }
           }
         } catch (err) {

@@ -453,11 +453,29 @@ export interface Submission {
   resume_markdown: string
   resume_file_path: string | null
   card_version_ids: number[]
+  /** FE-RESUME-02：简历 AI 优化建议（后端 resume_submission.resume_suggestions JSON 数组） */
+  resume_suggestions?: ResumeSuggestionWire[]
   status: SubmissionStatus
   notes: string
   delivered: boolean
   created_at: string | null
   updated_at: string | null
+}
+
+/**
+ * FE-RESUME-02：简历 AI 优化建议 wire 记录（后端 ResumeSuggestionRecord 序列化形态）。
+ * 定位：item_index/bullet_index 主定位 + original_text 水合校验兜底。
+ */
+export interface ResumeSuggestionWire {
+  id: string
+  type: 'keyword' | 'metric' | 'order' | 'prune' | 'polish'
+  title: string
+  original_text: string
+  suggested_text: string
+  reason: string
+  item_index: number
+  bullet_index: number
+  status: 'pending' | 'applied' | 'rejected'
 }
 
 export interface DashboardItem {
