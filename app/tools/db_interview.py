@@ -19,7 +19,7 @@ logger = logging.getLogger("jobcraft.db.interview")
 
 
 def _ensure_interview_preps_table() -> None:
-    """确保 interview_preps 表存在（schema 已由启动引导保证时短路）"""
+    """确保 interview_preps 表存在且含 drafts 列（schema 已由启动引导保证时短路）"""
     if is_schema_ready():
         return
     with connection() as conn:
@@ -37,11 +37,17 @@ def _ensure_interview_preps_table() -> None:
                     extended_version_json JSON,
                     ability_matrix_json JSON,
                     html_content LONGTEXT,
+                    drafts JSON,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     KEY idx_job (job_analysis_id)
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
                 """
             )
+            # FE-PREP-01：V0001/V0016 之外的历史库缺 drafts 列，运行时守卫补列兜底
+            cur.execute("SHOW COLUMNS FROM interview_preps")
+            existing = {c[0] for c in cur.fetchall()}
+            if "drafts" not in existing:
+                cur.execute("ALTER TABLE interview_preps ADD COLUMN drafts JSON")
 
 
 def insert_interview_prep(data: Dict[str, Any]) -> int:
@@ -112,6 +118,7 @@ def get_interview_prep_by_job(
         "company_research": _parse_json(row["company_research_json"])
         if "company_research_json" in row and row["company_research_json"]
         else None,
+        "drafts": _parse_json(row.get("drafts")) or {},
         "created_at": row["created_at"].isoformat() if row.get("created_at") else None,
     }
 
@@ -125,7 +132,7 @@ def list_interview_preps(user_id: int) -> List[Dict[str, Any]]:
                p.duration, p.elevator_pitch,
                p.standard_version_json, p.extended_version_json,
                p.ability_matrix_json, p.html_content, p.submission_id,
-               p.company_research_json, p.created_at,
+               p.company_research_json, p.drafts, p.created_at,
                j.company, j.position
         FROM interview_preps p
         LEFT JOIN job_analysis j ON j.id = p.job_analysis_id
@@ -154,12 +161,37 @@ def list_interview_preps(user_id: int) -> List[Dict[str, Any]]:
                 "company_research": _parse_json(r["company_research_json"])
                 if r.get("company_research_json")
                 else None,
+                "drafts": _parse_json(r.get("drafts")) or {},
                 "created_at": r["created_at"].isoformat()
                 if r.get("created_at")
                 else None,
             }
         )
     return result
+
+
+def update_interview_prep_drafts(
+    prep_id: int, user_id: int, drafts: Dict[str, Any]
+) -> bool:
+    """整体覆盖保存某份面试准备稿的应答草稿（按 id+user_id 校验所有权）。
+
+    :param prep_id: interview_preps 主键
+    :param user_id: 当前用户 id（越权写入直接不命中）
+    :param drafts: 题号 -> 草稿文本的映射
+    :return: True 表示已更新；False 表示记录不存在或不属于该用户
+    """
+    _ensure_interview_preps_table()
+    row = query_one(
+        "SELECT id FROM interview_preps WHERE id=%s AND user_id=%s",
+        (prep_id, user_id),
+    )
+    if not row:
+        return False
+    execute(
+        "UPDATE interview_preps SET drafts=%s WHERE id=%s AND user_id=%s",
+        (json.dumps(drafts, ensure_ascii=False), prep_id, user_id),
+    )
+    return True
 
 
 # ---------------- 面试复盘 ----------------

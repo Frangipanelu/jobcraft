@@ -347,6 +347,51 @@ def test_get_interview_prep(analyzed_job: Dict[str, Any]):
     assert result["dimension_questions"]
 
 
+@pytest.mark.slow
+def test_interview_prep_drafts_roundtrip(server_ok):
+    """FE-PREP-01：备战草稿 PATCH 保存 -> 列表回读 -> 覆盖写 -> 不存在 404。
+
+    依赖同文件前置 slow 用例已生成准备稿（与 test_get_interview_prep 同一惯例），
+    每次 e2e 运行为全新随机用户，故列表首条即本会话生成的记录。
+    """
+    listing = req("GET", "/api/jobcraft/interview-prep")
+    records = listing.get("records") or []
+    assert records, "前置用例应已生成面试准备稿"
+    prep_id = records[0]["id"]
+    assert records[0].get("drafts") == {}, "新准备稿草稿应为空"
+
+    saved_drafts = {"q-0": "STAR：背景→任务→行动→结果"}
+    saved = req(
+        "PATCH",
+        f"/api/jobcraft/interview-prep/{prep_id}",
+        json={"drafts": saved_drafts},
+    )
+    assert saved == {"id": prep_id, "drafts": saved_drafts}
+
+    def current_drafts() -> Dict[str, Any]:
+        rows = req("GET", "/api/jobcraft/interview-prep").get("records") or []
+        hit = next(r for r in rows if r["id"] == prep_id)
+        return hit.get("drafts") or {}
+
+    assert current_drafts() == saved_drafts
+
+    # 再次保存应整体覆盖（旧题草稿不保留）
+    req(
+        "PATCH",
+        f"/api/jobcraft/interview-prep/{prep_id}",
+        json={"drafts": {"q-1": "第二题草稿"}},
+    )
+    assert current_drafts() == {"q-1": "第二题草稿"}
+
+    resp = requests.patch(
+        api_url("/api/jobcraft/interview-prep/999999"),
+        json={"drafts": {}},
+        headers=_get_auth_headers(),
+        timeout=30,
+    )
+    assert resp.status_code == 404
+
+
 # ---------- 错误场景 ----------
 
 

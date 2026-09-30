@@ -137,6 +137,7 @@ from app.tools.db_interview import (  # noqa: E402, F401
     list_interview_qa_pairs,
     list_interview_preps,
     list_interview_records,
+    update_interview_prep_drafts,
     update_interview_record_analysis,
     update_interview_record_status,
 )

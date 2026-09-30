@@ -1653,6 +1653,69 @@ class TestGetInterviewPrep:
         assert resp.json()["job_analysis_id"] == 1
 
 
+class TestInterviewPrepDrafts:
+    """PATCH /api/jobcraft/interview-prep/{prep_id} + 列表回传 drafts（FE-PREP-01）"""
+
+    def test_save_drafts_normal(self, monkeypatch):
+        called = {}
+
+        def fake_update(prep_id, user_id, drafts):
+            called.update(prep_id=prep_id, user_id=user_id, drafts=drafts)
+            return True
+
+        monkeypatch.setattr(
+            "app.api.interview_prep.db_tools.update_interview_prep_drafts",
+            fake_update,
+        )
+        resp = client.patch(
+            "/api/jobcraft/interview-prep/7", json={"drafts": {"q-0": "STAR 草稿"}}
+        )
+        assert resp.status_code == 200
+        assert resp.json() == {"id": 7, "drafts": {"q-0": "STAR 草稿"}}
+        assert called == {"prep_id": 7, "user_id": 1, "drafts": {"q-0": "STAR 草稿"}}
+
+    def test_save_drafts_not_owned_returns_404(self, monkeypatch):
+        monkeypatch.setattr(
+            "app.api.interview_prep.db_tools.update_interview_prep_drafts",
+            lambda *a: False,
+        )
+        resp = client.patch("/api/jobcraft/interview-prep/999", json={"drafts": {}})
+        assert resp.status_code == 404
+        assert "面试准备稿不存在" in resp.json()["error"]["message"]
+
+    def test_save_drafts_invalid_payload_returns_422(self):
+        resp = client.patch(
+            "/api/jobcraft/interview-prep/7", json={"drafts": ["not", "a", "dict"]}
+        )
+        assert resp.status_code == 422
+
+    def test_list_returns_drafts(self, monkeypatch):
+        row = {
+            "id": 7,
+            "job_analysis_id": 12,
+            "user_id": 1,
+            "round_type": "技术面",
+            "duration": "10-15 分钟",
+            "elevator_pitch": "自我介绍",
+            "standard_version": {},
+            "extended_version": {"full_version": "完整稿"},
+            "ability_matrix": [{"dimension": "技术深度", "question": "Q1"}],
+            "html_content": "",
+            "submission_id": None,
+            "company_research": None,
+            "drafts": {"q-0": "STAR 草稿"},
+            "company": "字节跳动",
+            "position": "AI 产品经理",
+            "created_at": "2026-10-01T00:00:00",
+        }
+        monkeypatch.setattr(
+            "app.api.interview_prep.db_tools.list_interview_preps", lambda *a: [row]
+        )
+        resp = client.get("/api/jobcraft/interview-prep")
+        assert resp.status_code == 200
+        assert resp.json()["records"][0]["drafts"] == {"q-0": "STAR 草稿"}
+
+
 # ============================================================
 # 5. interview_review.py — 面试复盘路由
 # ============================================================

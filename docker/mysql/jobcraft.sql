@@ -78,6 +78,7 @@ CREATE TABLE IF NOT EXISTS interview_preps (
     extended_version_json JSON,
     ability_matrix_json JSON,
     html_content LONGTEXT,
+    drafts JSON,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     KEY idx_job (job_analysis_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

@@ -1,5 +1,5 @@
 import logging
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -16,6 +16,12 @@ class InterviewPrepPayload(BaseModel):
     round_type: str = "技术面"
     card_ids: List[int] = Field(default_factory=list)
     submission_id: Optional[int] = None
+
+
+class InterviewPrepDraftsPayload(BaseModel):
+    """备战应答草稿（题号 -> 文本），保存时整体覆盖。"""
+
+    drafts: Dict[str, str] = Field(default_factory=dict)
 
 
 def _get_previous_review_summary(
@@ -158,6 +164,7 @@ def jobcraft_interview_prep_list(
                         "company": r.get("company", ""),
                         "position": r.get("position", ""),
                         "submission_id": r.get("submission_id"),
+                        "drafts": r.get("drafts") or {},
                     }
                 )
             except Exception:
@@ -166,3 +173,18 @@ def jobcraft_interview_prep_list(
     except Exception as e:
         logger.exception("列出面试准备稿失败")
         raise HTTPException(status_code=500, detail=f"列出面试准备稿失败: {e}")
+
+
+@router.patch("/api/jobcraft/interview-prep/{prep_id}")
+def jobcraft_update_interview_prep_drafts(
+    prep_id: int,
+    payload: InterviewPrepDraftsPayload,
+    current_user: int = Depends(get_current_user),
+):
+    """保存备战应答草稿（按当前用户校验所有权，整体覆盖写入）。"""
+    updated = db_tools.update_interview_prep_drafts(
+        prep_id, current_user, payload.drafts
+    )
+    if not updated:
+        raise HTTPException(status_code=404, detail="面试准备稿不存在")
+    return {"id": prep_id, "drafts": payload.drafts}

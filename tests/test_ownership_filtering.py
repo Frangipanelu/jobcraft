@@ -291,6 +291,45 @@ def test_get_interview_prep_by_job_appends_user_id_filter(monkeypatch):
     assert 7 in cursor.last_args
 
 
+def test_update_interview_prep_drafts_owned_writes_drafts(monkeypatch):
+    """update_interview_prep_drafts 命中所有权时，存在性 SELECT 与 UPDATE 均带 user_id 过滤。"""
+    from app.tools.db_interview import update_interview_prep_drafts
+
+    cursor = _FakeCursor(rowcount=1, row={"id": 100})
+    holder = [cursor]
+    monkeypatch.setattr(
+        "app.tools.db_config.get_db_config", lambda overrides=None: _FAKE_DB_CONFIG
+    )
+    _patch_ensure_helper(monkeypatch, "app.tools.db_interview", holder)
+    with patch("app.tools.db_conn.connect", _capture(holder)):
+        assert update_interview_prep_drafts(100, 7, {"q-0": "草稿"}) is True
+
+    select_sql, select_args = cursor.executed[0]
+    assert "FROM interview_preps" in select_sql and "user_id=%s" in select_sql
+    assert select_args == (100, 7)
+    update_sql, update_args = cursor.executed[1]
+    assert "SET drafts=%s" in update_sql
+    assert update_args[1:] == (100, 7)
+    assert '"q-0"' in update_args[0]
+
+
+def test_update_interview_prep_drafts_wrong_user_returns_false(monkeypatch):
+    """越权（user_id 过滤后无行）返回 False 且不执行 UPDATE。"""
+    from app.tools.db_interview import update_interview_prep_drafts
+
+    cursor = _FakeCursor(row=None)
+    holder = [cursor]
+    monkeypatch.setattr(
+        "app.tools.db_config.get_db_config", lambda overrides=None: _FAKE_DB_CONFIG
+    )
+    _patch_ensure_helper(monkeypatch, "app.tools.db_interview", holder)
+    with patch("app.tools.db_conn.connect", _capture(holder)):
+        assert update_interview_prep_drafts(100, 7, {"q-0": "草稿"}) is False
+
+    assert len(cursor.executed) == 1, "越权时不应执行 UPDATE"
+    assert "user_id=%s" in cursor.executed[0][0]
+
+
 def test_delete_interview_record_appends_user_id_filter(monkeypatch):
     """delete_interview_record 支持按 user_id 过滤。"""
     from app.tools.db_interview import delete_interview_record

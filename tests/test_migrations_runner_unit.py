@@ -307,6 +307,70 @@ def test_v0015_resume_suggestions_matched_in_runtime_ddl_and_baseline():
         )
 
 
+def test_v0016_prep_drafts_matched_in_runtime_ddl_and_baseline():
+    """FE-PREP-01：V0016(drafts) 只加列，且迁移 / 运行时
+    _ensure_interview_preps_table 建表+守卫补列 / docker 基线三处收敛一致。"""
+    v0016 = os.path.join(runner.MIGRATIONS_DIR, "V0016__interview_prep_drafts.sql")
+    assert os.path.exists(v0016)
+    with open(v0016, encoding="utf-8") as fh:
+        sql = fh.read()
+    assert "ALTER TABLE interview_preps ADD COLUMN drafts JSON" in sql
+    assert "DROP" not in sql.upper(), "前向兼容：只加列，不得出现 DROP"
+    assert "MODIFY" not in sql.upper(), "前向兼容：不得改列类型"
+
+    from app.tools.db_interview import _ensure_interview_preps_table
+    import app.tools.db_interview as mod
+
+    executed: list[tuple[str, str]] = []
+
+    class _Cursor:
+        def execute(self, sql, params=None):
+            executed.append((sql.strip(), params))
+
+        def fetchall(self):
+            # 首次建表后列探测：返回空触发守卫 ALTER，证明未迁移环境也有补列路径
+            return []
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    class _Conn:
+        def cursor(self, *a, **k):
+            return _Cursor()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    original_ready = mod.is_schema_ready
+    original_conn = mod.connection
+    try:
+        mod.is_schema_ready = lambda: False
+        mod.connection = lambda: _Conn()
+        _ensure_interview_preps_table()
+    finally:
+        mod.is_schema_ready = original_ready
+        mod.connection = original_conn
+
+    creates = [s for s, _ in executed if s.startswith("CREATE TABLE IF NOT EXISTS")]
+    assert creates, "未捕获到 CREATE TABLE 语句"
+    assert "drafts JSON" in _normalize_ddl(creates[0]), "运行时建表缺 drafts 列"
+    alters = [s for s, _ in executed if s.startswith("ALTER TABLE interview_preps")]
+    assert alters, "运行时守卫补列路径缺失（未迁移环境兜底）"
+    assert "ADD COLUMN drafts JSON" in alters[0]
+
+    repo_root = os.path.dirname(os.path.dirname(runner.MIGRATIONS_DIR))
+    with open(
+        os.path.join(repo_root, "docker", "mysql", "jobcraft.sql"), encoding="utf-8"
+    ) as fh:
+        assert "drafts JSON" in fh.read(), "docker 基线缺 drafts 列"
+
+
 def test_v0007_soft_delete_follows_split_convention():
     """DB-04：V0007 语句块应遵守 SPLIT 约定（无尾分号），可被 runner 逐条执行。"""
     v0007 = os.path.join(runner.MIGRATIONS_DIR, "V0007__soft_delete.sql")
