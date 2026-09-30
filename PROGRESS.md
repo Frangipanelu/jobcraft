@@ -2,6 +2,16 @@
 
 > 本文件用于追踪项目整体进度。AI 在每次会话结束或完成子任务时，必须更新本文件的对应板块。
 
+## T-M7-3 备战草稿落库 FE-PREP-01 + FE-LOGIC-01①②（2026-10-01）
+
+> 修复缺陷：备战「保存草稿」只弹 toast、`answerDrafts` 纯本地随导航丢失；附带两处明确逻辑 bug（duration 展示优先级、轮次名映射）。
+
+- [x] **BE 草稿落库**（commit `b5d6cdd`）：V0016 `interview_preps.drafts JSON`——**迁移编号偏离**：原方案写 V0014，沿用 V0015 跳号先例，V0014 继续预留给 BE-INDEX-01/T-M7-4 批次；前向兼容只加列，information_schema 探测幂等（`_mig_stmt_103`）+ 运行时 `SHOW COLUMNS` 守卫补列 + `docker/mysql/jobcraft.sql` 基线同步（`test_v0016_*` 断言三处收敛）；`get_interview_prep_by_job`/`list_interview_preps` 读 drafts（`_parse_json(...) or {}`）；新增 `update_interview_prep_drafts`（先查归属再 UPDATE，越权 False 不发 UPDATE）；`PATCH /api/jobcraft/interview-prep/{prep_id}` `{drafts}` → `{id, drafts}`（404 统一错误信封）；list 端点 `model_dump() | {"drafts"}` union，不动共享 `InterviewPrepResult` schema。
+- [x] **FE 草稿接线**（commit `36e08d3`）：`InterviewPrepRecord.drafts?` + `saveInterviewPrepDrafts` PATCH + `useSavePrepDraftsMutation`（onSuccess `setQueryData([...INTERVIEWS_QUERY_KEY])` 回写 `prepSource.drafts`）；WorkspaceView `syncedPrepIdRef` 每份 prep 只灌入一次（存 tab 草稿不被列表刷新重置）；`handleSaveAnswer` 改 async，成功/失败/未落库三态诚实 toast；按钮 `saveDrafts.isPending` 禁用 + 「保存中…」。
+- [x] **FE-LOGIC-01①②**（commit `76502f3`）：① `预计时长` 表达式加括号恢复「有值优先」（原 `||` 紧于 `?:` 导致真实 duration 恒显示「见下方说明」）；② `InterviewDetailsStep` 轮次名映射补 `rNum===4 → HR面`、`rNum===5 → 终面`（原只到第3面，选 HR 面/终面均显示错误名）。③ `UserProfileView` 吞错仍开放。
+- [x] **验收**：BE +7 测试（API 4 / ownership 2 / 迁移收敛 1 / e2e slow 1）；真库（jobcraft 容器 mysql:8.4.9）守卫 ALTER + V0016 SQL 双跑幂等、schema_migrations 登记 0016；**非 LLM 七步链路脚本**（重建 backend 容器后：注册→列表空 drafts→PATCH→列表回读→覆盖写→404 不存在→404 越权且数据不改→401→清理）全过；终态全量：check_encoding 378/0、ruff check/format 绿、**pytest 796 passed / 7 skipped / 0 failed**、tsc 0、**vitest 202**、build ✅。
+- [ ] **遗留**：slow e2e `test_interview_prep_drafts_roundtrip` 及前置 generate 用例因 **LLM 429 账户速率限制**两次未跑通（`[llm_score_match] 结构化调用失败: 429`，非代码问题）——配额恢复后 `uv run pytest tests/test_jobcraft_e2e.py --runslow -k interview_prep` 补跑；V0014 编号待 BE-INDEX-01/T-M7-4 使用。
+
 ## BE-EXPR-01 真实 MySQL 复核：非法 SQL 判定为误报（2026-09-30）
 
 > 缺陷清单原判断：`increment_active_expression_usage` 的 `UPDATE ... ORDER BY version DESC LIMIT 1` 违反「MySQL 单表 UPDATE 禁止 ORDER BY/LIMIT」，方案拟改子查询。复核结论：**前提不成立，误报关闭，代码行为无需变更**。
