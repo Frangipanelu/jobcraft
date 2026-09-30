@@ -159,17 +159,21 @@ export const InterviewPrepCenterView: React.FC<InterviewPrepCenterViewProps> = (
                         <span>{interview.time}</span>
                       </div>
                       <div className="text-[11px] text-faint mt-1">
-                        {interview.format === 'video' ? '视频面试 (腾讯会议/飞书)' : '电话 / 现场'}
+                        {interview.format === 'video'
+                          ? '视频面试'
+                          : interview.format === 'phone'
+                            ? '电话面试'
+                            : '现场面试'}
                       </div>
                     </td>
 
                     {/* Interviewer Profile */}
                     <td className="p-3.5 align-top text-ink">
                       <div className="font-semibold text-ink">
-                        {interview.interviewer || '业务负责人 / 专家'}
+                        {interview.interviewer || '—'}
                       </div>
                       <div className="text-[11px] text-faint mt-0.5">
-                        {interview.supplementNotes ? interview.supplementNotes.slice(0, 20) + '...' : '考察业务攻坚与架构'}
+                        {interview.supplementNotes ? interview.supplementNotes.slice(0, 20) + '...' : '—'}
                       </div>
                     </td>
 
@@ -188,10 +192,10 @@ export const InterviewPrepCenterView: React.FC<InterviewPrepCenterViewProps> = (
                     {/* High-frequency Strategy Summary */}
                     <td className="p-3.5 align-top text-muted leading-relaxed">
                       <div className="font-medium text-ink line-clamp-1">
-                        重点聚焦：{prep?.companyResearch?.aiHiringIntent?.slice(0, 30) || '核心业务痛点与技术落地'}
+                        重点聚焦：{prep?.companyResearch?.aiHiringIntent?.slice(0, 30) || '—'}
                       </div>
                       <div className="text-[11px] text-faint mt-0.5 line-clamp-1">
-                        主打经历：{prep?.recommendedExperiences?.[0]?.proves?.join(' · ') || '端侧 AI 评测管线'}
+                        主打经历：{prep?.recommendedExperiences?.[0]?.proves?.join(' · ') || '—'}
                       </div>
                     </td>
 

@@ -104,9 +104,9 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({ initialTab }) 
   }, [user.name, user.role, user.targetSalary, user.yearsOfExp, user.city, user.email, user.phone, user.summary]);
 
   // Target preferences
-  const [targetRoles, setTargetRoles] = useState<string[]>(user.targetRoles || ['AI 产品经理', '大模型策略产品专家', '搜索与推荐产品负责人']);
+  const [targetRoles, setTargetRoles] = useState<string[]>(user.targetRoles || []);
   const [newRoleInput, setNewRoleInput] = useState('');
-  const [targetCompanies, setTargetCompanies] = useState<string[]>(user.targetCompanies || ['字节跳动', '腾讯', '阿里巴巴', '头部AI创企']);
+  const [targetCompanies, setTargetCompanies] = useState<string[]>(user.targetCompanies || []);
   const [newCompanyInput, setNewCompanyInput] = useState('');
 
   // Upload state
@@ -276,13 +276,14 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({ initialTab }) 
           <div className="space-y-1">
             <div className="flex items-center gap-3">
               <h1 className="text-2xl font-bold text-ink tracking-tight">{user.name}</h1>
-              <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-sage-soft text-sage border border-sage-soft">
-                求职中 · 积极沟通
-              </span>
             </div>
             <p className="text-xs text-muted flex items-center gap-3">
-              <span className="font-medium text-ink">{user.role}</span>
-              <span>·</span>
+              {user.role && (
+                <>
+                  <span className="font-medium text-ink">{user.role}</span>
+                  <span>·</span>
+                </>
+              )}
               <span>{user.yearsOfExp} 年工作经验</span>
               <span>·</span>
               <span className="flex items-center gap-1">
@@ -638,6 +639,9 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({ initialTab }) 
           <div className="space-y-2">
             <label className="block text-xs font-bold text-ink">意向职位方向</label>
             <div className="flex items-center gap-2 flex-wrap">
+              {targetRoles.length === 0 && (
+                <span className="text-xs text-faint">尚未添加意向职位，可在下方输入添加</span>
+              )}
               {targetRoles.map((role, idx) => (
                 <span
                   key={idx}
@@ -677,6 +681,9 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({ initialTab }) 
           <div className="space-y-2 pt-4 border-t border-edge">
             <label className="block text-xs font-bold text-ink">重点意向公司</label>
             <div className="flex items-center gap-2 flex-wrap">
+              {targetCompanies.length === 0 && (
+                <span className="text-xs text-faint">尚未添加目标公司，可在下方输入添加</span>
+              )}
               {targetCompanies.map((comp, idx) => (
                 <span
                   key={idx}

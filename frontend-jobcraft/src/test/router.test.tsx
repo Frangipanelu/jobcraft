@@ -26,7 +26,8 @@ describe('AppRoutes 路由匹配（基础设施冒烟测试）', () => {
     const ui = renderWithProviders(<AppRoutes />, { route: '/profile' });
     await waitFor(() => expect(ui.getByText('账号设置')).toBeInTheDocument());
     expect(ui.getByText('职业资产')).toBeInTheDocument();
-    expect(ui.getByText('求职中 · 积极沟通')).toBeInTheDocument();
+    expect(ui.getByText(/查看经历资产库/)).toBeInTheDocument();
+    expect(ui.queryByText('求职中 · 积极沟通')).not.toBeInTheDocument();
   });
 
   it('/profile?tab=preferences 传递子 tab 打开求职偏好', async () => {

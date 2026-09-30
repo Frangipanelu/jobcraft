@@ -31,6 +31,15 @@ const interviewPrepAiSteps = [
   '面试准备方案生成中...'
 ];
 
+/** 轮次数 → 轮次展示名（初始化与切换共用的唯一来源，避免两处文案漂移）。 */
+function roundNameFor(num: number): string {
+  if (num === 1) return '第1面 · 业务初面';
+  if (num === 2) return '第2面 · 业务与技术交叉面';
+  if (num === 3) return '第3面 · 总监/业务负责人面';
+  if (num === 4) return '第4面 · HRBP 综合面';
+  return `第${num}面 · 终面`;
+}
+
 export const CreateInterview: React.FC<{ initialJobId?: string }> = ({ initialJobId = '' }) => {
   const {
     selectedJobId: contextSelectedJobId,
@@ -77,7 +86,7 @@ export const CreateInterview: React.FC<{ initialJobId?: string }> = ({ initialJo
 
   // Step 1: Application Info
   const [selectedResumeId, setSelectedResumeId] = useState<string>(
-    historicalResumes.find((r) => r.isDefault)?.id || historicalResumes[0]?.id || 'hr-1'
+    historicalResumes.find((r) => r.isDefault)?.id || historicalResumes[0]?.id || ''
   );
   const [customUploadedFileName, setCustomUploadedFileName] = useState<string | null>(null);
   const [coverLetter, setCoverLetter] = useState(interviewDraft?.coverLetter || '');
@@ -86,28 +95,28 @@ export const CreateInterview: React.FC<{ initialJobId?: string }> = ({ initialJo
   // Step 2: Interview Info
   const [roundNumber, setRoundNumber] = useState<number>(interviewDraft?.roundNumber || 2);
   const [roundName, setRoundName] = useState<string>(
-    interviewDraft?.roundName || '第2面 · 业务与技术交叉面'
+    interviewDraft?.roundName || roundNameFor(interviewDraft?.roundNumber || 2)
   );
   const [roundType, setRoundType] = useState<InterviewRoundType>(
     interviewDraft?.roundType || 'tech'
   );
   const [interviewDate, setInterviewDate] = useState<string>(
-    interviewDraft?.interviewTime ? interviewDraft.interviewTime.split(' ')[0] : '2026-09-03'
+    interviewDraft?.interviewTime ? interviewDraft.interviewTime.split(' ')[0] : ''
   );
   const [interviewTimeHour, setInterviewTimeHour] = useState<string>(
-    interviewDraft?.interviewTime ? interviewDraft.interviewTime.split(' ')[1] || '14:00' : '14:00'
+    interviewDraft?.interviewTime ? interviewDraft.interviewTime.split(' ')[1] || '' : ''
   );
   const [interviewFormat, setInterviewFormat] = useState<InterviewFormat>(
     interviewDraft?.interviewFormat || 'video'
   );
-  const [platform, setPlatform] = useState<string>(interviewDraft?.platform || '腾讯会议 / 飞书会议');
+  const [platform, setPlatform] = useState<string>(interviewDraft?.platform || '');
   const [interviewer, setInterviewer] = useState<string>(
-    interviewDraft?.interviewer || '业务技术负责人 / 交叉面试官'
+    interviewDraft?.interviewer || ''
   );
 
   // Step 3: Supplement Info
   const [supplementNotes, setSupplementNotes] = useState<string>(
-    interviewDraft?.supplementNotes || '重点准备大模型评测体系、算法协同机制与量化业务产出。'
+    interviewDraft?.supplementNotes || ''
   );
   const [remindUpload, setRemindUpload] = useState<boolean>(
     interviewDraft?.remindUpload !== undefined ? interviewDraft.remindUpload : true
@@ -122,20 +131,16 @@ export const CreateInterview: React.FC<{ initialJobId?: string }> = ({ initialJo
   // Auto-sync round name when round number changes
   const handleRoundNumberChange = (num: number) => {
     setRoundNumber(num);
+    setRoundName(roundNameFor(num));
     if (num === 1) {
-      setRoundName('第1面 · 业务初面');
       setRoundType('business');
     } else if (num === 2) {
-      setRoundName('第2面 · 业务与技术交叉面');
       setRoundType('tech');
     } else if (num === 3) {
-      setRoundName('第3面 · 总监/业务负责人面');
       setRoundType('comprehensive');
     } else if (num === 4) {
-      setRoundName('第4面 · HRBP 综合面');
       setRoundType('hr');
     } else {
-      setRoundName(`第${num}面 · 终面`);
       setRoundType('comprehensive');
     }
   };
@@ -146,6 +151,9 @@ export const CreateInterview: React.FC<{ initialJobId?: string }> = ({ initialJo
     }
     if (step === 1) {
       return !!selectedResumeId;
+    }
+    if (step === 2) {
+      return !!interviewDate && !!interviewTimeHour;
     }
     return true;
   };
@@ -520,7 +528,9 @@ export const CreateInterview: React.FC<{ initialJobId?: string }> = ({ initialJo
                       {selectedJob?.company} · {selectedJob?.role}
                     </div>
                     <div className="text-[11px] text-muted mt-0.5">
-                      {selectedJob?.department || '核心业务线'} · {selectedJob?.salaryRange || '40K–60K · 16薪'}
+                      {[selectedJob?.department, selectedJob?.salaryRange]
+                        .filter(Boolean)
+                        .join(' · ') || '岗位信息未录入'}
                     </div>
                   </div>
                   <button
@@ -557,9 +567,6 @@ export const CreateInterview: React.FC<{ initialJobId?: string }> = ({ initialJo
                         </option>
                       ))}
                     </optgroup>
-                    <option value="res-tailored-1">
-                      {selectedJob?.company || '目标企业'} · AI 定制优化版简历（ATS 匹配 96%）
-                    </option>
                     <option value="upload_trigger">
                       + 上传本地新简历 (PDF / Word) ...
                     </option>

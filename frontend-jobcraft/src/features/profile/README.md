@@ -8,7 +8,7 @@
 
 - `useProfileQuery()`：`queryKey ['profile']`，合并 `authApi.getCurrentUser()`（`/api/auth/me`）与 `authApi.getProfile()`（`/api/auth/profile`）映射为领域 `UserProfile`（`src/types/jobcraft.ts`）。`getProfile` 失败时降级使用 auth 侧字段。
 - `useUpdateProfileMutation()`：变量为 `Partial<UserProfile>`（领域字段），内部经 `toApiProfilePatch()` 映射为后端 snake_case `ProfilePayload` 后调用 `authApi.updateProfile()`（`PATCH /api/auth/profile`）；成功后 `setQueryData(['profile'], ...)` 乐观合并缓存，不整页 refetch。
-- 空态：`EMPTY_PROFILE` 与 JobCraftContext 初始 user 对齐（`name:'' / role:'求职者' / ...`），供组件在查询加载前兜底。
+- 空态：`EMPTY_PROFILE` 与 JobCraftContext 初始 user 对齐（`name:'' / role:'' / ...`，无数据即空、不回填占位身份），供组件在查询加载前兜底；`role` 回落链为 `profile → auth → ''`。
 
 ## 组件消费方
 
@@ -20,7 +20,7 @@
 - `/profile` → `ProfilePage`（真实路由，经 `AppShell` 渲染，不再经过 `LegacyPageWrapper`）。
 - `ProfilePage` 解析 `?tab={resumes,profile,preferences,settings}` 作为 `UserProfileView` 的 `initialTab`（URL 为挂载时单一来源）。
 - TopHeader 头像下拉四个子项改为 `navigate('/profile?tab=...')`（router 驱动）。
-- `AppShell`（`src/app/AppShell.tsx`）与遗留 `MainLayout` 并行存在，Fallback 留待 FE-CONTEXT-REMOVE。
+- `AppShell`（`src/app/AppShell.tsx`）为全部路由页的统一壳（`LegacyPageWrapper` / 遗留 `MainLayout` 已删除）。
 
 ## 已解决
 

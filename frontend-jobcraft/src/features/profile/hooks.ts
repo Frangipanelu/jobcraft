@@ -20,11 +20,11 @@ export interface ProfilePayload {
   target_cities?: string[];
 }
 
-/** 空态默认值：与 JobCraftContext 初始 user 对齐，保证资料加载前的展示一致。 */
+/** 空态默认值：与 JobCraftContext 初始 user 对齐，保证资料加载前的展示一致（无数据即空，不回填占位身份）。 */
 export const EMPTY_PROFILE: UserProfile = {
   name: '',
   avatarUrl: '',
-  role: '求职者',
+  role: '',
   targetSalary: '',
   yearsOfExp: 0,
   city: '',
@@ -58,7 +58,7 @@ async function fetchUserProfile(): Promise<UserProfile> {
   return {
     name: (pd.display_name as string) || authUser.display_name || authUser.username,
     avatarUrl: (pd.avatar_url as string) || '',
-    role: (pd.role as string) || '求职者',
+    role: (pd.role as string) || authUser.role || '',
     targetSalary: (pd.target_salary as string) || '',
     yearsOfExp: (pd.years_of_exp as number) || 0,
     city: (pd.city as string) || '',

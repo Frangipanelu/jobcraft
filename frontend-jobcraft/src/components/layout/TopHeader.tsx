@@ -243,7 +243,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
               </div>
               <div className="min-w-0 flex-1 text-left">
                 <div className="text-sm font-bold text-ink truncate">{user.name || '未设置姓名'}</div>
-                <div className="text-xs text-muted truncate">{user.role || 'AI 产品方向'}</div>
+                <div className="text-xs text-muted truncate">{user.role || '—'}</div>
               </div>
             </div>
 

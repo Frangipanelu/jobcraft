@@ -25,6 +25,23 @@ export const InterviewReviewCenterView: React.FC<InterviewReviewCenterViewProps>
   const interviewsWithReviews = interviews.filter((i) => !!i.review);
   const interviewsWithoutReviews = interviews.filter((i) => !i.review);
 
+  const scored = interviewsWithReviews
+    .map((i) => i.review!.overallScore)
+    .filter((s) => typeof s === 'number' && !Number.isNaN(s));
+  const avgScore = scored.length > 0 ? scored.reduce((a, b) => a + b, 0) / scored.length : null;
+  const topReview = interviewsWithReviews.reduce<{ score: number; label: string } | null>(
+    (best, i) => {
+      const score = i.review?.overallScore;
+      if (typeof score !== 'number' || Number.isNaN(score)) return best;
+      if (best && best.score >= score) return best;
+      return { score, label: `${i.company} · ${i.roundName}` };
+    },
+    null
+  );
+
+  const formatLabel = (format: 'video' | 'phone' | 'onsite') =>
+    format === 'video' ? '视频面试' : format === 'phone' ? '电话面试' : '现场面试';
+
   const filteredReviewed = interviewsWithReviews.filter(
     (i) =>
       i.company.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -63,15 +80,18 @@ export const InterviewReviewCenterView: React.FC<InterviewReviewCenterViewProps>
           <div className="text-[11px] font-semibold text-muted uppercase">已完成逐题复盘</div>
           <div className="flex items-baseline gap-2">
             <span className="text-xl font-bold text-ink">{interviewsWithReviews.length} 场</span>
-            <span className="text-xs text-sage font-semibold">100% 反哺率</span>
           </div>
         </div>
 
         <div className="p-2 sm:px-4 space-y-1">
           <div className="text-[11px] font-semibold text-muted uppercase">平均得分</div>
           <div className="flex items-baseline gap-2">
-            <span className="text-xl font-bold text-sage">85.0 分</span>
-            <span className="text-xs text-muted">最高 88 分 (字节业务面)</span>
+            <span className="text-xl font-bold text-sage">
+              {avgScore !== null ? `${avgScore.toFixed(1)} 分` : '—'}
+            </span>
+            {topReview && (
+              <span className="text-xs text-muted">最高 {topReview.score} 分 ({topReview.label})</span>
+            )}
           </div>
         </div>
 
@@ -79,7 +99,6 @@ export const InterviewReviewCenterView: React.FC<InterviewReviewCenterViewProps>
           <div className="text-[11px] font-semibold text-muted uppercase">待复盘场次</div>
           <div className="flex items-baseline gap-2">
             <span className="text-xl font-bold text-terra">{interviewsWithoutReviews.length} 场</span>
-            <span className="text-xs text-terra">建议 24h 内完成</span>
           </div>
         </div>
       </div>
@@ -132,7 +151,7 @@ export const InterviewReviewCenterView: React.FC<InterviewReviewCenterViewProps>
                         <span>{interview.time}</span>
                       </div>
                       <div className="text-[11px] text-faint mt-0.5">
-                        {interview.format === 'video' ? '视频面试' : '现场面试'}
+                        {formatLabel(interview.format)}
                       </div>
                     </td>
 
@@ -144,18 +163,20 @@ export const InterviewReviewCenterView: React.FC<InterviewReviewCenterViewProps>
 
                     <td className="p-3.5 align-top">
                       <span className="px-2 py-0.5 rounded text-xs font-bold bg-sage-soft text-sage border border-sage-soft inline-block">
-                        {currentReview.passProbability || '高概率通过'}
+                        {currentReview.passProbability || '—'}
                       </span>
                     </td>
 
                     <td className="p-3.5 align-top text-muted leading-relaxed">
                       <div className="font-medium text-ink">
-                        诊断：{currentReview.aiDiagnosis?.slice(0, 48) || '对轻量化评测体系阐述清晰，指标具备说服力'}...
+                        诊断：{currentReview.aiDiagnosis?.slice(0, 48) || '—'}
                       </div>
-                      <div className="text-[11px] text-sage mt-1 flex items-center gap-1">
-                        <CheckCircle2 className="w-3 h-3 text-sage" />
-                        <span>已完成经历资产库反哺沉淀</span>
-                      </div>
+                      {(currentReview.experienceFeedbacks?.length ?? 0) > 0 && (
+                        <div className="text-[11px] text-sage mt-1 flex items-center gap-1">
+                          <CheckCircle2 className="w-3 h-3 text-sage" />
+                          <span>已完成经历资产库反哺沉淀（{currentReview.experienceFeedbacks?.length} 条）</span>
+                        </div>
+                      )}
                     </td>
 
                     <td className="p-3.5 align-top text-right">
