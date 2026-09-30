@@ -2,6 +2,16 @@
 
 > 本文件用于追踪项目整体进度。AI 在每次会话结束或完成子任务时，必须更新本文件的对应板块。
 
+## P0 导航地基批次：FE-NAV-01 / FE-TAB-01 / FE-STATE-01（2026-09-30，T-M10-1）
+
+> 依据 TODO「全量功能逻辑复核」P0 缺陷链执行序第一环（= 功能任务总表 T-M10-1 导航收口）。修复类：`navigateTo` 只改 state 不改 URL 导致约 19 个按钮静默失效。
+
+- [x] **FE-NAV-01 navigateTo 真实导航**（commit `e956a0d`）：`BrowserRouter` 上提至 `App.tsx` Provider 之上（`JobCraftProvider` 内 `useNavigate` 需 Router 上下文，测试侧 `test-utils` 的 `MemoryRouter` 同步外提）；context 拆分 `syncTabState`（只回填选中态、不改 URL）与 `navigateTo`（回填 + `navigate(tabToPath(...))` 真跳转）；`useSyncRouteTab` 改用 `syncTabState`——URL→context 回填若触发跳转会与来源 URL 打架（`/jobs/:jobId/jd/:jdId` 别名不可被重定向到 `/jd-report/:jdId`）。19 个死按钮（JD 分析中心/备战中心/复盘中心/简历编辑器/个人中心/新建面试/新建复盘）全部收口。
+- [x] **FE-STATE-01 返回意图清理**（commit `e956a0d`）：`CreateInterview`/`CreateReview` 挂载即 `setJdAnalysisReturnTarget(null)`——重新进入向导作废上一次未消费的返回意图，`JDReportDetailView:730` 底部横幅不再在后续无关访问错乱出现（点击「返回继续」的既有清理保留）。
+- [x] **FE-TAB-01 7 路由 currentTab 回填**（commit `70f8690`）：`JdAnalysisCenterPage`/`InterviewPrepCenterPage`/`InterviewReviewCenterPage`/`ResumeEditorPage`/`ProfilePage`/`CreateInterviewPage`/`CreateReviewPage` 补 `useSyncRouteTab(...)`，14+1 条路由侧栏高亮/面包屑由 URL 单一驱动；`TopHeader:195` 硬编码「字节跳动 · 第1面业务面 · 智能复盘报告」改为 `currentInterview` 真实数据（无数据不渲染，同其它面包屑分支守卫）。
+- [x] **T-M10-1 收尾清理**（commit `a538264`）：删除 `src/app/legacy` 空目录；清陈旧注释（`App.tsx`/`tabPaths.ts`/`AppShell.tsx`/`UserProfileView.tsx` 中 LegacyPageWrapper/MainLayout 引用）；`router/README.md` 重写对齐现状（全路由 AppShell + `navigateTo`/`syncTabState` 语义）。
+- [x] **测试**：新增 `nav-sync.test.tsx`（navigateTo 真跳转 3 条 + JD 中心「查看报告」真按钮 → `/jd-report/:id` + `syncTabState` 不改 URL + 别名路由不反向重定向 + FE-STATE-01 清理 1 条）+ `route-tab-sync.test.tsx`（15 条路由 → currentTab `it.each` + 侧栏高亮断言）。**逐 commit 验证**：c1 = tsc 0 错 + 156 tests；c2 = tsc 0 错 + 172 tests；终态 = check_encoding 366 文件 0 错 + ruff 全绿 + **pytest 752 passed/12 skipped** + tsc 0 错 + **vitest 26 files/172 tests** + build ✅（仅既有 chunk warning）。
+
 ## 全局健康扫描与技术债修复（2026-09-24）
 
 > 对全项目执行健康扫描（编码 / ruff / pytest / build / tsc / vitest / 红线），结论 GREEN 无阻断；三项低优先技术债随后修复。
