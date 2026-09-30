@@ -78,7 +78,7 @@ export const InterviewDetailsStep: React.FC<InterviewDetailsStepProps> = ({
               const rNum = parseInt(e.target.value);
               onRoundChange(
                 rNum,
-                `第${rNum}面 · ${rNum === 1 ? '业务面' : rNum === 2 ? '技术/架构面' : rNum === 3 ? '总监面' : '终面'}`
+                `第${rNum}面 · ${rNum === 1 ? '业务面' : rNum === 2 ? '技术/架构面' : rNum === 3 ? '总监面' : rNum === 4 ? 'HR面' : '终面'}`
               );
             }}
             className="w-full px-3 py-[9px] text-[13.5px] rounded-lg outline-none"

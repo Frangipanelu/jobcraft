@@ -3,6 +3,7 @@ import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { renderWithProviders } from './test-utils';
 import { ToastContainer } from '../components/common/Toast';
 import { InterviewPrepWorkspaceView } from '../components/interview/InterviewPrepWorkspaceView';
+import { InterviewDetailsStep } from '../components/interview/InterviewDetailsStep';
 import {
   useSavePrepDraftsMutation,
   useInterviewsQuery,
@@ -199,5 +200,45 @@ describe('FE-PREP-01 备战草稿落库', () => {
       expect(screen.getByTestId('cached-drafts').textContent).toBe('{"q-0":"缓存草稿"}')
     );
     expect(interview.saveInterviewPrepDrafts).toHaveBeenCalledWith(7, { 'q-0': '缓存草稿' });
+  });
+});
+
+describe('FE-LOGIC-01 前端逻辑 bug 修复', () => {
+  it('① 真实 duration 直接展示（|| 先于 ?: 的优先级修复）', async () => {
+    renderWithProviders(
+      <InterviewPrepWorkspaceView interviewId="prep-7" onOpenMockInterview={vi.fn()} />
+    );
+
+    fireEvent.click(screen.getByText('02 本场判断'));
+    await screen.findByText(/本场面试定位与考察维度研判/);
+    expect(await screen.findByText('预计时长：45分钟')).toBeInTheDocument();
+    expect(screen.queryByText('预计时长：见下方说明')).not.toBeInTheDocument();
+  });
+
+  it('② 轮次选择第4面（HR面）映射为「第4面 · HR面」而非「终面」', () => {
+    const onRoundChange = vi.fn();
+    renderWithProviders(
+      <InterviewDetailsStep
+        stepNumber={1}
+        roundNumber={1}
+        roundType="tech"
+        interviewTime="2026-09-02 10:00"
+        interviewFormat="video"
+        platform=""
+        interviewer=""
+        onRoundChange={onRoundChange}
+        onRoundTypeChange={vi.fn()}
+        onTimeChange={vi.fn()}
+        onFormatChange={vi.fn()}
+        onPlatformChange={vi.fn()}
+        onInterviewerChange={vi.fn()}
+      />
+    );
+
+    fireEvent.change(screen.getByDisplayValue('第1面'), { target: { value: '4' } });
+    expect(onRoundChange).toHaveBeenCalledWith(4, '第4面 · HR面');
+
+    fireEvent.change(screen.getByDisplayValue('第1面'), { target: { value: '5' } });
+    expect(onRoundChange).toHaveBeenCalledWith(5, '第5面 · 终面');
   });
 });

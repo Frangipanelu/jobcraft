@@ -349,7 +349,7 @@ export const InterviewPrepWorkspaceView: React.FC<InterviewPrepWorkspaceViewProp
               AI 策略研判
             </span>
             <span className="text-xs font-bold text-[#1F4D3D] bg-white px-3 py-1 rounded-full border border-[#B6DBCB] shadow-2xs">
-              预计时长：{src?.duration || prep?.aiStrategy?.roundTypeDesc?.includes('时长') ? '见下方说明' : '10-15 分钟'}
+              预计时长：{src?.duration || (prep?.aiStrategy?.roundTypeDesc?.includes('时长') ? '见下方说明' : '10-15 分钟')}
             </span>
           </div>
           <div className="text-lg sm:text-[19px] font-black text-[#0F3528] tracking-tight mb-2">
