@@ -541,7 +541,9 @@ def update_card(
     changed = False
     found = False
     with transaction() as conn:
-        with conn.cursor() as cur:
+        # dictionary=True：pre 须为 dict（_insert_version_snapshot/insert_original_baseline
+        # 与 is_confirmed/version 均按列名索引）；默认 cursor 返回 tuple 会致内容编辑 500
+        with conn.cursor(dictionary=True) as cur:
             pre: Optional[Dict[str, Any]] = None
             if confirm or content_change:
                 select_sql = (

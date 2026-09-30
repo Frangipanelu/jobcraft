@@ -443,6 +443,73 @@ def test_update_card_draft_content_change_does_not_version(monkeypatch):
     )
 
 
+def test_update_card_transaction_cursor_is_dictionary(monkeypatch):
+    """回归（e2e 暴露）：update_card 事务游标必须 dictionary=True。
+
+    默认 cursor 返回 tuple，而 pre 按列名索引（is_confirmed/version）并传入
+    _insert_version_snapshot/insert_original_baseline——tuple 会 TypeError →
+    真实 MySQL 下内容编辑 PATCH 500。假游标统一返回 dict 掩盖了该差异，
+    故单独断言 cursor(dictionary=True) 被显式开启。
+    """
+    executed = []
+    seen: dict = {}
+
+    class Cur:
+        def __init__(self):
+            self._rowcount = 1
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        @property
+        def rowcount(self):
+            return self._rowcount
+
+        def execute(self, sql, params=None):
+            executed.append((sql, params))
+
+        def fetchone(self):
+            return {
+                "id": 5,
+                "title": "卡",
+                "raw_text": "内容",
+                "tags": None,
+                "is_confirmed": 1,
+                "version": 3,
+            }
+
+    class Conn:
+        autocommit = True
+
+        def cursor(self, dictionary=False):
+            seen["dictionary"] = dictionary
+            return Cur()
+
+        def commit(self):
+            pass
+
+        def close(self):
+            pass
+
+    @contextmanager
+    def fake_transaction():
+        yield Conn()
+
+    monkeypatch.setattr(mod, "_ensure_experience_card_columns", _noop)
+    monkeypatch.setattr(mod, "_ensure_card_versions_table", _noop)
+    monkeypatch.setattr(mod, "transaction", fake_transaction)
+
+    ok = mod.update_card(5, {"summary": "新总结"}, user_id=1)
+    assert ok is True
+    assert seen["dictionary"] is True
+    assert any(
+        sql.strip().startswith("INSERT INTO card_versions") for sql, _ in executed
+    )
+
+
 # ============================================================
 # db 层：_row_to_card
 # ============================================================
