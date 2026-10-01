@@ -1,7 +1,7 @@
 """
 岗位分析纯函数模块（无 LLM 调用）
 
-提供本地关键词匹配、缺口分析、匹配等级判定与 LLM 分数融合等纯函数。
+提供本地关键词匹配、缺口分析与 LLM 分数融合等纯函数。
 LLM 语义评分 / 优化建议 / 缺口润色等逻辑由 app/agents/ 下各 Agent 负责。
 """
 
@@ -17,12 +17,6 @@ from app.schemas.jobcraft import (
     SuggestionsResult,
 )
 from app.tools.card_render import get_card_render_text
-
-# 融合策略：max(local, llm) —— local 只抬升不拉低 LLM 语义分。
-# 依据 evaluation 消融结论（matching_report / chinese_matching_report，2026-09）：
-# 0.4/0.6 加权会把 local 的校准问题传染给 LLM 分（0 分 local 把 80 分 LLM 拉到 48），
-# max 结构性等同纯 LLM，同时保留零成本本地关键词兜底。
-FUSION_MODE = "max"
 
 
 def _fuse_score(local: float, llm: float) -> float:
@@ -162,6 +156,7 @@ def _build_gap_text(jd_req: JDRequirements, per_card: List[PerCardScore]) -> str
 
 
 def _match_level(score: float) -> str:
+    """按综合得分判定匹配等级（job_analysis_flow 使用）。"""
     if score >= 80:
         return "高度匹配"
     if score >= 60:
@@ -210,47 +205,3 @@ def build_rule_suggestions(
         gap_items=gap_items,
         suggestions=suggestions,
     )
-
-
-def fuse_gap_scores(
-    ats: ATSProfile,
-    selected_cards: List[Dict[str, Any]],
-    per_card_raw: List[Dict[str, Any]],
-) -> Dict[str, Any]:
-    """
-    融合本地关键词分与 LLM 语义分（max(local, llm)：local 只抬升不拉低），
-    产出最终缺口分析结果。
-
-    :param ats: ATS 岗位画像
-    :param selected_cards: 用户勾选的经历卡
-    :param per_card_raw: GapPolishAgent 返回的 per_card 列表（含 LLM 原始 score）
-    :return: {"per_card": [...], "global_suggestions": [...],
-              "overall_score": float, "match_level": str, "score_weights": {...}}
-    """
-    jd_req = _ats_to_jdreq(ats)
-    card_by_id = {c["id"]: c for c in selected_cards}
-    per_card_out: List[Dict[str, Any]] = []
-    for p in per_card_raw:
-        llm_score = round(float(p.get("score") or 0.0), 1)
-        card = card_by_id.get(p.get("card_id"))
-        local_score = _local_score(card, jd_req)[0] if card else 0.0
-        final_score = _fuse_score(local_score, llm_score)
-        per_card_out.append(
-            {
-                **p,
-                "score": final_score,
-                "local_score": local_score,
-                "llm_score": llm_score,
-            }
-        )
-
-    overall_score = round(
-        sum(pc["score"] for pc in per_card_out) / max(len(per_card_out), 1), 1
-    )
-
-    return {
-        "per_card": per_card_out,
-        "overall_score": overall_score,
-        "match_level": _match_level(overall_score),
-        "score_weights": {"mode": FUSION_MODE},
-    }

@@ -126,7 +126,7 @@ npm run dev
 jobcraft/
 ├── app/                     # 后端主代码
 │   ├── api/                 # FastAPI 路由（job_analysis / experience / interview ...）
-│   ├── agents/              # AI Agent 节点（JdAtsAgent / GapPolishAgent ...）
+│   ├── agents/              # AI Agent 节点（JdAtsAgent / ScoreMatchAgent ...）
 │   ├── core/                # LLM 初始化、Prompt 管理
 │   ├── schemas/             # Pydantic 数据模型
 │   ├── tasks/               # 异步任务（Celery Worker）

@@ -158,7 +158,7 @@ One JSON object per line. The `label` is derived from `score` with thresholds al
 
 | Variant | Weight | Usage |
 |---|---|---|
-| hybrid_a | `0.4 * local + 0.6 * llm` | 历史产品权重（生产 2026-09 已切换为 max，见 `jobcraft_analyze.py` `FUSION_MODE`）|
+| hybrid_a | `0.4 * local + 0.6 * llm` | 历史产品权重（生产 2026-09 已切换为 max，见 `jobcraft_analyze.py` `_fuse_score`）|
 | hybrid_b | `0.2 * local + 0.8 * llm` | LLM-heavy 实验 |
 | hybrid_c | `max(local, llm)` | Local 只抬升不拉低 → **生产当前方案** |
 

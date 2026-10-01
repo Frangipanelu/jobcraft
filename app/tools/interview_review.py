@@ -158,7 +158,6 @@ def _format_cards_for_prompt(cards: List[Dict[str, Any]], max_cards: int = 5) ->
         solution = c.get("solution") or ""
         execution = c.get("execution") or ""
         result = c.get("result") or ""
-        metrics = c.get("metrics") or {}
         tags = c.get("tags") or []
 
         parts = [
@@ -178,7 +177,5 @@ def _format_cards_for_prompt(cards: List[Dict[str, Any]], max_cards: int = 5) ->
             ]:
                 if text:
                     parts.append(f"{label}:{text[:200]}")
-        if metrics:
-            parts.append(f"指标:{metrics}")
         lines.append(" | ".join(parts))
     return "\n".join(lines) or "无"

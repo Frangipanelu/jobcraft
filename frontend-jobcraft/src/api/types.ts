@@ -547,38 +547,6 @@ export interface Step1AtsProfile {
   subtext_decoded?: SubtextDecode[]
 }
 
-export interface CardDimensionScore {
-  dimension: string
-  score: number
-  note: string
-}
-
-// 对齐后端 app/agents/gap_polish_agent.py:CardGapItem + fuse_gap_scores 覆盖字段
-export interface CardGapItem {
-  card_id: number
-  score: number
-  local_score: number
-  llm_score: number
-  matched: string[]
-  missing: string[]
-  action: string
-  rewrite_suggestion?: string | null
-  supplement_suggestion?: string | null
-  supplement_steps: string[]
-  dimension_analysis: CardDimensionScore[]
-  transferable_skills: string[]
-  domain_overlap: string
-  quantified_note: string
-}
-
-// 对齐后端 app/agents/gap_polish_agent.py:GlobalSuggestion
-export interface GlobalSuggestion {
-  missing_ability: string
-  priority: 'high' | 'medium' | 'low'
-  action: string
-  steps: string[]
-}
-
 export interface BackfillResult {
   checked: number
   splits: {

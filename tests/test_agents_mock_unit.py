@@ -442,32 +442,6 @@ def test_analyze_structured_jd_reuses_pipeline(monkeypatch):
     assert "（加分项）" in captured["prompt"]
 
 
-# ---------- AtsRecommendAgent ----------
-
-
-def test_ats_recommend_agent_merges_ats_and_cards(monkeypatch):
-    from app.agents.ats_recommend_agent import AtsRecommendAgent
-
-    def _fake_invoke(model, schema, prompt, **kwargs):
-        return schema(
-            ats={"job_title": "后端工程师", "required_skills": ["python"]},
-            recommended_cards=[{"card_id": 1, "score": 90, "reason": "高度匹配"}],
-        )
-
-    monkeypatch.setattr(
-        "app.agents.ats_recommend_agent.invoke_structured", _fake_invoke
-    )
-    out = AtsRecommendAgent().run(
-        {
-            "jd_text": "JD",
-            "cards": [{"id": 1, "title": "后端开发", "raw_text": "python"}],
-        }
-    )
-    assert out["ats"]["job_title"] == "后端工程师"
-    assert out["recommended_cards"][0]["card_id"] == 1
-    assert out["recommended_cards"][0]["score"] == 90
-
-
 # ---------- QuestionTableAgent ----------
 
 
