@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useJobCraft, useToastActions } from '../context/JobCraftContext';
 import { useJobsQuery } from '../features/jobs/hooks';
-import { useInterviewsQuery } from '../features/interview/hooks';
+import { useInterviewsQuery, useCreateInterviewMutation } from '../features/interview/hooks';
 import { useCreateInterviewReviewMutation } from '../features/review/hooks';
 import { InterviewRoundType, InterviewFormat } from '../types/jobcraft';
 import {
@@ -32,6 +32,14 @@ const analysisSteps = [
   '复盘报告生成中...'
 ];
 
+/** FE-REVIEW-01：轮次号 → 轮次类型（与 roundName 选项语义对齐，防止「第2面技术交叉面」落成业务面）。 */
+function roundTypeForNumber(num: number): InterviewRoundType {
+  if (num === 2) return 'tech';
+  if (num === 4) return 'hr';
+  if (num >= 5) return 'comprehensive';
+  return 'business';
+}
+
 // FE-UPLOAD-01：与后端 POST /interview-review/upload 同契约（TXT/MD/PDF/DOCX，≤10MB）
 const REVIEW_UPLOAD_EXTS = ['txt', 'md', 'pdf', 'docx'];
 const REVIEW_UPLOAD_MAX_BYTES = 10 * 1024 * 1024;
@@ -57,6 +65,7 @@ export const CreateReview: React.FC<{ initialJobId?: string }> = ({ initialJobId
   const { data: jobs = [] } = useJobsQuery();
   const { data: interviews = [] } = useInterviewsQuery();
   const createReviewMutation = useCreateInterviewReviewMutation();
+  const createInterviewMutation = useCreateInterviewMutation();
 
   // FE-STATE-01：重新进入向导即作废上一次未消费的「JD 报告返回」意图，
   // 避免残留 flag 让 JD 报告页底部横幅在后续无关访问时错乱出现。
@@ -92,11 +101,11 @@ export const CreateReview: React.FC<{ initialJobId?: string }> = ({ initialJobId
     role: '',
     roundNumber: 1,
     roundName: '第1面 · 业务初面',
-    roundType: 'business' as InterviewRoundType,
-    date: '2026-09-01',
+    // FE-REVIEW-01：date/time 默认值不再造假数据（日期默认今天，由用户确认；轮次类型由轮次号派生）
+    date: new Date().toISOString().split('T')[0],
     time: '14:00',
     format: 'video' as InterviewFormat,
-    interviewer: '业务技术面试官'
+    interviewer: ''
   });
 
   // Step 2 - Upload（FE-UPLOAD-01：持有真实 File，提交时走 multipart 上传）
@@ -114,6 +123,10 @@ export const CreateReview: React.FC<{ initialJobId?: string }> = ({ initialJobId
     ? interviews.filter((i) => i.jobId === selectedJobId)
     : [];
 
+  // FE-REVIEW-01：手动录入模式（点「+ 录入新面试场次」或该岗位尚无面试记录）——
+  // 此模式下 selectedInterviewId 不作数，提交时先用表单创建面试再挂复盘。
+  const isManualIntake = newInterviewMode || jobInterviews.length === 0;
+
   // Auto-select first interview if available
   useEffect(() => {
     if (jobInterviews.length > 0 && !selectedInterviewId && !newInterviewMode) {
@@ -126,8 +139,12 @@ export const CreateReview: React.FC<{ initialJobId?: string }> = ({ initialJobId
       return !!selectedJobId;
     }
     if (step === 1) {
-      if (newInterviewMode || jobInterviews.length === 0) {
-        return !!(selectedJob?.company || manualForm.company.trim());
+      if (isManualIntake) {
+        return (
+          !!(selectedJob?.company || manualForm.company.trim()) &&
+          !!manualForm.date &&
+          !!manualForm.time
+        );
       }
       return !!selectedInterviewId;
     }
@@ -200,7 +217,7 @@ export const CreateReview: React.FC<{ initialJobId?: string }> = ({ initialJobId
       });
       return;
     }
-    if (!selectedInterviewId) {
+    if (!isManualIntake && !selectedInterviewId) {
       showToast({
         type: 'warning',
         title: '请先关联面试',
@@ -225,17 +242,41 @@ export const CreateReview: React.FC<{ initialJobId?: string }> = ({ initialJobId
     } else {
       const timer = setTimeout(async () => {
         try {
+          // FE-REVIEW-01：手动录入模式下表单数据先创建面试记录（此前表单收了从不提交），
+          // 再把复盘挂到新记录上；轮次/日期时间/形式/面试官全部进入创建 payload。
+          let targetInterviewId = selectedInterviewId;
+          let createdRoundName = '';
+          if (isManualIntake) {
+            const created = await createInterviewMutation.mutateAsync({
+              jobId: selectedJobId,
+              company: selectedJob?.company || manualForm.company,
+              role: selectedJob?.role || manualForm.role,
+              roundNumber: manualForm.roundNumber,
+              roundName: manualForm.roundName,
+              roundType: roundTypeForNumber(manualForm.roundNumber),
+              time: `${manualForm.date} ${manualForm.time}`,
+              format: manualForm.format,
+              interviewer: manualForm.interviewer || undefined
+            });
+            targetInterviewId = created.id;
+            createdRoundName = created.roundName;
+          }
+
           const { interviewId } = await createReviewMutation.mutateAsync({
-            interviewId: selectedInterviewId,
+            interviewId: targetInterviewId,
             ...(uploadMode === 'file' && uploadedFile
               ? { file: uploadedFile }
               : { transcript: pasteText })
           });
 
+          const roundLabel = isManualIntake
+            ? createdRoundName
+            : interviews.find((i) => i.id === selectedInterviewId)?.roundName ||
+              manualForm.roundName;
           showToast({
             type: 'success',
             title: '面试复盘已生成',
-            message: `已完成「${selectedJob?.company || manualForm.company || '当前岗位'} ${manualForm.roundName}」的深度逐题诊断与经历库反哺。`
+            message: `已完成「${selectedJob?.company || manualForm.company || '当前岗位'} ${roundLabel}」的深度逐题诊断与经历库反哺。`
           });
           navigateTo('interview_review_detail', { interviewId });
         } catch (error) {
@@ -604,13 +645,23 @@ export const CreateReview: React.FC<{ initialJobId?: string }> = ({ initialJobId
                     </div>
 
                     <div className="space-y-1.5">
-                      <label className="block text-xs font-semibold text-ink">面试日期 *</label>
-                      <input
-                        type="date"
-                        value={manualForm.date}
-                        onChange={(e) => setManualForm({ ...manualForm, date: e.target.value })}
-                        className="w-full px-3.5 py-2.5 bg-page border border-edge rounded-xl text-xs text-ink focus:outline-none focus:border-sage transition"
-                      />
+                      <label className="block text-xs font-semibold text-ink">面试日期时间 *</label>
+                      {/* FE-REVIEW-01：日期/时间补齐采集（此前 date 无处提交），
+                          拼接契约与 CreateInterview 向导一致：`YYYY-MM-DD HH:mm` 入 Interview.time */}
+                      <div className="flex gap-2">
+                        <input
+                          type="date"
+                          value={manualForm.date}
+                          onChange={(e) => setManualForm({ ...manualForm, date: e.target.value })}
+                          className="w-full min-w-0 px-3.5 py-2.5 bg-page border border-edge rounded-xl text-xs text-ink focus:outline-none focus:border-sage transition"
+                        />
+                        <input
+                          type="time"
+                          value={manualForm.time}
+                          onChange={(e) => setManualForm({ ...manualForm, time: e.target.value })}
+                          className="w-full min-w-0 px-3.5 py-2.5 bg-page border border-edge rounded-xl text-xs text-ink focus:outline-none focus:border-sage transition"
+                        />
+                      </div>
                     </div>
                   </div>
 

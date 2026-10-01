@@ -43,6 +43,7 @@ const job = vi.hoisted(() => ({
 
 const interview = vi.hoisted(() => ({
   listInterviewPreps: vi.fn(),
+  generateInterviewPrep: vi.fn(),
   createInterviewReview: vi.fn(),
   uploadInterviewReview: vi.fn(),
   analyzeInterviewReview: vi.fn(),
@@ -874,5 +875,162 @@ describe('FE-UPLOAD-01 CreateReview 上传路径（非法文件/缺文件不得�
 
     expect(screen.getByText('尚未输入文本')).toBeInTheDocument();
     expect(screen.queryByText(/已载入示例速记对话/)).not.toBeInTheDocument();
+  });
+});
+
+describe('FE-REVIEW-01 手动录入新面试场次（表单字段必须进入 payload）', () => {
+  const PREP_RESULT = {
+    id: 77,
+    round_type: '技术面',
+    duration: '45分钟',
+    elevator_pitch: '自我介绍',
+    dimension_questions: [],
+    full_version: '完整方案',
+    html_content: '<div>方案</div>',
+    created_at: '2026-10-01T10:00:00',
+    company_research: null,
+  };
+
+  /** 手动录入路径的种子 QC：岗位带 jdAnalysisId（创建面试的前提），面试列表由各用例指定。 */
+  const createManualQc = (seedInterviews: Interview[]) => {
+    const qc = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false, staleTime: Infinity },
+        mutations: { retry: false },
+      },
+    });
+    qc.setQueryData([...JOBS_QUERY_KEY], [{ ...JOB_12, jdAnalysisId: '12' } as unknown as Job]);
+    qc.setQueryData([...INTERVIEWS_QUERY_KEY], seedInterviews);
+    return qc;
+  };
+
+  beforeEach(() => {
+    interview.generateInterviewPrep.mockResolvedValue(PREP_RESULT);
+  });
+
+  /** 步骤1 → 步骤2（上传记录），返回容器用于查日期/时间输入。 */
+  const gotoUploadStep = async (qc: QueryClient) => {
+    const view = renderWithProviders(
+      <>
+        <CreateReview />
+        <ToastContainer />
+      </>,
+      { queryClient: qc },
+    );
+    await screen.findByText('步骤 1: 关联岗位');
+    fireEvent.click(screen.getByText('下一步'));
+    return view;
+  };
+
+  const pasteAndStart = async () => {
+    await screen.findByText('步骤 3: 上传记录');
+    fireEvent.change(screen.getByPlaceholderText(/【面试官】/), {
+      target: { value: '面试内容：聊了 RAG 评测。' },
+    });
+    fireEvent.click(screen.getByText('开始 AI 智能复盘研判'));
+  };
+
+  it('岗位无面试记录：表单创建面试（轮次/日期时间/形式/面试官入 payload）再挂复盘', async () => {
+    const qc = createManualQc([]);
+    await gotoUploadStep(qc);
+
+    // 该岗位无面试 → 直接呈现手动录入表单
+    await screen.findByText('录入新面试场次信息');
+    fireEvent.change(screen.getByDisplayValue('第1面 · 业务初面'), { target: { value: '4' } });
+    fireEvent.change(document.querySelector('input[type="date"]') as HTMLInputElement, {
+      target: { value: '2026-10-02' },
+    });
+    fireEvent.change(document.querySelector('input[type="time"]') as HTMLInputElement, {
+      target: { value: '09:30' },
+    });
+    fireEvent.change(screen.getByPlaceholderText('如：业务主管、交叉技术官...'), {
+      target: { value: '李面试官' },
+    });
+
+    fireEvent.click(screen.getByText('下一步'));
+    await pasteAndStart();
+
+    // 手动录入 → 先创建面试（roundType 由轮次号派生：第4面 → hr → HR面）
+    await waitFor(
+      () =>
+        expect(interview.generateInterviewPrep).toHaveBeenCalledWith(12, {
+          round_type: 'HR面',
+          card_ids: [],
+        }),
+      { timeout: 8000 },
+    );
+    // 复盘挂到新建面试上（round_type 取新面试的 'hr'，而非残留旧选择）
+    await waitFor(
+      () =>
+        expect(interview.createInterviewReview).toHaveBeenCalledWith(
+          expect.objectContaining({ round_type: 'hr', raw_text: '面试内容：聊了 RAG 评测。' }),
+        ),
+      { timeout: 8000 },
+    );
+
+    // 表单字段全部落在新建 Interview 上
+    const ivs = qc.getQueryData([...INTERVIEWS_QUERY_KEY]) as Interview[];
+    expect(ivs).toHaveLength(1);
+    expect(ivs[0]).toMatchObject({
+      id: 'prep-77',
+      jobId: '12',
+      company: '字节跳动',
+      role: 'AI 产品经理',
+      roundNumber: 4,
+      roundName: '第4面 · HRBP综合面',
+      roundType: 'hr',
+      time: '2026-10-02 09:30',
+      format: 'video',
+      interviewer: '李面试官',
+    });
+
+    // 成功 toast 的场次名来自实际创建的面试（此前固定用 manualForm 默认值）
+    await screen.findByText(/第4面 · HRBP综合面/);
+  });
+
+  it('已有面试但用户点「录入新面试场次」：创建新记录挂复盘，不挂残留的旧选择', async () => {
+    const qc = createManualQc([INT_YUAN]);
+    await gotoUploadStep(qc);
+
+    // 已有面试列表可见，再切手动录入
+    await screen.findByText(/选择面试场次/);
+    fireEvent.click(screen.getByText('+ 录入新面试场次'));
+    await screen.findByText('录入新面试场次信息');
+
+    fireEvent.click(screen.getByText('下一步'));
+    await pasteAndStart();
+
+    // 必须走创建路径（旧行为：直接拿 selectedInterviewId=INT_YUAN 提交，表单被无视）
+    await waitFor(
+      () =>
+        expect(interview.generateInterviewPrep).toHaveBeenCalledWith(12, {
+          round_type: '业务面',
+          card_ids: [],
+        }),
+      { timeout: 8000 },
+    );
+    // 复盘 round_type='business'（第1面派生）而非旧面试的 'tech'
+    await waitFor(
+      () =>
+        expect(interview.createInterviewReview).toHaveBeenCalledWith(
+          expect.objectContaining({ round_type: 'business' }),
+        ),
+      { timeout: 8000 },
+    );
+    expect(interview.createInterviewReview).not.toHaveBeenCalledWith(
+      expect.objectContaining({ round_type: 'tech' }),
+    );
+
+    const ivs = qc.getQueryData([...INTERVIEWS_QUERY_KEY]) as Interview[];
+    expect(ivs).toHaveLength(2);
+    const created = ivs.find((i) => i.id === 'prep-77');
+    expect(created).toMatchObject({
+      roundNumber: 1,
+      roundName: '第1面 · 业务初面',
+      roundType: 'business',
+      time: `${new Date().toISOString().split('T')[0]} 14:00`,
+    });
+    // 旧面试仍在（未被覆盖/删除）
+    expect(ivs.find((i) => i.id === 'prep-7')).toBeTruthy();
   });
 });
