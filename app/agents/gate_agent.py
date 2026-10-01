@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 
 from app.agents.base_agent import BaseAgent
 from app.core.prompts import load_prompt
+from app.tools.llm_rate_limit import call_with_limits
 
 
 class _GateIssue(BaseModel):
@@ -67,7 +68,7 @@ class GateAgent(BaseAgent):
         from langchain_core.messages import HumanMessage
 
         llm = model.bind_tools([schema], tool_choice=True)
-        response = llm.invoke([HumanMessage(content=prompt)])
+        response = call_with_limits(llm.invoke, [HumanMessage(content=prompt)])
         tool_calls = getattr(response, "tool_calls", None)
         if tool_calls:
             args = tool_calls[0].get("args", {})

@@ -15,6 +15,7 @@ from typing import Any, Dict, Optional, Type, get_args, get_origin
 from pydantic import BaseModel
 
 from app.core.prompts import load_prompt
+from app.tools.llm_rate_limit import call_with_limits, is_rate_limit_error
 
 logger = logging.getLogger("jobcraft.tools.llm_json")
 
@@ -98,7 +99,7 @@ def _invoke_with_bind_tools(
         bind_kwargs["max_tokens"] = max_tokens
     if bind_kwargs:
         llm = llm.bind(**bind_kwargs)
-    response = llm.invoke(prompt)
+    response = call_with_limits(llm.invoke, prompt)
 
     # 从 tool_calls 取参数
     tool_calls = getattr(response, "tool_calls", None)
@@ -178,7 +179,7 @@ def _invoke_with_plain_json(
         kwargs["temperature"] = temperature
     if max_tokens is not None:
         kwargs["max_tokens"] = max_tokens
-    response = model.invoke(final_prompt, **kwargs)
+    response = call_with_limits(model.invoke, final_prompt, **kwargs)
     content = getattr(response, "content", str(response))
     json_str = _extract_json(content)
     if not json_str:
@@ -309,6 +310,17 @@ def invoke_structured(
             )
             _finish("error", error=str(e))
             raise
+        if is_rate_limit_error(e):
+            # 限流错误经 call_with_limits 已退避重试仍失败，
+            # 此时再打「兜底」第二枪只会加剧账户级限流，直接上抛。
+            _record_llm_observability(
+                feature, "error", time.perf_counter() - _llm_start
+            )
+            _finish("error", error=f"限流跳过兜底: {e}")
+            label = f"[{debug_label}] " if debug_label else ""
+            raise RuntimeError(
+                f"{label}结构化调用失败（限流退避已耗尽，跳过兜底请求）: {e}"
+            ) from e
         try:
             _result, _response = _invoke_with_plain_json(
                 model, schema, prompt, temperature, max_tokens

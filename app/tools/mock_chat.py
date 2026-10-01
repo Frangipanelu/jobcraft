@@ -10,6 +10,7 @@ from typing import Any, Dict, List
 
 from app.core.llm import model
 from app.core.prompts import load_prompt
+from app.tools.llm_rate_limit import call_with_limits
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +55,7 @@ def mock_interview_chat(
         else:
             lc_messages.append(HumanMessage(content=content))
 
-    resp = model.invoke(lc_messages)
+    resp = call_with_limits(model.invoke, lc_messages)
     reply = resp.content.strip()
     if not reply:
         raise RuntimeError("模拟面试对话返回内容为空")
