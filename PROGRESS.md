@@ -2,6 +2,14 @@
 
 > 本文件用于追踪项目整体进度。AI 在每次会话结束或完成子任务时，必须更新本文件的对应板块。
 
+## BE-AI-02 GateAgent 接入结构化管道（2026-10-01，批次 3 收官）
+
+> `gate_agent.py` 直连 `bind_tools().invoke()`，绕过审计/缓存/指标/token 计量；且无 tool_calls 时返回 `schema()` 默认实例（required 字段路径必炸/吞空值）。修复 commit `48c955f`，JobCraft CI success。
+
+- 对齐 `TechAnalyzer` 范式：空结果短路（无分析结果免质检）保留 + `invoke_structured(model, schema, prompt, debug_label='gate_agent', prompt_version='1')`；删除 `_invoke` 与 `call_with_limits` 直连。失败经 plain-json 兜底仍失败则显式上抛——「模型失败静默吞成 `overall_quality` 空值」路径消失。
+- **mock_chat.py 评估结论（不改）**：多轮自由对话不适配结构化管道——缓存 key = 单 prompt 哈希，每轮 messages 变化天然 miss；强造 `{'reply': str}` 假 schema 会把 System+多轮消息压成单 prompt、丢 role 结构（禁止假功能）；审计/指标缺口需 `invoke_structured` 支持 messages 列表，留作独立观测任务。
+- **验收**：+2 例（prompt_version/debug_label 透传、失败上抛不吞）；pytest **860 passed / 7 skipped**，ruff/format/S/encoding 384 全绿；容器重建 + `uv run` 加载空输入短路 `LOAD-OK`。
+
 ## FE-REVIEW-01 复盘向导手动录入表单接入 payload（2026-10-01）
 
 > 「录入新面试场次信息」表单收轮次/日期/形式/面试官却从不提交，`handleStartAnalysis` 只认 `selectedInterviewId`——无面试记录的岗位点开始卡死「请先关联面试」，或静默挂到残留旧选择上。修复 commit `c42f7e0`，Frontend CI success。
