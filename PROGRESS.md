@@ -2,6 +2,18 @@
 
 > 本文件用于追踪项目整体进度。AI 在每次会话结束或完成子任务时，必须更新本文件的对应板块。
 
+## FE-CACHE-01 跨域写补定向 invalidateQueries（2026-10-01）
+
+> mutation 全靠 `setQueryData` 手工补丁 + `staleTime: 30_000` →「提交成功但别处仍显示旧值」。修复 commit `72a2199`，Frontend CI success。
+
+- **resume → jobs 镜像**：`persistResumePatch`（7 处调用）与 `useSaveResumeMutation` 落库后 `invalidate ['jobs']`——`['resumes']` 与 `['jobs']` 同源于 `jobApi.getDashboard`，`resume_markdown` 会翻转 dashboard `has_resume`，只补 RESUMES 时岗位卡片「有无简历」漂移。
+- **jobs 自身对账**：终止/恢复/已投递三个 mutation `onSettled` 重验 `['jobs']`（服务端 `effective_status`/`delivered` 为准，乐观补丁保留）；create 仅在服务端建行成功（`backendId != null`）时重验，本地-only 岗位不触发，防 refetch 用服务端列表覆盖本地行。
+- **review 跨域**：复盘落库 → `invalidate ['jobs']`（dashboard `review_count` 派生 reviewStage）；`applyFeedback` 反哺 → `invalidate ['experiences']`（updateCard 服务端真值，INTERVIEWS 的 `applied` 为客户端标记不重验）。
+- **experiences 自身**：卡片更新/加版本成功后 `invalidate ['experiences']`（usage/tags 派生字段以后端为准）；jd `deleteSubmission` 成功 → `invalidate ['jobs']`（服务端行已删，卡片随之移除）。
+- **刻意不加**（超出三类范围且会回归）：jd/interview create 的 jobs 重验——refetch 会抹掉服务端无法表达的客户端字段（`interviewIds`、合成 `jdAnalysisId`、`matchScore`），这些字段「刷新后丢失」是既有语义，「创建后立即丢失」是回归。
+- **测试 mock 服务端化**：jobs/review/experiences 三个测试文件的 `getDashboard`/`listCards`/`updateCard`/`createSubmission`/`updateSubmission`/`createInterviewReview`/`uploadInterviewReview` 改为有状态实现（写操作同步 fixture，refetch 返回反映写入的服务端真相），使 invalidate 后的 refetch 不再用静态 fixture 回滚乐观补丁。
+- **验收**：tsc 0、vitest 202/31 files、build ✅、pytest 858 passed/7 skipped、encoding 384/0。
+
 ## BE-TASK-01 悬挂任务类型声明清理（2026-10-01）
 
 > `TASK_TYPE_EXPORT_DOCX` / `TASK_TYPE_BATCH_ANALYZE` 声明但零引用（无 handler、无前端提交方、无测试）。修复 commit `350eac6`。
