@@ -10,7 +10,16 @@
 - [x] **接入全部真实 LLM 调用点**：`llm_json._invoke_with_bind_tools`、`llm_json._invoke_with_plain_json`（结构化双路径）、`gate_agent._invoke`（绕过 invoke_structured 的直调）、`mock_chat.mock_interview_chat`；`invoke_structured` 新增**限流跳过兜底**分支——退避耗尽后不再发起第二枪，audit error 记「限流跳过兜底」并 `from e` 保留异常链。
 - [x] **配置**：`.env.example` 新增 `LLM_RATE_LIMIT_RPS=1.0` / `LLM_CONCURRENCY_LIMIT=1` / `LLM_RATE_LIMIT_RETRIES=3` / `LLM_RATE_LIMIT_BACKOFF_BASE=1.0` + 补 `LLM_REQUEST_TIMEOUT=180`；<=0/0 可分别关闭间隔/并发限制，RETRIES=0 关闭重试。注意限流为**进程级**，backend 与 worker 各自计算，合计仍受账户全局速率约束。
 - [x] **验收**：`tests/test_llm_rate_limit_unit.py` 15 例（限流识别 4 / 退避重试 5 / 限流器 4 / `invoke_structured` 接线 2：限流跳过兜底 + 非限流仍走兜底）；终态 **pytest 811 passed / 7 skipped / 0 failed**（13.4s，无变慢）、ruff check/format 绿、encoding 380/0。
-- [ ] **遗留**：e2e 慢用例仍待智谱配额恢复后补跑（`uv run pytest tests/test_jobcraft_e2e.py --runslow -k interview_prep`）；如需进一步降 429 概率，可在 e2e 前置将 `LLM_RATE_LIMIT_RPS` 调至 0.5。
+- [x] **补跑完成（2026-10-01）**：`d11c5f8`（S311 noqa）+ `f35bda0`（间隔锁内休眠）后，重建 backend/worker 容器，`uv run pytest tests/test_jobcraft_e2e.py --runslow -k interview_prep` **5/5 passed（401s，全程无 429）**；无需降 RPS。
+
+## BE-PREP-OUT-01 面试准备稿 LLM 输出残缺/畸形加固（2026-10-01）
+
+> 起因：429 解除后慢 e2e 暴露三类输出质量问题——① 主路径 `company_research` 被 bind_tools 双重编码成 JSON 字符串、兜底路径 `card_ids` 填卡片标题而非整数 ID（两路径先后失败 → prep 500）；② prompt v1 只描述章节结构不映射 JSON 字段 → `elevator_pitch` 偶发空串；③ 内容字段带默认值 → JSON schema 全可选 → `dimension_questions` 偶发缺省 `[]`（静默残缺稿）。
+
+- [x] **`7830104` schema 容错**：`DimensionQuestion.card_ids` before 校验器（数字串转 int、非数字标题丢弃、bool 排除、`[...]` 串 JSON 解析）、`InterviewPrepResult.company_research` before 校验器（JSON 串尽力解析、坏值回退 `{}`、None→None）；依据：company_research 不落库（flow 以 `state["company_research"]` 为准）。`tests/test_interview_prep_schema_unit.py` 增 12 例（含真实 e2e 失败载荷回归）。
+- [x] **`df0fbc6` prompt v2**：`prompts/interview/interview_prep_script_v2.txt` 逐字段映射（自我介绍→`elevator_pitch`、全文→`full_version`、网页版式→`html_content`）+ 四字段非空约束 + `card_ids` 仅收整数 ID 禁标题；`interview_pre` 加载切 `version=2`（遵守 prompt 版本化规则）；`test_prompts` 增 v2 文件/渲染断言、`test_tools_extra_unit` builder 端到端断言。
+- [x] **`628e8bb` LLM 输出必填非空契约**：子类 `InterviewPrepLLMOutput` 以 `Field(min_length=1)` 强制 `elevator_pitch`/`dimension_questions`/`full_version`/`html_content` 进入 JSON schema `required` 且禁空——漏填/空值 → 校验错误 → 走兜底，不再静默残缺；Agent 绑定该契约、落库前转回 `InterviewPrepResult`（父类保持宽松默认，**API/DB 契约不变**）；mock 测试同步补必填字段。
+- [x] **验收**：schema 容错/契约 14 例 + prompt 断言 3 处；pytest **826 passed / 7 skipped**、encoding 384/0、ruff check/format/S 全绿；重建容器后慢 e2e **5/5 passed（401s）**。
 
 ## T-M7-3 备战草稿落库 FE-PREP-01 + FE-LOGIC-01①②（2026-10-01）
 
@@ -20,7 +29,7 @@
 - [x] **FE 草稿接线**（commit `36e08d3`）：`InterviewPrepRecord.drafts?` + `saveInterviewPrepDrafts` PATCH + `useSavePrepDraftsMutation`（onSuccess `setQueryData([...INTERVIEWS_QUERY_KEY])` 回写 `prepSource.drafts`）；WorkspaceView `syncedPrepIdRef` 每份 prep 只灌入一次（存 tab 草稿不被列表刷新重置）；`handleSaveAnswer` 改 async，成功/失败/未落库三态诚实 toast；按钮 `saveDrafts.isPending` 禁用 + 「保存中…」。
 - [x] **FE-LOGIC-01①②**（commit `76502f3`）：① `预计时长` 表达式加括号恢复「有值优先」（原 `||` 紧于 `?:` 导致真实 duration 恒显示「见下方说明」）；② `InterviewDetailsStep` 轮次名映射补 `rNum===4 → HR面`、`rNum===5 → 终面`（原只到第3面，选 HR 面/终面均显示错误名）。③ `UserProfileView` 吞错仍开放。
 - [x] **验收**：BE +7 测试（API 4 / ownership 2 / 迁移收敛 1 / e2e slow 1）；真库（jobcraft 容器 mysql:8.4.9）守卫 ALTER + V0016 SQL 双跑幂等、schema_migrations 登记 0016；**非 LLM 七步链路脚本**（重建 backend 容器后：注册→列表空 drafts→PATCH→列表回读→覆盖写→404 不存在→404 越权且数据不改→401→清理）全过；终态全量：check_encoding 378/0、ruff check/format 绿、**pytest 796 passed / 7 skipped / 0 failed**、tsc 0、**vitest 202**、build ✅。
-- [ ] **遗留**：slow e2e `test_interview_prep_drafts_roundtrip` 及前置 generate 用例因 **LLM 429 账户速率限制**两次未跑通（`[llm_score_match] 结构化调用失败: 429`，非代码问题）——配额恢复后 `uv run pytest tests/test_jobcraft_e2e.py --runslow -k interview_prep` 补跑；V0014 编号待 BE-INDEX-01/T-M7-4 使用。
+- [x] **补跑完成（2026-10-01）**：限流（`BE-LLM-RLIMIT-01`）+ 准备稿输出加固（`BE-PREP-OUT-01`，见下方新章节）后，`uv run pytest tests/test_jobcraft_e2e.py --runslow -k interview_prep` **5/5 passed**，含 `test_interview_prep_drafts_roundtrip`；V0014 编号仍预留 BE-INDEX-01/T-M7-4 使用。
 
 ## BE-EXPR-01 真实 MySQL 复核：非法 SQL 判定为误报（2026-09-30）
 
