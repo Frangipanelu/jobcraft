@@ -2,6 +2,16 @@
 
 > 本文件用于追踪项目整体进度。AI 在每次会话结束或完成子任务时，必须更新本文件的对应板块。
 
+## BE-LLM-RLIMIT-01 LLM 调用进程级限流 + 429 指数退避（2026-10-01）
+
+> 起因：T-M7-3 慢 e2e 两次被智谱 `1302`（HTTP 429 账户速率限制）挡住——免费档 `glm-4.7-flash` 约 1 req/s 低并发，而原代码无限流、无退避，`invoke_structured` 撞 429 后立即再打「兜底」第二个请求，密集调用即雪崩。
+
+- [x] **新模块 `app/tools/llm_rate_limit.py`**：`RateLimiter`（并发槽 + 最小启动间隔，`_reserve_start` 预约启动时刻）；`get_rate_limiter()` 进程级单例（环境变量变更自动重建，便于测试/运行期调整）；`is_rate_limit_error()` 按文本特征识别（429/1302/1305/速率限制/rate limit 等，兼容不同 SDK 异常类型）；`call_with_limits(fn)` 持槽执行整个重试循环（退避期间不释放并发槽，防其他线程穿插），仅限流错误按 `base * 2^n + jitter` 退避重试，其余异常原样上抛。
+- [x] **接入全部真实 LLM 调用点**：`llm_json._invoke_with_bind_tools`、`llm_json._invoke_with_plain_json`（结构化双路径）、`gate_agent._invoke`（绕过 invoke_structured 的直调）、`mock_chat.mock_interview_chat`；`invoke_structured` 新增**限流跳过兜底**分支——退避耗尽后不再发起第二枪，audit error 记「限流跳过兜底」并 `from e` 保留异常链。
+- [x] **配置**：`.env.example` 新增 `LLM_RATE_LIMIT_RPS=1.0` / `LLM_CONCURRENCY_LIMIT=1` / `LLM_RATE_LIMIT_RETRIES=3` / `LLM_RATE_LIMIT_BACKOFF_BASE=1.0` + 补 `LLM_REQUEST_TIMEOUT=180`；<=0/0 可分别关闭间隔/并发限制，RETRIES=0 关闭重试。注意限流为**进程级**，backend 与 worker 各自计算，合计仍受账户全局速率约束。
+- [x] **验收**：`tests/test_llm_rate_limit_unit.py` 15 例（限流识别 4 / 退避重试 5 / 限流器 4 / `invoke_structured` 接线 2：限流跳过兜底 + 非限流仍走兜底）；终态 **pytest 811 passed / 7 skipped / 0 failed**（13.4s，无变慢）、ruff check/format 绿、encoding 380/0。
+- [ ] **遗留**：e2e 慢用例仍待智谱配额恢复后补跑（`uv run pytest tests/test_jobcraft_e2e.py --runslow -k interview_prep`）；如需进一步降 429 概率，可在 e2e 前置将 `LLM_RATE_LIMIT_RPS` 调至 0.5。
+
 ## T-M7-3 备战草稿落库 FE-PREP-01 + FE-LOGIC-01①②（2026-10-01）
 
 > 修复缺陷：备战「保存草稿」只弹 toast、`answerDrafts` 纯本地随导航丢失；附带两处明确逻辑 bug（duration 展示优先级、轮次名映射）。
