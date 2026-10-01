@@ -85,6 +85,9 @@ class TestInterviewPre:
         assert "Project A" in prompt
         assert "D1" in prompt
         assert "InterviewPrepResult" in prompt
+        # v2 字段映射（elevator_pitch 非空 + card_ids 整数约束）已随加载生效
+        assert "elevator_pitch" in prompt
+        assert "禁止填卡片标题" in prompt
 
     def test_build_interview_prompt_with_company_research(self):
         from app.tools.interview_pre import _build_interview_prompt

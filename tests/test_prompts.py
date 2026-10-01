@@ -194,6 +194,28 @@ def test_parse_resume_entries_v2_no_forced_percent():
     assert "原文" in text
 
 
+def test_interview_prep_script_v2_field_mapping():
+    """prep v2：显式字段映射 + 非空约束 + card_ids 只收整数 ID（e2e 空 pitch/标题混入回归）。"""
+    text = (PROMPTS_DIR / "interview" / "interview_prep_script_v2.txt").read_text(
+        encoding="utf-8"
+    )
+    assert "elevator_pitch" in text
+    assert "full_version" in text
+    assert "html_content" in text
+    assert "非空" in text
+    assert "整数 ID" in text
+    assert "禁止填卡片标题" in text
+    # v2 显式渲染应包含 v1 没有的字段映射
+    fields = _REQUIRED_FIELDS[("interview", "interview_prep_script")]
+    rendered = load_prompt(
+        "interview",
+        "interview_prep_script",
+        version=2,
+        **{f: f"<{f}>" for f in fields},
+    )
+    assert "elevator_pitch" in rendered
+
+
 def test_load_prompt_renders_placeholders():
     """load_prompt 应返回已填充、无残留占位符的字符串，且字面花括号保留。"""
     for (subdir, name), fields in _REQUIRED_FIELDS.items():

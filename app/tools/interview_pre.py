@@ -114,6 +114,7 @@ def _build_interview_prompt(
     return load_prompt(
         "interview",
         "interview_prep_script",
+        version=2,
         position=position,
         round_type=round_type,
         company=company,
