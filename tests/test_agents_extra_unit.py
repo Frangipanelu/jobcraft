@@ -8,6 +8,8 @@ Agent 节点额外 Mock 单测（无真实 LLM 调用）
 import sys
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 
@@ -193,7 +195,7 @@ def test_gate_agent_empty_input(monkeypatch):
     def _fail(*args, **kwargs):
         raise AssertionError("空输入不应触发 LLM 调用")
 
-    monkeypatch.setattr("app.agents.gate_agent.GateAgent._invoke", _fail)
+    monkeypatch.setattr("app.agents.gate_agent.invoke_structured", _fail)
     out = GateAgent().run({"tech_results": [], "soft_results": []})
     assert out["gate_report"]["issues"] == []
     assert out["gate_report"]["overall_quality"] == "high"
@@ -213,10 +215,10 @@ def test_gate_agent_with_mock_llm(monkeypatch):
         "overall_quality": "medium",
     }
 
-    def _fake_invoke(self_agent, schema, prompt):
+    def _fake_invoke(model, schema, prompt, **kwargs):
         return schema(**fake)
 
-    monkeypatch.setattr("app.agents.gate_agent.GateAgent._invoke", _fake_invoke)
+    monkeypatch.setattr("app.agents.gate_agent.invoke_structured", _fake_invoke)
     out = GateAgent().run(
         {
             "tech_results": [
@@ -228,6 +230,47 @@ def test_gate_agent_with_mock_llm(monkeypatch):
     )
     assert len(out["gate_report"]["issues"]) == 1
     assert out["gate_report"]["overall_quality"] == "medium"
+
+
+def test_gate_agent_uses_structured_pipeline(monkeypatch):
+    """BE-AI-02：Gate 走 invoke_structured，prompt_version/debug_label 进审计管道。"""
+    from app.agents.gate_agent import GateAgent, _GateOut
+
+    captured = {}
+
+    def _fake_invoke(model, schema, prompt, **kwargs):
+        captured.update(kwargs)
+        captured["schema"] = schema
+        return _GateOut(issues=[], overall_quality="high")
+
+    monkeypatch.setattr("app.agents.gate_agent.invoke_structured", _fake_invoke)
+    out = GateAgent().run(
+        {
+            "tech_results": [{"sequence": 1, "score": 90, "dimension": "D1"}],
+            "soft_results": [],
+        }
+    )
+    assert captured["schema"] is _GateOut
+    assert captured["prompt_version"] == "1"
+    assert captured["debug_label"] == "gate_agent"
+    assert out["gate_report"]["overall_quality"] == "high"
+
+
+def test_gate_agent_llm_failure_raises(monkeypatch):
+    """BE-AI-02：LLM 失败必须上抛，不再静默吞成 schema() 默认空实例。"""
+    from app.agents.gate_agent import GateAgent
+
+    def _boom(*args, **kwargs):
+        raise RuntimeError("结构化调用失败")
+
+    monkeypatch.setattr("app.agents.gate_agent.invoke_structured", _boom)
+    with pytest.raises(RuntimeError, match="结构化调用失败"):
+        GateAgent().run(
+            {
+                "tech_results": [{"sequence": 1, "score": 90, "dimension": "D1"}],
+                "soft_results": [],
+            }
+        )
 
 
 # ---------- GapPolishAgent ----------

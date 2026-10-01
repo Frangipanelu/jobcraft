@@ -9,8 +9,9 @@ from typing import Any, Dict, List
 from pydantic import BaseModel, Field
 
 from app.agents.base_agent import BaseAgent
+from app.core.llm import model
 from app.core.prompts import load_prompt
-from app.tools.llm_rate_limit import call_with_limits
+from app.tools.llm_json import invoke_structured
 
 
 class _GateIssue(BaseModel):
@@ -59,18 +60,11 @@ class GateAgent(BaseAgent):
             return {"gate_report": {"issues": [], "overall_quality": "high"}}
         schema = self._get_output_schema()
         prompt = self._build_prompt(state)
-        raw = self._invoke(schema, prompt)
+        raw = invoke_structured(
+            model,
+            schema,
+            prompt,
+            debug_label="gate_agent",
+            prompt_version="1",
+        )
         return {"gate_report": raw.model_dump()}
-
-    def _invoke(self, schema, prompt):
-        """轻量调用，不使用 model.bind_tools 的兜底"""
-        from app.core.llm import model
-        from langchain_core.messages import HumanMessage
-
-        llm = model.bind_tools([schema], tool_choice=True)
-        response = call_with_limits(llm.invoke, [HumanMessage(content=prompt)])
-        tool_calls = getattr(response, "tool_calls", None)
-        if tool_calls:
-            args = tool_calls[0].get("args", {})
-            return schema.model_validate(args)
-        return schema()
