@@ -4,9 +4,10 @@ JobCraft 求职助手 Pydantic 数据模型
 所有 LLM 结构化输出、API 请求/响应共用此模块，确保字段一致。
 """
 
+import json
 from typing import Any, Dict, List, Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 # ============================================================
@@ -622,6 +623,41 @@ class DimensionQuestion(BaseModel):
     answer_points: List[str] = Field(default_factory=list)
     card_ids: List[int] = Field(default_factory=list)
 
+    @field_validator("card_ids", mode="before")
+    @classmethod
+    def _coerce_card_ids(cls, v: Any) -> List[int]:
+        """容忍 LLM 结构化输出的常见畸形，避免单字段导致整稿 500。
+
+        - 字符串：整体形如 `"[1, 2]"` 先 JSON 解析，否则视为单值
+        - 非数字文本（模型把卡片标题填进 card_ids）：丢弃该条而非报错
+        - bool（Python 中 int 的子类）：丢弃
+
+        :param v: 校验前的原始值
+        :return: 清洗后的整数 ID 列表
+        """
+        if v is None:
+            return []
+        if isinstance(v, str):
+            text = v.strip()
+            if text.startswith("["):
+                try:
+                    v = json.loads(text)
+                except json.JSONDecodeError:
+                    v = [text]
+            else:
+                v = [text]
+        if not isinstance(v, list):
+            return []
+        ids: List[int] = []
+        for item in v:
+            if isinstance(item, bool):
+                continue
+            if isinstance(item, int):
+                ids.append(item)
+            elif isinstance(item, str) and item.strip().isdigit():
+                ids.append(int(item.strip()))
+        return ids
+
 
 class InterviewPrepResult(BaseModel):
     """面试准备稿结果"""
@@ -638,6 +674,27 @@ class InterviewPrepResult(BaseModel):
     html_content: str = ""
     created_at: Optional[str] = None
     company_research: Optional[Dict[str, Any]] = Field(default_factory=dict)
+
+    @field_validator("company_research", mode="before")
+    @classmethod
+    def _coerce_company_research(cls, v: Any) -> Optional[Dict[str, Any]]:
+        """容忍 LLM 把对象双重编码成 JSON 字符串（bind_tools 常见）。
+
+        解析失败回退 `{}`：该字段落库以 workflow state 为准
+        （`interview_prep_flow` 写入 `state["company_research"]`，不用 LLM 值）。
+
+        :param v: 校验前的原始值
+        :return: dict / None（原样透传合法值）
+        """
+        if v is None:
+            return None
+        if isinstance(v, str):
+            try:
+                parsed = json.loads(v)
+            except json.JSONDecodeError:
+                return {}
+            return parsed if isinstance(parsed, dict) else {}
+        return v if isinstance(v, dict) else {}
 
 
 # ============================================================
