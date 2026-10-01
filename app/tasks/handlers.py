@@ -18,7 +18,6 @@ logger = logging.getLogger(__name__)
 
 TASK_TYPE_RESUME_GENERATE = "resume_generate"
 TASK_TYPE_INTERVIEW_PREP = "interview_prep"
-TASK_TYPE_EXPORT_PDF = "export_pdf"
 TASK_TYPE_JD_ANALYZE_STRUCTURED = "jd_analyze_structured"
 TASK_TYPE_INTERVIEW_REVIEW_ANALYZE = "interview_review_analyze"
 TASK_TYPE_QUESTION_TABLE = "question_table"
@@ -137,57 +136,6 @@ def execute_interview_prep(params: Dict[str, Any]) -> Dict[str, Any]:
 
     except Exception as e:
         logger.error(f"面试准备任务失败: {e}")
-        manager = get_task_manager()
-        manager.update_task_status(task_id, TaskStatus.FAILED, error=str(e))
-        raise
-
-
-def execute_export_pdf(params: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    执行 PDF 导出任务
-
-    :param params: 任务参数
-    :return: 导出结果（包含文件路径）
-    """
-    from app.tools import jobcraft_resume
-
-    task_id = params.get("task_id")
-    user_id = params.get("user_id", 1)
-    job_analysis_id = params.get("job_analysis_id")
-    selected_card_ids = params.get("selected_card_ids") or params.get("card_ids", [])
-    # 透传用户编辑版本与联系方式（BE-TASKDIV-01：与 /save-resume 同参）
-    card_versions = params.get("card_versions")
-    personal_info = params.get("personal_info")
-
-    if not job_analysis_id:
-        raise ValueError("job_analysis_id 缺失，无法导出简历")
-
-    logger.info(f"开始执行PDF导出任务: {task_id}")
-
-    try:
-        manager = get_task_manager()
-        manager.update_task_status(task_id, TaskStatus.RUNNING)
-
-        # 生成简历内容
-        resume_content = jobcraft_resume.generate_resume(
-            job_analysis_id=job_analysis_id,
-            selected_card_ids=selected_card_ids,
-            card_versions=card_versions,
-            personal_info=personal_info,
-            user_id=user_id,
-        )
-
-        # PDF 落地暂未实现：回传简历内容，导出提示待完善
-        result = {
-            "content": resume_content,
-            "message": "PDF导出功能待完善",
-        }
-
-        manager.update_task_status(task_id, TaskStatus.COMPLETED, result=result)
-        return result
-
-    except Exception as e:
-        logger.error(f"PDF导出任务失败: {e}")
         manager = get_task_manager()
         manager.update_task_status(task_id, TaskStatus.FAILED, error=str(e))
         raise
@@ -476,7 +424,6 @@ def execute_resume_suggest(params: Dict[str, Any]) -> Dict[str, Any]:
 TASK_REGISTRY = {
     TASK_TYPE_RESUME_GENERATE: execute_resume_generate,
     TASK_TYPE_INTERVIEW_PREP: execute_interview_prep,
-    TASK_TYPE_EXPORT_PDF: execute_export_pdf,
     TASK_TYPE_JD_ANALYZE_STRUCTURED: execute_jd_analyze_structured,
     TASK_TYPE_INTERVIEW_REVIEW_ANALYZE: execute_interview_review_analyze,
     TASK_TYPE_QUESTION_TABLE: execute_question_table,

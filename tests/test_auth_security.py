@@ -101,7 +101,11 @@ _BUSINESS_ENDPOINTS = [
     ("GET", "/api/jobcraft/interview-review/1", None),
     ("DELETE", "/api/jobcraft/interview-review/1", None),
     # tasks
-    ("POST", "/api/jobcraft/tasks/submit", {"task_type": "export_pdf", "params": {}}),
+    (
+        "POST",
+        "/api/jobcraft/tasks/submit",
+        {"task_type": "resume_generate", "params": {}},
+    ),
     ("GET", "/api/jobcraft/tasks/t_1", None),
     ("POST", "/api/jobcraft/tasks/t_1/cancel", None),
     ("GET", "/api/jobcraft/tasks", None),

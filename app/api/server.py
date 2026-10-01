@@ -255,7 +255,6 @@ async def submit_task(
     支持的任务类型：
     - resume_generate: 简历生成
     - interview_prep: 面试准备
-    - export_pdf: PDF导出
     """
     try:
         from app.tasks import get_task_manager

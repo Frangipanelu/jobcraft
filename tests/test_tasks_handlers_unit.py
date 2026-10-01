@@ -24,7 +24,6 @@ def test_registry_exposes_expected_types():
     assert set(handlers.TASK_REGISTRY.keys()) == {
         "resume_generate",
         "interview_prep",
-        "export_pdf",
         "jd_analyze_structured",
         "interview_review_analyze",
         "question_table",
@@ -456,34 +455,10 @@ def test_jd_analyze_structured_rejects_illegal_tag(monkeypatch):
         )
 
 
-def test_export_pdf_passes_versions_and_personal_info(monkeypatch):
-    """export_pdf 任务应透传 card_versions/personal_info（BE-TASKDIV-01）。"""
-    fake_mgr = FakeTaskManager()
-    monkeypatch.setattr("app.tasks.handlers.get_task_manager", lambda: fake_mgr)
+def test_export_pdf_task_removed():
+    """FE-RESUME-03：export_pdf 占位任务已下线（前后端同批处置，不允许悬挂）。"""
+    from app.tasks import handlers
 
-    captured = {}
-
-    def fake_generate(**kwargs):
-        captured.update(kwargs)
-        return {"markdown": "# 简历", "html": "<p>x</p>"}
-
-    monkeypatch.setattr("app.tools.jobcraft_resume.generate_resume", fake_generate)
-
-    from app.tasks.handlers import execute_export_pdf
-
-    result = execute_export_pdf(
-        {
-            "task_id": "t-p",
-            "user_id": 7,
-            "job_analysis_id": 10,
-            "selected_card_ids": [1],
-            "card_versions": {1: "编辑后文本"},
-            "personal_info": {"name": "张三"},
-        }
-    )
-
-    assert result["content"]["markdown"] == "# 简历"
-    assert captured["card_versions"] == {1: "编辑后文本"}
-    assert captured["personal_info"] == {"name": "张三"}
-    assert captured["user_id"] == 7
-    assert any(u["task_id"] == "t-p" for u in fake_mgr.status_updates)
+    assert "export_pdf" not in handlers.TASK_REGISTRY
+    assert not hasattr(handlers, "execute_export_pdf")
+    assert not hasattr(handlers, "TASK_TYPE_EXPORT_PDF")

@@ -1267,6 +1267,31 @@ class TestSaveResume:
         assert resp.status_code == 200
         assert "resume_md" in resp.json()
 
+    def test_save_resume_passes_versions_and_personal_info(self, monkeypatch):
+        """save-resume 主路径应透传 card_versions/personal_info（BE-TASKDIV-01 覆盖迁移到同步路径）。"""
+        captured = {}
+
+        def fake_generate(**kw):
+            captured.update(kw)
+            return {"resume_md": "# Resume"}
+
+        monkeypatch.setattr(
+            "app.api.job_analysis.jobcraft_resume.generate_resume", fake_generate
+        )
+        resp = client.post(
+            "/api/jobcraft/job/save-resume",
+            json={
+                "job_analysis_id": 10,
+                "selected_card_ids": [1],
+                "card_versions": {1: "编辑后文本"},
+                "personal_info": {"name": "张三"},
+            },
+        )
+        assert resp.status_code == 200
+        assert captured["card_versions"] == {1: "编辑后文本"}
+        assert captured["personal_info"] == {"name": "张三"}
+        assert captured["user_id"] is not None
+
 
 class TestResumeDownload:
     """GET /api/jobcraft/job/resume/download"""
