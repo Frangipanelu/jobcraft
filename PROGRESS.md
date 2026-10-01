@@ -2,6 +2,15 @@
 
 > 本文件用于追踪项目整体进度。AI 在每次会话结束或完成子任务时，必须更新本文件的对应板块。
 
+## BE-DRIFT-01 投递状态 DEFAULT 漂移关闭（2026-10-01，批次 4）
+
+> `resume_submission.status` DEFAULT 三处不一致（V0001 `'APPLIED'` / `_ensure` `'PREPARED'` / jobcraft.sql `'已投递'`）。裁决：不动 DDL，应用层隔离。修复 commit `01e9884`，JobCraft CI success。
+
+- **不改 DDL 的理由**：AGENTS §4.4 禁改列；且 DEFAULT 变更对存量库无效（`is_schema_ready` 短路不重跑 CREATE），只会造成「已统一」的错觉。
+- **写路径已隔离**（现状确认）：`insert_submission` 恒显式 `normalize_status` + 显式 status 列（缺省 PREPARED、旧中文归一化、垃圾值回落 PREPARED），DB DEFAULT 永不参与写入。
+- **本项补齐**：① `get_submission_by_analysis` 原返回裸 `row["status"]` → 改 `effective_status` 投影（与 `get_submission`/`list_submissions` 一致，堵住读不一致缺口）；② `_ensure_resume_submission_table` docstring 记录三处差异与裁决（统一 DEFAULT 需独立迁移决策）。
+- **验收**：+3 例（INSERT 恒带 status 列且垃圾值不透传、三处 DEFAULT 文本差异锁定防「误统一」、按分析读投影 APPLIED+delivered=0→PREPARED / delivered=1→APPLIED）；pytest **863 passed / 7 skipped**，ruff/format/S/encoding 384 全绿；容器重建 LOAD-OK。
+
 ## BE-AI-02 GateAgent 接入结构化管道（2026-10-01，批次 3 收官）
 
 > `gate_agent.py` 直连 `bind_tools().invoke()`，绕过审计/缓存/指标/token 计量；且无 tool_calls 时返回 `schema()` 默认实例（required 字段路径必炸/吞空值）。修复 commit `48c955f`，JobCraft CI success。
