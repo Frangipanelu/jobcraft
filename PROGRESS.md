@@ -2,6 +2,18 @@
 
 > 本文件用于追踪项目整体进度。AI 在每次会话结束或完成子任务时，必须更新本文件的对应板块。
 
+## FE-REVIEW-01 复盘向导手动录入表单接入 payload（2026-10-01）
+
+> 「录入新面试场次信息」表单收轮次/日期/形式/面试官却从不提交，`handleStartAnalysis` 只认 `selectedInterviewId`——无面试记录的岗位点开始卡死「请先关联面试」，或静默挂到残留旧选择上。修复 commit `c42f7e0`，Frontend CI success。
+
+- **manualMode 判定**：`isManualIntake = newInterviewMode || jobInterviews.length === 0`；验证（`!isManualIntake && !selectedInterviewId` 才报「请先关联」）与提交分支同源——manual 下先 `createInterviewMutation.mutateAsync` 用表单建面试，再用新 `id` 建复盘，`selectedInterviewId` 在该分支完全被忽略（切回选择模式旧选择仍在，恢复而非丢失）。
+- **字段接线**：表单补齐 date/time 采集（新增 `<input type="time">`），提交 `time: '${date} ${time}'`（与 CreateInterview 向导同契约，入 `Interview.time`）；`roundType` 移出 state，提交时 `roundTypeForNumber(roundNumber)` 派生（2→tech / 4→hr / 5+→comprehensive / else business），与 roundName 选项语义对齐。
+- **假默认值清理**：date 硬编码 `2026-09-01` → 当天日期；`interviewer: '业务技术面试官'` 假人名 → `''`；toast 场次名从固定 `manualForm.roundName`（select 模式下是陈旧默认）改实际创建返回值（select 模式查列表兜底）。
+- **门禁**：canNext step1 manual 分支加 `!!manualForm.date && !!manualForm.time` 必填。
+- **既有契约注记**：创建面试走 `useCreateInterviewMutation`，要求 `job.jdAnalysisId`，无分析岗位抛错并归入「面试复盘失败」toast（与向导侧行为一致）。
+- **测试**：review-query +2 例——无面试记录全链路（`generateInterviewPrep(12, {round_type:'HR面'})` → review `round_type:'hr'`、新建 Interview 字段逐项 `toMatchObject`、toast 用实际 roundName）；已有面试切「录入新面试场次」（必须走创建路径、review `round_type:'business'` 且断言非 `'tech'` 旧选择、旧 INT_YUAN 保留）。
+- **验收**：tsc 0、vitest **204**/31 files、build ✅、pytest 858 passed/7 skipped、encoding 384/0、Frontend CI `c42f7e0` success。
+
 ## FE-CACHE-01 跨域写补定向 invalidateQueries（2026-10-01）
 
 > mutation 全靠 `setQueryData` 手工补丁 + `staleTime: 30_000` →「提交成功但别处仍显示旧值」。修复 commit `72a2199`，Frontend CI success。
