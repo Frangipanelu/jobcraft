@@ -125,9 +125,13 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({ initialTab }) 
 
   // Settings state
   const [modelInfo, setModelInfo] = useState<{ model_name: string; provider: string; status: string } | null>(null);
+  const [settingsLoadFailed, setSettingsLoadFailed] = useState(false);
 
   useEffect(() => {
-    authApi.getSettings().then(setModelInfo).catch(() => {});
+    authApi
+      .getSettings()
+      .then(setModelInfo)
+      .catch(() => setSettingsLoadFailed(true));
   }, []);
 
   const handleExportData = async () => {
@@ -726,11 +730,15 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({ initialTab }) 
               <div>
                 <div className="text-xs font-bold text-ink">当前推理模型</div>
                 <div className="text-[11px] text-muted mt-0.5">
-                  {modelInfo ? `${modelInfo.model_name}（${modelInfo.provider}）` : '加载中...'}
+                  {settingsLoadFailed
+                    ? '获取失败（请稍后重试）'
+                    : modelInfo
+                      ? `${modelInfo.model_name}（${modelInfo.provider}）`
+                      : '加载中...'}
                 </div>
               </div>
               <span className="px-2.5 py-1 rounded bg-sage-soft text-sage text-xs font-bold">
-                {modelInfo?.status === 'running' ? '运行正常' : '加载中'}
+                {settingsLoadFailed ? '获取失败' : modelInfo ? (modelInfo.status === 'running' ? '运行正常' : '未运行') : '加载中'}
               </span>
             </div>
           </div>

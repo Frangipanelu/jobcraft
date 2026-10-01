@@ -73,3 +73,26 @@ describe('UserProfileView + useProfileQuery/useUpdateProfileMutation 迁移', ()
     );
   });
 });
+
+describe('FE-LOGIC-01③ 设置引擎信息加载失败（不得永久「加载中」）', () => {
+  it('getSettings 失败：模型名与状态徽标均显示获取失败', async () => {
+    api.getSettings.mockRejectedValue(new Error('boom'));
+
+    renderWithProviders(<UserProfileView initialTab="settings" />);
+
+    expect(await screen.findByText('获取失败（请稍后重试）')).toBeInTheDocument();
+    expect(screen.getByText('获取失败')).toBeInTheDocument();
+    expect(screen.queryByText('加载中...')).not.toBeInTheDocument();
+    expect(screen.queryByText('加载中')).not.toBeInTheDocument();
+  });
+
+  it('getSettings 成功但 status 非 running：显示未运行而非加载中', async () => {
+    api.getSettings.mockResolvedValue({ model_name: 'gpt-x', provider: 'openai', status: 'stopped' });
+
+    renderWithProviders(<UserProfileView initialTab="settings" />);
+
+    expect(await screen.findByText('gpt-x（openai）')).toBeInTheDocument();
+    expect(screen.getByText('未运行')).toBeInTheDocument();
+    expect(screen.queryByText('加载中')).not.toBeInTheDocument();
+  });
+});
