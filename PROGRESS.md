@@ -2,6 +2,19 @@
 
 > 本文件用于追踪项目整体进度。AI 在每次会话结束或完成子任务时，必须更新本文件的对应板块。
 
+## P2 死代码与逻辑缺陷批次收官（2026-10-01，7 commits，CI 待推送验证）
+
+> TODO「优先级 P2 — 死代码与逻辑缺陷（清理为主）」7 项全部完成（FE-LAYER-02 为范围外新立项，见 TODO）。每项独立 commit、独立门禁。
+
+- [x] **FE-DEAD-01 前端死代码/零消费 API 清理** `d2ddd45`：删 4 个 common 组件、api-paths.test、孤儿 README；api 层删 15 死导出（`uploadInterviewReview` 活的保留）；context 删 `selectedExperienceId`/`userProfileTab`；LocalQuestion 删 difficulty/defaultDraft；resumeParser 删不可达分支；6 测试文件删死 mock key；附带 review-query 2 例超时 5000→15000（既有基线问题，HEAD worktree 复现确认）。26 files，+20/−472。
+- [x] **FE-LOGIC-01③ settings 吞错** `fd0f029`：`UserProfileView` 空 catch → `settingsLoadFailed` state（「获取失败」分支），status 非 running 显示「未运行」；profile-query +2 例。
+- [x] **FE-LAYER-01 组件层直调收敛 hooks** `7993213`：`api/client.ts` 加 `requestBlob`、`api/auth.ts` 加 `exportUserData`；profile/historical-resumes/interview 三 features 加 7 个 hooks（含 `useMockChatMutation`/`useSaveMockInterviewReviewMutation`，onSuccess invalidate 面试列表——修「盘中心看不到新复盘」）；`MockInterviewModal`/`UserProfileView` 全改 hooks；mock-interview-modal +1 invalidate 例。8 files，+169/−30。**范围外发现 → FE-LAYER-02（已立项 TODO）**。
+- [x] **FE-UNUSED-01 未使用 import** `1bd3fdb`：脚本全量扫描清理 83 个（TODO 原列 12 + 脚本复扫 71），复扫归零。15 files，+7/−87。
+- [x] **BE-DEAD-01 后端死代码** `5668acc`：删 `AtsRecommendAgent`/`GapPolishAgent` + 2 prompts + `fuse_gap_scores`/`FUSION_MODE` + 8 测试 + README/types 残留（`_match_level` 复核为活代码 `job_analysis_flow:133` 保留）；`monitor.py` 删 WebSocket 死通路（server 未接线、前端零消费，保留 report_*+stream_writer）；`db_tools.get_db_config` 收敛为 re-export `db_config`；删 `interview_review` metrics 死分支（`_row_to_card` 不产出该 key）；DB 层 COMMENT/列均不动（前向兼容）。15 files，+14/−748。
+- [x] **BE-INDEX-01 未索引逻辑外键** `477a251`：新增 **V0014 迁移**（4×ADD KEY：`job.raw_jd_id`/`job.job_analysis_id`/`interview_records.job_analysis_id`/`interview_qa_pairs.related_card_id` + `job_analysis.updated_at`），information_schema 探测 + PREPARE/EXECUTE 幂等；迁移/运行时 CREATE/docker 基线三处收敛 +4 测试。6 files，+244/−5。
+- [x] **BE-INIT-01 运行时 DDL 自洽** `bd37cba`：preps/records 运行时 CREATE 补全（`submission_id`/`round_label`/`company_research_*`/`KEY idx_submission`，单函数即得完整表，docker 基线同步）；`db_expression`/`db_direction`/`db_job`/`db_experience` docstring 明确迁移依赖；`run_schema_bootstrap` **核心表启动断言**（`expression`/`direction` 缺失 → 不置位 + 日志提示先 migrate，1146 才计缺失、连接异常不阻断）+3 测试。9 files，+195/−7。
+- **批次验收**：每项提交前均过 ruff/format/encoding + pytest 全量 + （前端项）tsc/vitest/build；最终 pytest **878 passed / 7 skipped**、vitest **211**/30 files、encoding 377/0、tsc 0、build ✅。**待办**：CI 推送验证、FE-LAYER-02。
+
 ## FE-RESUME-03 导出 PDF / 下载原始简历端到端闭环（2026-10-01，批次 5）
 
 > 「导出 PDF」「下载原始简历」按钮只弹 toast，后端 `export_pdf` 任务返回占位消息——前后端同时为假。产品三问裁决后实施：只读 A4 打印导出 / 自动带入+手动同步 / 删任务+补 github 字段。Commits `cd8a373`（BE-1）、`d2b13ff`（BE-2）、`2c780f7`（FE），CI 全绿。
