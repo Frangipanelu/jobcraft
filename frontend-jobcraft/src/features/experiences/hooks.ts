@@ -194,7 +194,8 @@ export function useUpdateExperienceMutation() {
           : exp,
       );
       queryClient.setQueryData([...EXPERIENCES_QUERY_KEY], next);
-
+      // FE-CACHE-01：服务端 updateCard（usage/tags 派生字段）落库后重验
+      queryClient.invalidateQueries({ queryKey: [...EXPERIENCES_QUERY_KEY] });
     },
   });
 }
@@ -272,7 +273,8 @@ export function useAddExperienceVersionMutation() {
           : exp,
       );
       queryClient.setQueryData([...EXPERIENCES_QUERY_KEY], next);
-
+      // FE-CACHE-01：升级落库（updateCard 版本化）后重验，版本号以后端为准
+      queryClient.invalidateQueries({ queryKey: [...EXPERIENCES_QUERY_KEY] });
     },
   });
 }

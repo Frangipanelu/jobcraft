@@ -107,6 +107,28 @@ const CacheSpy = () => {
   );
 };
 
+// FE-CACHE-01：mock 服务端需有状态——invalidate 触发 getDashboard refetch 时
+// 必须返回反映本次写入的服务端真相，否则乐观补丁会被静态 fixture 回滚。
+interface Sub {
+  id: number;
+  position: string;
+  company: string;
+  status: string;
+  job_analysis_id: number | null;
+  job_id?: number | null;
+  has_analysis: boolean;
+  card_version_count: number;
+  card_count: number;
+  has_resume: boolean;
+  is_manual: boolean;
+  delivered: boolean;
+  prep_count: number;
+  review_count: number;
+  created_at: string | null;
+  updated_at: string | null;
+}
+let serverSubs: Sub[] = [];
+
 beforeEach(() => {
   vi.resetAllMocks();
   auth.autoLogin.mockResolvedValue(1);
@@ -114,10 +136,37 @@ beforeEach(() => {
   auth.getProfile.mockResolvedValue({});
   auth.updateProfile.mockResolvedValue({});
   auth.getSettings.mockResolvedValue({ model_name: 'test', provider: 'x', status: 'running' });
-  job.getDashboard.mockResolvedValue({ submissions: SUBMISSIONS });
+  serverSubs = SUBMISSIONS.map((s) => ({ ...s }));
+  job.getDashboard.mockImplementation(async () => ({ submissions: serverSubs }));
+  job.updateSubmission.mockImplementation(async (id: number, patch: Partial<Sub>) => {
+    const row = serverSubs.find((s) => s.id === id);
+    if (row) Object.assign(row, patch);
+    return row;
+  });
+  job.createSubmission.mockImplementation(async (payload: { position: string; company: string }) => {
+    const row: Sub = {
+      id: 99,
+      position: payload.position,
+      company: payload.company,
+      status: 'PREPARED',
+      job_analysis_id: null,
+      job_id: 42,
+      has_analysis: false,
+      card_version_count: 0,
+      card_count: 0,
+      has_resume: false,
+      is_manual: false,
+      delivered: false,
+      prep_count: 0,
+      review_count: 0,
+      created_at: '2026-09-10T00:00:00',
+      updated_at: '2026-09-10T00:00:00',
+    };
+    serverSubs = [row, ...serverSubs];
+    return { ...MIRROR_JOB, position: payload.position, company: payload.company };
+  });
   job.listBaseResumes.mockResolvedValue([]);
   job.listJobAnalyses.mockResolvedValue([]);
-  job.createSubmission.mockResolvedValue(MIRROR_JOB);
 });
 
 describe('useJobsQuery 迁移视图', () => {

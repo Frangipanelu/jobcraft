@@ -131,7 +131,8 @@ const nextJobs: Job[] = jobs.map((j) =>
           : j,
       );
         queryClient.setQueryData([...JOBS_QUERY_KEY], nextJobs);
-  
+        // FE-CACHE-01：复盘落库改变 dashboard review_count，定向重验 jobs 镜像
+        queryClient.invalidateQueries({ queryKey: [...JOBS_QUERY_KEY] });
       }
     },
   });
@@ -237,6 +238,8 @@ export function useApplyReviewFeedbackMutation() {
         e.id === experienceId ? finalExp : e,
       );
       queryClient.setQueryData([...EXPERIENCES_QUERY_KEY], nextExp);
+      // FE-CACHE-01：服务端 updateCard 已写入（usage/tags 派生字段以后端为准）
+      queryClient.invalidateQueries({ queryKey: [...EXPERIENCES_QUERY_KEY] });
 
 
       // INTERVIEWS cache + mirror

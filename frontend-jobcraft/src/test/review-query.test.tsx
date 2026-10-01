@@ -352,6 +352,49 @@ const seedProps = {
 const waitForSeed = () =>
   waitFor(() => expect(screen.getByTestId('cache-score').textContent).toBe('85'));
 
+// FE-CACHE-01：mock 服务端需有状态——invalidate 触发 refetch 时必须返回反映
+// 本次写入的服务端真相（dashboard review_count / cards 内容），否则乐观补丁被静态 fixture 回滚。
+interface DashRow {
+  id: number;
+  position: string;
+  company: string;
+  status: string;
+  job_analysis_id: number | null;
+  job_id: number | null;
+  has_analysis: boolean;
+  card_version_count: number;
+  card_count: number;
+  has_resume: boolean;
+  is_manual: boolean;
+  delivered: boolean;
+  prep_count: number;
+  review_count: number;
+  created_at: string | null;
+  updated_at: string | null;
+}
+let serverSubs: DashRow[] = [];
+let serverCards: ExperienceCard[] = [];
+
+/** 复盘落库后的服务端 submission 行（id=12 → mapper 后 job.id='12'，review_count=1 → reviewStage done）。 */
+const REVIEWED_ROW: DashRow = {
+  id: 12,
+  position: 'AI 产品经理',
+  company: '字节跳动',
+  status: 'ROUND_1',
+  job_analysis_id: 12,
+  job_id: null,
+  has_analysis: true,
+  card_version_count: 0,
+  card_count: 1,
+  has_resume: true,
+  is_manual: false,
+  delivered: true,
+  prep_count: 1,
+  review_count: 1,
+  created_at: '2026-09-18T00:00:00',
+  updated_at: '2026-09-19T00:00:00',
+};
+
 beforeEach(() => {
   vi.resetAllMocks();
   auth.autoLogin.mockResolvedValue(1);
@@ -359,13 +402,21 @@ beforeEach(() => {
   auth.getProfile.mockResolvedValue({});
   auth.updateProfile.mockResolvedValue({});
   auth.getSettings.mockResolvedValue({ model_name: 'test', provider: 'x', status: 'running' });
-  job.getDashboard.mockResolvedValue({ submissions: [] });
+  serverSubs = [];
+  serverCards = [];
+  job.getDashboard.mockImplementation(async () => ({ submissions: serverSubs }));
   job.listBaseResumes.mockResolvedValue([]);
   job.listJobAnalyses.mockResolvedValue({ analyses: [] });
   job.getJobAnalysis.mockResolvedValue(null);
-  experience.listCards.mockResolvedValue([]);
+  experience.listCards.mockImplementation(async () => serverCards);
   // EXP-P1-06b：复盘反哺持久化 + 版本回流（updateCard 后 listCardVersions 返回 V2 + 2 条快照）
-  experience.updateCard.mockResolvedValue(CARD_A);
+  experience.updateCard.mockImplementation(
+    async (cardId: number, payload: Partial<ExperienceCard>) => {
+      const card = serverCards.find((c) => c.id === cardId);
+      if (card) Object.assign(card, payload);
+      return card;
+    },
+  );
   experience.listCardVersions.mockImplementation(async (cardId: number) => ({
     card_id: cardId,
     current_version: 2,
@@ -392,8 +443,14 @@ beforeEach(() => {
     speaker_count: 1,
     role_counts: ['interviewer', 'candidate'],
   };
-  interview.createInterviewReview.mockResolvedValue(createResult);
-  interview.uploadInterviewReview.mockResolvedValue(createResult);
+  interview.createInterviewReview.mockImplementation(async () => {
+    serverSubs = [REVIEWED_ROW];
+    return createResult;
+  });
+  interview.uploadInterviewReview.mockImplementation(async () => {
+    serverSubs = [REVIEWED_ROW];
+    return createResult;
+  });
   interview.analyzeInterviewReview.mockResolvedValue(ANALYSIS);
   tasks.runTaskOrSync.mockImplementation(async (_t: unknown, _p: unknown, fallback: () => unknown) =>
     fallback(),
@@ -559,6 +616,12 @@ describe('useCreateInterviewReviewMutation（生成复盘）', () => {
 });
 
 describe('useApplyReviewFeedbackMutation（反哺经历资产）', () => {
+  beforeEach(() => {
+    // 反哺的 updateCard 写入需在服务端可回读：listCards 返回有状态卡片，
+    // EXPERIENCES invalidate refetch 后内容/版本与乐观补丁一致。
+    serverCards = [{ ...CARD_A }];
+  });
+
   it('proposedChanges 路径：updateCard 持久化 + EXPERIENCES/INTERVIEWS cache 反哺', async () => {
     renderWithProviders(
       <>

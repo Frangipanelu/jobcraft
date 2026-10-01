@@ -11,6 +11,7 @@ import {
   suggestionsToWire,
 } from '../../utils/resumeSuggestionMapper';
 import { RESUMES_QUERY_KEY } from './mappers';
+import { JOBS_QUERY_KEY } from '../jobs/mappers';
 
 /**
  * 读取当前 RESUMES cache。
@@ -37,9 +38,12 @@ function writeResumesMap(
  * - resume_markdown：正文变更（生成/编辑/增删/应用改写）
  * - resume_suggestions：建议状态变更（生成落库/应用/忽略）
  * 本地示例（resumeId 非数字）跳过 API，返回 synced=false（调用方 toast 提示）。
+ * FE-CACHE-01：submission 写入后重验 jobs 镜像（两键同源于 getDashboard，
+ * resume_markdown 会翻转 dashboard 的 has_resume，只补 RESUMES 会漂移）。
  * @returns 是否已同步后端；PATCH 失败上抛（调用方 error toast）
  */
 async function persistResumePatch(
+  queryClient: ReturnType<typeof useQueryClient>,
   resumeId: string,
   patch: {
     resume_markdown?: string;
@@ -49,6 +53,7 @@ async function persistResumePatch(
   const submissionId = Number(resumeId);
   if (Number.isNaN(submissionId)) return false;
   await jobApi.updateSubmission(submissionId, patch);
+  queryClient.invalidateQueries({ queryKey: [...JOBS_QUERY_KEY] });
   return true;
 }
 
@@ -170,7 +175,7 @@ export function useApplyResumeAiSuggestionMutation() {
         sections: updatedSections,
         updatedAt: '刚刚',
       };
-      const synced = await persistResumePatch(resumeId, {
+      const synced = await persistResumePatch(queryClient, resumeId, {
         ...(textChanged ? { resume_markdown: resumeToMarkdown(nextResume) } : {}),
         resume_suggestions: suggestionsToWire(updatedSuggestions, nextResume),
       });
@@ -204,7 +209,7 @@ export function useRejectResumeAiSuggestionMutation() {
         ...activeResume,
         aiSuggestions: updatedSuggestions,
       };
-      const synced = await persistResumePatch(resumeId, {
+      const synced = await persistResumePatch(queryClient, resumeId, {
         resume_suggestions: suggestionsToWire(updatedSuggestions, nextResume),
       });
       writeResumesMap(queryClient, { ...prev, [resumeId]: nextResume });
@@ -267,7 +272,7 @@ export function useApplyAllResumeAiSuggestionsMutation() {
         aiSuggestions: updatedSuggestions,
         ...(textChanged ? { sections: updatedSections, updatedAt: '刚刚' } : {}),
       };
-      const synced = await persistResumePatch(resumeId, {
+      const synced = await persistResumePatch(queryClient, resumeId, {
         ...(textChanged ? { resume_markdown: resumeToMarkdown(nextResume) } : {}),
         resume_suggestions: suggestionsToWire(updatedSuggestions, nextResume),
       });
@@ -326,7 +331,7 @@ export function useUpdateResumeBulletTextMutation() {
         aiSuggestions: updatedSuggestions,
         updatedAt: '刚刚',
       };
-      const synced = await persistResumePatch(resumeId, {
+      const synced = await persistResumePatch(queryClient, resumeId, {
         resume_markdown: resumeToMarkdown(nextResume),
       });
       writeResumesMap(queryClient, { ...prev, [resumeId]: nextResume });
@@ -381,7 +386,7 @@ export function useAddResumeBulletMutation() {
         sections: updatedSections,
         updatedAt: '刚刚',
       };
-      const synced = await persistResumePatch(resumeId, {
+      const synced = await persistResumePatch(queryClient, resumeId, {
         resume_markdown: resumeToMarkdown(nextResume),
       });
       writeResumesMap(queryClient, { ...prev, [resumeId]: nextResume });
@@ -435,7 +440,7 @@ export function useDeleteResumeBulletMutation() {
         aiSuggestions: updatedSuggestions,
         updatedAt: '刚刚',
       };
-      const synced = await persistResumePatch(resumeId, {
+      const synced = await persistResumePatch(queryClient, resumeId, {
         resume_markdown: resumeToMarkdown(nextResume),
       });
       writeResumesMap(queryClient, { ...prev, [resumeId]: nextResume });
@@ -485,6 +490,9 @@ export function useSaveResumeMutation() {
         ...prev,
         [resumeId]: { ...resume, updatedAt: '刚刚' },
       });
+      // FE-CACHE-01：submission.resume_markdown 落库翻转 dashboard has_resume，
+      // 定向重验 jobs 镜像，避免岗位卡片仍显示「无简历」
+      queryClient.invalidateQueries({ queryKey: [...JOBS_QUERY_KEY] });
     },
   });
 }
@@ -567,7 +575,7 @@ export function useGenerateResumeSuggestionsMutation() {
         updatedAt: '刚刚',
       };
 
-      const synced = await persistResumePatch(resumeId, {
+      const synced = await persistResumePatch(queryClient, resumeId, {
         resume_suggestions: suggestionsToWire(updatedSuggestions, nextResume),
       });
       writeResumesMap(queryClient, { ...prev, [resumeId]: nextResume });

@@ -79,6 +79,11 @@ export function useCreateJobMutation() {
       const prev = queryClient.getQueryData<Job[]>([...JOBS_QUERY_KEY]) || [];
       const next = [newJob, ...prev];
       queryClient.setQueryData([...JOBS_QUERY_KEY], next);
+      // FE-CACHE-01：服务端已建 submission 时重验对齐 dashboard 派生字段；
+      // 本地-only 岗位（后端不可用）不触发，避免 refetch 用服务端列表覆盖掉本地行
+      if (newJob.backendId != null) {
+        queryClient.invalidateQueries({ queryKey: [...JOBS_QUERY_KEY] });
+      }
     },
   });
 }
@@ -112,6 +117,8 @@ export function useTerminateJobMutation() {
       });
       queryClient.setQueryData([...JOBS_QUERY_KEY], next);
     },
+    // FE-CACHE-01：乐观补丁后重验——服务端 effective_status / updated_at 为准
+    onSettled: () => queryClient.invalidateQueries({ queryKey: [...JOBS_QUERY_KEY] }),
   });
 }
 
@@ -146,6 +153,8 @@ export function useResumeJobMutation() {
       });
       queryClient.setQueryData([...JOBS_QUERY_KEY], next);
     },
+    // FE-CACHE-01：乐观补丁后重验——服务端 status（reopen 语义）为准
+    onSettled: () => queryClient.invalidateQueries({ queryKey: [...JOBS_QUERY_KEY] }),
   });
 }
 
@@ -184,5 +193,7 @@ export function useSetDeliveredMutation(delivered: boolean) {
       });
       queryClient.setQueryData([...JOBS_QUERY_KEY], next);
     },
+    // FE-CACHE-01：delivered 落库后重验——dashboard delivered 事实为准
+    onSettled: () => queryClient.invalidateQueries({ queryKey: [...JOBS_QUERY_KEY] }),
   });
 }

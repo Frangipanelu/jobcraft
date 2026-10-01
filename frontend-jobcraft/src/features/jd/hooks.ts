@@ -262,6 +262,8 @@ export function useDeleteJdAnalysisMutation() {
       if (match) {
         try {
           await jobApi.deleteSubmission(Number(match[1]));
+          // FE-CACHE-01：服务端 submission 已删，定向重验 jobs 镜像（岗位卡片随之移除）
+          queryClient.invalidateQueries({ queryKey: [...JOBS_QUERY_KEY] });
         } catch {
           /* ignore */
         }

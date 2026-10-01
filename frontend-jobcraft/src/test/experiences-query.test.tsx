@@ -89,6 +89,10 @@ const ExpCacheTitle = () => {
   return <span data-testid="exp-cache-title">{experiences[0]?.title ?? ''}</span>;
 };
 
+// FE-CACHE-01：mock 服务端需有状态——updateCard 后 invalidate 触发 listCards
+// refetch 时必须返回反映本次写入的服务端真相，否则乐观合并被静态 fixture 回滚。
+let serverCards: ExperienceCard[] = [];
+
 beforeEach(() => {
   vi.resetAllMocks();
   auth.autoLogin.mockResolvedValue(1);
@@ -96,7 +100,15 @@ beforeEach(() => {
   auth.getProfile.mockResolvedValue({});
   auth.updateProfile.mockResolvedValue({});
   auth.getSettings.mockResolvedValue({ model_name: 'test', provider: 'x', status: 'running' });
-  experience.listCards.mockResolvedValue([CARD_A, CARD_B]);
+  serverCards = [{ ...CARD_A }, { ...CARD_B }];
+  experience.listCards.mockImplementation(async () => serverCards);
+  experience.updateCard.mockImplementation(
+    async (cardId: number, payload: Partial<ExperienceCard>) => {
+      const card = serverCards.find((c) => c.id === cardId);
+      if (card) Object.assign(card, payload);
+      return card;
+    },
+  );
   // EXP-P1-06b：默认版本历史为空（版本服务仅在后端有快照时返回）
   experience.listCardVersions.mockImplementation(async (cardId: number) => ({
     card_id: cardId,
@@ -238,8 +250,6 @@ const VersionHarness = () => {
 
 describe('useUpdateExperienceMutation / 版本保存（EXP-P1-06b 后端回流）', () => {
   it('update：后端 updateCard 成功 → cache 乐观合并', async () => {
-    experience.updateCard.mockResolvedValue(CARD_A);
-
     renderWithProviders(
       <>
         <UpdateHarness />
@@ -261,7 +271,6 @@ describe('useUpdateExperienceMutation / 版本保存（EXP-P1-06b 后端回流�
   });
 
   it('加版本：updateCard 持久化四槽位，versionHistory/currentVersion 以后端回流为准', async () => {
-    experience.updateCard.mockResolvedValue(CARD_A);
     // 前两次调用 = 初始列表拉取（CARD_A / CARD_B，空历史）；
     // 点击「加版本」后的第三次调用 = mutation 回流（后端已新增 user_edit 快照 V4）。
     let versionCalls = 0;
