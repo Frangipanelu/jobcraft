@@ -193,7 +193,7 @@ def call_with_limits(fn: Callable[..., T], *args: Any, **kwargs: Any) -> T:
             except Exception as exc:
                 if not is_rate_limit_error(exc) or attempt >= retries:
                     raise
-                delay = base * (2**attempt) + random.uniform(0.0, base)
+                delay = base * (2**attempt) + random.uniform(0.0, base)  # noqa: S311 - 退避抖动，非加密用途
                 logger.warning(
                     "LLM 限流（429/1302），%.2fs 后重试 %d/%d: %s",
                     delay,
