@@ -2,7 +2,20 @@
 
 > 本文件用于追踪项目整体进度。AI 在每次会话结束或完成子任务时，必须更新本文件的对应板块。
 
-## P2 死代码与逻辑缺陷批次收官（2026-10-01，7 commits，CI 待推送验证）
+## FE-LAYER-02 组件层残余 api 直调收敛（2026-10-01，P2 批次追加）
+
+> P2 批次范围外发现（FE-LAYER-01 立项、用户指定优先）。3 个组件的运行时 api 直调收敛至 features hooks，组件层直调清零。同会话清除 63 个 phantom M（stash pop 后 stat 缓存过期；`git add -u` 刷新即清，`git diff --cached` 确认零内容入暂存）。
+
+- [x] **FE-LAYER-02 组件层残余直调** `271638f`（6 files，+163/−83）：
+  - `ExperiencesView`：AI 润色（`tasksApi.runTaskOrSync` + `jobApi.polishExperience`）→ `usePolishExperienceMutation`（任务降级 + 拆行候选 actions 归 hook，落库仍走既有版本化 mutation）；
+  - `JDAnalysisCenterView`：`splitJd` ×2 → `useSplitJdMutation`（职责拼接 + tag 归一 hard|required|preferred）；`isSplitting` 本地态 → `splitJd.isPending`；两处 `console.error` → error toast（AGENTS 红线）；
+  - `JDReportDetailView`：`saveResume` → `useGenerateResumeFromJdMutation`（save-resume + markdownToResume 收进 hook，移除动态 `resumeParser` import 与 `console.error`）；NaN guard 仍在组件（合成 id 早退语义不变，jd-query 测试锁定）。
+  - 复扫：组件层运行时 api 直调/裸 fetch **清零**（余 3 处 `import type` 类型导入，豁免）。
+- **门禁**：tsc 0 / vitest **211**/30 files / build ✓ / encoding 377/0。测试零改动全绿（`vi.mock('../api/job')` 为模块级，收敛到 hooks 后仍覆盖）。
+- **环境注记**：本机可用内存一度仅 2.3GB，vitest 默认并发触发 4 个 worker OOM（`NewSpace::EnsureCurrentCapacity`）——`NODE_OPTIONS=--max-old-space-size=3072` + `npx vitest run --pool=forks --maxWorkers=2` 恢复 211/211。后续内存紧张时沿用该参数。
+- **P2 批次至此全部收口**：7 任务 + 本追加项全完成并推送（`d2ddd45`…`bd37cba`、`271638f` + docs）。
+
+## P2 死代码与逻辑缺陷批次收官（2026-10-01，7 commits，已推送）
 
 > TODO「优先级 P2 — 死代码与逻辑缺陷（清理为主）」7 项全部完成（FE-LAYER-02 为范围外新立项，见 TODO）。每项独立 commit、独立门禁。
 
@@ -13,7 +26,7 @@
 - [x] **BE-DEAD-01 后端死代码** `5668acc`：删 `AtsRecommendAgent`/`GapPolishAgent` + 2 prompts + `fuse_gap_scores`/`FUSION_MODE` + 8 测试 + README/types 残留（`_match_level` 复核为活代码 `job_analysis_flow:133` 保留）；`monitor.py` 删 WebSocket 死通路（server 未接线、前端零消费，保留 report_*+stream_writer）；`db_tools.get_db_config` 收敛为 re-export `db_config`；删 `interview_review` metrics 死分支（`_row_to_card` 不产出该 key）；DB 层 COMMENT/列均不动（前向兼容）。15 files，+14/−748。
 - [x] **BE-INDEX-01 未索引逻辑外键** `477a251`：新增 **V0014 迁移**（4×ADD KEY：`job.raw_jd_id`/`job.job_analysis_id`/`interview_records.job_analysis_id`/`interview_qa_pairs.related_card_id` + `job_analysis.updated_at`），information_schema 探测 + PREPARE/EXECUTE 幂等；迁移/运行时 CREATE/docker 基线三处收敛 +4 测试。6 files，+244/−5。
 - [x] **BE-INIT-01 运行时 DDL 自洽** `bd37cba`：preps/records 运行时 CREATE 补全（`submission_id`/`round_label`/`company_research_*`/`KEY idx_submission`，单函数即得完整表，docker 基线同步）；`db_expression`/`db_direction`/`db_job`/`db_experience` docstring 明确迁移依赖；`run_schema_bootstrap` **核心表启动断言**（`expression`/`direction` 缺失 → 不置位 + 日志提示先 migrate，1146 才计缺失、连接异常不阻断）+3 测试。9 files，+195/−7。
-- **批次验收**：每项提交前均过 ruff/format/encoding + pytest 全量 + （前端项）tsc/vitest/build；最终 pytest **878 passed / 7 skipped**、vitest **211**/30 files、encoding 377/0、tsc 0、build ✅。**待办**：CI 推送验证、FE-LAYER-02。
+- **批次验收**：每项提交前均过 ruff/format/encoding + pytest 全量 + （前端项）tsc/vitest/build；最终 pytest **878 passed / 7 skipped**、vitest **211**/30 files、encoding 377/0、tsc 0、build ✅。**待办**：CI 推送验证（FE-LAYER-02 追加项已于同日完成，见顶部章节）。
 
 ## FE-RESUME-03 导出 PDF / 下载原始简历端到端闭环（2026-10-01，批次 5）
 
