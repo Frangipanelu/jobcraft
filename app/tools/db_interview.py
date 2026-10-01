@@ -420,6 +420,30 @@ def delete_interview_qa_pairs_by_record(record_id: int) -> None:
     execute("DELETE FROM interview_qa_pairs WHERE record_id=%s", (record_id,))
 
 
+# 问题表重新生成时允许覆盖的列（BE-QT-01：深度研判字段必须保留）
+_QA_PAIR_REGENERABLE_FIELDS = {"intent", "dimension", "level"}
+
+
+def update_interview_qa_pair_fields(qa_pair_id: int, fields: Dict[str, Any]) -> bool:
+    """按白名单更新单个 QA 对的可再生字段（问题表 upsert 用，不动已评估字段）。
+
+    :param qa_pair_id: interview_qa_pairs 主键
+    :param fields: 仅允许 intent / dimension / level
+    :return: True 表示命中行并更新；False 表示行不存在
+    :raises ValueError: 出现白名单之外的字段名（防误改 score/feedback 等）
+    """
+    _ensure_interview_qa_pairs_table()
+    unknown = set(fields) - _QA_PAIR_REGENERABLE_FIELDS
+    if unknown:
+        raise ValueError(f"不允许更新的 QA 对字段: {sorted(unknown)}")
+    if not fields:
+        return False
+    assignments = ", ".join(f"{name}=%s" for name in fields)
+    sql = f"UPDATE interview_qa_pairs SET {assignments} WHERE id=%s"
+    params = [*fields.values(), qa_pair_id]
+    return execute(sql, tuple(params)) > 0
+
+
 def list_interview_qa_pairs(record_id: int) -> List[Dict[str, Any]]:
     """列出某条面试记录下的所有 QA 对"""
     _ensure_interview_qa_pairs_table()

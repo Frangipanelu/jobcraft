@@ -79,11 +79,17 @@ def _generate_intents(state: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _persist(state: Dict[str, Any]) -> Dict[str, Any]:
-    """第 3 步：合并意图并落库（无 LLM）"""
+    """第 3 步：合并意图并落库（无 LLM）
+
+    BE-QT-01：按 sequence upsert——已存在的行只刷新 intent/dimension/level，
+    保留深度研判字段（score/feedback/suggestions/related_card_id/expected_answer），
+    不再全量删除重写；分析完成（status=done）的记录不因重新生成问题表而降级。
+    """
     record_id = state["record_id"]
     user_id = state.get("user_id", 1)
     qa_pairs = state.get("qa_pairs", [])
     intent_by_seq = state.get("intent_by_seq", {})
+    record = state.get("record", {})
 
     result = []
     for qa in qa_pairs:
@@ -102,35 +108,67 @@ def _persist(state: Dict[str, Any]) -> Dict[str, Any]:
             }
         )
 
-    # 落库：先删除旧的 QA 对，再写入新的问题表（状态为未详细分析）
-    db_tools.delete_interview_qa_pairs_by_record(record_id)
-
+    # upsert：读取既有行，按 sequence 匹配——存在则只补意图三字段，不存在才新插入
+    existing_by_seq = {
+        row["sequence"]: row for row in db_tools.list_interview_qa_pairs(record_id)
+    }
+    new_sequences = set()
+    inserted = 0
+    updated = 0
     for item in result:
-        db_tools.insert_interview_qa_pair(
-            {
-                "record_id": record_id,
-                "user_id": user_id,
-                "sequence": item["sequence"],
-                "speaker": item["speaker"],
-                "start_time": item["start_time"],
-                "content": item["question_text"],
-                "is_question": True,
-                "question_text": item["question_text"],
-                "my_answer": item["my_answer"],
-                "dimension": item["dimension"],
-                "level": item["level"],
-                "intent": item["intent"],
-                "expected_answer": "",
-                "feedback": [],
-                "suggestions": [],
-                "score": 0,
-                "related_card_id": None,
-                "related_card_title": "",
-            }
-        )
+        seq = item["sequence"]
+        new_sequences.add(seq)
+        prev = existing_by_seq.get(seq)
+        if prev is None:
+            inserted += 1
+            db_tools.insert_interview_qa_pair(
+                {
+                    "record_id": record_id,
+                    "user_id": user_id,
+                    "sequence": seq,
+                    "speaker": item["speaker"],
+                    "start_time": item["start_time"],
+                    "content": item["question_text"],
+                    "is_question": True,
+                    "question_text": item["question_text"],
+                    "my_answer": item["my_answer"],
+                    "dimension": item["dimension"],
+                    "level": item["level"],
+                    "intent": item["intent"],
+                    "expected_answer": "",
+                    "feedback": [],
+                    "suggestions": [],
+                    "score": 0,
+                    "related_card_id": None,
+                    "related_card_title": "",
+                }
+            )
+        else:
+            updated += 1
+            db_tools.update_interview_qa_pair_fields(
+                prev["id"],
+                {
+                    "intent": item["intent"],
+                    "dimension": item["dimension"],
+                    "level": item["level"],
+                },
+            )
 
-    db_tools.update_interview_record_status(record_id, "question_table")
-    logger.info("问题表生成完成 record_id=%s questions=%s", record_id, len(result))
+    # 孤儿 sequence（对话分段变化后的旧行）删除，避免残留失效段落
+    for seq, row in existing_by_seq.items():
+        if seq not in new_sequences:
+            db_tools.delete_interview_qa_pair(row["id"])
+
+    # 已完成深度分析（done）的记录保持 done，不降级回 question_table
+    if record.get("status") != "done":
+        db_tools.update_interview_record_status(record_id, "question_table")
+    logger.info(
+        "问题表生成完成 record_id=%s questions=%s inserted=%s updated=%s",
+        record_id,
+        len(result),
+        inserted,
+        updated,
+    )
     return {"questions": result}
 
 

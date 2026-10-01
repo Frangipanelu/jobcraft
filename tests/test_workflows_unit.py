@@ -1351,8 +1351,16 @@ class TestQuestionTableFlow:
             "app.workflows.question_table_flow.QuestionTableAgent.run", fake_agent_run
         )
         monkeypatch.setattr(
-            "app.workflows.question_table_flow.db_tools.delete_interview_qa_pairs_by_record",
-            lambda rid: None,
+            "app.workflows.question_table_flow.db_tools.list_interview_qa_pairs",
+            lambda rid: [],
+        )
+        monkeypatch.setattr(
+            "app.workflows.question_table_flow.db_tools.update_interview_qa_pair_fields",
+            lambda qid, fields: True,
+        )
+        monkeypatch.setattr(
+            "app.workflows.question_table_flow.db_tools.delete_interview_qa_pair",
+            lambda qid: None,
         )
         monkeypatch.setattr(
             "app.workflows.question_table_flow.db_tools.insert_interview_qa_pair",
@@ -1401,8 +1409,16 @@ class TestQuestionTableFlow:
             "app.workflows.question_table_flow.QuestionTableAgent.run", fake_agent_run
         )
         monkeypatch.setattr(
-            "app.workflows.question_table_flow.db_tools.delete_interview_qa_pairs_by_record",
-            lambda rid: None,
+            "app.workflows.question_table_flow.db_tools.list_interview_qa_pairs",
+            lambda rid: [],
+        )
+        monkeypatch.setattr(
+            "app.workflows.question_table_flow.db_tools.update_interview_qa_pair_fields",
+            lambda qid, fields: True,
+        )
+        monkeypatch.setattr(
+            "app.workflows.question_table_flow.db_tools.delete_interview_qa_pair",
+            lambda qid: None,
         )
         monkeypatch.setattr(
             "app.workflows.question_table_flow.db_tools.insert_interview_qa_pair",
@@ -1465,8 +1481,16 @@ class TestQuestionTableFlow:
             "app.workflows.question_table_flow.QuestionTableAgent.run", fake_agent_run
         )
         monkeypatch.setattr(
-            "app.workflows.question_table_flow.db_tools.delete_interview_qa_pairs_by_record",
-            lambda rid: None,
+            "app.workflows.question_table_flow.db_tools.list_interview_qa_pairs",
+            lambda rid: [],
+        )
+        monkeypatch.setattr(
+            "app.workflows.question_table_flow.db_tools.update_interview_qa_pair_fields",
+            lambda qid, fields: True,
+        )
+        monkeypatch.setattr(
+            "app.workflows.question_table_flow.db_tools.delete_interview_qa_pair",
+            lambda qid: None,
         )
         monkeypatch.setattr(
             "app.workflows.question_table_flow.db_tools.insert_interview_qa_pair",
@@ -1481,3 +1505,119 @@ class TestQuestionTableFlow:
         assert len(result) == 2
         # 验证 agent 收到了 jd_text
         assert captured_inputs[0]["jd_text"] == "负责后端开发"
+
+
+class TestQuestionTablePersistUpsert:
+    """BE-QT-01：问题表重新生成必须 upsert，保留深度研判结果"""
+
+    @staticmethod
+    def _state(record_status="pending", intent_by_seq=None, qa_pairs=None):
+        return {
+            "record_id": 1,
+            "user_id": 1,
+            "record": {"id": 1, "status": record_status},
+            "qa_pairs": qa_pairs if qa_pairs is not None else _fake_qa_pairs(),
+            "intent_by_seq": intent_by_seq
+            if intent_by_seq is not None
+            else {
+                1: {
+                    "intent": "考察自我介绍",
+                    "dimension": "D8 职业规划",
+                    "level": "L2",
+                },
+                2: {
+                    "intent": "考察项目经验",
+                    "dimension": "D1 技术深度",
+                    "level": "L4",
+                },
+            },
+        }
+
+    @staticmethod
+    def _spy(monkeypatch, existing):
+        """记录 upsert 各方调用，返回 (updates, inserts, deletes, status_calls, wipes)"""
+        updates, inserts, deletes, status_calls, wipes = [], [], [], [], []
+        monkeypatch.setattr(
+            "app.workflows.question_table_flow.db_tools.list_interview_qa_pairs",
+            lambda rid: existing,
+        )
+        monkeypatch.setattr(
+            "app.workflows.question_table_flow.db_tools.update_interview_qa_pair_fields",
+            lambda qid, fields: updates.append((qid, fields)) or True,
+        )
+        monkeypatch.setattr(
+            "app.workflows.question_table_flow.db_tools.insert_interview_qa_pair",
+            lambda data: inserts.append(data) or 1,
+        )
+        monkeypatch.setattr(
+            "app.workflows.question_table_flow.db_tools.delete_interview_qa_pair",
+            lambda qid: deletes.append(qid),
+        )
+        monkeypatch.setattr(
+            "app.workflows.question_table_flow.db_tools.update_interview_record_status",
+            lambda rid, s: status_calls.append(s),
+        )
+        monkeypatch.setattr(
+            "app.workflows.question_table_flow.db_tools.delete_interview_qa_pairs_by_record",
+            lambda rid: wipes.append(rid),
+        )
+        return updates, inserts, deletes, status_calls, wipes
+
+    def test_existing_sequences_only_refresh_intent_fields(self, monkeypatch):
+        """已分析行（有 score/feedback）只刷新意图三字段——不删不重插，评分保留"""
+        from app.workflows.question_table_flow import _persist
+
+        existing = [
+            {"id": 9, "sequence": 1, "score": 88, "feedback": ["很好"]},
+            {"id": 10, "sequence": 2, "score": 60, "suggestions": ["再展开"]},
+        ]
+        updates, inserts, deletes, status_calls, wipes = self._spy(
+            monkeypatch, existing
+        )
+
+        out = _persist(self._state())
+
+        assert wipes == [], "禁止全量删除重写"
+        assert inserts == [], "已存在 sequence 不得重插（重插会把 score 归零）"
+        assert deletes == []
+        assert updates == [
+            (9, {"intent": "考察自我介绍", "dimension": "D8 职业规划", "level": "L2"}),
+            (10, {"intent": "考察项目经验", "dimension": "D1 技术深度", "level": "L4"}),
+        ]
+        assert status_calls == ["question_table"]
+        assert len(out["questions"]) == 2
+
+    def test_new_sequence_inserted_and_orphan_deleted(self, monkeypatch):
+        """新 sequence 插入默认值；分段变化后的孤儿 sequence 删除"""
+        from app.workflows.question_table_flow import _persist
+
+        existing = [
+            {"id": 9, "sequence": 1, "score": 88},
+            {"id": 11, "sequence": 7, "score": 70},
+        ]
+        updates, inserts, deletes, status_calls, wipes = self._spy(
+            monkeypatch, existing
+        )
+
+        _persist(self._state())
+
+        assert wipes == []
+        # seq1 命中 → 只更新；seq2 新增 → 插入默认行；seq7 孤儿 → 删除
+        assert [u[0] for u in updates] == [9]
+        assert [i["sequence"] for i in inserts] == [2]
+        assert inserts[0]["score"] == 0
+        assert inserts[0]["feedback"] == []
+        assert deletes == [11]
+        assert status_calls == ["question_table"]
+
+    def test_done_status_not_downgraded(self, monkeypatch):
+        """深度分析已完成（done）的记录不因重新生成问题表而降级"""
+        from app.workflows.question_table_flow import _persist
+
+        _, inserts, _, status_calls, wipes = self._spy(monkeypatch, [])
+
+        _persist(self._state(record_status="done"))
+
+        assert wipes == []
+        assert status_calls == [], "已 done 的记录不得改回 question_table"
+        assert len(inserts) == 2

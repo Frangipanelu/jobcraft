@@ -1713,3 +1713,65 @@ class TestDbJobEntity:
         sql, params = mock_query.call_args[0]
         assert "user_id=%s AND is_active=1" in sql
         assert params == (1,)
+
+
+class TestUpdateInterviewQaPairFields:
+    """BE-QT-01：QA 对字段级更新（问题表 upsert）的白名单与 SQL 组装"""
+
+    @staticmethod
+    def _patch(monkeypatch, execute_result=1):
+        """替换 ensure 与 execute，返回 SQL 调用记录列表"""
+        from app.tools import db_interview
+
+        calls = []
+        monkeypatch.setattr(
+            db_interview, "_ensure_interview_qa_pairs_table", lambda: None
+        )
+        monkeypatch.setattr(
+            db_interview,
+            "execute",
+            lambda sql, params: (calls.append((sql, params)), execute_result)[1],
+        )
+        return calls
+
+    def test_whitelist_fields_builds_parameterized_update(self, monkeypatch):
+        from app.tools import db_interview
+
+        calls = self._patch(monkeypatch, execute_result=1)
+        assert (
+            db_interview.update_interview_qa_pair_fields(
+                9, {"intent": "考察项目", "dimension": "D1 技术深度", "level": "L4"}
+            )
+            is True
+        )
+        sql, params = calls[0]
+        assert sql == (
+            "UPDATE interview_qa_pairs "
+            "SET intent=%s, dimension=%s, level=%s WHERE id=%s"
+        )
+        assert params == ("考察项目", "D1 技术深度", "L4", 9)
+
+    def test_rejects_analysis_fields(self, monkeypatch):
+        from app.tools import db_interview
+
+        calls = self._patch(monkeypatch)
+        with pytest.raises(ValueError, match="不允许更新"):
+            db_interview.update_interview_qa_pair_fields(
+                9, {"score": 100, "intent": "x"}
+            )
+        assert calls == [], "白名单外字段不得触达 SQL"
+
+    def test_empty_fields_is_noop(self, monkeypatch):
+        from app.tools import db_interview
+
+        calls = self._patch(monkeypatch)
+        assert db_interview.update_interview_qa_pair_fields(9, {}) is False
+        assert calls == []
+
+    def test_missing_row_returns_false(self, monkeypatch):
+        from app.tools import db_interview
+
+        self._patch(monkeypatch, execute_result=0)
+        assert (
+            db_interview.update_interview_qa_pair_fields(404, {"intent": ""}) is False
+        )
