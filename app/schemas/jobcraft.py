@@ -697,6 +697,22 @@ class InterviewPrepResult(BaseModel):
         return v if isinstance(v, dict) else {}
 
 
+class InterviewPrepLLMOutput(InterviewPrepResult):
+    """LLM 结构化输出契约：关键内容字段强制必填且非空。
+
+    `InterviewPrepResult` 内容字段均带默认值 → JSON schema 中全部可选，
+    function calling 下模型会漏填（e2e 实测 `elevator_pitch` 空串、
+    `dimension_questions` 缺省为 `[]`）。子类以 `Field(min_length=1)`
+    去掉默认值使其进入 `required` 并禁止空值；漏填/空值 → 校验错误 →
+    走兜底而非静默产出残缺准备稿。落库与 API 响应仍用 `InterviewPrepResult`。
+    """
+
+    elevator_pitch: str = Field(min_length=1)
+    dimension_questions: List[DimensionQuestion] = Field(min_length=1)
+    full_version: str = Field(min_length=1)
+    html_content: str = Field(min_length=1)
+
+
 # ============================================================
 # 公司背调
 # ============================================================

@@ -6,6 +6,8 @@
 - `card_ids` 填卡片标题而非整数 ID（兜底路径失败根因）
 """
 
+import pytest
+
 from app.schemas.jobcraft import DimensionQuestion, InterviewPrepResult
 
 
@@ -98,3 +100,47 @@ def test_e2e_observed_malformed_payload_validates():
     assert result.dimension_questions[0].card_ids == []
     assert result.dimension_questions[1].card_ids == [12]
     assert result.company_research == {"industry_trends": "AI、企业成本压力"}
+
+
+class TestInterviewPrepLLMOutput:
+    """LLM 输出契约：关键字段 required + 非空，防模型漏填。"""
+
+    def test_content_fields_are_required_and_non_empty(self):
+        from pydantic import ValidationError
+
+        from app.schemas.jobcraft import InterviewPrepLLMOutput
+
+        schema = InterviewPrepLLMOutput.model_json_schema()
+        required = set(schema.get("required", []))
+        assert {
+            "elevator_pitch",
+            "dimension_questions",
+            "full_version",
+            "html_content",
+        } <= required
+
+        # 漏填 → 校验错误（e2e 实测：dimension_questions 缺省为 []、pitch 空串）
+        with pytest.raises(ValidationError):
+            InterviewPrepLLMOutput(job_analysis_id=1)
+        with pytest.raises(ValidationError):
+            InterviewPrepLLMOutput(
+                job_analysis_id=1,
+                elevator_pitch="",
+                dimension_questions=[],
+                full_version="全文",
+                html_content="<p>x</p>",
+            )
+
+    def test_valid_output_isinstance_parent(self):
+        from app.schemas.jobcraft import InterviewPrepLLMOutput
+
+        out = InterviewPrepLLMOutput(
+            job_analysis_id=1,
+            elevator_pitch="自我介绍",
+            dimension_questions=[{"dimension": "D", "question": "Q"}],
+            full_version="全文",
+            html_content="<p>x</p>",
+        )
+        assert isinstance(out, InterviewPrepResult)
+        # 父类保持宽松默认：落库/API 契约不变
+        assert InterviewPrepResult(job_analysis_id=1).dimension_questions == []

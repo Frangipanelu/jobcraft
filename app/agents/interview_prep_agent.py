@@ -9,7 +9,7 @@ from typing import Any, Dict
 
 from app.agents.base_agent import BaseAgent
 from app.core.llm import model
-from app.schemas.jobcraft import InterviewPrepResult
+from app.schemas.jobcraft import InterviewPrepLLMOutput, InterviewPrepResult
 from app.tools.llm_json import invoke_structured
 
 
@@ -17,7 +17,7 @@ class InterviewPrepAgent(BaseAgent):
     """生成面试准备稿（单次 LLM 调用）"""
 
     def _get_output_schema(self):
-        return InterviewPrepResult
+        return InterviewPrepLLMOutput
 
     def run(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """生成面试逐字稿。
@@ -29,6 +29,6 @@ class InterviewPrepAgent(BaseAgent):
         if not prompt:
             raise ValueError("面试准备 prompt 为空")
         result = invoke_structured(
-            model, InterviewPrepResult, prompt, debug_label="interview_prep"
+            model, InterviewPrepLLMOutput, prompt, debug_label="interview_prep"
         )
-        return {"prep_result": result.model_dump()}
+        return {"prep_result": InterviewPrepResult(**result.model_dump()).model_dump()}

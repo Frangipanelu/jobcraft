@@ -535,6 +535,8 @@ def test_interview_prep_agent_with_mock_llm(monkeypatch):
             dimension_questions=[
                 {"dimension": "D1", "question": "谈谈项目", "card_ids": [1]}
             ],
+            full_version="完整逐字稿全文",
+            html_content="<p>逐字稿</p>",
         )
 
     monkeypatch.setattr(
