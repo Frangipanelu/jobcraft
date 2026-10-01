@@ -20,7 +20,6 @@ import {
   CheckCircle2,
   Trash2,
   Star,
-  Download,
   Eye,
   Plus,
   Sparkles,
@@ -86,7 +85,8 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({ initialTab }) 
     city: user.city || '',
     email: user.email || '',
     phone: user.phone || '',
-    summary: user.summary || ''
+    summary: user.summary || '',
+    github: user.github || ''
   });
 
   // 当 user 数据从 API 加载后同步表单
@@ -99,9 +99,10 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({ initialTab }) 
       city: user.city || '',
       email: user.email || '',
       phone: user.phone || '',
-      summary: user.summary || ''
+      summary: user.summary || '',
+      github: user.github || ''
     });
-  }, [user.name, user.role, user.targetSalary, user.yearsOfExp, user.city, user.email, user.phone, user.summary]);
+  }, [user.name, user.role, user.targetSalary, user.yearsOfExp, user.city, user.email, user.phone, user.summary, user.github]);
 
   // Target preferences
   const [targetRoles, setTargetRoles] = useState<string[]>(user.targetRoles || []);
@@ -489,20 +490,6 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({ initialTab }) 
                     <span>查看已解析经历</span>
                   </button>
 
-                  <button
-                    onClick={() =>
-                      showToast({
-                        type: 'success',
-                        title: '开始下载',
-                        message: `正在导出「${resume.name}」`
-                      })
-                    }
-                    className="p-1.5 rounded-lg border border-edge hover:bg-page text-muted transition"
-                    title="下载原始简历"
-                  >
-                    <Download className="w-4 h-4" />
-                  </button>
-
                   {historicalResumes.length > 1 && (
                     <button
                       onClick={() =>
@@ -605,6 +592,17 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({ initialTab }) 
                 type="text"
                 value={profileForm.phone}
                 onChange={(e) => setProfileForm({ ...profileForm, phone: e.target.value })}
+                className="w-full px-3.5 py-2 text-xs rounded-lg border border-edge focus:border-sage focus:outline-none"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-ink mb-1.5">GitHub 主页</label>
+              <input
+                type="text"
+                value={profileForm.github}
+                onChange={(e) => setProfileForm({ ...profileForm, github: e.target.value })}
+                placeholder="如：https://github.com/yourname"
                 className="w-full px-3.5 py-2 text-xs rounded-lg border border-edge focus:border-sage focus:outline-none"
               />
             </div>

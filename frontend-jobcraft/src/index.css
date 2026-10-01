@@ -51,6 +51,19 @@
   }
 }
 
+/* FE-RESUME-03：简历打印导出——A4 满版；打印时隐藏应用壳（预览组件经 portal
+   直挂 body，不受 #root 隐藏影响，仅输出 A4 预览内容）。 */
+@media print {
+  @page {
+    size: A4;
+    margin: 0;
+  }
+
+  #root {
+    display: none !important;
+  }
+}
+
 .custom-scrollbar::-webkit-scrollbar {
   width: 6px;
   height: 6px;

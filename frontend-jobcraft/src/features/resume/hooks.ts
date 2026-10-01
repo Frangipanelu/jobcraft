@@ -341,6 +341,50 @@ export function useUpdateResumeBulletTextMutation() {
 }
 
 /**
+ * FE-RESUME-03：从个人资料同步简历头部个人信息。
+ * - 仅覆盖 profile 侧非空字段（profile 空白不冲掉简历上已手动微调的值，保留手动编辑）；
+ * - 落库 PATCH {resume_markdown}（头部变更走与正文一致的持久化路径）；
+ * - 无任何字段可覆盖时返回 {synced:false, applied:[]}（调用方提示，不视为错误）。
+ * @param mutationFn 入参 { resumeId, personalInfo }（视图层已完成 profile→personalInfo 字段映射）；返回 { synced, applied }
+ */
+export function useSyncResumePersonalInfoMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation<{ synced: boolean; applied: string[] }, unknown, {
+    resumeId: string;
+    personalInfo: Partial<ResumeVersion['personalInfo']>;
+  }>({
+    mutationFn: async ({ resumeId, personalInfo }) => {
+      const prev = readResumesMap(queryClient);
+      const activeResume = prev[resumeId];
+      if (!activeResume) throw new Error('未找到对应的简历');
+
+      const merged = { ...activeResume.personalInfo };
+      const applied: string[] = [];
+      for (const key of Object.keys(personalInfo) as (keyof ResumeVersion['personalInfo'])[]) {
+        const value = personalInfo[key];
+        if (typeof value === 'string' && value.trim()) {
+          merged[key] = value.trim();
+          applied.push(key);
+        }
+      }
+      if (!applied.length) return { synced: false, applied };
+
+      const nextResume = {
+        ...activeResume,
+        personalInfo: merged,
+        updatedAt: '刚刚',
+      };
+      const synced = await persistResumePatch(queryClient, resumeId, {
+        resume_markdown: resumeToMarkdown(nextResume),
+      });
+      writeResumesMap(queryClient, { ...prev, [resumeId]: nextResume });
+      return { synced, applied };
+    },
+  });
+}
+
+/**
  * 向指定 item 追加一条 bullet（legacy `addResumeBullet`，当前无 UI 消费，保留域能力）。
  * 落库 PATCH {resume_markdown}；存量建议靠 original_text 全文兜底重定位（索引后移不判 stale）。
  * @param mutationFn 入参 { resumeId, sectionId, itemId, text, experienceId? }；返回 { synced }

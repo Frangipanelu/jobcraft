@@ -12,7 +12,10 @@ import {
   useDeleteResumeBulletMutation,
   useSaveResumeMutation,
   useGenerateResumeSuggestionsMutation,
+  useSyncResumePersonalInfoMutation,
 } from '../../features/resume/hooks';
+import { useProfileQuery } from '../../features/profile/hooks';
+import { ResumePrintPreview } from './ResumePrintPreview';
 import {
   FileText,
   Sparkles,
@@ -34,7 +37,8 @@ import {
   Target,
   FileCheck,
   HelpCircle,
-  Clock
+  Clock,
+  RefreshCcw
 } from 'lucide-react';
 
 interface ResumeEditorViewProps {
@@ -62,6 +66,11 @@ export const ResumeEditorView: React.FC<ResumeEditorViewProps> = ({
   const saveResume = useSaveResumeMutation();
   const generateSuggestions = useGenerateResumeSuggestionsMutation();
   const saveExpression = useCreateExpressionMutation();
+  const { data: profile } = useProfileQuery();
+  const syncPersonalInfo = useSyncResumePersonalInfoMutation();
+
+  // FE-RESUME-03：只读 A4 预览 + window.print() 打印导出（产品裁决①）
+  const [showPrintPreview, setShowPrintPreview] = useState(false);
 
   // active 简历 id 为编辑器局部状态（legacy context.activeResumeId 仅本视图消费）
   const [activeResumeId, setActiveResumeId] = useState<string | null>(null);
@@ -269,12 +278,47 @@ export const ResumeEditorView: React.FC<ResumeEditorViewProps> = ({
       });
   };
 
+  // FE-RESUME-03：从个人资料同步简历头部（仅覆盖 profile 非空字段，保留手动微调）
+  const handleSyncFromProfile = () => {
+    if (!profile) return;
+    syncPersonalInfo
+      .mutateAsync({
+        resumeId: rid,
+        personalInfo: {
+          name: profile.name,
+          email: profile.email,
+          phone: profile.phone,
+          location: profile.city,
+          title: profile.role,
+          github: profile.github,
+        },
+      })
+      .then(({ applied }) => {
+        if (!applied.length) {
+          showToast({
+            type: 'info',
+            title: '暂无可同步内容',
+            message: '请先在「个人资料」中完善姓名、邮箱等信息。',
+          });
+          return;
+        }
+        showToast({
+          type: 'success',
+          title: '已同步个人信息',
+          message: `从个人资料带入 ${applied.length} 项，已保存到简历。`,
+        });
+      })
+      .catch((error: unknown) => {
+        showToast({
+          type: 'error',
+          title: '同步失败',
+          message: (error as Error).message || '请稍后重试',
+        });
+      });
+  };
+
   const handleExportPDF = () => {
-    showToast({
-      type: 'success',
-      title: '正在生成高保真单页 PDF...',
-      message: '已按 1:1 招聘标准排版，导出准备完毕。'
-    });
+    setShowPrintPreview(true);
   };
 
   // U2b「存为表达」：把选中 bullet 的定制文本保存为目标经历卡的标准化表达（candidate 态）
@@ -344,6 +388,15 @@ export const ResumeEditorView: React.FC<ResumeEditorViewProps> = ({
 
           <div className="flex items-center gap-2.5 shrink-0">
             <button
+              onClick={handleSyncFromProfile}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg border border-edge bg-white hover:bg-page text-ink text-xs font-semibold transition cursor-pointer"
+              title="从个人资料带入姓名、联系方式、GitHub 等头部信息"
+            >
+              <RefreshCcw className="w-3.5 h-3.5" />
+              <span>同步资料</span>
+            </button>
+
+            <button
               onClick={() => handleSave(rid)}
               className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg border border-edge bg-white hover:bg-page text-ink text-xs font-semibold transition cursor-pointer"
             >
@@ -372,6 +425,15 @@ export const ResumeEditorView: React.FC<ResumeEditorViewProps> = ({
           </div>
 
           <div className="flex items-center gap-2.5">
+            <button
+              onClick={handleSyncFromProfile}
+              className="flex items-center gap-1 px-3 py-1 rounded-md border border-edge bg-white hover:bg-page text-ink text-xs font-semibold transition cursor-pointer"
+              title="从个人资料带入姓名、联系方式、GitHub 等头部信息"
+            >
+              <RefreshCcw className="w-3.5 h-3.5" />
+              <span>同步资料</span>
+            </button>
+
             <button
               onClick={() => handleSave(rid)}
               className="flex items-center gap-1 px-3 py-1 rounded-md border border-edge bg-white hover:bg-page text-ink text-xs font-semibold transition cursor-pointer"
@@ -747,6 +809,12 @@ export const ResumeEditorView: React.FC<ResumeEditorViewProps> = ({
           </div>
         </div>
       </div>
+
+      <ResumePrintPreview
+        resume={resume}
+        isOpen={showPrintPreview}
+        onClose={() => setShowPrintPreview(false)}
+      />
     </div>
   );
 };

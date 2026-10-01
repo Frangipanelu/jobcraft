@@ -15,6 +15,7 @@ export interface ProfilePayload {
   email?: string;
   phone?: string;
   summary?: string;
+  github?: string;
   target_roles?: string[];
   target_companies?: string[];
   target_cities?: string[];
@@ -28,6 +29,7 @@ export const EMPTY_PROFILE: UserProfile = {
   targetSalary: '',
   yearsOfExp: 0,
   city: '',
+  github: '',
 };
 
 /** 把领域字段更新映射为后端 snake_case patch（与 context updateUserProfile 同构）。 */
@@ -42,6 +44,7 @@ export function toApiProfilePatch(updates: Partial<UserProfile>): ProfilePayload
   if (updates.email !== undefined) patch.email = updates.email;
   if (updates.phone !== undefined) patch.phone = updates.phone;
   if (updates.summary !== undefined) patch.summary = updates.summary;
+  if (updates.github !== undefined) patch.github = updates.github;
   if (updates.targetRoles !== undefined) patch.target_roles = updates.targetRoles;
   if (updates.targetCompanies !== undefined) patch.target_companies = updates.targetCompanies;
   if (updates.targetCities !== undefined) patch.target_cities = updates.targetCities;
@@ -65,6 +68,7 @@ async function fetchUserProfile(): Promise<UserProfile> {
     email: (pd.email as string) || authUser.email || '',
     phone: (pd.phone as string) || '',
     summary: (pd.summary as string) || '',
+    github: (pd.github as string) || '',
     targetRoles: (pd.target_roles as string[]) || [],
     targetCompanies: (pd.target_companies as string[]) || [],
     targetCities: (pd.target_cities as string[]) || [],

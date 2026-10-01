@@ -7,6 +7,7 @@ import { useJdAnalysesQuery } from '../../features/jd/hooks';
 import { useJobsQuery } from '../../features/jobs/hooks';
 import { useExperiencesQuery } from '../../features/experiences/hooks';
 import { useUpsertResumeMutation, useGenerateResumeSuggestionsMutation } from '../../features/resume/hooks';
+import { useProfileQuery } from '../../features/profile/hooks';
 import {
   ArrowLeft,
   ArrowRight,
@@ -72,6 +73,7 @@ export const JDReportDetailView: React.FC<JDReportDetailViewProps> = ({
   const { data: jdAnalyses = [], isLoading } = useJdAnalysesQuery();
   const { data: jobs = [] } = useJobsQuery();
   const { data: experiences = [] } = useExperiencesQuery();
+  const { data: profile } = useProfileQuery();
 
   const [isReanalyzing, setIsReanalyzing] = useState(false);
 
@@ -274,6 +276,17 @@ export const JDReportDetailView: React.FC<JDReportDetailViewProps> = ({
           const result = await saveResume({
             job_analysis_id: parseInt(currentAnalysis.id),
             selected_card_ids: selectedIds.length > 0 ? selectedIds : experiences.map(e => parseInt(e.id)).filter(id => !isNaN(id)),
+            // FE-RESUME-03：自动带入个人资料（profile 空字段由后端默认值兜底，不阻塞生成）
+            personal_info: profile
+              ? {
+                  name: profile.name,
+                  phone: profile.phone,
+                  email: profile.email,
+                  city: profile.city,
+                  github: profile.github,
+                  years: profile.yearsOfExp ? `${profile.yearsOfExp} 年` : '',
+                }
+              : undefined,
           });
           if (result.resume_markdown && result.submission_id) {
             // 将生成的简历并入 RESUMES cache

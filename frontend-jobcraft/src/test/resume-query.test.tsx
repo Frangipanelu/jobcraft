@@ -3,10 +3,11 @@ import { useEffect, useRef } from 'react';
 import { fireEvent, screen } from '@testing-library/react';
 import { useQueryClient } from '@tanstack/react-query';
 import { renderWithProviders } from './test-utils';
+import { ToastContainer } from '../components/common/Toast';
 import { ResumeEditorView } from '../components/resume/ResumeEditorView';
 import { useResumesQuery, useUpsertResumeMutation } from '../features/resume/hooks';
 import { RESUMES_QUERY_KEY } from '../features/resume/mappers';
-import { markdownToResume } from '../utils/resumeParser';
+import { markdownToResume, resumeToMarkdown } from '../utils/resumeParser';
 import type { DashboardItem, Submission } from '../api/types';
 import type { AISuggestion, ResumeVersion } from '../types/jobcraft';
 
@@ -195,6 +196,7 @@ function renderEditor(injectSuggestion = false) {
     <>
       <ResumeSeeder injectSuggestion={injectSuggestion} />
       <ResumeEditorView resumeId="100" />
+      <ToastContainer />
     </>,
   );
 }
@@ -302,5 +304,111 @@ describe('resume-query', () => {
     fireEvent.click(screen.getByRole('button', { name: '并入生成简历' }));
 
     expect(await screen.findByText('2')).toBeTruthy();
+  });
+});
+
+describe('FE-RESUME-03 个人信息同步 / 打印导出', () => {
+  it('从个人资料同步：profile 非空字段覆盖简历头部并落库', async () => {
+    auth.getProfile.mockResolvedValue({
+      display_name: '李雷',
+      email: 'lilei@example.com',
+      phone: '13900001111',
+      city: '深圳',
+      role: '算法工程师',
+      github: 'https://github.com/lilei',
+    });
+    renderEditor();
+    expect(await screen.findByText(/主导 RAG 评测体系搭建/)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: '同步资料' }));
+
+    expect(await screen.findByText('已同步个人信息')).toBeTruthy();
+    await vi.waitFor(() => {
+      expect(job.updateSubmission).toHaveBeenCalledWith(
+        100,
+        expect.objectContaining({
+          resume_markdown: expect.stringContaining('# 李雷'),
+        }),
+      );
+    });
+    expect(job.updateSubmission).toHaveBeenCalledWith(
+      100,
+      expect.objectContaining({
+        resume_markdown: expect.stringContaining(
+          'GitHub/作品：https://github.com/lilei',
+        ),
+      }),
+    );
+  });
+
+  it('profile 无可同步字段：提示且不落库', async () => {
+    job.updateSubmission.mockClear();
+    auth.getCurrentUser.mockResolvedValue({
+      id: 1,
+      username: '',
+      display_name: null,
+      email: '',
+      role: '',
+    });
+    auth.getProfile.mockResolvedValue({});
+    renderEditor();
+    expect(await screen.findByText(/主导 RAG 评测体系搭建/)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: '同步资料' }));
+
+    expect(await screen.findByText('暂无可同步内容')).toBeTruthy();
+    expect(job.updateSubmission).not.toHaveBeenCalled();
+  });
+
+  it('导出 PDF 打开只读 A4 预览，打印按钮触发 window.print', async () => {
+    const printSpy = vi.fn();
+    Object.defineProperty(window, 'print', {
+      value: printSpy,
+      writable: true,
+      configurable: true,
+    });
+    renderEditor();
+    expect(await screen.findByText(/主导 RAG 评测体系搭建/)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: '导出 PDF' }));
+    expect(await screen.findByTestId('resume-print-preview')).toBeTruthy();
+    expect(screen.getByTestId('resume-a4-page').textContent).toContain('张三');
+    expect(screen.getByTestId('resume-a4-page').textContent).toContain(
+      '主导 RAG 评测体系搭建',
+    );
+
+    fireEvent.click(screen.getByTestId('print-action'));
+    expect(printSpy).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByTestId('print-preview-close'));
+    expect(screen.queryByTestId('resume-print-preview')).toBeNull();
+  });
+});
+
+describe('FE-RESUME-03 github 解析 / 序列化往返', () => {
+  const FALLBACK = { position: 'AI 产品经理', company: '字节跳动', id: '100' };
+
+  it('contact 行含 GitHub/作品 → 解析为 personalInfo.github', () => {
+    const md =
+      '# 张三\n电话：13812345678 | 邮箱：z@x.com | GitHub/作品：https://github.com/zhang\n求职意向：PM\n\n## 工作经历\n### 字节\n### 做了什么\n';
+    const r = markdownToResume(md, FALLBACK);
+    expect(r?.personalInfo.github).toBe('https://github.com/zhang');
+  });
+
+  it('独立 GitHub/作品 键值行 → 解析为 personalInfo.github', () => {
+    const md =
+      '# 张三\nGitHub/作品：https://github.com/zhang\n求职意向：PM\n\n## 工作经历\n### 字节\n### 做了什么\n';
+    const r = markdownToResume(md, FALLBACK);
+    expect(r?.personalInfo.github).toBe('https://github.com/zhang');
+  });
+
+  it('resumeToMarkdown 输出 GitHub/作品 片段（往返不丢字段）', () => {
+    const md =
+      '# 张三\n电话：13812345678 | GitHub/作品：https://github.com/zhang\n求职意向：PM\n\n## 工作经历\n### 字节\n### 做了什么\n';
+    const r = markdownToResume(md, FALLBACK);
+    expect(r).toBeTruthy();
+    expect(resumeToMarkdown(r as ResumeVersion)).toContain(
+      'GitHub/作品：https://github.com/zhang',
+    );
   });
 });

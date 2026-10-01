@@ -35,6 +35,7 @@ export interface UserProfile {
   email?: string;
   phone?: string;
   summary?: string;
+  github?: string;
   targetCities?: string[];
   targetCompanies?: string[];
   targetRoles?: string[];
@@ -181,6 +182,7 @@ export interface ResumeVersion {
     title: string;
     location: string;
     wechat?: string;
+    github?: string;
   };
   summary: string;
   aiSuggestions: AISuggestion[];

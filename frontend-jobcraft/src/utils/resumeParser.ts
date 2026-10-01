@@ -50,6 +50,7 @@ export function markdownToResume(
     phone: '',
     title: '',
     location: '',
+    github: '',
   }
   let summary = ''
   let jobTitle = fallback.position || ''
@@ -134,6 +135,7 @@ export function markdownToResume(
       personalInfo.email = contact.email ?? personalInfo.email ?? ''
       personalInfo.phone = contact.phone ?? personalInfo.phone ?? ''
       personalInfo.location = contact.location ?? personalInfo.location ?? ''
+      if (contact.github) personalInfo.github = contact.github
       continue
     }
 
@@ -147,6 +149,7 @@ export function markdownToResume(
       else if (kv.key === '邮箱' || kv.key === 'email' || kv.key === 'Email') personalInfo.email = kv.value
       else if (kv.key === '所在城市' || kv.key === '城市') personalInfo.location = kv.value
       else if (kv.key === '职位' || kv.key === '岗位') personalInfo.title = kv.value
+      else if (kv.key === 'GitHub/作品' || kv.key === 'GitHub' || kv.key === 'github') personalInfo.github = kv.value
       continue
     }
 
@@ -234,6 +237,7 @@ export function resumeToMarkdown(resume: ResumeVersion): string {
   if (personalInfo.email) contactParts.push(`邮箱：${personalInfo.email}`)
   if (personalInfo.location) contactParts.push(`城市：${personalInfo.location}`)
   if (personalInfo.title) contactParts.push(`职位：${personalInfo.title}`)
+  if (personalInfo.github) contactParts.push(`GitHub/作品：${personalInfo.github}`)
   if (contactParts.length) push(contactParts.join(' | '))
   if (jobTitle) push(`求职意向：${jobTitle}`)
   if (company) push(`目标公司：${company}`)
@@ -290,13 +294,15 @@ const PHONE_RE = /1[3-9]\d{9}/
 function parseContact(
   line: string,
   personalInfo: ResumeVersion['personalInfo'],
-): { matched: boolean; email?: string; phone?: string; location?: string } {
+): { matched: boolean; email?: string; phone?: string; location?: string; github?: string } {
   const emailMatch = line.match(EMAIL_RE)
   const phoneMatch = line.match(PHONE_RE)
   if (!emailMatch && !phoneMatch) return { matched: false }
 
   const email = emailMatch ? emailMatch[0] : personalInfo.email || undefined
   const phone = phoneMatch ? phoneMatch[0] : personalInfo.phone || undefined
+  const githubMatch = line.match(/GitHub\/作品[:：]\s*(\S+)/)
+  const github = githubMatch ? githubMatch[1] : undefined
 
   let rest = line
     .replace(email || '', ' ')
@@ -305,9 +311,9 @@ function parseContact(
   const leftover = rest
     .split(/[·|/,，]/)
     .map((s) => s.trim())
-    .filter((s) => Boolean(s) && !s.includes('：') && !s.includes(':'))
+    .filter((s) => Boolean(s) && !s.includes('http') && !s.includes(':'))
     .find((s) => /[\u4e00-\u9fa5]/.test(s))
   const location = leftover || personalInfo.location || undefined
 
-  return { matched: true, email, phone, location }
+  return { matched: true, email, phone, location, github }
 }
