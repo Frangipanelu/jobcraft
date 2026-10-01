@@ -1990,3 +1990,50 @@ class TestInterviewReviewUpload:
         )
         assert resp.status_code == 400
         assert "不支持" in resp.json()["error"]["message"]
+
+
+class TestProfileGithub:
+    """PATCH /api/auth/profile：github 字段契约（FE-RESUME-03）。"""
+
+    def test_profile_patch_accepts_github(self, monkeypatch):
+        import app.api.profile as profile_mod
+
+        monkeypatch.setattr(profile_mod, "_ensure_table", lambda: None)
+        executed: list[tuple[str, list]] = []
+
+        class _DB:
+            @staticmethod
+            def execute(sql, params=None):
+                executed.append((sql.strip(), list(params or [])))
+                return 1
+
+            @staticmethod
+            def query_one(sql, params=None):
+                if sql.strip().startswith("SELECT user_id"):
+                    return {"user_id": 1}
+                return {"github": "https://github.com/alice"}
+
+        monkeypatch.setattr(profile_mod, "db_conn", _DB)
+        resp = client.patch(
+            "/api/auth/profile", json={"github": "https://github.com/alice"}
+        )
+        assert resp.status_code == 200
+        assert resp.json()["github"] == "https://github.com/alice"
+        updates = [p for s, p in executed if s.startswith("UPDATE user_profiles")]
+        assert updates, "PATCH github 未落到 UPDATE 语句"
+        assert "https://github.com/alice" in updates[0]
+
+    def test_profile_get_github_defaults_to_empty(self, monkeypatch):
+        import app.api.profile as profile_mod
+
+        monkeypatch.setattr(profile_mod, "_ensure_table", lambda: None)
+
+        class _DBNone:
+            @staticmethod
+            def query_one(sql, params=None):
+                return None
+
+        monkeypatch.setattr(profile_mod, "db_conn", _DBNone)
+        resp = client.get("/api/auth/profile")
+        assert resp.status_code == 200
+        assert resp.json()["github"] == ""

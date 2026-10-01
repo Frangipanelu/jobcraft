@@ -25,6 +25,7 @@ class UserProfileUpdate(BaseModel):
     phone: Optional[str] = None
     email: Optional[str] = None
     summary: Optional[str] = None
+    github: Optional[str] = None
     target_cities: Optional[List[str]] = None
     target_companies: Optional[List[str]] = None
     target_roles: Optional[List[str]] = None
@@ -51,6 +52,7 @@ def _row_to_dict(row: Any) -> Dict[str, Any]:
         "phone": row.get("phone") or "",
         "email": row.get("email") or "",
         "summary": row.get("summary") or "",
+        "github": row.get("github") or "",
         "target_cities": row.get("target_cities") or [],
         "target_companies": row.get("target_companies") or [],
         "target_roles": row.get("target_roles") or [],

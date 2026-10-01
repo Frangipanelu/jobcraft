@@ -371,6 +371,61 @@ def test_v0016_prep_drafts_matched_in_runtime_ddl_and_baseline():
         assert "drafts JSON" in fh.read(), "docker 基线缺 drafts 列"
 
 
+def test_v0017_profile_github_matched_in_runtime_ddl():
+    """FE-RESUME-03：V0017(github) 只加列，且迁移 / 运行时
+    _ensure_user_profiles_table 建表+守卫补列两路径收敛一致。
+    （docker 基线 jobcraft.sql 不含 user_profiles 表，该表由运行时 DDL 建，故基线断言从略。）"""
+    v0017 = os.path.join(runner.MIGRATIONS_DIR, "V0017__profile_github.sql")
+    assert os.path.exists(v0017)
+    with open(v0017, encoding="utf-8") as fh:
+        sql = fh.read()
+    assert "ALTER TABLE user_profiles ADD COLUMN github VARCHAR(255)" in sql
+    assert "DROP" not in sql.upper(), "前向兼容：只加列，不得出现 DROP"
+    assert "MODIFY" not in sql.upper(), "前向兼容：不得改列类型"
+
+    from app.tools import db_profile as mod
+
+    executed: list[str] = []
+
+    def fake_execute(sql, params=None):
+        executed.append(sql.strip())
+        return 0
+
+    original_ready = mod.is_schema_ready
+    original_execute = mod.execute
+    original_query_all = mod.query_all
+    try:
+        mod.is_schema_ready = lambda: False
+        mod.execute = fake_execute
+
+        # 缺 github 列：守卫触发 ALTER（未迁移环境兜底路径）
+        mod.query_all = lambda sql, params=None: [
+            {"Field": "user_id"},
+            {"Field": "display_name"},
+        ]
+        mod._ensure_user_profiles_table()
+        creates = [s for s in executed if s.startswith("CREATE TABLE IF NOT EXISTS")]
+        assert creates, "未捕获到 CREATE TABLE 语句"
+        assert "github VARCHAR(255)" in _normalize_ddl(creates[0]), (
+            "运行时建表缺 github 列"
+        )
+        alters = [s for s in executed if s.startswith("ALTER TABLE user_profiles")]
+        assert alters, "运行时守卫补列路径缺失（未迁移环境兜底）"
+        assert "ADD COLUMN github VARCHAR(255)" in alters[0]
+
+        # 列已存在：守卫不得重复 ALTER
+        executed.clear()
+        mod.query_all = lambda sql, params=None: [{"Field": "github"}]
+        mod._ensure_user_profiles_table()
+        assert not [s for s in executed if s.startswith("ALTER TABLE user_profiles")], (
+            "列已存在时不应重复 ALTER"
+        )
+    finally:
+        mod.is_schema_ready = original_ready
+        mod.execute = original_execute
+        mod.query_all = original_query_all
+
+
 def test_v0007_soft_delete_follows_split_convention():
     """DB-04：V0007 语句块应遵守 SPLIT 约定（无尾分号），可被 runner 逐条执行。"""
     v0007 = os.path.join(runner.MIGRATIONS_DIR, "V0007__soft_delete.sql")

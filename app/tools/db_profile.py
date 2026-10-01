@@ -7,13 +7,13 @@ TASK-P1-10 收敛：user_profiles 的建表 DDL 原散落在 app/api/profile.py�
 
 import logging
 
-from app.tools.db_conn import execute, is_schema_ready
+from app.tools.db_conn import execute, is_schema_ready, query_all
 
 logger = logging.getLogger("jobcraft.db.profile")
 
 
 def _ensure_user_profiles_table() -> None:
-    """确保 user_profiles 表存在（幂等；schema 已就绪则直接返回）。"""
+    """确保 user_profiles 表存在且含 github 列（schema 已由启动引导保证时短路）。"""
     if is_schema_ready():
         return
     execute(
@@ -30,7 +30,13 @@ def _ensure_user_profiles_table() -> None:
             target_companies JSON,
             target_roles JSON,
             avatar_url VARCHAR(500) DEFAULT '',
+            github VARCHAR(255) DEFAULT '',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"""
     )
+    # FE-RESUME-03：V0001/V0017 之外的历史库缺 github 列，运行时守卫补列兜底
+    rows = query_all("SHOW COLUMNS FROM user_profiles")
+    existing = {r.get("Field") for r in rows}
+    if "github" not in existing:
+        execute("ALTER TABLE user_profiles ADD COLUMN github VARCHAR(255) DEFAULT ''")
