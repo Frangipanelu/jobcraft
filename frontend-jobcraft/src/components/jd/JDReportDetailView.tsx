@@ -11,19 +11,7 @@ import { useProfileQuery } from '../../features/profile/hooks';
 import {
   ArrowLeft,
   ArrowRight,
-  RotateCw,
-  Edit,
-  MoreHorizontal,
-  CheckCircle2,
-  AlertTriangle,
-  XCircle,
-  Star,
-  ExternalLink,
-  BookOpen,
-  Check,
-  Briefcase,
-  FileText,
-  Sparkles
+  RotateCw
 } from 'lucide-react';
 
 interface JDReportDetailViewProps {

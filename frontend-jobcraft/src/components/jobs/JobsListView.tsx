@@ -8,10 +8,6 @@ import {
   Search,
   Plus,
   ArrowRight,
-  Sparkles,
-  CheckCircle2,
-  Clock,
-  MoreVertical,
   Filter
 } from 'lucide-react';
 

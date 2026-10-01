@@ -12,8 +12,6 @@ import {
   RotateCcw,
   Sparkles,
   Award,
-  ChevronLeft,
-  ChevronRight,
   PanelLeftClose,
   PanelLeftOpen
 } from 'lucide-react';

@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useJobCraft } from '../../context/JobCraftContext';
 import {
-  Briefcase,
   ArrowLeft,
   FileSearch,
   FileText,
@@ -10,10 +9,7 @@ import {
   RotateCcw,
   Sparkles,
   Plus,
-  ArrowRight,
-  CheckCircle2,
-  Clock,
-  ExternalLink
+  CheckCircle2
 } from 'lucide-react';
 import { JDReportDetailView } from '../jd/JDReportDetailView';
 import { ResumeEditorView } from '../resume/ResumeEditorView';

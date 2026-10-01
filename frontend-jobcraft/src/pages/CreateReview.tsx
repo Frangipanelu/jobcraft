@@ -12,7 +12,6 @@ import {
   Upload,
   Settings,
   Sparkles,
-  FileText,
   Clock,
   Video
 } from 'lucide-react';

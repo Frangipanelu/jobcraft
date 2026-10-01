@@ -7,11 +7,6 @@ import { useJobsQuery } from '../../features/jobs/hooks';
 import { useInterviewsQuery } from '../../features/interview/hooks';
 import {
   ChevronRight,
-  Sparkles,
-  ArrowLeft,
-  Search,
-  ExternalLink,
-  Plus,
   User,
   Target,
   FileText,

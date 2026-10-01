@@ -2,17 +2,10 @@ import React, { useState } from 'react';
 import { useJobCraft } from '../../context/JobCraftContext';
 import { useInterviewsQuery } from '../../features/interview/hooks';
 import {
-  RotateCcw,
   Plus,
-  ArrowRight,
-  TrendingUp,
-  Award,
-  Sparkles,
   Calendar,
   CheckCircle2,
-  Search,
-  ArrowLeft,
-  FileCheck2
+  Search
 } from 'lucide-react';
 
 interface InterviewReviewCenterViewProps {}

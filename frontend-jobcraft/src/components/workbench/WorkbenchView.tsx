@@ -6,7 +6,6 @@ import { useTabNavigate } from '../../router/tabPaths';
 import type { Job } from '../../types/jobcraft';
 import {
   Plus,
-  ChevronRight,
   TrendingUp,
   Sparkles
 } from 'lucide-react';

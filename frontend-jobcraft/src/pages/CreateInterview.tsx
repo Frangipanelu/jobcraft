@@ -11,8 +11,7 @@ import {
   ChevronRight,
   Upload,
   Settings,
-  Sparkles,
-  CheckCircle2
+  Sparkles
 } from 'lucide-react';
 
 const steps = [

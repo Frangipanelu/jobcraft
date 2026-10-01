@@ -4,17 +4,13 @@ import { useInterviewsQuery } from '../../features/interview/hooks';
 import { useApplyReviewFeedbackMutation } from '../../features/review/hooks';
 import { useTabNavigate } from '../../router/tabPaths';
 import {
-  ArrowLeft,
   Star,
-  Sparkles,
   CheckCircle2,
   AlertTriangle,
   ArrowRight,
   Database,
   Quote,
-  Lightbulb,
-  TrendingUp,
-  FileText
+  Lightbulb
 } from 'lucide-react';
 import { InterviewQA } from '../../types/jobcraft';
 

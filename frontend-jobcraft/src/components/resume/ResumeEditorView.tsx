@@ -17,27 +17,16 @@ import {
 import { useProfileQuery } from '../../features/profile/hooks';
 import { ResumePrintPreview } from './ResumePrintPreview';
 import {
-  FileText,
   Sparkles,
   Check,
-  X,
   Download,
   Save,
-  Eye,
-  Plus,
   Trash2,
   Edit2,
-  CheckCircle2,
-  ExternalLink,
   Layers,
   ArrowRight,
   RotateCcw,
   Sparkle,
-  Zap,
-  Target,
-  FileCheck,
-  HelpCircle,
-  Clock,
   RefreshCcw
 } from 'lucide-react';
 

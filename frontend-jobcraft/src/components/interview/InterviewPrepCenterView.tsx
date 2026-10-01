@@ -2,19 +2,10 @@ import React, { useState } from 'react';
 import { useJobCraft } from '../../context/JobCraftContext';
 import { useInterviewsQuery } from '../../features/interview/hooks';
 import {
-  BookOpenCheck,
   Plus,
-  ArrowRight,
-  Clock,
-  CheckCircle2,
   Calendar,
-  Sparkles,
   Search,
-  Building2,
-  User,
-  Play,
-  Layers,
-  ChevronRight
+  Play
 } from 'lucide-react';
 
 interface InterviewPrepCenterViewProps {
