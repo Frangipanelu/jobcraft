@@ -2,6 +2,10 @@
 
 表结构见 migrations/versions/V0009__expression_direction.sql（EXP-P2-01）：
 expression 表是 V0009 的唯一落点，不在本模块补充运行时 DDL。
+**迁移依赖**：全新环境必须先执行 ``python -m migrations.runner migrate``
+（或导入 docker 基线后再 migrate 补 V0009），否则本模块的查询会因表缺失报错；
+``run_schema_bootstrap`` 的启动断言会校验 expression/direction 存在，缺失即
+不置位 schema-ready 并在日志中提示迁移。
 
 版本链语义（§31 / U1）：同 (experience_id, type, direction_id, job_id) 的多行
 构成一条表达版本链；每次生成 / 修改都会新插入一行（不覆盖旧行），可回溯。

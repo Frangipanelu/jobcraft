@@ -204,6 +204,10 @@ def _runtime_create_sql(fn, mod=None) -> str:
         def execute(self, sql, params=None):
             executed.append((sql.strip(), params))
 
+        def fetchall(self):
+            # CREATE 后的 SHOW COLUMNS 守卫：返回空触发补列（结果不参与断言）
+            return []
+
         def __enter__(self):
             return self
 
@@ -896,3 +900,53 @@ def test_v0014_migrate_is_applied_via_runner(fake_conn):
         if e[0].strip().startswith("INSERT INTO schema_migrations")
     ]
     assert "0014" in inserted
+
+
+def test_interview_runtime_creates_carry_all_baseline_columns():
+    """BE-INIT-01：preps/records 运行时 CREATE 单函数即得完整表
+    （对齐 V0001/docker 基线），不依赖 _ensure_interview_submission_columns 补列守卫。"""
+    import app.tools.db_interview as di
+
+    preps = _normalize_ddl(
+        _runtime_create_sql(di._ensure_interview_preps_table, mod=di)
+    )
+    for fragment in (
+        "submission_id INT",
+        "company_research_json JSON",
+        "company_research_at DATETIME",
+        "drafts JSON",
+        "KEY idx_submission (submission_id)",
+    ):
+        assert fragment in preps, f"preps 运行时 CREATE 缺 {fragment}"
+
+    records = _normalize_ddl(
+        _runtime_create_sql(di._ensure_interview_records_table, mod=di)
+    )
+    for fragment in (
+        "submission_id INT",
+        "round_label VARCHAR(32) DEFAULT ''",
+        "KEY idx_submission (submission_id)",
+        "KEY idx_job_analysis (job_analysis_id)",
+    ):
+        assert fragment in records, f"records 运行时 CREATE 缺 {fragment}"
+
+    # docker 基线同样携带：四路收敛（V0001 / seed / 运行时 CREATE / ALTER 守卫）
+    repo_root = os.path.dirname(os.path.dirname(runner.MIGRATIONS_DIR))
+    with open(
+        os.path.join(repo_root, "docker", "mysql", "jobcraft.sql"), encoding="utf-8"
+    ) as fh:
+        seed = fh.read()
+    preps_block = seed.split("CREATE TABLE IF NOT EXISTS interview_preps")[1].split(
+        "ENGINE=InnoDB"
+    )[0]
+    for fragment in (
+        "submission_id INT",
+        "company_research_json JSON",
+        "company_research_at DATETIME",
+    ):
+        assert fragment in preps_block, f"docker 基线 preps 缺 {fragment}"
+    records_block = seed.split("CREATE TABLE IF NOT EXISTS interview_records")[1].split(
+        "ENGINE=InnoDB"
+    )[0]
+    for fragment in ("submission_id INT", "round_label VARCHAR(32) DEFAULT ''"):
+        assert fragment in records_block, f"docker 基线 records 缺 {fragment}"

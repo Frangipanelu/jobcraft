@@ -1,5 +1,9 @@
 """direction 表查询模块（V0009 建表；P3 六维分类 CRUD 落地前的最小只读子集）。
 
+**迁移依赖**：direction 表仅由 V0009 迁移创建（本模块零运行时 DDL），
+全新环境先 ``python -m migrations.runner migrate``，否则查询因表缺失报错
+（``run_schema_bootstrap`` 启动断言会校验并提示迁移）。
+
 P2C-07 归属校验使用：POST /expressions 携带 direction_id 时确认方向存在且
 归属当前用户，防止跨用户数据关联（与 P0-5 同类的所有权守卫）。
 """

@@ -79,9 +79,13 @@ CREATE TABLE IF NOT EXISTS interview_preps (
     extended_version_json JSON,
     ability_matrix_json JSON,
     html_content LONGTEXT,
+    submission_id INT,
+    company_research_json JSON,
+    company_research_at DATETIME,
     drafts JSON,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    KEY idx_job (job_analysis_id)
+    KEY idx_job (job_analysis_id),
+    KEY idx_submission (submission_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- 5. 公司背调缓存表 (Company Research Cache)

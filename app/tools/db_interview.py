@@ -19,7 +19,12 @@ logger = logging.getLogger("jobcraft.db.interview")
 
 
 def _ensure_interview_preps_table() -> None:
-    """确保 interview_preps 表存在且含 drafts 列（schema 已由启动引导保证时短路）"""
+    """确保 interview_preps 表存在且含全部列（schema 已由启动引导保证时短路）。
+
+    列集合对齐 V0001 基线（submission_id / company_research_json /
+    company_research_at）+ V0016 drafts：单函数调用即得完整表，
+    不依赖 db_submission._ensure_interview_submission_columns 的补列守卫。
+    """
     if is_schema_ready():
         return
     with connection() as conn:
@@ -37,9 +42,13 @@ def _ensure_interview_preps_table() -> None:
                     extended_version_json JSON,
                     ability_matrix_json JSON,
                     html_content LONGTEXT,
+                    submission_id INT,
+                    company_research_json JSON,
+                    company_research_at DATETIME,
                     drafts JSON,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    KEY idx_job (job_analysis_id)
+                    KEY idx_job (job_analysis_id),
+                    KEY idx_submission (submission_id)
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
                 """
             )
@@ -198,7 +207,11 @@ def update_interview_prep_drafts(
 
 
 def _ensure_interview_records_table() -> None:
-    """确保 interview_records 表存在（schema 已由启动引导保证时短路）"""
+    """确保 interview_records 表存在且含全部列（schema 已由启动引导保证时短路）。
+
+    列集合对齐 V0001 基线（submission_id / round_label）：单函数调用即得
+    完整表，不依赖 db_submission._ensure_interview_submission_columns 的补列守卫。
+    """
     if is_schema_ready():
         return
     with connection() as conn:
@@ -213,12 +226,15 @@ def _ensure_interview_records_table() -> None:
                     position VARCHAR(200),
                     round_type VARCHAR(50),
                     job_analysis_id INT,
+                    submission_id INT,
+                    round_label VARCHAR(32) DEFAULT '',
                     raw_text LONGTEXT,
                     parsed_dialogue_json JSON,
                     analysis_json JSON,
                     status VARCHAR(50) DEFAULT 'pending',
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     KEY idx_user_created (user_id, created_at),
+                    KEY idx_submission (submission_id),
                     KEY idx_job_analysis (job_analysis_id)
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
                 """

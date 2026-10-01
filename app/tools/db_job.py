@@ -20,6 +20,11 @@ logger = logging.getLogger("jobcraft.db.job")
 def _ensure_job_analysis_columns() -> None:
     """为 job_analysis 表补齐运行期所需字段（schema 已由启动引导保证时短路）。
 
+    **表依赖**：job_analysis 本体由 V0001/docker 基线创建，本函数仅
+    SHOW COLUMNS + ADD COLUMN 补列（无 CREATE TABLE）；表缺失时本函数会
+    报错并使引导失败——全新环境先 ``python -m migrations.runner migrate``
+    或导入 docker/mysql/jobcraft.sql。
+
     迁移基线：dimension_requirements / is_active 见 V0001/V0007；
     P4-1 分析物五列（ats_profile / suggestions / per_card_scores / match_level /
     analysis_version）见 V0011。此处保留 SHOW COLUMNS + ADD COLUMN 作为

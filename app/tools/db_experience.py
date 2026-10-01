@@ -22,7 +22,13 @@ logger = logging.getLogger("jobcraft.db.experience")
 
 
 def _ensure_experience_card_columns() -> None:
-    """确保 experience_card 表有新架构字段（schema 已由启动引导保证时短路）"""
+    """确保 experience_card 表有新架构字段（schema 已由启动引导保证时短路）。
+
+    **表依赖**：experience_card 本体由 V0001/docker 基线创建，本函数仅
+    SHOW COLUMNS + ADD COLUMN 补列（无 CREATE TABLE）；表缺失时本函数会
+    报错并使引导失败——全新环境先 ``python -m migrations.runner migrate``
+    或导入 docker/mysql/jobcraft.sql。
+    """
     if is_schema_ready():
         return
     # 先确保旧字段存在（兼容尚未迁移的库）

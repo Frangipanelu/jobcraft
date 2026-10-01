@@ -9,6 +9,8 @@
 
 # 先加载 db_tools 的 re-export 链（db_user/db_experience/db_job/db_submission/db_interview），
 # 规避 db_experience ↔ db_tools 的循环引用（二者直接 import 会 ImportError）。
+import pytest
+
 from app.tools import db_bootstrap, db_conn, db_tools, db_user  # noqa: F401
 
 
@@ -40,6 +42,9 @@ def test_run_schema_bootstrap_executes_all_steps_in_order(monkeypatch):
             lambda _m=module_path, _f=func_name: called.append(f"{_m}.{_f}"),
         )
 
+    # 核心表断言与真实 DB 无关：本用例只验证步骤编排
+    monkeypatch.setattr(db_bootstrap, "_verify_core_tables", lambda: [])
+
     ok = db_bootstrap.run_schema_bootstrap()
 
     expected = [f"{m}.{f}" for m, f in db_bootstrap._BOOTSTRAP_STEPS]
@@ -58,11 +63,55 @@ def test_run_schema_bootstrap_is_idempotent(monkeypatch):
         mod = importlib.import_module(module_path)
         monkeypatch.setattr(mod, func_name, lambda: called.append(func_name))
 
+    monkeypatch.setattr(db_bootstrap, "_verify_core_tables", lambda: [])
+
     db_bootstrap.run_schema_bootstrap()
     db_bootstrap.run_schema_bootstrap()
 
     # 第二次调用直接短路，不再重复执行
     assert len(called) == len(db_bootstrap._BOOTSTRAP_STEPS)
+
+
+def test_run_schema_bootstrap_fails_when_core_tables_missing(monkeypatch):
+    """BE-INIT-01：仅迁移创建的核心表缺失 → 不置位 schema-ready（启动断言）。"""
+    _reset()
+
+    for module_path, func_name in db_bootstrap._BOOTSTRAP_STEPS:
+        import importlib
+
+        mod = importlib.import_module(module_path)
+        monkeypatch.setattr(mod, func_name, lambda: None)
+
+    monkeypatch.setattr(
+        db_bootstrap, "_verify_core_tables", lambda: ["expression", "direction"]
+    )
+
+    ok = db_bootstrap.run_schema_bootstrap()
+
+    assert ok is False
+    assert not db_conn.is_schema_ready()
+
+
+def test_verify_core_tables_reports_missing_and_rethrows_others(monkeypatch):
+    """BE-INIT-01：1146（表缺失）计入缺失列表；其他库错误上抛。"""
+    from mysql.connector import Error as MySQLError
+
+    def _fake_query_one(sql, params=None):
+        if "`expression`" in sql:
+            err = MySQLError("Table 'jobcraft.expression' doesn't exist")
+            err.errno = 1146
+            raise err
+        return {"1": 1}
+
+    monkeypatch.setattr(db_conn, "query_one", _fake_query_one)
+    assert db_bootstrap._verify_core_tables() == ["expression"]
+
+    def _conn_down(sql, params=None):
+        raise MySQLError("Can't connect to MySQL server")
+
+    monkeypatch.setattr(db_conn, "query_one", _conn_down)
+    with pytest.raises(MySQLError):
+        db_bootstrap._verify_core_tables()
 
 
 def test_run_schema_bootstrap_failure_does_not_mark_ready(monkeypatch):
