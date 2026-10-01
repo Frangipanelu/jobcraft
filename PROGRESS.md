@@ -2,6 +2,16 @@
 
 > 本文件用于追踪项目整体进度。AI 在每次会话结束或完成子任务时，必须更新本文件的对应板块。
 
+## BE-TASKDIV-01 异步任务与同步 API 行为对齐（2026-10-01）
+
+> 根因：校验/增强逻辑分别内嵌在 API 层与 handler 各一份，异步任务路径长期缺校验、缺增强。修复原则——**校验与增强下沉共享入口，API 只做 HTTP 映射**（commit `453dabc`）。
+
+- **jd_structured**：新增 `prepare_structured_jd(duties, requirements)`（`app/workflows/job_analysis_flow.py`）——清洗空条目、tag 白名单（hard/required/preferred，非法抛 `ValueError`）、两者同时为空抛错。API（`api/job_analysis.py`）与 `execute_jd_analyze_structured` 同用，handler 不再静默丢弃非法 tag。
+- **review_analyze**：`run_interview_review_workflow` 开头强制校验——空→「请至少选择 1 个问题进行详细解析」、`> MAX_ANALYSIS_QA_PAIRS(8)`→「最多选择 8 个问题」（常量取自 `tools/interview_review.py`，首次真正生效）。`api/interview_review.py` 删内联检查，仅保留 `ValueError→400` 映射；任务路径 → FAILED，同一输入两路径同语义。
+- **interview_prep**：新增 `load_interview_prep_enrichment(job_analysis_id, user_id, submission_id)`（公司调研/resume_markdown/复盘摘要，整体容忍异常→None）；`_generate_prep` 卡片回退（空 `card_ids` → `get_selected_card_ids_by_job` → 仍空报「该岗位分析未关联经历卡，请从岗位分析页重新分析」）。handler 缺增强参数时自动加载（params 非 None 优先，兼容旧契约）；API 端点删全部内联增强/回退/摘要逻辑。**效果**：前端任务路径（`hooks.ts` 只发 `{card_ids: []}`）不再因缺增强而必然失败降级。
+- **export_pdf**：`execute_export_pdf` 透传 `card_versions`/`personal_info`/`user_id` 给 `generate_resume`，异步导出不再丢用户编辑文本与联系方式。
+- **测试**：+13 例（prep loader 成功/失败容忍、卡片回退两分支、review 空/9 序列、`prepare_structured_jd` 四态、handler 缺参加载/有参跳过、jd 非法 tag、export 透传）；空卡 400 测试改全链路 mock 保持单测隔离。pytest **846 passed / 7 skipped**，encoding/ruff/format/security 全绿；容器已重建（backend+worker）。
+
 ## BE-QT-01 问题表重新生成覆盖深度研判结果（2026-10-01）
 
 > 起因：`question_table_flow._persist` 全量 `delete_interview_qa_pairs_by_record` + 重插默认行（score=0/feedback=[]/suggestions=[]）——三条创建路径共用，用户已 `/analyze` 后再生成问题表即丢全部研判；附带把 `status=done` 降级回 `question_table`。
