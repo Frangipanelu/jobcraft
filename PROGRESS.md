@@ -2,6 +2,14 @@
 
 > 本文件用于追踪项目整体进度。AI 在每次会话结束或完成子任务时，必须更新本文件的对应板块。
 
+## BE-ATS-01 简历核心能力块接线 ats_profile（2026-10-01）
+
+> `generate_resume`（`app/tools/jobcraft_resume.py`）原硬编码 `ats=None` 传给 md/html 生成器 →「核心能力」段永不渲染。修复 commit `2a8d96e`。
+
+- 解析 `job_analysis.ats_profile` → `ATSProfile(**raw)` 后传入 `generate_resume_markdown`/`generate_resume_html`（两函数按 `required_skills` + `preferred_skills[:3]` 渲染技能段）；损坏 profile 捕获 warning 降级跳过，不阻断生成。
+- `company_ctx` 在生成器内未被消费（仅签名占位），维持 None；无 DDL（V0011 已落库）。
+- **验收**：+3 例（传参、真实渲染含「## 核心能力」与「Python、MySQL、Redis」并集、损坏 profile 降级）；pytest **849 passed / 7 skipped**，encoding/ruff/format/security 全绿；容器已重建。API 与 `export_pdf` 任务两路径同时受益（T-M6-6 生成链接线一并闭环）。
+
 ## BE-TASKDIV-01 异步任务与同步 API 行为对齐（2026-10-01）
 
 > 根因：校验/增强逻辑分别内嵌在 API 层与 handler 各一份，异步任务路径长期缺校验、缺增强。修复原则——**校验与增强下沉共享入口，API 只做 HTTP 映射**（commit `453dabc`）。
