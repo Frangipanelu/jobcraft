@@ -2,6 +2,15 @@
 
 > 本文件用于追踪项目整体进度。AI 在每次会话结束或完成子任务时，必须更新本文件的对应板块。
 
+## BE-TASK-01 悬挂任务类型声明清理（2026-10-01）
+
+> `TASK_TYPE_EXPORT_DOCX` / `TASK_TYPE_BATCH_ANALYZE` 声明但零引用（无 handler、无前端提交方、无测试）。修复 commit `350eac6`。
+
+- 按「注册或删除声明（不允许悬挂）」**删除**两常量（注册需要造 handler，无消费方 = 假功能）。
+- 新增不变量测试 `test_no_dangling_task_type_constants`：`TASK_TYPE_*` 模块常量集合必须 == `TASK_REGISTRY` 键集合，杜绝「声明未注册」与「注册未声明」双向漂移。
+- `export_pdf` 的「PDF导出功能待完善」消息归 FE-RESUME-03（产品裁决）；其内容链路（card_versions/personal_info 透传 + ats_profile 核心能力块）已由 BE-TASKDIV-01 / BE-ATS-01 修复。
+- **验收**：handlers 17 例；pytest **858 passed / 7 skipped**，encoding/ruff/format/security 全绿，容器已重建。
+
 ## BE-AI-01 Prompt 版本审计透传（2026-10-01）
 
 > `ai_tasks.prompt_version` / `ai_outputs.schema_version` 恒为 `''`，违反 AGENTS §7「所有 AI Prompt 必须版本化」。修复 commit `ca91e89`。
