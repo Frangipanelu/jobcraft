@@ -26,6 +26,7 @@ from app.tools.interview_review import (
     _get_job_context,
     _format_cards_for_prompt,
     _find_my_answer,
+    MAX_ANALYSIS_QA_PAIRS,
     MAX_QUESTION_TABLE_QA_PAIRS,
 )
 
@@ -283,7 +284,18 @@ def run_interview_review_workflow(
     selected_sequences: List[int],
     user_id: int = 1,
 ) -> Dict[str, Any]:
-    """执行面试复盘详细分析 Workflow"""
+    """执行面试复盘详细分析 Workflow。
+
+    校验下沉共享入口（BE-TASKDIV-01）：非空且不超过上限，
+    API（ValueError → 400）与异步任务（→ FAILED）同语义。
+    """
+    if not selected_sequences:
+        raise ValueError("请至少选择 1 个问题进行详细解析")
+    if len(selected_sequences) > MAX_ANALYSIS_QA_PAIRS:
+        raise ValueError(
+            f"因模型输出长度限制，每次最多选择 {MAX_ANALYSIS_QA_PAIRS} 个问题"
+        )
+
     workflow = StateGraph(InterviewReviewState)
 
     # 注册节点

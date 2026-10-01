@@ -7,7 +7,7 @@
 """
 
 import logging
-from typing import Any, Dict, List, Optional, TypedDict
+from typing import Any, Dict, List, Optional, Tuple, TypedDict
 
 from langgraph.graph import END, START, StateGraph
 
@@ -257,6 +257,35 @@ def _run_structured_ats(state: Dict[str, Any]) -> Dict[str, Any]:
             "position": position or out["ats"].get("job_title", ""),
         }
     }
+
+
+def prepare_structured_jd(
+    duties: List[Any],
+    requirements: List[Any],
+) -> Tuple[List[str], List[StructuredRequirementItem]]:
+    """结构化 JD 入口清洗与校验（API 与异步任务共用，BE-TASKDIV-01）。
+
+    清洗空文本条目；tag 仅允许 hard/required/preferred，非法即 ValueError
+    （不再静默丢弃）；职责与任职要求不能同时为空。
+
+    :param duties: 岗位职责文本列表
+    :param requirements: 每项含 text 与可选 tag 的映射
+    :return: (清洗后的 duties, StructuredRequirementItem 列表)
+    :raises ValueError: 非法标签或两者同时为空
+    """
+    clean_duties = [str(d).strip() for d in duties if d and str(d).strip()]
+    reqs: List[Dict[str, str]] = []
+    for r in requirements:
+        text = str(r.get("text", "")).strip()
+        if not text:
+            continue
+        tag = str(r.get("tag", "required")).strip().lower()
+        if tag not in ("hard", "required", "preferred"):
+            raise ValueError(f"标签 {tag} 非法，仅支持 hard/required/preferred")
+        reqs.append({"text": text, "tag": tag})
+    if not clean_duties and not reqs:
+        raise ValueError("岗位职责与任职要求不能同时为空")
+    return clean_duties, [StructuredRequirementItem(**r) for r in reqs]
 
 
 def run_structured_ats_workflow(

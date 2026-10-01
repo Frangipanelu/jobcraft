@@ -1570,6 +1570,14 @@ class TestInterviewPrep:
     """POST /api/jobcraft/job/{job_id}/interview-prep"""
 
     def test_prep_empty_card_ids_and_no_saved_returns_400(self, monkeypatch):
+        # 卡片回退与增强加载已下沉 workflow（BE-TASKDIV-01），全链路 mock 保持单测隔离
+        monkeypatch.setattr(
+            "app.api.interview_prep.db_tools.get_job_analysis",
+            lambda *a: {"company": ""},
+        )
+        monkeypatch.setattr(
+            "app.api.interview_prep.db_tools.list_submissions", lambda *a: []
+        )
         monkeypatch.setattr(
             "app.api.interview_prep.db_tools.get_selected_card_ids_by_job",
             lambda *a: [],

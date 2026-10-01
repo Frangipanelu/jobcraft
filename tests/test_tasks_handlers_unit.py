@@ -320,3 +320,160 @@ def test_dispatch_routes_to_known_handler(monkeypatch):
 
     assert called["task_id"] == "t-2"
     assert called["job_analysis_id"] == 5
+
+
+# ============================================================
+# BE-TASKDIV-01：路径行为对齐（校验/增强下沉共享入口）
+# ============================================================
+
+
+def test_interview_prep_loads_enrichment_when_params_missing(monkeypatch):
+    """任务路径缺增强参数时应自动加载（与 API 同步路径行为一致）。"""
+    fake_mgr = FakeTaskManager()
+    monkeypatch.setattr("app.tasks.handlers.get_task_manager", lambda: fake_mgr)
+
+    loader_calls = []
+
+    def fake_loader(job_analysis_id, user_id, submission_id=None):
+        loader_calls.append((job_analysis_id, user_id, submission_id))
+        return {
+            "company_research": {"info": {"name": "X"}},
+            "resume_markdown": "MD",
+            "previous_review_summary": "优势：x",
+        }
+
+    monkeypatch.setattr(
+        "app.workflows.interview_prep_flow.load_interview_prep_enrichment",
+        fake_loader,
+    )
+
+    captured = {}
+
+    def fake_workflow(**kwargs):
+        captured.update(kwargs)
+        return {"elevator_pitch": "hi"}
+
+    monkeypatch.setattr(
+        "app.workflows.interview_prep_flow.run_interview_prep_workflow",
+        fake_workflow,
+    )
+
+    from app.tasks.handlers import execute_interview_prep
+
+    result = execute_interview_prep(
+        {
+            "task_id": "t-e",
+            "user_id": 7,
+            "job_analysis_id": 10,
+            "round_type": "技术面",
+            "card_ids": [1],
+            "submission_id": 3,
+        }
+    )
+
+    assert result == {"elevator_pitch": "hi"}
+    assert loader_calls == [(10, 7, 3)]
+    assert captured["company_research"] == {"info": {"name": "X"}}
+    assert captured["resume_markdown"] == "MD"
+    assert captured["previous_review_summary"] == "优势：x"
+
+
+def test_interview_prep_skips_enrichment_when_params_provided(monkeypatch):
+    """params 显式提供增强参数时不得触发加载（旧契约兼容）。"""
+    fake_mgr = FakeTaskManager()
+    monkeypatch.setattr("app.tasks.handlers.get_task_manager", lambda: fake_mgr)
+
+    def must_not_call(*args, **kwargs):
+        raise AssertionError("params 已提供时不得触发增强加载")
+
+    monkeypatch.setattr(
+        "app.workflows.interview_prep_flow.load_interview_prep_enrichment",
+        must_not_call,
+    )
+
+    captured = {}
+
+    def fake_workflow(**kwargs):
+        captured.update(kwargs)
+        return {"elevator_pitch": "hi"}
+
+    monkeypatch.setattr(
+        "app.workflows.interview_prep_flow.run_interview_prep_workflow",
+        fake_workflow,
+    )
+
+    from app.tasks.handlers import execute_interview_prep
+
+    execute_interview_prep(
+        {
+            "task_id": "t-e2",
+            "user_id": 7,
+            "job_analysis_id": 10,
+            "round_type": "技术面",
+            "card_ids": [1],
+            "company_research": {"basic": {}},
+            "resume_markdown": "md",
+            "previous_review_summary": "rev",
+        }
+    )
+
+    assert captured["company_research"] == {"basic": {}}
+    assert captured["resume_markdown"] == "md"
+    assert captured["previous_review_summary"] == "rev"
+
+
+def test_jd_analyze_structured_rejects_illegal_tag(monkeypatch):
+    """非法 tag 必须报错而非静默丢弃（与 API 400 同语义）。"""
+    from app.tasks.handlers import execute_jd_analyze_structured
+
+    def must_not_run(**kwargs):
+        raise AssertionError("非法 tag 不得进入 workflow")
+
+    monkeypatch.setattr(
+        "app.workflows.job_analysis_flow.run_structured_ats_workflow",
+        must_not_run,
+    )
+
+    with pytest.raises(ValueError, match="非法"):
+        execute_jd_analyze_structured(
+            {
+                "task_id": "t-s",
+                "company": "A",
+                "position": "P",
+                "duties": ["职责"],
+                "requirements": [{"text": "x", "tag": "nice_to_have"}],
+            }
+        )
+
+
+def test_export_pdf_passes_versions_and_personal_info(monkeypatch):
+    """export_pdf 任务应透传 card_versions/personal_info（BE-TASKDIV-01）。"""
+    fake_mgr = FakeTaskManager()
+    monkeypatch.setattr("app.tasks.handlers.get_task_manager", lambda: fake_mgr)
+
+    captured = {}
+
+    def fake_generate(**kwargs):
+        captured.update(kwargs)
+        return {"markdown": "# 简历", "html": "<p>x</p>"}
+
+    monkeypatch.setattr("app.tools.jobcraft_resume.generate_resume", fake_generate)
+
+    from app.tasks.handlers import execute_export_pdf
+
+    result = execute_export_pdf(
+        {
+            "task_id": "t-p",
+            "user_id": 7,
+            "job_analysis_id": 10,
+            "selected_card_ids": [1],
+            "card_versions": {1: "编辑后文本"},
+            "personal_info": {"name": "张三"},
+        }
+    )
+
+    assert result["content"]["markdown"] == "# 简历"
+    assert captured["card_versions"] == {1: "编辑后文本"}
+    assert captured["personal_info"] == {"name": "张三"}
+    assert captured["user_id"] == 7
+    assert any(u["task_id"] == "t-p" for u in fake_mgr.status_updates)

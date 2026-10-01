@@ -100,6 +100,23 @@ def execute_interview_prep(params: Dict[str, Any]) -> Dict[str, Any]:
     if not job_analysis_id:
         raise ValueError("job_analysis_id 缺失，无法生成面试准备")
 
+    # 增强上下文下沉共享入口（BE-TASKDIV-01）：与 API 同步路径行为一致；
+    # params 显式提供（非 None）时优先，缺省字段自动加载
+    if (
+        company_research is None
+        or resume_markdown is None
+        or previous_review_summary is None
+    ):
+        from app.workflows.interview_prep_flow import load_interview_prep_enrichment
+
+        enrich = load_interview_prep_enrichment(job_analysis_id, user_id, submission_id)
+        if company_research is None:
+            company_research = enrich["company_research"]
+        if resume_markdown is None:
+            resume_markdown = enrich["resume_markdown"]
+        if previous_review_summary is None:
+            previous_review_summary = enrich["previous_review_summary"]
+
     logger.info(f"开始执行面试准备任务: {task_id}")
 
     try:
@@ -140,6 +157,9 @@ def execute_export_pdf(params: Dict[str, Any]) -> Dict[str, Any]:
     user_id = params.get("user_id", 1)
     job_analysis_id = params.get("job_analysis_id")
     selected_card_ids = params.get("selected_card_ids") or params.get("card_ids", [])
+    # 透传用户编辑版本与联系方式（BE-TASKDIV-01：与 /save-resume 同参）
+    card_versions = params.get("card_versions")
+    personal_info = params.get("personal_info")
 
     if not job_analysis_id:
         raise ValueError("job_analysis_id 缺失，无法导出简历")
@@ -154,6 +174,8 @@ def execute_export_pdf(params: Dict[str, Any]) -> Dict[str, Any]:
         resume_content = jobcraft_resume.generate_resume(
             job_analysis_id=job_analysis_id,
             selected_card_ids=selected_card_ids,
+            card_versions=card_versions,
+            personal_info=personal_info,
             user_id=user_id,
         )
 
@@ -179,26 +201,21 @@ def execute_jd_analyze_structured(params: Dict[str, Any]) -> Dict[str, Any]:
     :param params: 任务参数（company/position/duties/requirements）
     :return: {ats_profile, raw, company, position}
     """
-    from app.schemas.jobcraft import StructuredRequirementItem
-    from app.workflows.job_analysis_flow import run_structured_ats_workflow
+    from app.workflows.job_analysis_flow import (
+        prepare_structured_jd,
+        run_structured_ats_workflow,
+    )
 
     task_id = params.get("task_id")
     company = params.get("company", "")
     position = params.get("position", "")
-    duties = [d for d in params.get("duties", []) if d and str(d).strip()]
-    raw_reqs = [
-        r
-        for r in params.get("requirements", [])
-        if r and str(r.get("text", "")).strip()
-    ]
-    if not duties and not raw_reqs:
-        raise ValueError("岗位职责与任职要求不能同时为空")
 
-    requirements = [
-        StructuredRequirementItem(**r)
-        for r in raw_reqs
-        if str(r.get("tag", "required")).lower() in ("hard", "required", "preferred")
-    ]
+    # 清洗与校验下沉共享入口（BE-TASKDIV-01）：非法 tag 不再静默丢弃，
+    # 与 API 路径同语义（ValueError → 任务 FAILED，而非悄悄少一条需求）
+    duties, requirements = prepare_structured_jd(
+        params.get("duties", []),
+        params.get("requirements", []),
+    )
 
     logger.info(f"开始执行结构化 JD 分析任务: {task_id}")
 

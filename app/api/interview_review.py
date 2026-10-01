@@ -338,12 +338,7 @@ def jobcraft_interview_review_analyze(
 ):
     from app.workflows.interview_review_flow import run_interview_review_workflow
 
-    if not payload.selected_sequences:
-        raise HTTPException(status_code=400, detail="请至少选择 1 个问题进行详细解析")
-    if len(payload.selected_sequences) > 8:
-        raise HTTPException(
-            status_code=400, detail="因模型输出长度限制，每次最多选择 8 个问题"
-        )
+    # 非空/≤8 校验下沉 workflow（BE-TASKDIV-01），此处只做 HTTP 映射
     try:
         result = run_interview_review_workflow(
             record_id=record_id,

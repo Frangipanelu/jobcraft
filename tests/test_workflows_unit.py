@@ -1621,3 +1621,154 @@ class TestQuestionTablePersistUpsert:
         assert wipes == []
         assert status_calls == [], "已 done 的记录不得改回 question_table"
         assert len(inserts) == 2
+
+
+# ============================================================
+#  BE-TASKDIV-01：校验/增强下沉共享入口（API 与任务路径同语义）
+# ============================================================
+
+
+class TestTaskDivSharedValidation:
+    def test_review_rejects_empty_selected_sequences(self):
+        from app.workflows.interview_review_flow import run_interview_review_workflow
+
+        with pytest.raises(ValueError, match="请至少选择 1 个问题"):
+            run_interview_review_workflow(record_id=1, selected_sequences=[])
+
+    def test_review_rejects_more_than_eight_sequences(self):
+        from app.workflows.interview_review_flow import run_interview_review_workflow
+
+        with pytest.raises(ValueError, match="最多选择 8 个问题"):
+            run_interview_review_workflow(
+                record_id=1, selected_sequences=list(range(1, 10))
+            )
+
+    def test_prepare_structured_jd_cleans_and_validates(self):
+        from app.schemas.jobcraft import StructuredRequirementItem
+        from app.workflows.job_analysis_flow import prepare_structured_jd
+
+        duties, reqs = prepare_structured_jd(
+            ["  职责1 ", "", None],
+            [
+                {"text": " 熟悉 Python ", "tag": " Required "},
+                {"text": "  ", "tag": "hard"},
+                {"text": "加分项", "tag": "preferred"},
+            ],
+        )
+        assert duties == ["职责1"]
+        assert reqs == [
+            StructuredRequirementItem(text="熟悉 Python", tag="required"),
+            StructuredRequirementItem(text="加分项", tag="preferred"),
+        ]
+
+    def test_prepare_structured_jd_rejects_illegal_tag(self):
+        from app.workflows.job_analysis_flow import prepare_structured_jd
+
+        with pytest.raises(ValueError, match="标签 nice 非法"):
+            prepare_structured_jd(["职责"], [{"text": "x", "tag": "nice"}])
+
+    def test_prepare_structured_jd_rejects_both_empty(self):
+        from app.workflows.job_analysis_flow import prepare_structured_jd
+
+        with pytest.raises(ValueError, match="不能同时为空"):
+            prepare_structured_jd([], [])
+
+    @staticmethod
+    def _patch_prep_analysis(monkeypatch, selected_cards=None):
+        monkeypatch.setattr(
+            "app.workflows.interview_prep_flow.db_tools.get_job_analysis",
+            lambda jid, user_id=None: {
+                "company": "C",
+                "position": "P",
+                "jd_text": "J",
+            },
+        )
+        monkeypatch.setattr(
+            "app.workflows.interview_prep_flow.db_tools.get_selected_card_ids_by_job",
+            lambda jid: selected_cards or [],
+        )
+        monkeypatch.setattr(
+            "app.workflows.interview_prep_flow.db_tools.get_card",
+            lambda cid, user_id=None: None,
+        )
+        monkeypatch.setattr(
+            "app.workflows.interview_prep_flow.db_tools.get_card_versions_by_source",
+            lambda source, jid: [],
+        )
+
+    def test_prep_empty_card_ids_falls_back_to_job_selection(self, monkeypatch):
+        """空 card_ids 回退岗位默认选择（任务路径与 API 一致）。"""
+        from app.workflows.interview_prep_flow import run_interview_prep_workflow
+
+        self._patch_prep_analysis(monkeypatch, selected_cards=[1])
+        # 回退命中 [1] 后 get_card 返回 None → 走到「所选经历卡不可用」而非「未关联经历卡」
+        with pytest.raises(ValueError, match="所选经历卡不可用"):
+            run_interview_prep_workflow(
+                job_analysis_id=10, round_type="技术面", card_ids=[]
+            )
+
+    def test_prep_no_cards_anywhere_raises(self, monkeypatch):
+        from app.workflows.interview_prep_flow import run_interview_prep_workflow
+
+        self._patch_prep_analysis(monkeypatch, selected_cards=[])
+        with pytest.raises(ValueError, match="该岗位分析未关联经历卡"):
+            run_interview_prep_workflow(
+                job_analysis_id=10, round_type="技术面", card_ids=[]
+            )
+
+    def test_load_enrichment_happy_path(self, monkeypatch):
+        from app.workflows import interview_prep_flow as flow
+
+        monkeypatch.setattr(
+            flow.db_tools,
+            "get_job_analysis",
+            lambda jid, uid=None: {"company": "X公司"},
+        )
+        monkeypatch.setattr(
+            "app.agents.company_research_agent.get_or_search_company",
+            lambda c: {"info": {"name": c}},
+        )
+        monkeypatch.setattr(
+            flow.db_tools,
+            "list_submissions",
+            lambda uid: [{"id": 5, "job_analysis_id": 10}],
+        )
+        monkeypatch.setattr(
+            flow.db_tools,
+            "get_submission",
+            lambda sid, uid=None: {"id": sid, "resume_markdown": "简历MD"},
+        )
+        monkeypatch.setattr(
+            flow.db_tools,
+            "list_interview_records_by_submission",
+            lambda sid, user_id=None: [
+                {
+                    "analysis_json": {
+                        "strengths": ["清晰"],
+                        "weaknesses": ["缺量化"],
+                        "action_items": ["补数据"],
+                    }
+                }
+            ],
+        )
+
+        enrich = flow.load_interview_prep_enrichment(10, 1)
+        assert enrich["company_research"] == {"info": {"name": "X公司"}}
+        assert enrich["resume_markdown"] == "简历MD"
+        assert "优势：清晰" in enrich["previous_review_summary"]
+        assert "改进项：补数据" in enrich["previous_review_summary"]
+
+    def test_load_enrichment_tolerates_failures(self, monkeypatch):
+        from app.workflows import interview_prep_flow as flow
+
+        def boom(*args, **kwargs):
+            raise RuntimeError("db down")
+
+        monkeypatch.setattr(flow.db_tools, "get_job_analysis", boom)
+
+        enrich = flow.load_interview_prep_enrichment(10, 1)
+        assert enrich == {
+            "company_research": None,
+            "resume_markdown": None,
+            "previous_review_summary": None,
+        }

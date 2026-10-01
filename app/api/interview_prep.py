@@ -24,88 +24,30 @@ class InterviewPrepDraftsPayload(BaseModel):
     drafts: Dict[str, str] = Field(default_factory=dict)
 
 
-def _get_previous_review_summary(
-    submission_id: Optional[int], user_id: Optional[int] = None
-) -> Optional[str]:
-    if not submission_id:
-        return None
-    try:
-        rows = db_tools.list_interview_records_by_submission(
-            submission_id, user_id=user_id
-        )
-        if not rows:
-            return None
-        latest = rows[0]
-        analysis = latest.get("analysis_json") or {}
-        parts = []
-        if analysis.get("strengths"):
-            parts.append(f"优势：{'、'.join(analysis['strengths'][:3])}")
-        if analysis.get("weaknesses"):
-            parts.append(f"劣势：{'、'.join(analysis['weaknesses'][:3])}")
-        if analysis.get("action_items"):
-            parts.append(f"改进项：{'、'.join(analysis['action_items'][:3])}")
-        return "\n".join(parts) if parts else None
-    except Exception as exc:
-        logger.warning("读取上一轮复盘摘要失败，返回空: %s", exc)
-        return None
-
-
 @router.post("/api/jobcraft/job/{job_id}/interview-prep")
 def jobcraft_job_interview_prep(
     job_id: int,
     payload: InterviewPrepPayload,
     current_user: int = Depends(get_current_user),
 ):
-    from app.workflows.interview_prep_flow import run_interview_prep_workflow
+    from app.workflows.interview_prep_flow import (
+        load_interview_prep_enrichment,
+        run_interview_prep_workflow,
+    )
 
-    card_ids = payload.card_ids
-    if not card_ids:
-        card_ids = db_tools.get_selected_card_ids_by_job(job_id)
-    if not card_ids:
-        raise HTTPException(
-            status_code=400, detail="该岗位分析未关联经历卡，请从岗位分析页重新分析"
-        )
-
-    company_research = None
-    resume_markdown = None
-    previous_review_summary = None
-    try:
-        analysis = db_tools.get_job_analysis(job_id, current_user)
-        company = (analysis or {}).get("company", "")
-        if company:
-            from app.agents.company_research_agent import get_or_search_company
-
-            company_research = get_or_search_company(company)
-
-        submission = None
-        if payload.submission_id:
-            submission = db_tools.get_submission(payload.submission_id, current_user)
-        elif analysis:
-            subs = db_tools.list_submissions(current_user)
-            for s in subs:
-                if s.get("job_analysis_id") == job_id:
-                    submission = db_tools.get_submission(s["id"], current_user)
-                    break
-        if submission:
-            resume_markdown = submission.get("resume_markdown")
-
-        previous_review_summary = _get_previous_review_summary(
-            payload.submission_id or (submission.get("id") if submission else None),
-            current_user,
-        )
-    except Exception:
-        logger.warning("加载面试增强数据失败", exc_info=True)
-
+    # 增强上下文加载与卡片回退均下沉共享入口（BE-TASKDIV-01），
+    # 与异步任务路径行为一致；ValueError → 400
+    enrich = load_interview_prep_enrichment(job_id, current_user, payload.submission_id)
     try:
         result = run_interview_prep_workflow(
             job_analysis_id=job_id,
             round_type=payload.round_type,
-            card_ids=card_ids,
+            card_ids=payload.card_ids,
             user_id=current_user,
             submission_id=payload.submission_id,
-            company_research=company_research,
-            resume_markdown=resume_markdown,
-            previous_review_summary=previous_review_summary,
+            company_research=enrich["company_research"],
+            resume_markdown=enrich["resume_markdown"],
+            previous_review_summary=enrich["previous_review_summary"],
         )
         return result
     except ValueError as e:

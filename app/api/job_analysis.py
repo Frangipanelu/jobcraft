@@ -156,31 +156,22 @@ def jobcraft_job_analyze_ats_structured(
 
     duties / requirements 均按条传入；requirements 的每条带 tag
     （hard 硬性门槛 / required 必选 / preferred 加分）。
+    清洗与校验下沉共享入口（BE-TASKDIV-01），与异步任务路径行为一致。
     """
-    duties = [d.strip() for d in payload.duties if d and d.strip()]
-    reqs = []
-    for r in payload.requirements:
-        text = str(r.get("text", "")).strip()
-        if not text:
-            continue
-        tag = str(r.get("tag", "required")).strip().lower()
-        if tag not in ("hard", "required", "preferred"):
-            raise HTTPException(
-                status_code=400,
-                detail=f"标签 {tag} 非法，仅支持 hard/required/preferred",
-            )
-        reqs.append({"text": text, "tag": tag})
-    if not duties and not reqs:
-        raise HTTPException(status_code=400, detail="岗位职责与任职要求不能同时为空")
     try:
-        from app.schemas.jobcraft import StructuredRequirementItem
-        from app.workflows.job_analysis_flow import run_structured_ats_workflow
+        from app.workflows.job_analysis_flow import (
+            prepare_structured_jd,
+            run_structured_ats_workflow,
+        )
 
+        duties, requirements = prepare_structured_jd(
+            payload.duties, payload.requirements
+        )
         return run_structured_ats_workflow(
             company=payload.company,
             position=payload.position,
             duties=duties,
-            requirements=[StructuredRequirementItem(**r) for r in reqs],
+            requirements=requirements,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
