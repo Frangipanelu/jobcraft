@@ -14,6 +14,7 @@ Tools 额外单元测试
  10. db_raw_jd.py — RawJD 不可变快照（P4-2）
 """
 
+import inspect
 import json
 import sys
 from pathlib import Path
@@ -1262,6 +1263,87 @@ class TestDbSubmission:
         assert params[8] == "PREPARED"
         # P4-4a：创建后 find-or-create 岗位并挂上投递记录
         mock_attach.assert_called_once()
+
+    def test_insert_submission_never_relies_on_db_default(self):
+        """BE-DRIFT-01：INSERT 恒显式带 status 列（三处 DDL DEFAULT 不参与写入），
+        无法识别的 status 回落 PREPARED 而非透传。"""
+        from app.schemas.submission_status import SUBMISSION_STATUS_CN, SubmissionStatus
+        from app.tools.db_submission import insert_submission
+
+        with (
+            patch("app.tools.db_conn.connect"),
+            patch(
+                "app.tools.db_submission.execute_lastrowid", return_value=1
+            ) as mock_insert,
+            patch("app.tools.db_submission._attach_job_entity", return_value=3),
+        ):
+            insert_submission({"position": "PM"})
+            insert_submission({"position": "PM", "status": "已投递"})
+            insert_submission({"position": "PM", "status": "不存在的状态"})
+        sql = mock_insert.call_args_list[0][0][0]
+        assert "status" in sql.split("VALUES")[0]
+        valid = {s.value for s in SubmissionStatus} | set(SUBMISSION_STATUS_CN)
+        for call in mock_insert.call_args_list:
+            assert call[0][1][8] in valid
+        # 缺省 → PREPARED；旧中文归一化；垃圾值不透传
+        assert mock_insert.call_args_list[0][0][1][8] == "PREPARED"
+        assert mock_insert.call_args_list[1][0][1][8] == "APPLIED"
+        assert mock_insert.call_args_list[2][0][1][8] == "PREPARED"
+
+    def test_status_default_drift_documented_and_isolated(self):
+        """BE-DRIFT-01：三处 DDL DEFAULT 差异锁定为已知决策（AGENTS §4.4 不改列）。
+        若任一处被改动，本测试失败提醒重新评估迁移方案。"""
+        root = Path(__file__).resolve().parent.parent
+        v0001 = (root / "migrations" / "versions" / "V0001__baseline.sql").read_text(
+            encoding="utf-8"
+        )
+        baseline = (root / "docker" / "mysql" / "jobcraft.sql").read_text(
+            encoding="utf-8"
+        )
+        ensure_sql = inspect.getsource(
+            sys.modules["app.tools.db_submission"]._ensure_resume_submission_table
+        )
+        assert "DEFAULT 'APPLIED'" in v0001
+        assert "DEFAULT '已投递'" in baseline
+        assert "DEFAULT 'PREPARED'" in ensure_sql
+
+    def test_get_submission_by_analysis_projects_effective_status(self):
+        """BE-DRIFT-01：按分析查投递也走 effective_status 投影（存量
+        APPLIED+delivered=0 → PREPARED），不透传裸存量值。"""
+        from app.tools.db_submission import get_submission_by_analysis
+
+        row = {
+            "id": 9,
+            "user_id": 1,
+            "job_analysis_id": 7,
+            "position": "PM",
+            "company": "X",
+            "jd_text": "",
+            "resume_markdown": "",
+            "resume_file_path": "",
+            "card_version_ids": "[]",
+            "status": "APPLIED",
+            "notes": "",
+            "is_manual": 0,
+            "delivered": 0,
+            "created_at": SimpleNamespace(isoformat=lambda: "2024-01-01"),
+            "updated_at": SimpleNamespace(isoformat=lambda: "2024-01-02"),
+        }
+        with (
+            patch("app.tools.db_submission.is_schema_ready", return_value=True),
+            patch("app.tools.db_submission.query_one", return_value=row),
+        ):
+            out = get_submission_by_analysis(7, user_id=1)
+        assert out is not None
+        assert out["status"] == "PREPARED"
+
+        row["delivered"] = 1
+        with (
+            patch("app.tools.db_submission.is_schema_ready", return_value=True),
+            patch("app.tools.db_submission.query_one", return_value=row),
+        ):
+            out = get_submission_by_analysis(7, user_id=1)
+        assert out["status"] == "APPLIED"
 
     def test_get_submission_returns_job_id(self):
         """P4-4a：单条读取暴露岗位实体 id（LEFT JOIN job）。"""

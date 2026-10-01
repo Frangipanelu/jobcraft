@@ -28,7 +28,15 @@ def _normalize_or_raw(value: Any) -> Any:
 
 
 def _ensure_resume_submission_table() -> None:
-    """确保 resume_submission 表存在（schema 已由启动引导保证时短路）"""
+    """确保 resume_submission 表存在（schema 已由启动引导保证时短路）
+
+    BE-DRIFT-01 决策：`status` DEFAULT 在三处不一致——V0001 基线为
+    ``'APPLIED'``、本函数为 ``'PREPARED'``、``docker/mysql/jobcraft.sql``
+    为 ``'已投递'``。按 AGENTS §4.4（只加列/表，不改/删列）不改既有 DDL；
+    应用层已隔离：写路径 ``insert_submission`` 恒显式 normalize 并传 status
+    （DEFAULT 永不参与），读路径统一 ``effective_status`` 投影（见
+    ``app/schemas/submission_status.py``）。统一 DEFAULT 需独立迁移决策。
+    """
     if is_schema_ready():
         return
     with connection() as conn:
@@ -261,7 +269,9 @@ def get_submission_by_analysis(
         "resume_file_path": row["resume_file_path"] or "",
         "card_version_ids": json.loads(row["card_version_ids"] or "[]"),
         "resume_suggestions": _parse_json(row.get("resume_suggestions")) or [],
-        "status": row["status"],
+        # BE-DRIFT-01：与 get_submission/list_submissions 一致，按 delivered
+        # 事实投影（存量 APPLIED+delivered=0 → PREPARED），不透传裸存量值
+        "status": effective_status(row["status"], bool(row.get("delivered"))),
         "notes": row["notes"] or "",
         "is_manual": row.get("is_manual", 0),
         "delivered": bool(row.get("delivered")),
