@@ -2,6 +2,17 @@
 
 > 本文件用于追踪项目整体进度。AI 在每次会话结束或完成子任务时，必须更新本文件的对应板块。
 
+## FE-RESUME-03 导出 PDF / 下载原始简历端到端闭环（2026-10-01，批次 5）
+
+> 「导出 PDF」「下载原始简历」按钮只弹 toast，后端 `export_pdf` 任务返回占位消息——前后端同时为假。产品三问裁决后实施：只读 A4 打印导出 / 自动带入+手动同步 / 删任务+补 github 字段。Commits `cd8a373`（BE-1）、`d2b13ff`（BE-2）、`2c780f7`（FE），CI 全绿。
+
+- **产品裁决（2026-10-01）**：① 预览 = 只读 A4 + `window.print()`（不做 contenteditable，markdown 编辑模型单一真相源）；② 个人信息 = 自动带入 + 手动「同步资料」按钮；③ 删 `export_pdf` 任务 + profile 补 `github`；追加：历史简历「下载原始简历」因 `base_resume` 只存元数据无原文 → 按「不允许收了不做」删除假按钮。
+- **BE-1 `cd8a373` 下线 export_pdf**：删 `TASK_TYPE_EXPORT_PDF`/`execute_export_pdf`/registry 项/`server.py` docstring；原透传测试（card_versions/personal_info，BE-TASKDIV-01 资产）**迁移**至 save-resume 主路径 `test_save_resume_passes_versions_and_personal_info`；新增 `test_export_pdf_task_removed` 锁定下线；`test_auth_security` 样例任务类型换 `resume_generate`。
+- **BE-2 `d2b13ff` github 字段**：V0017 `user_profiles.github VARCHAR(255) DEFAULT ''`（information_schema 探测 + PREPARE/EXECUTE 幂等；`db_profile` 运行时 CREATE 带列 + SHOW COLUMNS 守卫兜底；jobcraft.sql 基线不含该表故收敛于两处）；`UserProfileUpdate.github` + `_row_to_dict.github` 契约。
+- **FE `2c780f7`**：profile 补 github（类型/`toApiProfilePatch`/`fetchUserProfile`/表单）；`ResumeVersion.personalInfo.github` + parser 双向（`parseContact` 抽 `GitHub/作品：` 片段——同行 contact 不丢字段、独立 kv 行、`resumeToMarkdown` 序列化输出）；`useSyncResumePersonalInfoMutation`（仅覆盖 profile 非空字段，保留简历手动微调，`persistResumePatch` 落库）+ 编辑器两处工具栏「同步资料」按钮（空 profile 提示不落库）；JD 生成 `saveResume` 自动传 `personal_info`（name/phone/email/city/github/years）；新 `ResumePrintPreview`（`createPortal` 挂 body、只读 A4、工具栏 print:hidden）+ `index.css` `@page{size:A4;margin:0}` 与 `#root` 打印隐藏——portal 节点在 `#root` 外不受影响；两处「导出 PDF」接线开预览。
+- **验收**：pytest **880 passed / 7 skipped**、encoding 385/0、ruff/format/S 全绿；vitest **210**/31 files（resume-query +6：同步覆盖落库、空 profile 不落库、预览打印 `window.print` 断言、github 双向解析 3 例）、tsc 0、build ✅；真库 V0017 双跑幂等 + `github` 列在位；容器重建 backend/worker LOAD-OK；CI `cd8a373`/`d2b13ff` JobCraft+Frontend success、`2c780f7` Frontend success。测试基建注记：`renderWithProviders` 不含 `ToastContainer`（toast 断言需手动加，照 jd-query 范式）。
+- **附带发现 → DB-VERIFY-02（已立项 TODO）**：本地库 `schema_migrations` 记录不连续（0007-0013/0015 缺记录但列已由运行时 DDL 建成），全量 `runner migrate` 在 V0007 `Duplicate column name 'is_active'` 中断 → V0017 无法经 runner 应用（已单独真库双跑验证，功能不受影响）；处置方向为 runner reconcile 模式，禁止手工伪造记录。
+
 ## BE-QUEUE-01 Redis 任务队列加固（2026-10-01，批次 4 收官）
 
 > `jobcraft:tasks` 无清理、`jobcraft:queue` at-most-once 异常即丢、重复提交重复跑 LLM。修复 commit `cddc64a`，JobCraft CI success。
