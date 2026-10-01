@@ -145,13 +145,14 @@ class TestCallWithLimits:
 
 class TestRateLimiter:
     def test_min_interval_enforced(self):
-        limiter = RateLimiter(rps=50, max_concurrency=0)  # 20ms 间隔
+        # 间隔取 200ms：远大于本机 Windows ~16ms 时钟粒度，避免计时抖动
+        limiter = RateLimiter(rps=5, max_concurrency=0)
         stamps = []
         for _ in range(3):
             with limiter.slot():
                 stamps.append(time.monotonic())
         gaps = [b - a for a, b in zip(stamps, stamps[1:])]
-        assert all(g >= 0.015 for g in gaps), gaps
+        assert all(g >= 0.15 for g in gaps), gaps
 
     def test_concurrency_serialized(self):
         limiter = RateLimiter(rps=0, max_concurrency=1)

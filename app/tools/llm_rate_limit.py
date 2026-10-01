@@ -109,7 +109,9 @@ class RateLimiter:
             if self.max_concurrency > 0
             else None
         )
-        self._clock_lock = threading.Lock()
+        # 间隔锁：等待期间持锁，串行化「睡到目标时刻」这一步，
+        # 保证相邻两次实际启动间隔 ≥ min_interval（否则睡眠超时/开销会漂移出 2 连发）
+        self._interval_lock = threading.Lock()
         self._next_start = 0.0
 
     @contextmanager
@@ -135,16 +137,20 @@ class RateLimiter:
         self._reserve_start()
 
     def _reserve_start(self) -> None:
-        """预约本次调用启动时刻，超出间隔则同步休眠对齐。"""
+        """预约本次调用启动时刻，超出间隔则同步休眠对齐。
+
+        休眠在间隔锁内完成：后来的线程先排队等锁，进入时以上一次
+        **实际启动**时刻为基准重新计算，从而严格保证 start-to-start 间隔。
+        """
         if self._min_interval <= 0:
             return
-        with self._clock_lock:
+        with self._interval_lock:
             now = time.monotonic()
             start_at = max(now, self._next_start)
-            self._next_start = start_at + self._min_interval
-        delay = start_at - time.monotonic()
-        if delay > 0:
-            _sleep(delay)
+            delay = start_at - now
+            if delay > 0:
+                _sleep(delay)
+            self._next_start = time.monotonic() + self._min_interval
 
 
 _limiter: Optional[RateLimiter] = None
