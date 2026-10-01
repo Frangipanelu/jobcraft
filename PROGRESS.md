@@ -2,6 +2,14 @@
 
 > 本文件用于追踪项目整体进度。AI 在每次会话结束或完成子任务时，必须更新本文件的对应板块。
 
+## BE-AI-01 Prompt 版本审计透传（2026-10-01）
+
+> `ai_tasks.prompt_version` / `ai_outputs.schema_version` 恒为 `''`，违反 AGENTS §7「所有 AI Prompt 必须版本化」。修复 commit `ca91e89`。
+
+- `invoke_structured` 新增 `prompt_version`（写入 `ai_tasks`）与 `schema_version`（写入 `ai_outputs`，缺省与 prompt 同值——本项目 schema 与 prompt 模板同步演进，docstring 注明）。
+- 全部 **21 个调用点**按 `load_prompt` 的 version 透传：extract 结构化 v3 / 简历解析 v2 / 标签推荐 v1、jd_ats v1-v4（`_ATS_PROMPT_VERSIONS`，v4 两入口）、interview_prep v2（flow 经 state 传 `INTERVIEW_PREP_PROMPT_VERSION`）、experience_polish v2、其余默认 v1；`BaseAgent._PROMPT_VERSION` 类属性供 RouterAgent 等共用；tech/soft 自有 run 同步传 v1。gate_agent 直连 bind_tools 无审计 = BE-AI-02 待办。
+- **验收**：+8 例（invoke 双参透传/显式覆盖/默认兼容、base/extract/jd v1+v4/prep agent 接线、flow state 传 v2）；pytest **857 passed / 7 skipped**；容器真库探针——1 次真实 LLM 调用后 `prompt_version='probe9'` 落 ai_tasks、`schema_version='probe9'` 落 ai_outputs、`GROUP BY prompt_version` 新旧数据（355 条 `''` vs 探针）可区分，探针数据已清理；encoding/ruff/format/security 全绿，容器已重建。
+
 ## BE-ATS-01 简历核心能力块接线 ats_profile（2026-10-01）
 
 > `generate_resume`（`app/tools/jobcraft_resume.py`）原硬编码 `ats=None` 传给 md/html 生成器 →「核心能力」段永不渲染。修复 commit `2a8d96e`。
