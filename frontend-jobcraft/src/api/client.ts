@@ -99,3 +99,25 @@ export async function requestFormData<T>(url: string, formData: FormData, method
 
   return res.json() as Promise<T>
 }
+
+/**
+ * 二进制下载出口（blob 端点，如全量数据导出）。
+ * 与 request() 同规则：token 集中注入、非 2xx 统一抛错；不设 Content-Type。
+ */
+export async function requestBlob(url: string, options?: RequestInit): Promise<Blob> {
+  const headers: Record<string, string> = {}
+  if (authToken) {
+    headers['Authorization'] = `Bearer ${authToken}`
+  }
+
+  const res = await fetch(`${BASE_URL}${url}`, {
+    headers,
+    ...options,
+  })
+
+  if (!res.ok) {
+    throw await parseUnifiedError(res, `Request failed: ${res.status}`)
+  }
+
+  return res.blob()
+}

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { fireEvent, screen, waitFor } from '@testing-library/react';
-import { renderWithProviders } from './test-utils';
+import { renderWithProviders, createTestQueryClient } from './test-utils';
 import { MockInterviewModal } from '../components/interview/MockInterviewModal';
 
 const auth = vi.hoisted(() => ({
@@ -66,5 +66,28 @@ describe('FE-MOCK-01 模拟面试启动失败必须显式报错', () => {
     expect(
       screen.getByRole('button', { name: /发送回答/ })
     ).toBeEnabled();
+  });
+});
+
+describe('FE-LAYER-01 模拟面试复盘保存必须失效 INTERVIEWS 列表', () => {
+  it('完成并生成复盘：createInterviewReview 落库后 invalidate ["interviews"]', async () => {
+    interview.mockChat.mockResolvedValue({ reply: '开场白：请做自我介绍' });
+    interview.createInterviewReview.mockResolvedValue({ record_id: 9, qa_pair_count: 2 });
+    const qc = createTestQueryClient();
+    const invalidateSpy = vi.spyOn(qc, 'invalidateQueries');
+
+    renderWithProviders(<MockInterviewModal isOpen onClose={vi.fn()} />, { queryClient: qc });
+
+    await screen.findByText(/开场白/);
+    fireEvent.click(screen.getByText('完成并生成复盘'));
+
+    await waitFor(() =>
+      expect(interview.createInterviewReview).toHaveBeenCalledWith(
+        expect.objectContaining({ raw_text: expect.stringContaining('开场白') }),
+      ),
+    );
+    await waitFor(() =>
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['interviews'] }),
+    );
   });
 });

@@ -80,6 +80,21 @@ export function useProfileQuery() {
   return useQuery({ queryKey: PROFILE_QUERY_KEY, queryFn: fetchUserProfile });
 }
 
+export const SETTINGS_QUERY_KEY = ['settings'] as const;
+
+/**
+ * 系统设置（模型引擎信息）查询（FE-LAYER-01）：
+ * 替代视图层直调 getSettings + 手写 loading/error state——
+ * isError 即「获取失败」，isPending 即「加载中」，失败不再被空 catch 吞掉。
+ */
+export function useSettingsQuery() {
+  return useQuery({
+    queryKey: SETTINGS_QUERY_KEY,
+    queryFn: () => authApi.getSettings(),
+    staleTime: 5 * 60_000,
+  });
+}
+
 /** 部分更新用户资料；成功后同步 react-query 缓存（乐观合并，不整页 refetch）。 */
 export function useUpdateProfileMutation() {
   const queryClient = useQueryClient();
@@ -95,5 +110,15 @@ export function useUpdateProfileMutation() {
         ...updates,
       }));
     },
+  });
+}
+
+/**
+ * 导出全量数据包（FE-LAYER-01）：组件层不再直调 api，
+ * blob 下载与触发保存归视图，失败上抛由视图 toast。
+ */
+export function useExportUserDataMutation() {
+  return useMutation<Blob, unknown, void>({
+    mutationFn: () => authApi.exportUserData(),
   });
 }

@@ -110,6 +110,30 @@ export function useUploadResumeMutation() {
 }
 
 /**
+ * 简历解析预览（两阶段上传第一阶段，FE-LAYER-01）：
+ * 组件层不再直调 `jobApi.previewResume`——解析结果由视图以预览态呈现，失败上抛由视图报错。
+ */
+export function usePreviewResumeMutation() {
+  return useMutation<Awaited<ReturnType<typeof jobApi.previewResume>>, unknown, File>({
+    mutationFn: (file) => jobApi.previewResume(file),
+  });
+}
+
+/**
+ * 简历确认入库（两阶段上传第二阶段，FE-LAYER-01）：
+ * 组件层不再直调 `jobApi.confirmUpload`——预览用户确认后提交所选条目。
+ */
+export function useConfirmUploadMutation() {
+  return useMutation<
+    Awaited<ReturnType<typeof jobApi.confirmUpload>>,
+    unknown,
+    { items: jobApi.PreviewItem[]; rawText?: string }
+  >({
+    mutationFn: ({ items, rawText }) => jobApi.confirmUpload(items, rawText || undefined),
+  });
+}
+
+/**
  * 删除历史简历。与 legacy `deleteHistoricalResume` 等价但语义更稳：
  * `await deleteBaseResume(serverId)` 成功后才从 cache 过滤（对齐 experiences delete；
  * legacy 无条件本地删除 + 失败 console）。无 serverId（本地未落库记录）直接移除。

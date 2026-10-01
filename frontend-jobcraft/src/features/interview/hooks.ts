@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as authApi from '../../api/auth';
 import * as interviewApi from '../../api/interview';
 import * as tasksApi from '../../api/tasks';
-import type { InterviewPrepResult } from '../../api/types';
+import type { InterviewPrepResult, InterviewReviewCreateResult } from '../../api/types';
 import { Interview, Job } from '../../types/jobcraft';
 import { JOBS_QUERY_KEY } from '../jobs/mappers';
 import { INTERVIEWS_QUERY_KEY, buildInterviewFromPrep, prepRecordToInterview, roundTypeToCn } from './mappers';
@@ -176,6 +176,48 @@ export function useSavePrepDraftsMutation() {
             : iv
         )
       );
+    },
+  });
+}
+
+export interface MockChatArgs {
+  messages: { role: string; content: string }[];
+  company?: string;
+  position?: string;
+  round_type?: string;
+  experience_context?: string;
+}
+
+/**
+ * 模拟面试对话（FE-LAYER-01）：会话内 AI 回复调用收敛至特征层，
+ * 组件层不再直连 api（无缓存副作用；toast/错误态归视图）。
+ */
+export function useMockChatMutation() {
+  return useMutation<interviewApi.MockChatReply, unknown, MockChatArgs>({
+    mutationFn: (args) => interviewApi.mockChat(args),
+  });
+}
+
+export interface SaveMockReviewArgs {
+  title?: string;
+  company?: string;
+  position?: string;
+  round_type?: string;
+  raw_text: string;
+}
+
+/**
+ * 模拟面试完成 → 保存为复盘（FE-LAYER-01 缓存失效）：
+ * 落库后失效 INTERVIEWS 列表（复盘中心与详情页同源），
+ * 跳转后重新拉取即可看到新复盘，不再出现「保存成功但列表没有」。
+ */
+export function useSaveMockInterviewReviewMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation<InterviewReviewCreateResult, unknown, SaveMockReviewArgs>({
+    mutationFn: (payload) => interviewApi.createInterviewReview(payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [...INTERVIEWS_QUERY_KEY] });
     },
   });
 }

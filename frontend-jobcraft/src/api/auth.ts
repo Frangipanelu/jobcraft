@@ -3,7 +3,7 @@
  * 自动登录 + JWT Token 管理
  */
 
-import { request, setAuthToken, getAuthToken } from './client'
+import { request, requestBlob, setAuthToken, getAuthToken } from './client'
 
 export interface AuthTokenResponse {
   access_token: string
@@ -104,6 +104,14 @@ export async function getSettings(): Promise<{
   status: string;
 }> {
   return request('/api/auth/settings')
+}
+
+/**
+ * 导出当前用户全量数据包（FE-LAYER-01：收敛组件层裸 fetch 至 api 层，
+ * token 注入与错误处理统一走 client.requestBlob）。
+ */
+export function exportUserData(): Promise<Blob> {
+  return requestBlob('/api/auth/export')
 }
 
 /**

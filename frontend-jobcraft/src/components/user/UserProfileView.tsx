@@ -2,15 +2,16 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useJobCraft, useToastActions } from '../../context/JobCraftContext';
 import { useExperiencesQuery } from '../../features/experiences/hooks';
 import type { UserProfile } from '../../types/jobcraft';
-import { useProfileQuery, useUpdateProfileMutation, EMPTY_PROFILE } from '../../features/profile/hooks';
+import { useProfileQuery, useUpdateProfileMutation, useSettingsQuery, useExportUserDataMutation, EMPTY_PROFILE } from '../../features/profile/hooks';
 import {
   useHistoricalResumesQuery,
   useAddHistoricalResumeMutation,
   useDeleteHistoricalResumeMutation,
   useSetDefaultHistoricalResumeMutation,
+  usePreviewResumeMutation,
+  useConfirmUploadMutation,
 } from '../../features/historical-resumes/hooks';
-import * as jobApi from '../../api/job';
-import * as authApi from '../../api/auth';
+import type { PreviewItem } from '../../api/job';
 import {
   FileText,
   User,
@@ -57,6 +58,8 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({ initialTab }) 
   const addHistoricalResumeMutation = useAddHistoricalResumeMutation();
   const deleteHistoricalResumeMutation = useDeleteHistoricalResumeMutation();
   const setDefaultHistoricalResumeMutation = useSetDefaultHistoricalResumeMutation();
+  const previewResumeMutation = usePreviewResumeMutation();
+  const confirmUploadMutation = useConfirmUploadMutation();
 
   const saveProfile = (updates: Partial<UserProfile>) => {
     updateProfileMutation.mutate(updates, {
@@ -117,31 +120,19 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({ initialTab }) 
 
   // Preview modal state
   const [showPreview, setShowPreview] = useState(false);
-  const [previewItems, setPreviewItems] = useState<jobApi.PreviewItem[]>([]);
+  const [previewItems, setPreviewItems] = useState<PreviewItem[]>([]);
   const [previewRawText, setPreviewRawText] = useState('');
   const [previewMode, setPreviewMode] = useState<'structured' | 'raw'>('structured');
   const [isConfirming, setIsConfirming] = useState(false);
   const [expandedPreviewIdx, setExpandedPreviewIdx] = useState<number | null>(null);
 
-  // Settings state
-  const [modelInfo, setModelInfo] = useState<{ model_name: string; provider: string; status: string } | null>(null);
-  const [settingsLoadFailed, setSettingsLoadFailed] = useState(false);
-
-  useEffect(() => {
-    authApi
-      .getSettings()
-      .then(setModelInfo)
-      .catch(() => setSettingsLoadFailed(true));
-  }, []);
+  // Settings（FE-LAYER-01：react-query 单一真相源，isPending=加载中 / isError=获取失败）
+  const { data: modelInfo, isError: settingsLoadFailed } = useSettingsQuery();
+  const exportUserDataMutation = useExportUserDataMutation();
 
   const handleExportData = async () => {
     try {
-      const token = localStorage.getItem('jobcraft_token');
-      const res = await fetch('/api/auth/export', {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) throw new Error('导出失败');
-      const blob = await res.blob();
+      const blob = await exportUserDataMutation.mutateAsync();
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -205,7 +196,7 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({ initialTab }) 
     setLastUploadedFileSize(file.size);
     setIsUploading(true);
     try {
-      const result = await jobApi.previewResume(file);
+      const result = await previewResumeMutation.mutateAsync(file);
       if (result.mode === 'structured' && result.items.length > 0) {
         setPreviewItems(result.items);
         setPreviewRawText('');
@@ -236,7 +227,10 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({ initialTab }) 
   const handleConfirmUpload = async () => {
     setIsConfirming(true);
     try {
-      const result = await jobApi.confirmUpload(previewItems, previewRawText || undefined);
+      const result = await confirmUploadMutation.mutateAsync({
+        items: previewItems,
+        rawText: previewRawText || undefined,
+      });
       const count = result.cards?.length || 0;
 
       // 同步更新历史简历列表（FE-UPLOAD-01：落库失败上抛，不得假成功）

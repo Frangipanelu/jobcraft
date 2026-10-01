@@ -1,14 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useToastActions } from '../../context/JobCraftContext';
 import { useTabNavigate } from '../../router/tabPaths';
-import { useInterviewsQuery } from '../../features/interview/hooks';
+import { useInterviewsQuery, useMockChatMutation, useSaveMockInterviewReviewMutation } from '../../features/interview/hooks';
 import {
   X,
   Sparkles,
   Send,
   CheckCircle2
 } from 'lucide-react';
-import * as interviewApi from '../../api/interview';
 
 interface MockInterviewModalProps {
   isOpen: boolean;
@@ -35,6 +34,8 @@ export const MockInterviewModal: React.FC<MockInterviewModalProps> = ({
   const { showToast } = useToastActions();
   const go = useTabNavigate();
   const { data: interviews = [] } = useInterviewsQuery();
+  const mockChatMutation = useMockChatMutation();
+  const saveReviewMutation = useSaveMockInterviewReviewMutation();
   const currentInterview = interviews.find((i) => i.id === interviewId);
 
   const [messages, setMessages] = useState<ChatMsg[]>([]);
@@ -56,7 +57,7 @@ export const MockInterviewModal: React.FC<MockInterviewModalProps> = ({
     setStartError(null);
     setIsStarting(true);
     try {
-      const res = await interviewApi.mockChat({ messages: [], company, position, round_type: roundType });
+      const res = await mockChatMutation.mutateAsync({ messages: [], company, position, round_type: roundType });
       setMessages([{ role: 'interviewer', content: res.reply }]);
     } catch (err) {
       const message = (err as Error).message || '请稍后重试';
@@ -99,7 +100,7 @@ export const MockInterviewModal: React.FC<MockInterviewModalProps> = ({
     setCandidateInput('');
     setIsSending(true);
     try {
-      const res = await interviewApi.mockChat({
+      const res = await mockChatMutation.mutateAsync({
         messages: nextMessages.map((m) => ({ role: m.role, content: m.content })),
         company,
         position,
@@ -122,7 +123,7 @@ export const MockInterviewModal: React.FC<MockInterviewModalProps> = ({
     setIsCompleting(true);
     try {
       const transcript = toReviewTranscript(messages);
-      const result = await interviewApi.createInterviewReview({
+      const result = await saveReviewMutation.mutateAsync({
         title: `${company || '模拟'} 模拟面试复盘`,
         company,
         position,
