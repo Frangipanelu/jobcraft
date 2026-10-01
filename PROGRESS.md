@@ -2,6 +2,15 @@
 
 > 本文件用于追踪项目整体进度。AI 在每次会话结束或完成子任务时，必须更新本文件的对应板块。
 
+## BE-QUEUE-01 Redis 任务队列加固（2026-10-01，批次 4 收官）
+
+> `jobcraft:tasks` 无清理、`jobcraft:queue` at-most-once 异常即丢、重复提交重复跑 LLM。修复 commit `cddc64a`，JobCraft CI success。
+
+- **过期清理**：`prune_tasks` 删终态超 7 天任务与脏 JSON 条目（hash 无 field TTL，惰性清理）；`_maybe_prune` 以 `SET NX EX 3600` 跨进程节流，`submit_task` 惰性触发。
+- **至少 1 次重试 + 死信**：`_process_payload` 接管单条消息决策——handler 抛错第 1 次回 `pending` 并重入队（payload 累计 `attempts`），第 2 次标 `failed` 写 `jobcraft:queue:dlq`（`lpush`+`ltrim` 有界 1000 条）；回队时 `restore_dedupe` 重建幂等占位（handler 的 FAILED 标记曾释放它）；unsupported task_type 确定性失败不重试。
+- **提交幂等**：`submit_task` 默认 `task_type+规范化 params` SHA256 键，`SET NX EX 7200` 原子占位——命中 pending/running 复用既有 task_id（不重复入队跑 LLM），终态释放占位（完成后合法的重新生成不被去重），TTL 兜底 worker 死亡场景。
+- **验收**：新 `tests/test_tasks_queue_unit.py` 13 例（自写 FakeRedis，零新依赖）；pytest **876 passed / 7 skipped**，ruff/format/S/encoding 384 全绿；容器重建 + 真 Redis 探针 ALL PASS（重复提交复用 / 终态释放 / prune 锁 / DLQ 读写），探针数据已清理。
+
 ## BE-DRIFT-01 投递状态 DEFAULT 漂移关闭（2026-10-01，批次 4）
 
 > `resume_submission.status` DEFAULT 三处不一致（V0001 `'APPLIED'` / `_ensure` `'PREPARED'` / jobcraft.sql `'已投递'`）。裁决：不动 DDL，应用层隔离。修复 commit `01e9884`，JobCraft CI success。
