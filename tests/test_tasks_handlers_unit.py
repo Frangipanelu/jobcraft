@@ -34,6 +34,16 @@ def test_registry_exposes_expected_types():
     }
 
 
+def test_no_dangling_task_type_constants():
+    """BE-TASK-01：TASK_TYPE_* 声明必须全部注册（不允许悬挂声明）。"""
+    from app.tasks import handlers
+
+    declared = {
+        value for name, value in vars(handlers).items() if name.startswith("TASK_TYPE_")
+    }
+    assert declared == set(handlers.TASK_REGISTRY.keys())
+
+
 def test_interview_prep_missing_job_analysis_id_raises(monkeypatch):
     """执行面试准备前必须提供 job_analysis_id。"""
     from app.tasks.handlers import execute_interview_prep
