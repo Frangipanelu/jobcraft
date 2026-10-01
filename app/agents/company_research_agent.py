@@ -43,7 +43,11 @@ class CompanyResearchAgent(BaseAgent):
         search_data = state.get("search_data", {})
         prompt = _build_company_prompt(company, search_data)
         info = invoke_structured(
-            model, CompanyResearchInfo, prompt, debug_label="company_research"
+            model,
+            CompanyResearchInfo,
+            prompt,
+            debug_label="company_research",
+            prompt_version="1",
         )
         return {"info": info.model_dump()}
 

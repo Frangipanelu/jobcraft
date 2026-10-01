@@ -29,6 +29,10 @@ class InterviewPrepAgent(BaseAgent):
         if not prompt:
             raise ValueError("面试准备 prompt 为空")
         result = invoke_structured(
-            model, InterviewPrepLLMOutput, prompt, debug_label="interview_prep"
+            model,
+            InterviewPrepLLMOutput,
+            prompt,
+            debug_label="interview_prep",
+            prompt_version=state.get("prompt_version", "1"),
         )
         return {"prep_result": InterviewPrepResult(**result.model_dump()).model_dump()}

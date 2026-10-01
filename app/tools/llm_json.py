@@ -227,6 +227,8 @@ def invoke_structured(
     max_tokens: Optional[int] = None,
     debug_label: Optional[str] = None,
     fallback: bool = True,
+    prompt_version: str = "",
+    schema_version: Optional[str] = None,
 ) -> BaseModel:
     """
     调用 LLM 并返回 Pydantic 结构化对象
@@ -238,10 +240,17 @@ def invoke_structured(
     :param max_tokens: 可选最大输出 token 数
     :param debug_label: 调试标签，失败时打印
     :param fallback: 是否允许手动 JSON 兜底
+    :param prompt_version: prompt 模板版本（AGENTS §7 版本化），
+        取自 load_prompt 的 version，写入 ai_tasks.prompt_version 供按版本聚合
+    :param schema_version: 输出 schema 版本，写入 ai_outputs.schema_version；
+        缺省与 prompt_version 同值（本项目 schema 与 prompt 模板同步演进）
     :return: schema 实例
     """
     from app.tools import ai_cache
     from app.tools import db_ai
+
+    if schema_version is None:
+        schema_version = prompt_version
 
     schema_name = getattr(schema, "__name__", str(schema))
     sm_name = (
@@ -261,6 +270,7 @@ def invoke_structured(
             schema_name=schema_name,
             prompt_hash=db_ai.sha256_hex(prompt),
             input_hash=input_hash,
+            prompt_version=prompt_version,
         )
     except Exception as exc:
         logger.debug("AI 审计任务行创建失败，继续无审计路径: %s", exc)
@@ -277,6 +287,7 @@ def invoke_structured(
                 latency_ms=_latency,
                 schema_name=schema_name,
                 error=error,
+                schema_version=schema_version,
                 **extra,
             )
         except Exception:

@@ -136,7 +136,11 @@ def suggest_resume_edits(
         bullets_section=bullets_section,
     )
     parsed = invoke_structured(
-        model, ResumeSuggestOutput, prompt, debug_label="resume_suggest"
+        model,
+        ResumeSuggestOutput,
+        prompt,
+        debug_label="resume_suggest",
+        prompt_version="1",
     )
 
     # 定位表：(item_index, bullet_index) → 输入原文（用于剔除 LLM 幻觉定位）

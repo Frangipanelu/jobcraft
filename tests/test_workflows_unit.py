@@ -1115,6 +1115,48 @@ class TestInterviewPrepFlow:
         assert result["round_type"] == "技术面"
         assert result["job_analysis_id"] == 10
 
+    def test_prep_flow_passes_prompt_version_to_agent(self, monkeypatch):
+        """BE-AI-01：flow 应把 prompt 模板版本（v2）经 state 传给 Agent 审计。"""
+        from app.workflows.interview_prep_flow import run_interview_prep_workflow
+
+        self._mock_prep_deps(monkeypatch)
+        captured = {}
+
+        monkeypatch.setattr(
+            "app.workflows.interview_prep_flow.interview_pre._build_interview_prompt",
+            lambda **kwargs: "prompt",
+        )
+
+        def fake_agent_run(self, data):
+            captured.update(data)
+            return {
+                "prep_result": {
+                    "job_analysis_id": 10,
+                    "round_type": "技术面",
+                    "duration": "15 分钟",
+                    "elevator_pitch": "pitch",
+                    "dimension_questions": [],
+                    "full_version": "full",
+                    "html_content": "<div>x</div>",
+                }
+            }
+
+        monkeypatch.setattr(
+            "app.workflows.interview_prep_flow.InterviewPrepAgent.run", fake_agent_run
+        )
+        monkeypatch.setattr(
+            "app.workflows.interview_prep_flow.db_tools.insert_interview_prep",
+            lambda data: 1,
+        )
+
+        run_interview_prep_workflow(
+            job_analysis_id=10,
+            round_type="技术面",
+            card_ids=[1],
+            user_id=1,
+        )
+        assert captured.get("prompt_version") == "2"
+
     def test_prep_flow_attaches_active_expression(self, monkeypatch):
         """P2C-01：面试准备消费链应携带每个活跃卡片的激活表达供渲染优先使用。"""
         from app.workflows.interview_prep_flow import run_interview_prep_workflow

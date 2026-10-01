@@ -56,5 +56,7 @@ class ScoreMatchAgent(BaseAgent):
             cards_section=cards_section,
         )
 
-        parsed = invoke_structured(model, _Items, prompt, debug_label="llm_score_match")
+        parsed = invoke_structured(
+            model, _Items, prompt, debug_label="llm_score_match", prompt_version="1"
+        )
         return {"llm_match_items": {it.card_id: it.model_dump() for it in parsed.items}}

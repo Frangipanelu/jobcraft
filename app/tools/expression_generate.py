@@ -60,6 +60,7 @@ def generate_standardized_expression(
         StandardizedExpressionOutput,
         prompt,
         debug_label="expression_standardized",
+        prompt_version="1",
     )
     content = parsed.content.strip()
     if not content:

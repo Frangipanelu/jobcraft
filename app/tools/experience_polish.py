@@ -51,6 +51,7 @@ def polish_experience(
         PolishOutput,
         prompt,
         debug_label="experience_polish",
+        prompt_version="2",
     )
     polished = parsed.polished_text.strip()
     if not polished:

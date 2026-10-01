@@ -84,5 +84,6 @@ class TechAnalyzer(BaseAgent):
             prompt,
             debug_label="tech_analyzer",
             max_tokens=4096,
+            prompt_version="1",
         )
         return {"tech_results": [a.model_dump() for a in raw.analyses]}

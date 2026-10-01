@@ -62,7 +62,11 @@ class AtsRecommendAgent(BaseAgent):
         )
 
         parsed = invoke_structured(
-            model, ATSRecommendResult, prompt, debug_label="ats_recommend"
+            model,
+            ATSRecommendResult,
+            prompt,
+            debug_label="ats_recommend",
+            prompt_version="1",
         )
 
         return {

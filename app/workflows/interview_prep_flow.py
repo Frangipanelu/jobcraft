@@ -173,7 +173,12 @@ def _generate_prep(state: Dict[str, Any]) -> Dict[str, Any]:
     )
 
     # Agent 单次 LLM 生成
-    out = InterviewPrepAgent().run({"prompt": prompt})
+    out = InterviewPrepAgent().run(
+        {
+            "prompt": prompt,
+            "prompt_version": str(interview_pre.INTERVIEW_PREP_PROMPT_VERSION),
+        }
+    )
     result = InterviewPrepResult(**out["prep_result"])
     result.job_analysis_id = job_analysis_id
     result.round_type = round_type

@@ -84,5 +84,6 @@ class SoftAnalyzer(BaseAgent):
             prompt,
             debug_label="soft_analyzer",
             max_tokens=4096,
+            prompt_version="1",
         )
         return {"soft_results": [a.model_dump() for a in raw.analyses]}

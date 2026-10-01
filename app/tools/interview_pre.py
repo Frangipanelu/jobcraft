@@ -15,6 +15,9 @@ from app.tools.card_render import get_card_render_text
 
 logger = logging.getLogger("jobcraft.tools.interview_pre")
 
+#: 面试准备稿 prompt 模板版本（与 load_prompt version 同步演进，审计透传用）
+INTERVIEW_PREP_PROMPT_VERSION = 2
+
 # 8 维能力说明
 DIMENSION_DESCRIPTIONS = {
     "D1": "技术深度",
@@ -114,7 +117,7 @@ def _build_interview_prompt(
     return load_prompt(
         "interview",
         "interview_prep_script",
-        version=2,
+        version=INTERVIEW_PREP_PROMPT_VERSION,
         position=position,
         round_type=round_type,
         company=company,

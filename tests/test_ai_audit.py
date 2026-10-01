@@ -164,6 +164,94 @@ def test_invoke_structured_audit_never_blocks(monkeypatch):
     assert result.title == "ok"
 
 
+# ---------- BE-AI-01：prompt_version / schema_version 透传 ----------
+
+
+def test_invoke_structured_records_prompt_version(monkeypatch):
+    """prompt_version 应写入 ai_tasks，schema_version 缺省与其同值写入 ai_outputs。"""
+    from app.tools import ai_cache
+
+    calls = {"create": {}, "complete": {}}
+
+    def fake_create(**k):
+        calls["create"] = k
+        return 42
+
+    def fake_complete(**k):
+        calls["complete"] = k
+
+    sample = _SampleOut(title="t", score=1)
+    monkeypatch.setattr(ai_cache, "cache_get", lambda key: None)
+    monkeypatch.setattr(ai_cache, "cache_set", lambda *a, **k: None)
+    monkeypatch.setattr(
+        llm_json, "_invoke_with_bind_tools", lambda *a, **k: (sample, _FakeResponse())
+    )
+    monkeypatch.setattr(db_ai, "create_ai_task", fake_create)
+    monkeypatch.setattr(db_ai, "complete_ai_task", fake_complete)
+
+    llm_json.invoke_structured(_FakeModel(), _SampleOut, "hello", prompt_version="3")
+
+    assert calls["create"]["prompt_version"] == "3"
+    assert calls["complete"]["schema_version"] == "3"
+
+
+def test_invoke_structured_explicit_schema_version_overrides(monkeypatch):
+    """显式 schema_version 覆盖缺省同值策略。"""
+    from app.tools import ai_cache
+
+    calls = {"create": {}, "complete": {}}
+
+    def fake_create(**k):
+        calls["create"] = k
+        return 42
+
+    def fake_complete(**k):
+        calls["complete"] = k
+
+    sample = _SampleOut(title="t", score=1)
+    monkeypatch.setattr(ai_cache, "cache_get", lambda key: None)
+    monkeypatch.setattr(ai_cache, "cache_set", lambda *a, **k: None)
+    monkeypatch.setattr(
+        llm_json, "_invoke_with_bind_tools", lambda *a, **k: (sample, _FakeResponse())
+    )
+    monkeypatch.setattr(db_ai, "create_ai_task", fake_create)
+    monkeypatch.setattr(db_ai, "complete_ai_task", fake_complete)
+
+    llm_json.invoke_structured(
+        _FakeModel(),
+        _SampleOut,
+        "hello",
+        prompt_version="2",
+        schema_version="7",
+    )
+
+    assert calls["create"]["prompt_version"] == "2"
+    assert calls["complete"]["schema_version"] == "7"
+
+
+def test_prompt_version_defaults_to_empty_for_backward_compat(monkeypatch):
+    """未显式传参时审计仍可写（prompt_version=''，兼容旧调用方）。"""
+    from app.tools import ai_cache
+
+    calls = {"create": {}}
+
+    def fake_create(**k):
+        calls["create"] = k
+        return 42
+
+    sample = _SampleOut(title="t")
+    monkeypatch.setattr(ai_cache, "cache_get", lambda key: None)
+    monkeypatch.setattr(ai_cache, "cache_set", lambda *a, **k: None)
+    monkeypatch.setattr(
+        llm_json, "_invoke_with_bind_tools", lambda *a, **k: (sample, _FakeResponse())
+    )
+    monkeypatch.setattr(db_ai, "create_ai_task", fake_create)
+    monkeypatch.setattr(db_ai, "complete_ai_task", lambda **k: None)
+
+    llm_json.invoke_structured(_FakeModel(), _SampleOut, "hello")
+    assert calls["create"]["prompt_version"] == ""
+
+
 def test_v3_migration_declares_audit_tables():
     """V0003 迁移应声明 ai_tasks 与 ai_outputs 表。"""
     import os

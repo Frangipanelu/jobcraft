@@ -19,6 +19,9 @@ class BaseAgent:
     子类只需实现 _build_prompt() 和 _get_output_schema() 两个方法。
     """
 
+    #: prompt 模板版本（审计 ai_tasks.prompt_version），子类按 load_prompt 的 version 覆写
+    _PROMPT_VERSION: str = "1"
+
     def __init__(self, config: Optional[Dict[str, Any]] = None):
         self.config = config or {}
 
@@ -41,6 +44,7 @@ class BaseAgent:
             temperature=self.config.get("temperature"),
             max_tokens=self.config.get("max_tokens"),
             debug_label=self.__class__.__name__,
+            prompt_version=self._PROMPT_VERSION,
         )
         return self._transform_result(result, state)
 

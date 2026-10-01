@@ -45,6 +45,7 @@ class QuestionIntentAgent(BaseAgent):
             prompt,
             debug_label="interview_preview_intents",
             max_tokens=2048,
+            prompt_version="1",
         )
         intent_by_seq = {q.sequence: q.model_dump() for q in raw.questions}
         result = []

@@ -119,7 +119,11 @@ class GapPolishAgent(BaseAgent):
         )
 
         parsed = invoke_structured(
-            model, GapPolishResult, prompt, debug_label="gap_polish"
+            model,
+            GapPolishResult,
+            prompt,
+            debug_label="gap_polish",
+            prompt_version="1",
         )
         return {
             "gap_polish": {

@@ -46,6 +46,10 @@ class SugAgent(BaseAgent):
             cards_lines=cards_lines,
         )
         parsed = invoke_structured(
-            model, SuggestionsResult, prompt, debug_label="suggest"
+            model,
+            SuggestionsResult,
+            prompt,
+            debug_label="suggest",
+            prompt_version="1",
         )
         return {"suggestions": parsed.model_dump()}

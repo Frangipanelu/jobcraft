@@ -290,6 +290,7 @@ def analyze_structured_jd(
         AtsInference,
         _build_v4_prompt(jd_text, structured, classified, extraction),
         debug_label="jd_ats_v4_structured",
+        prompt_version=str(_ATS_PROMPT_VERSIONS["v4"]),
     )
     merged = merge_ats(extraction, classified, inference, jd_text)
     return {
@@ -388,7 +389,13 @@ class JdAtsAgent(BaseAgent):
             return self._run_v4(jd_text)
 
         prompt = _build_ats_prompt(jd_text, version=version)
-        ats = invoke_structured(model, ATSProfile, prompt, debug_label="jd_ats")
+        ats = invoke_structured(
+            model,
+            ATSProfile,
+            prompt,
+            debug_label="jd_ats",
+            prompt_version=str(_ATS_PROMPT_VERSIONS.get(version, 1)),
+        )
         result: Dict[str, Any] = {"ats": ats.model_dump()}
         if version == "v3":
             result["raw"] = result["ats"]
@@ -407,7 +414,11 @@ class JdAtsAgent(BaseAgent):
 
         prompt = _build_v4_prompt(jd_text, structured, classified, extraction)
         inference = invoke_structured(
-            model, AtsInference, prompt, debug_label="jd_ats_v4"
+            model,
+            AtsInference,
+            prompt,
+            debug_label="jd_ats_v4",
+            prompt_version=str(_ATS_PROMPT_VERSIONS["v4"]),
         )
 
         merged = merge_ats(extraction, classified, inference, jd_text)

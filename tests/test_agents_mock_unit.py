@@ -545,3 +545,105 @@ def test_interview_prep_agent_with_mock_llm(monkeypatch):
     out = InterviewPrepAgent().run({"prompt": "请生成逐字稿"})
     assert out["prep_result"]["elevator_pitch"] == "我是候选人"
     assert out["prep_result"]["dimension_questions"][0]["dimension"] == "D1"
+
+
+# ---------- BE-AI-01：prompt_version 审计透传 ----------
+
+
+def test_base_agent_passes_default_prompt_version(monkeypatch):
+    """BaseAgent 默认透传 _PROMPT_VERSION（RouterAgent 等共用）。"""
+    from pydantic import BaseModel
+
+    from app.agents.base_agent import BaseAgent
+
+    class _Out(BaseModel):
+        x: int = 0
+
+    class _A(BaseAgent):
+        def _get_output_schema(self):
+            return _Out
+
+        def _build_prompt(self, state):
+            return "p"
+
+    captured = {}
+
+    def _fake_invoke(m, s, p, **k):
+        captured.update(k)
+        return _Out()
+
+    monkeypatch.setattr("app.agents.base_agent.invoke_structured", _fake_invoke)
+    _A().run({})
+    assert captured["prompt_version"] == "1"
+
+
+def test_extract_agent_passes_template_version(monkeypatch):
+    """extract_structured 模板 version=3 → 审计 prompt_version='3'。"""
+    from app.agents.extract_agent import ExtractStructuredAgent
+
+    captured = {}
+
+    def _fake_invoke(m, s, prompt, **k):
+        captured.update(k)
+        return s()
+
+    monkeypatch.setattr("app.agents.extract_agent.invoke_structured", _fake_invoke)
+    ExtractStructuredAgent().run({"raw_text": "负责性能优化，QPS 提升 3 倍"})
+    assert captured["prompt_version"] == "3"
+    assert captured["debug_label"] == "extract_structured"
+
+
+def test_jd_ats_passes_template_version_numbers(monkeypatch):
+    """v1 默认与 v4 路径应分别透传 '1' / '4'。"""
+    from app.agents.jd_ats_agent import JdAtsAgent
+    from app.schemas.jobcraft import ATSProfile, AtsInference
+
+    captured = {}
+
+    def _fake_v1(m, s, prompt, **k):
+        captured["v1"] = k
+        return ATSProfile(job_title="后端工程师")
+
+    monkeypatch.setattr("app.agents.jd_ats_agent.invoke_structured", _fake_v1)
+    JdAtsAgent().run({"jd_text": "JD 文本"})
+    assert captured["v1"]["prompt_version"] == "1"
+
+    def _fake_v4(m, s, prompt, **k):
+        captured["v4"] = k
+        return AtsInference(job_title="后端工程师")
+
+    monkeypatch.setattr("app.agents.jd_ats_agent.invoke_structured", _fake_v4)
+    jd = (
+        "职位描述\n岗位职责：\n1）负责交易系统后端开发\n"
+        "岗位要求：\n1）熟悉 Python、Redis\n2）具备良好的沟通能力"
+    )
+    JdAtsAgent().run({"jd_text": jd, "prompt_version": "v4"})
+    assert captured["v4"]["prompt_version"] == "4"
+
+
+def test_interview_prep_agent_uses_state_prompt_version(monkeypatch):
+    """prep 审计版本由 flow 经 state 传入（prompt v2）。"""
+    from app.agents.interview_prep_agent import InterviewPrepAgent
+
+    captured = {}
+
+    def _fake_invoke(m, s, prompt, **k):
+        captured.update(k)
+        return s(
+            job_analysis_id=1,
+            round_type="技术面",
+            elevator_pitch="pitch",
+            dimension_questions=[{"dimension": "D1", "question": "Q", "card_ids": [1]}],
+            full_version="full",
+            html_content="<p>x</p>",
+        )
+
+    monkeypatch.setattr(
+        "app.agents.interview_prep_agent.invoke_structured", _fake_invoke
+    )
+    InterviewPrepAgent().run({"prompt": "p", "prompt_version": "2"})
+    assert captured["prompt_version"] == "2"
+
+    # 未传 state 版本时回退默认（兼容旧调用方）
+    InterviewPrepAgent().run({"prompt": "p"})
+    assert captured["prompt_version"] == "1"

@@ -43,7 +43,11 @@ class ExtractStructuredAgent(BaseAgent):
             "experience", "extract_structured", version=3, raw_text=raw_text[:6000]
         )
         parsed = invoke_structured(
-            model, CardStructuredCacheWithTags, prompt, debug_label="extract_structured"
+            model,
+            CardStructuredCacheWithTags,
+            prompt,
+            debug_label="extract_structured",
+            prompt_version="3",
         )
         if not parsed:
             return {"cache": None, "tags": []}
@@ -78,7 +82,11 @@ class ParseResumeEntriesAgent(BaseAgent):
             resume_text=resume_text[:8000],
         )
         parsed = invoke_structured(
-            model, ResumeParseResult, prompt, debug_label="parse_resume"
+            model,
+            ResumeParseResult,
+            prompt,
+            debug_label="parse_resume",
+            prompt_version="2",
         )
         if not parsed or not parsed.entries:
             return {"entries": []}
@@ -107,6 +115,6 @@ class RecommendTagsAgent(BaseAgent):
 
         prompt = load_prompt("experience", "recommend_tags", raw_text=raw_text[:3000])
         parsed = invoke_structured(
-            model, _TagList, prompt, debug_label="recommend_tags"
+            model, _TagList, prompt, debug_label="recommend_tags", prompt_version="1"
         )
         return {"tags": parsed.tags[:8] if parsed else []}
