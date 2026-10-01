@@ -2,6 +2,13 @@
 
 > 本文件用于追踪项目整体进度。AI 在每次会话结束或完成子任务时，必须更新本文件的对应板块。
 
+## BE-QT-01 问题表重新生成覆盖深度研判结果（2026-10-01）
+
+> 起因：`question_table_flow._persist` 全量 `delete_interview_qa_pairs_by_record` + 重插默认行（score=0/feedback=[]/suggestions=[]）——三条创建路径共用，用户已 `/analyze` 后再生成问题表即丢全部研判；附带把 `status=done` 降级回 `question_table`。
+
+- [x] **`52cc0fe` 修复**：新 DB 函数 `update_interview_qa_pair_fields`（白名单仅 `intent/dimension/level`，白名单外字段 `ValueError` 拒绝触达 SQL，参数化 UPDATE）；`_persist` 改按 sequence upsert——读 `list_interview_qa_pairs` 建既有行索引，命中只刷意图三字段（score/feedback/suggestions/related_card_id/expected_answer 不触碰），新 sequence 才插默认行，分段变化后的孤儿 sequence 删除；`record.status == "done"` 时不调用状态更新（不降级），其余推进 `question_table`。全量 delete 调用移除（analyze 流程 `interview_review_flow` 的 delete+insert 保留——它是研判字段的生产者）。
+- [x] **验收**：流程 upsert 3 例（保留分析不删不重插 / 新插+孤儿删+默认值 / done 不降级）+ db 白名单 4 例（参数化 SQL 组装 / 越权字段拒绝 / 空字段 noop / 未命中 False）；pytest **833 passed / 7 skipped**、ruff check/format/S 全绿、encoding 384/0；重建 backend+worker 后容器内真库脚本 **PASS**（场景1：score=88、feedback、suggestions、related_card_id、expected_answer 全保留 + intent/dimension/level 刷新 + done 不降级；场景2：pending 首次生成插默认行 + 推进 question_table）。
+
 ## BE-LLM-RLIMIT-01 LLM 调用进程级限流 + 429 指数退避（2026-10-01）
 
 > 起因：T-M7-3 慢 e2e 两次被智谱 `1302`（HTTP 429 账户速率限制）挡住——免费档 `glm-4.7-flash` 约 1 req/s 低并发，而原代码无限流、无退避，`invoke_structured` 撞 429 后立即再打「兜底」第二个请求，密集调用即雪崩。
