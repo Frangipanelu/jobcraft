@@ -37,6 +37,11 @@ def _ensure_job_analysis_columns() -> None:
         ("analysis_version", "VARCHAR(32)"),
         # P4-4a：分析记录归属岗位（V0013 加列，runtime 兜底同步）
         ("job_id", "INT"),
+        # BE-INDEX-01：更新时间（V0014 加列，runtime 兜底同步；ON UPDATE 自动维护）
+        (
+            "updated_at",
+            "TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP",
+        ),
     )
     with connection() as conn:
         with conn.cursor() as cur:

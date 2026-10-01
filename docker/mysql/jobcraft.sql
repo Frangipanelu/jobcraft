@@ -51,6 +51,7 @@ CREATE TABLE IF NOT EXISTS job_analysis (
     gap_analysis TEXT,
     dimension_requirements JSON,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     KEY idx_user_created (user_id, created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
@@ -132,7 +133,8 @@ CREATE TABLE IF NOT EXISTS interview_records (
     status VARCHAR(50) DEFAULT 'pending',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     KEY idx_user_created (user_id, created_at),
-    KEY idx_submission (submission_id)
+    KEY idx_submission (submission_id),
+    KEY idx_job_analysis (job_analysis_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- 8. 面试 QA 对表 (Interview QA Pairs)
@@ -159,7 +161,8 @@ CREATE TABLE IF NOT EXISTS interview_qa_pairs (
     related_card_title VARCHAR(300),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     KEY idx_record (record_id),
-    KEY idx_sequence (record_id, sequence)
+    KEY idx_sequence (record_id, sequence),
+    KEY idx_related_card (related_card_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- 9. 经历卡版本表 (Card Versions)

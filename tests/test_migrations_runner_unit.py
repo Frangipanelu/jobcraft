@@ -774,3 +774,125 @@ def test_v0013_migrate_is_applied_via_runner(fake_conn):
         if e[0].strip().startswith("INSERT INTO schema_migrations")
     ]
     assert "0013" in inserted
+
+
+def test_v0014_logic_fk_indexes_and_updated_at():
+    """BE-INDEX-01：V0014 为 4 个逻辑外键补索引 + job_analysis.updated_at，
+    幂等（information_schema 探测 + PREPARE/EXECUTE），只加不改/删。"""
+    v0014 = os.path.join(runner.MIGRATIONS_DIR, "V0014__logic_fk_indexes.sql")
+    assert os.path.exists(v0014)
+    with open(v0014, encoding="utf-8") as fh:
+        sql = fh.read()
+    for add_key in (
+        "ALTER TABLE job ADD KEY idx_job_raw_jd (raw_jd_id)",
+        "ALTER TABLE job ADD KEY idx_job_analysis (job_analysis_id)",
+        "ALTER TABLE interview_records ADD KEY idx_job_analysis (job_analysis_id)",
+        "ALTER TABLE interview_qa_pairs ADD KEY idx_related_card (related_card_id)",
+    ):
+        assert add_key in sql, f"V0014 缺少索引: {add_key}"
+    assert (
+        "ALTER TABLE job_analysis ADD COLUMN updated_at TIMESTAMP "
+        "DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"
+    ) in sql
+    assert "information_schema.STATISTICS" in sql
+    assert "information_schema.COLUMNS" in sql
+    assert sql.count("\nPREPARE _mig_stmt_") == 5
+    assert sql.count("EXECUTE _mig_stmt_") == 5
+    assert sql.count("DEALLOCATE PREPARE _mig_stmt_") == 5
+    # 前向兼容：只加索引/加列，禁止 DROP/MODIFY
+    assert "DROP" not in sql.upper(), "前向兼容：不得出现 DROP"
+    assert "MODIFY" not in sql.upper(), "前向兼容：不得改列类型"
+
+
+def test_v0014_converged_in_runtime_ddl_and_docker_baseline():
+    """BE-INDEX-01：V0014 的索引/列在 迁移 / 运行时 DDL / docker 基线 三处收敛。
+    （job 表由 V0013 创建、不在 docker 基线，故基线断言对 job 从略。）"""
+    import app.tools.db_interview as di
+    import app.tools.db_job as dj
+    import app.tools.db_job_entity as dje
+
+    job_create = _normalize_ddl(_runtime_create_sql(dje._ensure_job_table, mod=dje))
+    assert "KEY idx_job_raw_jd (raw_jd_id)" in job_create
+    assert "KEY idx_job_analysis (job_analysis_id)" in job_create
+
+    records_create = _normalize_ddl(
+        _runtime_create_sql(di._ensure_interview_records_table, mod=di)
+    )
+    assert "KEY idx_job_analysis (job_analysis_id)" in records_create
+
+    qa_create = _normalize_ddl(
+        _runtime_create_sql(di._ensure_interview_qa_pairs_table, mod=di)
+    )
+    assert "KEY idx_related_card (related_card_id)" in qa_create
+
+    # job_analysis.updated_at 运行时兜底：SHOW COLUMNS 探测 + ADD COLUMN
+    # （游标桩：列探测返回空 → 全部 additive 列触发守卫 ALTER）
+    executed: list[tuple[str, str]] = []
+
+    class _Cursor:
+        def execute(self, sql, params=None):
+            executed.append((sql.strip(), params))
+
+        def fetchall(self):
+            return []
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    class _Conn:
+        def cursor(self, *a, **k):
+            return _Cursor()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    original_ready = dj.is_schema_ready
+    original_conn = dj.connection
+    try:
+        dj.is_schema_ready = lambda: False
+        dj.connection = lambda: _Conn()
+        dj._ensure_job_analysis_columns()
+    finally:
+        dj.is_schema_ready = original_ready
+        dj.connection = original_conn
+
+    alters = [s for s, _ in executed if s.startswith("ALTER TABLE job_analysis")]
+    assert alters, "未捕获到 job_analysis 守卫 ALTER"
+    assert any("ADD COLUMN updated_at" in a for a in alters)
+
+    # docker 基线：job_analysis 列 + interview_records / interview_qa_pairs 索引
+    repo_root = os.path.dirname(os.path.dirname(runner.MIGRATIONS_DIR))
+    with open(
+        os.path.join(repo_root, "docker", "mysql", "jobcraft.sql"), encoding="utf-8"
+    ) as fh:
+        seed = fh.read()
+    job_analysis_block = seed.split("CREATE TABLE IF NOT EXISTS job_analysis")[1].split(
+        "ENGINE=InnoDB"
+    )[0]
+    assert (
+        "updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"
+        in (job_analysis_block)
+    ), "docker 基线 job_analysis 缺 updated_at"
+    assert seed.count("KEY idx_job_analysis (job_analysis_id)") >= 2, (
+        "docker 基线 interview_records 缺 idx_job_analysis（resume_submission 已有同名索引）"
+    )
+    assert "KEY idx_related_card (related_card_id)" in seed, (
+        "docker 基线 interview_qa_pairs 缺 idx_related_card"
+    )
+
+
+def test_v0014_migrate_is_applied_via_runner(fake_conn):
+    """BE-INDEX-01：V0014 与既有迁移共存，runner.migrate() 不抛错且入库。"""
+    runner.migrate()
+    inserted = [
+        e[1][0]
+        for e in fake_conn.cursor_obj.executed
+        if e[0].strip().startswith("INSERT INTO schema_migrations")
+    ]
+    assert "0014" in inserted

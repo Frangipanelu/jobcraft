@@ -54,7 +54,9 @@ def _ensure_job_table() -> None:
                     updated_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                     KEY idx_job_owner (user_id),
                     KEY idx_job_lookup (user_id, company, position),
-                    KEY idx_job_submission (submission_id)
+                    KEY idx_job_submission (submission_id),
+                    KEY idx_job_raw_jd (raw_jd_id),
+                    KEY idx_job_analysis (job_analysis_id)
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
                 """
             )

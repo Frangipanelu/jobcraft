@@ -218,7 +218,8 @@ def _ensure_interview_records_table() -> None:
                     analysis_json JSON,
                     status VARCHAR(50) DEFAULT 'pending',
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    KEY idx_user_created (user_id, created_at)
+                    KEY idx_user_created (user_id, created_at),
+                    KEY idx_job_analysis (job_analysis_id)
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
                 """
             )
@@ -254,7 +255,8 @@ def _ensure_interview_qa_pairs_table() -> None:
                     related_card_title VARCHAR(300),
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     KEY idx_record (record_id),
-                    KEY idx_sequence (record_id, sequence)
+                    KEY idx_sequence (record_id, sequence),
+                    KEY idx_related_card (related_card_id)
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
                 """
             )
