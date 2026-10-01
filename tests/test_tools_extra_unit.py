@@ -258,6 +258,129 @@ class TestJobcraftResume:
         assert incremented == [3]
         assert result["submission_id"] == 99
 
+    def test_generate_resume_passes_ats_profile_to_generators(self, tmp_path):
+        """BE-ATS-01：ats_profile 应解析后传入 md/html 生成器（原硬编码 None）。"""
+        from app.schemas.jobcraft import ATSProfile
+        from app.tools.jobcraft_resume import generate_resume
+
+        captured_md = {}
+        captured_html = {}
+
+        def fake_md(**kwargs):
+            captured_md["ats"] = kwargs["ats"]
+            return "resume-md"
+
+        def fake_html(**kwargs):
+            captured_html["ats"] = kwargs["ats"]
+            return "resume-html"
+
+        with (
+            patch("app.tools.jobcraft_resume.db_tools") as mock_db,
+            patch("app.tools.jobcraft_resume.generate_resume_markdown", fake_md),
+            patch("app.tools.jobcraft_resume.generate_resume_html", fake_html),
+            patch("app.tools.jobcraft_resume.OUTPUT_ROOT", tmp_path),
+            patch(
+                "app.tools.db_submission.get_submission_by_analysis",
+                lambda *a, **k: None,
+            ),
+            patch("app.tools.db_submission.insert_submission", lambda *a, **k: 99),
+        ):
+            mock_db.get_job_analysis.return_value = {
+                "user_id": 7,
+                "company": "C",
+                "position": "P",
+                "jd_text": "JD",
+                "ats_profile": {
+                    "job_title": "后端工程师",
+                    "required_skills": ["Python", "MySQL"],
+                    "preferred_skills": ["Redis", "K8s", "Go", "Rust"],
+                },
+            }
+            mock_db.get_card.return_value = {
+                "id": 3,
+                "is_active": True,
+                "raw_text": "x",
+            }
+            generate_resume(1, [3], user_id=7)
+
+        assert isinstance(captured_md["ats"], ATSProfile)
+        assert captured_md["ats"].required_skills == ["Python", "MySQL"]
+        assert captured_md["ats"].preferred_skills[:3] == ["Redis", "K8s", "Go"]
+        assert captured_html["ats"] is captured_md["ats"]
+
+    def test_generate_resume_renders_core_skills_section(self, tmp_path):
+        """真实渲染路径：核心能力块应出现于 md 与 html（原恒跳过）。"""
+        from app.tools.jobcraft_resume import generate_resume
+
+        with (
+            patch("app.tools.jobcraft_resume.db_tools") as mock_db,
+            patch("app.tools.jobcraft_resume.OUTPUT_ROOT", tmp_path),
+            patch(
+                "app.tools.db_submission.get_submission_by_analysis",
+                lambda *a, **k: None,
+            ),
+            patch("app.tools.db_submission.insert_submission", lambda *a, **k: 99),
+            patch(
+                "app.tools.db_expression.get_active_expression_content",
+                lambda cid, user_id, expr_type="standardized": None,
+            ),
+        ):
+            mock_db.get_job_analysis.return_value = {
+                "user_id": 7,
+                "company": "C",
+                "position": "P",
+                "jd_text": "JD",
+                "ats_profile": {
+                    "required_skills": ["Python", "MySQL"],
+                    "preferred_skills": ["Redis"],
+                },
+            }
+            mock_db.get_card.return_value = {
+                "id": 3,
+                "is_active": True,
+                "raw_text": "原始文本",
+            }
+            result = generate_resume(1, [3], user_id=7)
+
+        assert "## 核心能力" in result["resume_markdown"]
+        assert "Python、MySQL、Redis" in result["resume_markdown"]
+        assert "核心能力" in result["resume_html"]
+        assert "Python" in result["resume_html"]
+
+    def test_generate_resume_invalid_ats_profile_skips_section(self, tmp_path):
+        """ats_profile 损坏时降级跳过核心能力块，生成流程不失败。"""
+        from app.tools.jobcraft_resume import generate_resume
+
+        with (
+            patch("app.tools.jobcraft_resume.db_tools") as mock_db,
+            patch("app.tools.jobcraft_resume.OUTPUT_ROOT", tmp_path),
+            patch(
+                "app.tools.db_submission.get_submission_by_analysis",
+                lambda *a, **k: None,
+            ),
+            patch("app.tools.db_submission.insert_submission", lambda *a, **k: 99),
+            patch(
+                "app.tools.db_expression.get_active_expression_content",
+                lambda cid, user_id, expr_type="standardized": None,
+            ),
+        ):
+            mock_db.get_job_analysis.return_value = {
+                "user_id": 7,
+                "company": "C",
+                "position": "P",
+                "jd_text": "JD",
+                "ats_profile": {"required_skills": "not-a-list"},
+            }
+            mock_db.get_card.return_value = {
+                "id": 3,
+                "is_active": True,
+                "raw_text": "原始文本",
+            }
+            result = generate_resume(1, [3], user_id=7)
+
+        assert "## 核心能力" not in result["resume_markdown"]
+        assert result["resume_markdown"]
+
 
 # ============================================================
 # 3. upload_file_read_tool.py — _read_pdf

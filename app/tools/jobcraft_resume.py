@@ -11,7 +11,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from app.schemas.jobcraft import ResumePersonalInfo
+from app.schemas.jobcraft import ATSProfile, ResumePersonalInfo
 from app.tools import db_tools
 from app.tools.jobcraft_resume_gen import (
     generate_resume_html,
@@ -69,6 +69,16 @@ def generate_resume(
     position = analysis.get("position", "")
     company = analysis.get("company", "")
 
+    # BE-ATS-01：核心能力/技能标签段来自 job_analysis.ats_profile（V0011），
+    # 原硬编码 ats=None 使该段永不渲染
+    ats = None
+    raw_ats = analysis.get("ats_profile") or {}
+    if raw_ats:
+        try:
+            ats = ATSProfile(**raw_ats)
+        except (TypeError, ValueError) as e:
+            logger.warning("ats_profile 解析失败，简历跳过核心能力块: %s", e)
+
     info = ResumePersonalInfo(**(personal_info or {})) if personal_info else None
 
     md = generate_resume_markdown(
@@ -76,7 +86,7 @@ def generate_resume(
         company=company,
         position=position,
         jd_text=analysis.get("jd_text", ""),
-        ats=None,
+        ats=ats,
         company_ctx=None,
         cards=cards,
         card_versions=card_versions or {},
@@ -85,7 +95,7 @@ def generate_resume(
     html = generate_resume_html(
         company=company,
         position=position,
-        ats=None,
+        ats=ats,
         cards=cards,
         card_versions=card_versions or {},
         personal_info=info,
