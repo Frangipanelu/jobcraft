@@ -25,7 +25,6 @@ const job = vi.hoisted(() => ({
   deleteSubmission: vi.fn(),
   listBaseResumes: vi.fn(),
   listJobAnalyses: vi.fn(),
-  getJobAnalysis: vi.fn(),
 }));
 
 vi.mock('../api/auth', () => ({ ...auth }));

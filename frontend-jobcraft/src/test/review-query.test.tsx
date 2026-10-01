@@ -38,7 +38,6 @@ const job = vi.hoisted(() => ({
   getSubmission: vi.fn(),
   listBaseResumes: vi.fn(),
   listJobAnalyses: vi.fn(),
-  getJobAnalysis: vi.fn(),
 }));
 
 const interview = vi.hoisted(() => ({
@@ -408,7 +407,6 @@ beforeEach(() => {
   job.getDashboard.mockImplementation(async () => ({ submissions: serverSubs }));
   job.listBaseResumes.mockResolvedValue([]);
   job.listJobAnalyses.mockResolvedValue({ analyses: [] });
-  job.getJobAnalysis.mockResolvedValue(null);
   experience.listCards.mockImplementation(async () => serverCards);
   // EXP-P1-06b：复盘反哺持久化 + 版本回流（updateCard 后 listCardVersions 返回 V2 + 2 条快照）
   experience.updateCard.mockImplementation(
@@ -930,6 +928,7 @@ describe('FE-REVIEW-01 手动录入新面试场次（表单字段必须进入 pa
     fireEvent.click(screen.getByText('开始 AI 智能复盘研判'));
   };
 
+  // it 级超时须大于内层 waitFor(8000)：默认 5000 会在慢负载下先于 waitFor 判死（基线亦复现）
   it('岗位无面试记录：表单创建面试（轮次/日期时间/形式/面试官入 payload）再挂复盘', async () => {
     const qc = createManualQc([]);
     await gotoUploadStep(qc);
@@ -986,7 +985,7 @@ describe('FE-REVIEW-01 手动录入新面试场次（表单字段必须进入 pa
 
     // 成功 toast 的场次名来自实际创建的面试（此前固定用 manualForm 默认值）
     await screen.findByText(/第4面 · HRBP综合面/);
-  });
+  }, 15000);
 
   it('已有面试但用户点「录入新面试场次」：创建新记录挂复盘，不挂残留的旧选择', async () => {
     const qc = createManualQc([INT_YUAN]);
@@ -1032,5 +1031,5 @@ describe('FE-REVIEW-01 手动录入新面试场次（表单字段必须进入 pa
     });
     // 旧面试仍在（未被覆盖/删除）
     expect(ivs.find((i) => i.id === 'prep-7')).toBeTruthy();
-  });
+  }, 15000);
 });

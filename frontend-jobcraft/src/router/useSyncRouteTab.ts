@@ -10,11 +10,10 @@ import type { NavigationTab } from '../types/jobcraft';
  */
 export function useSyncRouteTab(tab?: NavigationTab) {
   const { syncTabState } = useJobCraft();
-  const { jobId, jdId, interviewId, experienceId } = useParams<{
+  const { jobId, jdId, interviewId } = useParams<{
     jobId?: string;
     jdId?: string;
     interviewId?: string;
-    experienceId?: string;
   }>();
 
   useEffect(() => {
@@ -23,7 +22,6 @@ export function useSyncRouteTab(tab?: NavigationTab) {
       jobId,
       jdId,
       interviewId,
-      expId: experienceId,
     });
-  }, [tab, jobId, jdId, interviewId, experienceId, syncTabState]);
+  }, [tab, jobId, jdId, interviewId, syncTabState]);
 }

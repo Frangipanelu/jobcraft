@@ -30,7 +30,6 @@ const auth = vi.hoisted(() => ({
 
 const job = vi.hoisted(() => ({
   listJobAnalyses: vi.fn(),
-  getJobAnalysis: vi.fn(),
   getDashboard: vi.fn(),
   getSubmission: vi.fn(),
   listBaseResumes: vi.fn(),
@@ -254,7 +253,6 @@ describe('useJdAnalysesQuery 迁移视图', () => {
     expect(screen.getByText('腾讯')).toBeInTheDocument();
     expect(screen.getByText('历史研判报告 (2)')).toBeInTheDocument();
     expect(job.listJobAnalyses).toHaveBeenCalledWith(1);
-    expect(job.getJobAnalysis).not.toHaveBeenCalled();
 
     fireEvent.change(screen.getByPlaceholderText('搜索公司或岗位名称...'), {
       target: { value: '腾讯' },

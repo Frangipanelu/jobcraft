@@ -153,9 +153,6 @@ export function markdownToResume(
       continue
     }
 
-    // 标签行忽略
-    if (line.startsWith('*标签')) continue
-
     // 核心能力段：顿号/逗号分隔的技能 → summary
     if (currentSection && currentSection.title === '核心能力') {
       summary = line

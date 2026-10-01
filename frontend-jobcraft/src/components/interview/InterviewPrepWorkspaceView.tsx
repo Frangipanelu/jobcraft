@@ -47,10 +47,8 @@ interface LocalQuestion {
   id: string;
   q: string;
   type: string;
-  difficulty: 'high' | 'medium' | 'low';
   prepared: boolean;
   starSuggestion: string;
-  defaultDraft: string;
 }
 
 function SectionHeader({
@@ -128,10 +126,8 @@ export const InterviewPrepWorkspaceView: React.FC<InterviewPrepWorkspaceViewProp
         id: `q-${idx}`,
         q: dq.question || `第 ${idx + 1} 题`,
         type: String(dimName).replace(/^D\d+\s*/, ''),
-        difficulty: 'medium',
         prepared: !!dq.isPrepared,
         starSuggestion: answerTxt || '根据自身经历准备 STAR 应答（背景→任务→行动→结果）。',
-        defaultDraft: ''
       };
     });
   }, [src, prep]);

@@ -26,7 +26,6 @@ const job = vi.hoisted(() => ({
   getSubmission: vi.fn(),
   listBaseResumes: vi.fn(),
   listJobAnalyses: vi.fn(),
-  getJobAnalysis: vi.fn(),
 }));
 
 const interview = vi.hoisted(() => ({
@@ -92,7 +91,6 @@ beforeEach(() => {
   job.getDashboard.mockResolvedValue({ submissions: [] });
   job.listBaseResumes.mockResolvedValue([]);
   job.listJobAnalyses.mockResolvedValue({ analyses: [] });
-  job.getJobAnalysis.mockResolvedValue(null);
   experience.listCards.mockResolvedValue({ cards: [] });
   interview.listInterviewPreps.mockResolvedValue({ records: [PREP_RECORD] });
   interview.saveInterviewPrepDrafts.mockResolvedValue({ id: 7, drafts: {} });

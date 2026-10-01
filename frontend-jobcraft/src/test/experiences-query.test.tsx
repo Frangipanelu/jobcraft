@@ -26,10 +26,6 @@ const experience = vi.hoisted(() => ({
   createCard: vi.fn(),
   updateCard: vi.fn(),
   deleteCard: vi.fn(),
-  uploadResume: vi.fn(),
-  structureCard: vi.fn(),
-  recommendTags: vi.fn(),
-  backfillCards: vi.fn(),
   listCardVersions: vi.fn(),
 }));
 

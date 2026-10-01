@@ -20,14 +20,10 @@ interface JobCraftContextType {
   selectedJobId: string | null;
   selectedInterviewId: string | null;
   selectedJDId: string | null;
-  selectedExperienceId: string | null;
   setSelectedJobId: (id: string | null) => void;
   setSelectedInterviewId: (id: string | null) => void;
   setSelectedJDId: (id: string | null) => void;
-  setSelectedExperienceId: (id: string | null) => void;
   jobWorkspaceSubTab: 'jd' | 'resume' | 'interview';
-  userProfileTab: 'resumes' | 'profile' | 'preferences' | 'settings';
-  setUserProfileTab: (tab: 'resumes' | 'profile' | 'preferences' | 'settings') => void;
   navigateTo: (tab: NavigationTab, params?: TabNavParams) => void;
   syncTabState: (tab: NavigationTab, params?: TabNavParams) => void;
 
@@ -112,9 +108,7 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const [selectedInterviewId, setSelectedInterviewId] = useState<string | null>(null);
   const [selectedJDId, setSelectedJDId] = useState<string | null>(null);
-  const [selectedExperienceId, setSelectedExperienceId] = useState<string | null>(null);
   const [jobWorkspaceSubTab, setJobWorkspaceSubTab] = useState<'jd' | 'resume' | 'interview'>('jd');
-  const [userProfileTab, setUserProfileTab] = useState<'resumes' | 'profile' | 'preferences' | 'settings'>('resumes');
 
   const [interviewDraft, setInterviewDraft] = useState<InterviewDraft | null>(null);
   const [jdAnalysisReturnTarget, setJdAnalysisReturnTarget] = useState<'create_interview' | 'create_review' | null>(null);
@@ -213,12 +207,10 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
       if (params?.jobId !== undefined) setSelectedJobId(params.jobId);
       if (params?.interviewId !== undefined) setSelectedInterviewId(params.interviewId);
       if (params?.jdId !== undefined) setSelectedJDId(params.jdId);
-      if (params?.expId !== undefined) setSelectedExperienceId(params.expId);
       if (params?.workspaceTab !== undefined) setJobWorkspaceSubTab(params.workspaceTab);
-      if (params?.profileTab !== undefined) setUserProfileTab(params.profileTab);
       setCurrentTab(tab);
     },
-    [setSelectedJobId, setSelectedInterviewId, setSelectedJDId, setSelectedExperienceId, setJobWorkspaceSubTab, setUserProfileTab]
+    [setSelectedJobId, setSelectedInterviewId, setSelectedJDId, setJobWorkspaceSubTab]
   );
 
   /** 真实导航（FE-NAV-01）：同步选中态 + 路由跳转，legacy 只改 state 的死按钮由此收口。 */
@@ -237,16 +229,12 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
       selectedJobId,
       selectedInterviewId,
       selectedJDId,
-      selectedExperienceId,
       setSelectedJobId,
       setSelectedInterviewId,
       setSelectedJDId,
-      setSelectedExperienceId,
       jobWorkspaceSubTab,
       navigateTo,
       syncTabState,
-      userProfileTab,
-      setUserProfileTab,
       interviewDraft,
       saveInterviewDraft,
       clearInterviewDraft,
@@ -265,16 +253,12 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
       selectedJobId,
       selectedInterviewId,
       selectedJDId,
-      selectedExperienceId,
       setSelectedJobId,
       setSelectedInterviewId,
       setSelectedJDId,
-      setSelectedExperienceId,
       jobWorkspaceSubTab,
       navigateTo,
       syncTabState,
-      userProfileTab,
-      setUserProfileTab,
       interviewDraft,
       saveInterviewDraft,
       clearInterviewDraft,

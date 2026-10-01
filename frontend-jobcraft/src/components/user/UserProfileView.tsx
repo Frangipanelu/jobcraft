@@ -37,15 +37,13 @@ import {
 } from 'lucide-react';
 
 interface UserProfileViewProps {
-  /** 路由页面（/profile?tab=）传入的初始子 tab；未传时回退到遗留 userProfileTab。 */
+  /** 路由页面（/profile?tab=）传入的初始子 tab；未传时回退默认 resumes。 */
   initialTab?: 'resumes' | 'profile' | 'preferences' | 'settings';
 }
 
 export const UserProfileView: React.FC<UserProfileViewProps> = ({ initialTab }) => {
   const {
     navigateTo,
-    userProfileTab,
-    setUserProfileTab,
     currentUserId
   } = useJobCraft();
   const { showToast } = useToastActions();
@@ -67,7 +65,7 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({ initialTab }) 
     });
   };
 
-  const [activeTab, setActiveTab] = useState<'resumes' | 'profile' | 'preferences' | 'settings'>(initialTab || userProfileTab || 'resumes');
+  const [activeTab, setActiveTab] = useState<'resumes' | 'profile' | 'preferences' | 'settings'>(initialTab || 'resumes');
 
   // 路由页面（/profile?tab=）SPA 内跳转时同路由元素不重挂载，initialTab 变化需同步子 tab。
   useEffect(() => {

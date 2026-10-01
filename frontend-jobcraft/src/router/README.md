@@ -29,7 +29,7 @@
 - **组件内触发跳转**：`useTabNavigate()`（签名对齐 legacy `navigateTo`）。
 - **context 入口 `navigateTo(tab, params)`**（FE-NAV-01）：`syncTabState` 回填选中态 + `navigate(tabToPath(...))` 真实跳转，与 `useTabNavigate` 行为一致，不再是"只改 state 不改 URL"的死按钮。
 - **`syncTabState(tab, params)`**：只回填 context、不改 URL，专供 `useSyncRouteTab` 使用——URL → context 回填若再触发跳转会与来源 URL 打架（`/jobs/:jobId/jd/:jdId` 别名不能被重定向到 `/jd-report/:jdId`）。
-- **URL → context 回填**由 `useSyncRouteTab(tab)` 负责（`selectedJobId` / `selectedJDId` / `selectedInterviewId` / `selectedExperienceId` / `currentTab` / sidebar 高亮），每条路由页在挂载时调用一次（FE-TAB-01）。
+- **URL → context 回填**由 `useSyncRouteTab(tab)` 负责（`selectedJobId` / `selectedJDId` / `selectedInterviewId` / `currentTab` / sidebar 高亮），每条路由页在挂载时调用一次（FE-TAB-01）。
 - `BrowserRouter` 位于 `App.tsx` Provider 之上（`JobCraftProvider.navigateTo` 需要 `useNavigate`）；测试侧 `test-utils` 的 `MemoryRouter` 同样外提。
 
 ## 相关任务

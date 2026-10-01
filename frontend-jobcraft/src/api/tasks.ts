@@ -9,7 +9,6 @@ import { request } from './client'
 import type {
   SubmitTaskResult,
   TaskInfo,
-  TaskStatusName,
 } from './types'
 
 export interface SubmitTaskPayload {
@@ -28,25 +27,6 @@ export async function submitTask(
 
 export async function getTask(taskId: string): Promise<TaskInfo> {
   return request<TaskInfo>(`/api/jobcraft/tasks/${taskId}`)
-}
-
-export async function cancelTask(taskId: string): Promise<{ message: string }> {
-  return request<{ message: string }>(`/api/jobcraft/tasks/${taskId}/cancel`, {
-    method: 'POST',
-  })
-}
-
-export async function listTasks(
-  status?: TaskStatusName,
-  limit = 50
-): Promise<{ items: TaskInfo[]; total: number }> {
-  const params = new URLSearchParams()
-  if (status) params.set('status', status)
-  params.set('limit', String(limit))
-  const qs = params.toString()
-  return request<{ items: TaskInfo[]; total: number }>(
-    `/api/jobcraft/tasks?${qs}`
-  )
 }
 
 /**

@@ -1,29 +1,23 @@
 # features/jd — JD 分析域
 
-FE-JD-01 已迁移读/删路径（spec `tasks/FE-JD-01.md`）。
+FE-JD-01 已迁移读/删路径（spec `tasks/FE-JD-01.md`）；create 已由 FE-JD-02 迁移（`tasks/FE-JD-02.md`）。
 
-## 数据流（过渡期）
+## 数据流
 
 ```
-login → loadJdAnalyses（legacy）→ listJobAnalyses(userId) → N× getJobAnalysis → analysisDetailToJD
-                                                                                 ├→ context.jdAnalyses
-                                                                                 └→ query cache（双写）
+useJdAnalysesQuery → authApi.getCurrentUser → listJobAnalyses(userId)（单次返回完整详情）→ analysisDetailToJD → query cache
 JDAnalysisCenterView / JDReportDetailView 读：useJdAnalysesQuery（cache 权威）
-JDAnalysisCenterView 删：useDeleteJdAnalysisMutation → cache → onSync → context 镜像
-createJDAnalysis / createStructuredJDAnalysis（legacy，仍走 context）→ analysisToJD → setJdAnalyses → 双写 cache
+JDAnalysisCenterView 删：useDeleteJdAnalysisMutation → cache（id 形如 sub-{number} 时尝试 deleteSubmission）
+create：useCreateJdAnalysisMutation / useCreateStructuredJdAnalysisMutation
+        → resolveTargetJob（find-or-create 岗位）→ runTaskOrSync → analysisToJD → 写 jd + jobs 双 cache
 ```
 
-- **权威与镜像**：react-query cache 是迁移后视图的读源；`context.jdAnalyses` 为只读镜像
-  （`JobWorkspaceView` / `NewInterviewModal` / `MainLayout` 仍读 context），由 hooks 的 `onSync` 与 legacy writers 双向同步。
+- **权威**：react-query cache 是唯一读源（`context.jdAnalyses` 已由 FE-CONTEXT-REMOVE 删除，无镜像）。
 - **hooks API**：
-  - `useJdAnalysesQuery`：`authApi.getCurrentUser` → `listJobAnalyses` → 逐条 `getJobAnalysis` → `analysisDetailToJD`（与 legacy load 一致，保持 N+1；单条失败跳过）。
+  - `useJdAnalysesQuery`：`authApi.getCurrentUser` → `listJobAnalyses` 单次返回完整详情 → `analysisDetailToJD`（无逐条 GET，N+1 已消除）。
   - `useDeleteJdAnalysisMutation`：仅本地移除；id 形如 `sub-{number}` 时尝试 `deleteSubmission`（失败忽略）。**后端无 JD 分析删除端点**，真实分析 id 不发删除请求。
-  - `onSync` 由消费方注入 `useJobCraft().syncJdAnalyses`。
-- **创建仍为 legacy（非目标）**：`createJDAnalysis` / `createStructuredJDAnalysis` 跨域自动创建 Job、经
-  `tasksApi.runTaskOrSync` 异步分析、并同步返回本地 id 供 `navigateTo`；迁移需拆分 jobs 域与任务编排，留待后续 task。
-- **映射单源**：`analysisToJD`（分析结果 → JDAnalysis）与 `analysisDetailToJD`（详情 → JDAnalysis）均在此，
-  context 改 import，杜绝双份漂移。
-- 移除触发器：FE-CONTEXT-REMOVE 删除 `context.jdAnalyses` / legacy 动作 / `syncJdAnalyses`。
+  - `useCreateJdAnalysisMutation` / `useCreateStructuredJdAnalysisMutation`：find-or-create 岗位 → `tasksApi.runTaskOrSync` 异步分析（降级同步端点）→ 同步返回本地 id 供 `navigateTo`。
+- **映射单源**：`analysisToJD`（分析结果 → JDAnalysis）与 `analysisDetailToJD`（详情 → JDAnalysis）均在此，杜绝双份漂移。
 
 ## 目标边界
 

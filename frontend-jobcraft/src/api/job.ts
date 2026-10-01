@@ -84,12 +84,6 @@ export async function listJobAnalyses(
   return request(`/api/jobcraft/job/analyses${qs}`)
 }
 
-export async function getJobAnalysis(
-  jobId: number
-): Promise<JobAnalysisResult> {
-  return request<JobAnalysisResult>(`/api/jobcraft/job/analyze/${jobId}`)
-}
-
 // ============================================================
 // 结构化 JD 分析（前端已分好类）
 // ============================================================
@@ -189,18 +183,6 @@ export async function getDashboard(
   return request(`/api/jobcraft/dashboard${qs}`)
 }
 
-export async function createManualSubmission(
-  file: File,
-  payload: { position: string; company?: string; jd_text?: string }
-): Promise<Submission> {
-  const formData = new FormData()
-  formData.append('file', file)
-  formData.append('position', payload.position)
-  formData.append('company', payload.company || '')
-  formData.append('jd_text', payload.jd_text || '')
-  return requestFormData<Submission>('/api/jobcraft/submission/manual', formData)
-}
-
 // ============================================================
 // 简历
 // ============================================================
@@ -261,8 +243,4 @@ export async function deleteBaseResume(resumeId: number): Promise<{ ok: boolean 
   return request<{ ok: boolean }>(`/api/jobcraft/experience/base-resumes/${resumeId}`, {
     method: 'DELETE',
   })
-}
-
-export function getResumeDownloadUrl(path: string): string {
-  return `/api/jobcraft/job/resume/download?path=${encodeURIComponent(path)}`
 }

@@ -9,7 +9,6 @@ export interface TabNavParams {
   jdId?: string;
   expId?: string;
   workspaceTab?: 'jd' | 'resume' | 'interview';
-  profileTab?: 'resumes' | 'profile' | 'preferences' | 'settings';
 }
 
 /**
