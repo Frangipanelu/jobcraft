@@ -10,11 +10,11 @@ import {
   Clock,
   Wand2
 } from 'lucide-react';
-import { splitJd } from '../../api/job';
 import {
   useCreateStructuredJdAnalysisMutation,
   useDeleteJdAnalysisMutation,
   useJdAnalysesQuery,
+  useSplitJdMutation,
 } from '../../features/jd/hooks';
 
 export const JDAnalysisCenterView: React.FC = () => {
@@ -24,6 +24,7 @@ export const JDAnalysisCenterView: React.FC = () => {
   const { data: jdAnalyses = [] } = useJdAnalysesQuery();
   const deleteAnalysis = useDeleteJdAnalysisMutation();
   const createStructuredAnalysis = useCreateStructuredJdAnalysisMutation();
+  const splitJd = useSplitJdMutation();
 
   const [activeTab, setActiveTab] = useState<'create' | 'history'>('create');
   const [company, setCompany] = useState('');
@@ -31,7 +32,6 @@ export const JDAnalysisCenterView: React.FC = () => {
   const [dutyText, setDutyText] = useState('');
   const [requirements, setRequirements] = useState<{ text: string; tag: 'hard' | 'required' | 'preferred' }[]>([]);
   const [pastedRaw, setPastedRaw] = useState('');
-  const [isSplitting, setIsSplitting] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
@@ -54,18 +54,16 @@ export const JDAnalysisCenterView: React.FC = () => {
 
   const handleSplitPrefill = async () => {
     if (!pastedRaw.trim()) return;
-    setIsSplitting(true);
     try {
-      const result = await splitJd(pastedRaw.trim());
-      setDutyText(result.duties.join('\n'));
-      setRequirements(result.requirements.map((r) => ({
-        text: r.text,
-        tag: (r.tag === 'hard' || r.tag === 'required' || r.tag === 'preferred') ? r.tag : 'required'
-      })));
+      const result = await splitJd.mutateAsync({ jdText: pastedRaw.trim() });
+      setDutyText(result.dutiesText);
+      setRequirements(result.requirements);
     } catch (e) {
-      console.error('JD 拆分失败:', e);
-    } finally {
-      setIsSplitting(false);
+      showToast({
+        type: 'error',
+        title: 'JD 拆分失败',
+        message: (e as Error).message || '请稍后重试'
+      });
     }
   };
 
@@ -73,18 +71,16 @@ export const JDAnalysisCenterView: React.FC = () => {
     setCompany('某头部科技公司');
     setRole('AI 产品经理（端侧与 Agent 方向）');
     setPastedRaw(sampleJD);
-    setIsSplitting(true);
     try {
-      const result = await splitJd(sampleJD);
-      setDutyText(result.duties.join('\n'));
-      setRequirements((result.requirements || []).map((r) => ({
-        text: r.text,
-        tag: (r.tag === 'hard' || r.tag === 'required' || r.tag === 'preferred') ? r.tag : 'required'
-      })));
+      const result = await splitJd.mutateAsync({ jdText: sampleJD });
+      setDutyText(result.dutiesText);
+      setRequirements(result.requirements);
     } catch (e) {
-      console.error('JD 拆分失败:', e);
-    } finally {
-      setIsSplitting(false);
+      showToast({
+        type: 'error',
+        title: 'JD 拆分失败',
+        message: (e as Error).message || '请稍后重试'
+      });
     }
   };
 
@@ -249,11 +245,11 @@ export const JDAnalysisCenterView: React.FC = () => {
                 <button
                   type="button"
                   onClick={handleSplitPrefill}
-                  disabled={isSplitting || !pastedRaw.trim()}
+                  disabled={splitJd.isPending || !pastedRaw.trim()}
                   className="self-start flex items-center gap-1.5 px-4 py-2 rounded-lg border border-sage/40 text-sage hover:bg-sage-soft disabled:opacity-40 text-xs font-semibold transition cursor-pointer"
                 >
                   <Wand2 className="w-3.5 h-3.5" />
-                  {isSplitting ? '拆分中...' : '拆分预填到下方'}
+                  {splitJd.isPending ? '拆分中...' : '拆分预填到下方'}
                 </button>
               </div>
             </div>

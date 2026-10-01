@@ -2,8 +2,6 @@ import React, { useEffect, useState } from 'react';
 import { useToastActions } from '../../context/JobCraftContext';
 import { useTabNavigate } from '../../router/tabPaths';
 import { Experience, ExperienceCategory, ExperienceVersionRecord } from '../../types/jobcraft';
-import * as jobApi from '../../api/job';
-import * as tasksApi from '../../api/tasks';
 import {
   Layers,
   Plus,
@@ -26,7 +24,8 @@ import {
   useExperiencesQuery,
   useUpdateExperienceMutation,
   useDeleteExperienceMutation,
-  useAddExperienceVersionMutation
+  useAddExperienceVersionMutation,
+  usePolishExperienceMutation
 } from '../../features/experiences/hooks';
 import { NewExperienceModal } from './NewExperienceModal';
 import { ExpressionPanel } from './ExpressionPanel';
@@ -42,6 +41,7 @@ export const ExperiencesView: React.FC<ExperiencesViewProps> = ({ initialSelecte
   const updateExperience = useUpdateExperienceMutation();
   const deleteExperience = useDeleteExperienceMutation();
   const addExperienceVersion = useAddExperienceVersionMutation();
+  const polishExperience = usePolishExperienceMutation();
   const experiences = experiencesData ?? [];
 
   const [activeCategory, setActiveCategory] = useState<'all' | ExperienceCategory>('all');
@@ -127,23 +127,12 @@ export const ExperiencesView: React.FC<ExperiencesViewProps> = ({ initialSelecte
 
     try {
       showToast({ type: 'info', title: 'AI 润色中...', message: '正在调用大模型优化经历表述' });
-      const result = await tasksApi.runTaskOrSync(
-        'experience_polish',
-        { raw_text: originalText, company: exp.company, role: exp.role },
-        () => jobApi.polishExperience(
-          parseInt(exp.id.replace('exp-', '')),
-          originalText,
-          exp.company,
-          exp.role
-        ),
-        { timeout: 120_000 }
-      );
-
-      // 将润色结果拆分为 actions
-      const polishedLines = result.polished_text
-        .split('\n')
-        .map(l => l.replace(/^[-·•]\s*/, '').trim())
-        .filter(l => l.length > 5);
+      const polishedLines = await polishExperience.mutateAsync({
+        expId: exp.id,
+        rawText: originalText,
+        company: exp.company,
+        role: exp.role
+      });
 
       // EXP-P1-06b §34.6：内容落库走后端 updateCard（自动版本化），版本号以后端回流为准
       const saved = await addExperienceVersion.mutateAsync({

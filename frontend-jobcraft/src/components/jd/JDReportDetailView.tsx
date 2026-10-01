@@ -2,11 +2,14 @@ import React, { useState } from 'react';
 import { useJobCraft, useToastActions } from '../../context/JobCraftContext';
 import { useTabNavigate } from '../../router/tabPaths';
 import type { Experience } from '../../types/jobcraft';
-import { saveResume } from '../../api/job';
 import { useJdAnalysesQuery } from '../../features/jd/hooks';
 import { useJobsQuery } from '../../features/jobs/hooks';
 import { useExperiencesQuery } from '../../features/experiences/hooks';
-import { useUpsertResumeMutation, useGenerateResumeSuggestionsMutation } from '../../features/resume/hooks';
+import {
+  useUpsertResumeMutation,
+  useGenerateResumeSuggestionsMutation,
+  useGenerateResumeFromJdMutation
+} from '../../features/resume/hooks';
 import { useProfileQuery } from '../../features/profile/hooks';
 import {
   ArrowLeft,
@@ -57,6 +60,7 @@ export const JDReportDetailView: React.FC<JDReportDetailViewProps> = ({
 
   const upsertResume = useUpsertResumeMutation();
   const generateSuggestions = useGenerateResumeSuggestionsMutation();
+  const generateResumeFromJd = useGenerateResumeFromJdMutation();
 
   const { data: jdAnalyses = [], isLoading } = useJdAnalysesQuery();
   const { data: jobs = [] } = useJobsQuery();
@@ -261,11 +265,11 @@ export const JDReportDetailView: React.FC<JDReportDetailViewProps> = ({
           const selectedIds = (currentAnalysis.recommendedExperiences || [])
             .map(r => parseInt(r.experienceId))
             .filter(id => !isNaN(id));
-          const result = await saveResume({
-            job_analysis_id: parseInt(currentAnalysis.id),
-            selected_card_ids: selectedIds.length > 0 ? selectedIds : experiences.map(e => parseInt(e.id)).filter(id => !isNaN(id)),
+          const generated = await generateResumeFromJd.mutateAsync({
+            jobAnalysisId: analysisIdNum,
+            selectedCardIds: selectedIds.length > 0 ? selectedIds : experiences.map(e => parseInt(e.id)).filter(id => !isNaN(id)),
             // FE-RESUME-03：自动带入个人资料（profile 空字段由后端默认值兜底，不阻塞生成）
-            personal_info: profile
+            personalInfo: profile
               ? {
                   name: profile.name,
                   phone: profile.phone,
@@ -275,39 +279,30 @@ export const JDReportDetailView: React.FC<JDReportDetailViewProps> = ({
                   years: profile.yearsOfExp ? `${profile.yearsOfExp} 年` : '',
                 }
               : undefined,
+            position: currentAnalysis.role,
+            company: currentAnalysis.company,
           });
-          if (result.resume_markdown && result.submission_id) {
-            // 将生成的简历并入 RESUMES cache
-            const { markdownToResume } = await import('../../utils/resumeParser');
-            const resumeVersion = markdownToResume(result.resume_markdown, {
-              position: currentAnalysis.role,
-              company: currentAnalysis.company,
-              id: String(result.submission_id),
-            });
-            if (resumeVersion) {
-              const newResumeId = String(result.submission_id);
-              upsertResume
-                .mutateAsync({ resumeId: newResumeId, resume: resumeVersion })
-                .then(() => {
-                  // FE-RESUME-02 方案 B：简历生成成功后自动 fire 一次建议生成
-                  // （异步不阻塞跳转；失败只 toast，不回滚简历生成）
-                  generateSuggestions.mutate(
-                    { resumeId: newResumeId },
-                    {
-                      onError: (error) =>
-                        showToast({
-                          type: 'warning',
-                          title: '优化建议生成失败',
-                          message: `${(error as Error).message || '请稍后重试'}（可在简历编辑器手动重试）`,
-                        }),
-                    },
-                  );
-                })
-                .catch(() => undefined);
-            }
+          if (generated) {
+            await upsertResume
+              .mutateAsync({ resumeId: generated.resumeId, resume: generated.resume })
+              .then(() => {
+                // FE-RESUME-02 方案 B：简历生成成功后自动 fire 一次建议生成
+                // （异步不阻塞跳转；失败只 toast，不回滚简历生成）
+                generateSuggestions.mutate(
+                  { resumeId: generated.resumeId },
+                  {
+                    onError: (error) =>
+                      showToast({
+                        type: 'warning',
+                        title: '优化建议生成失败',
+                        message: `${(error as Error).message || '请稍后重试'}（可在简历编辑器手动重试）`,
+                      }),
+                  },
+                );
+              })
+              .catch(() => undefined);
           }
-        } catch (err) {
-          console.error('Resume generation failed:', err);
+        } catch {
           showToast({ type: 'error', title: '生成简历失败', message: '请稍后重试' });
           return;
         }

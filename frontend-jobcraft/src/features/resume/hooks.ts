@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as authApi from '../../api/auth';
 import * as jobApi from '../../api/job';
 import * as tasksApi from '../../api/tasks';
-import type { ResumeSuggestionWire } from '../../api/types';
+import type { ResumePersonalInfo, ResumeSuggestionWire } from '../../api/types';
 import { ResumeVersion } from '../../types/jobcraft';
 import { markdownToResume, resumeToMarkdown } from '../../utils/resumeParser';
 import {
@@ -541,8 +541,48 @@ export function useSaveResumeMutation() {
   });
 }
 
+export interface GenerateResumeFromJdArgs {
+  jobAnalysisId: number;
+  selectedCardIds: number[];
+  personalInfo?: Partial<ResumePersonalInfo>;
+  /** markdownToResume 的兜底元数据（JD 分析的岗位/公司） */
+  position: string;
+  company: string;
+}
+
 /**
- * 将生成的简历并入 RESUMES cache（JD 生成写路径：`JDReportDetailView` 调 API save-resume 成功后写入）。
+ * JD 报告页「生成简历」（save-resume 端点）：生成简历并把 markdown 解析为 ResumeVersion。
+ * 返回 { resumeId, resume }（resumeId = submission id 字符串），由调用方接
+ * useUpsertResumeMutation 并入 RESUMES cache；端点未回 markdown/id 或解析失败
+ * 返回 null（不视为错误，调用方跳过缓存写入）；失败上抛（调用方 error toast）。
+ */
+export function useGenerateResumeFromJdMutation() {
+  return useMutation<
+    { resumeId: string; resume: ResumeVersion } | null,
+    unknown,
+    GenerateResumeFromJdArgs
+  >({
+    mutationFn: async ({ jobAnalysisId, selectedCardIds, personalInfo, position, company }) => {
+      const result = await jobApi.saveResume({
+        job_analysis_id: jobAnalysisId,
+        selected_card_ids: selectedCardIds,
+        personal_info: personalInfo,
+      });
+      if (!result.resume_markdown || !result.submission_id) return null;
+      const resume = markdownToResume(result.resume_markdown, {
+        position,
+        company,
+        id: String(result.submission_id),
+      });
+      if (!resume) return null;
+      return { resumeId: String(result.submission_id), resume };
+    },
+  });
+}
+
+/**
+ * 将生成的简历并入 RESUMES cache（JD 生成写路径：`JDReportDetailView` 经
+ * useGenerateResumeFromJdMutation 生成成功后写入）。
  * 纯 cache 写，无 API。
  * @param mutationFn 入参 { resumeId, resume }，以 resumeId = submission id（字符串）键控
  */

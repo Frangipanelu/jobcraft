@@ -1,6 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as authApi from '../../api/auth';
 import * as experienceApi from '../../api/experience';
+import * as jobApi from '../../api/job';
+import * as tasksApi from '../../api/tasks';
 import type { ExperienceCard } from '../../api/types';
 import type { Experience, ExperienceVersionRecord } from '../../types/jobcraft';
 import {
@@ -275,6 +277,36 @@ export function useAddExperienceVersionMutation() {
       queryClient.setQueryData([...EXPERIENCES_QUERY_KEY], next);
       // FE-CACHE-01：升级落库（updateCard 版本化）后重验，版本号以后端为准
       queryClient.invalidateQueries({ queryKey: [...EXPERIENCES_QUERY_KEY] });
+    },
+  });
+}
+
+interface PolishExperienceArgs {
+  expId: string;
+  rawText: string;
+  company: string;
+  role: string;
+}
+
+/**
+ * AI 润色经历原文（任务 `experience_polish`，降级同步端点 polishExperience）。
+ * 返回拆行后的候选 actions（去 bullet 前缀、保留 >5 字条目）；落库由调用方
+ * 走 useAddExperienceVersionMutation（服务端自动版本化，EXP-P1-06b §34.6）。
+ * 失败上抛（调用方 error toast）。
+ */
+export function usePolishExperienceMutation() {
+  return useMutation<string[], unknown, PolishExperienceArgs>({
+    mutationFn: async ({ expId, rawText, company, role }) => {
+      const result = await tasksApi.runTaskOrSync<{ polished_text: string }>(
+        'experience_polish',
+        { raw_text: rawText, company, role },
+        () => jobApi.polishExperience(parseInt(expId.replace('exp-', '')), rawText, company, role),
+        { timeout: 120_000 },
+      );
+      return result.polished_text
+        .split('\n')
+        .map((l) => l.replace(/^[-·•]\s*/, '').trim())
+        .filter((l) => l.length > 5);
     },
   });
 }

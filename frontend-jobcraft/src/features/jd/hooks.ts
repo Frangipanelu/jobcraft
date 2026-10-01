@@ -247,6 +247,34 @@ export function useJdAnalysesQuery() {
   });
 }
 
+export interface SplitJdMutationResult {
+  dutiesText: string;
+  requirements: { text: string; tag: 'hard' | 'required' | 'preferred' }[];
+}
+
+/**
+ * JD 原文拆分预填（split-jd 端点）：职责拼为换行文本，任职要求 tag 归一为
+ * hard|required|preferred（非法值回退 required），供 JD 创建表单直接落栏。
+ * 失败上抛（调用方 error toast）。
+ */
+export function useSplitJdMutation() {
+  return useMutation<SplitJdMutationResult, unknown, { jdText: string }>({
+    mutationFn: async ({ jdText }) => {
+      const result = await jobApi.splitJd(jdText);
+      return {
+        dutiesText: (result.duties || []).join('\n'),
+        requirements: (result.requirements || []).map((r) => ({
+          text: r.text,
+          tag:
+            r.tag === 'hard' || r.tag === 'required' || r.tag === 'preferred'
+              ? r.tag
+              : 'required',
+        })),
+      };
+    },
+  });
+}
+
 /**
  * 删除 JD 分析。与 legacy `JobCraftContext.deleteJDAnalysis` 行为等价：
  * 仅从前端状态移除；id 形如 `sub-{number}` 时尝试删除后端 submission（失败忽略）；
