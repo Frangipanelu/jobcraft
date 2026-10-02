@@ -27,10 +27,6 @@ router = APIRouter(prefix="/api/jobcraft/experience", tags=["experience"])
 logger = logging.getLogger("jobcraft.api.experience")
 
 
-class BackfillPayload(BaseModel):
-    min_chars: int = 100
-
-
 def _get_updated_dir() -> Path:
     from app.api.server import updated_dir
 
@@ -329,138 +325,6 @@ async def jobcraft_experience_upload_confirm(
         return {"cards": created_cards}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"保存失败: {e}")
-
-
-@router.post("/upload")
-async def jobcraft_experience_upload(
-    file: UploadFile = File(...),
-    current_user: int = Depends(get_current_user),
-):
-    MAX_BYTES = 10 * 1024 * 1024
-    if file.size is not None and file.size > MAX_BYTES:
-        raise HTTPException(
-            status_code=400,
-            detail=f"文件过大 ({file.size / 1024 / 1024:.1f}MB > 10MB)",
-        )
-
-    updated_dir = _get_updated_dir()
-    upload_id = uuid.uuid4().hex[:12]
-    target_dir = updated_dir / f"jobcraft_{upload_id}"
-    target_dir.mkdir(parents=True, exist_ok=True)
-    saved_path = target_dir / file.filename
-    with saved_path.open("wb") as buf:
-        shutil.copyfileobj(file.file, buf)
-
-    SUPPORTED_EXTS = {".pdf", ".docx", ".md", ".txt"}
-    ext = saved_path.suffix.lower()
-    if ext not in SUPPORTED_EXTS:
-        raise HTTPException(
-            status_code=400,
-            detail=f"暂不支持「{ext or '无后缀'}」格式, 请使用 PDF / DOCX / MD / TXT",
-        )
-
-    token = set_session_context(str(target_dir))
-    try:
-        resume_text = read_file_content.invoke(str(saved_path))
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"文件读取失败: {e}")
-    finally:
-        reset_session_context(token)
-
-    if not resume_text or not resume_text.strip():
-        raise HTTPException(status_code=400, detail="文件内容为空")
-    if resume_text.startswith("错误"):
-        raise HTTPException(status_code=400, detail=resume_text)
-    if len(resume_text.strip()) < 50:
-        raise HTTPException(
-            status_code=400,
-            detail="内容过少 (可能为扫描件)，请使用纯文本简历",
-        )
-
-    try:
-        from app.workflows.extract_flow import run_parse_resume_entries_workflow
-
-        entries = run_parse_resume_entries_workflow(resume_text.strip())
-    except Exception:
-        logger.warning("简历解析失败，降级为单卡")
-        entries = []
-
-    created_cards = []
-    seen: set = set()
-    try:
-        if entries:
-            for ent in entries:
-                company = (ent.get("company") or "").strip()
-                role = (ent.get("role") or "").strip()
-                dedup_key = f"{company}::{role}"
-                if company and dedup_key in seen:
-                    continue
-                existing = db_tools.find_card_by_company_role(
-                    current_user, company, role
-                )
-                if existing:
-                    seen.add(dedup_key)
-                    continue
-                seen.add(dedup_key)
-                card_data = {
-                    "user_id": current_user,
-                    "title": ent.get("title")
-                    or role
-                    or company
-                    or file.filename
-                    or "未命名经历",
-                    "raw_text": db_tools._rebuild_entry_text(ent),
-                    "company": company,
-                    "role": role,
-                    "period": ent.get("period", ""),
-                    "card_type": (ent.get("card_type") or "work"),
-                    "source": "resume_upload",
-                    "tags": [],
-                    "is_confirmed": False,
-                    "ai_structured": {
-                        "summary": ent.get("summary", ""),
-                        "achievements": ent.get("achievements", []),
-                    },
-                }
-                card_id = db_tools.insert_card(card_data)
-                card = db_tools.get_card(card_id, current_user)
-                if card:
-                    created_cards.append(card)
-        else:
-            card_data = {
-                "user_id": current_user,
-                "title": file.filename or "未命名经历",
-                "raw_text": resume_text.strip(),
-                "source": "resume_upload",
-                "is_confirmed": False,
-            }
-            card_id = db_tools.insert_card(card_data)
-            card = db_tools.get_card(card_id, current_user)
-            if card:
-                try:
-                    from app.tools.tag_pool import recommend_tags_from_pool
-                    from app.workflows.extract_flow import (
-                        run_extract_structured_workflow,
-                    )
-
-                    out = run_extract_structured_workflow(resume_text.strip())
-                    updates: Dict[str, Any] = {}
-                    if out and out["cache"]:
-                        updates["ai_structured"] = out["cache"]
-                    tags = recommend_tags_from_pool(resume_text.strip())
-                    if not tags and out:
-                        tags = out.get("tags", [])
-                    if tags:
-                        updates["tags"] = tags
-                    if updates:
-                        db_tools.update_card(card_id, updates, current_user)
-                except Exception:
-                    logger.warning("自动结构化抽取失败")
-                created_cards.append(card)
-
-        return {"cards": created_cards}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"创建经历卡失败: {e}")
 
 
 def _attach_cards_summary(user_id: int, cards: List[Dict[str, Any]]) -> None:
@@ -1030,21 +894,6 @@ def jobcraft_experience_recommend_tags(
     except Exception as e:
         logger.exception("标签推荐失败")
         raise HTTPException(status_code=500, detail=f"标签推荐失败: {e}")
-
-
-@router.post("/cards/backfill")
-def jobcraft_experience_backfill(
-    payload: BackfillPayload,
-    current_user: int = Depends(get_current_user),
-):
-    try:
-        from app.workflows.extract_flow import run_backfill_workflow
-
-        result = run_backfill_workflow(current_user, payload.min_chars)
-        return result
-    except Exception as e:
-        logger.exception("卡片回填失败")
-        raise HTTPException(status_code=500, detail=f"回填失败: {e}")
 
 
 class PolishPayload(BaseModel):

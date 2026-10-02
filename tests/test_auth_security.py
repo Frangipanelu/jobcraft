@@ -42,7 +42,6 @@ _BUSINESS_ENDPOINTS = [
     ("DELETE", "/api/jobcraft/experience/cards/1", None),
     ("POST", "/api/jobcraft/experience/cards/1/structure", None),
     ("POST", "/api/jobcraft/experience/cards/1/recommend-tags", None),
-    ("POST", "/api/jobcraft/experience/cards/backfill", {"min_chars": 100}),
     # direction（T-M3-1）
     ("GET", "/api/jobcraft/direction", None),
     ("POST", "/api/jobcraft/direction", {"name": "方向A"}),
@@ -150,7 +149,7 @@ def test_upload_and_form_endpoints_require_auth():
     import io
 
     resp = client.post(
-        "/api/jobcraft/experience/upload",
+        "/api/jobcraft/experience/upload/preview",
         files={"file": ("resume.md", io.BytesIO(b"resume"), "text/plain")},
     )
     assert resp.status_code == 401

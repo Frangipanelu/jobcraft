@@ -589,34 +589,6 @@ class TestExperienceRecommendTags:
         assert resp.json()["tags"] == ["Python", "FastAPI"]
 
 
-class TestExperienceBackfill:
-    """POST /api/jobcraft/experience/cards/backfill"""
-
-    def test_backfill_normal(self, monkeypatch):
-        monkeypatch.setattr(
-            "app.workflows.extract_flow.run_backfill_workflow",
-            lambda *a: {"processed": 3},
-        )
-        resp = client.post(
-            "/api/jobcraft/experience/cards/backfill",
-            json={"user_id": 1, "min_chars": 100},
-        )
-        assert resp.status_code == 200
-        assert resp.json()["processed"] == 3
-
-    def test_backfill_workflow_error_returns_500(self, monkeypatch):
-        def raise_err(*a, **kw):
-            raise Exception("boom")
-
-        monkeypatch.setattr(
-            "app.workflows.extract_flow.run_backfill_workflow", raise_err
-        )
-        resp = client.post(
-            "/api/jobcraft/experience/cards/backfill", json={"user_id": 1}
-        )
-        assert resp.status_code == 500
-
-
 class TestBaseResume:
     """底座简历历史版本 CRUD"""
 
