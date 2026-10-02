@@ -32,6 +32,14 @@
 - [x] **测试同步**：删 `TestExperienceBackfill`（2 条）与 `_BUSINESS_ENDPOINTS` 的 backfill 行；`test_upload_and_form_endpoints_require_auth` 的 upload 段改打 `/upload/preview`（文件上传 401 断言保留）；新增 `tests/test_backfill_script_unit.py` 4 条（参数透传 / min_chars 默认 / 缺 --user-id 拒绝 / workflow 失败退出码 1）。
 - [x] **门禁**：pytest **1043 passed / 7 skipped**、ruff 全绿、encoding 388 文件 0 错、前端 tsc 0 + build 通过（本轮前端零改动）；`run_backfill_workflow` 既有 4 条 workflow 单测不动。
 - **边界**：`recommend-tags` 按 Q1② 留待下轮裁决（未动）；全程 mock 单测（互斥约束 1/5）；零迁移；未碰 B/D 窗口在途文件。
+
+## T-M1-3 检索 v1：经历页搜索接线 + DB-03 解封评估（2026-10-02，C 窗口第二轮）
+
+- [x] **前端接线**（`67fdb26`）：`api/experience.ts` 新增 `searchCards`（q/direction_id/page/page_size 透传，q 与 direction_id 至少其一由调用方保证）+ `api/types.ts` `CardSearchResponse` 分页信封；`hooks.ts` 新增 `experienceSearchQueryKey`（以 `['experiences']` 为前缀 → 写路径既有 invalidate 自动覆盖搜索缓存，`getQueryData` 精确匹配不受影响）+ `useCardSearchQuery`（空关键词 enabled=false 不请求，pageSize=100 单页，失败置 isError 交调用方回落）；`ExperiencesView` 搜索框 300ms debounce → 服务端结果**仅在关键词同步时接管**（打字/清空瞬间回落本地过滤，保持即时反馈与既有语义），失败 toast「搜索失败」+ 本地回落（暴露问题不隐藏），拉取中输入框 spinner，服务端态 tab/header 计数改用结果集（`countBase`）。
+- [x] **测试**：`experiences-query.test.tsx` 新增 3 条——服务端返回与本地匹配**不同的卡**以证明确走服务端 / 空关键词不发请求 / 失败 toast 并回落本地；既有「支持搜索过滤」本地语义回归通过。
+- [x] **DB-03 解封评估结论**（已同步 TODO DB-03 条目）：触发条件「前端正式接入搜索」满足（`cards/search` 关键词消费者 0→1，第二接入点为 T-M3-4 结构化检索）；**FULLTEXT 方案 A（V0006 nGram + MATCH...AGAINST 双轨）经复评维持 DEFERRED**——LIKE↔MATCH 语义差异证据仍成立（`Java`→LIKE 1/MATCH 0，英文词漏检风险），无相关性排序需求前切换只有风险无收益，`test_keyword_only_regression_no_exists` 护栏不变；后续与 **v2 embedding 选型 ADR（矩阵 Q4，3-5d）** 一并作为独立 Search Optimization Task 重评（ADR 本轮按矩阵「可后置」不做）。
+- [x] **门禁**：tsc 0 错、vitest **222 passed**（30 files）、build 通过、encoding 390 文件 0 错；**后端零改动、零迁移**（search 端点/DAO 为 T-M3-4 既有产物，本轮纯接线）。
+- **边界**：未碰他窗口在途的 `resume_version`/`V0021`（认领归他方）、B 的 interview/prep 域；`recommend-tags` 留下轮裁决。
 - **⚠️共享工作区**：同一 worktree 内 B 窗口（interview / jobs 域）存在未提交改动，本批按 hunk 精确暂存 C 域文件（`types/jobcraft.ts` 只入 C 侧 hunk），提交前逐文件核对 `git diff --cached --stat`。
 
 ## T-M4-2 缺口重构=改写任务清单（2026-10-02，P4/M4 批次）
