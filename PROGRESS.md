@@ -2,6 +2,16 @@
 
 > 本文件用于追踪项目整体进度。AI 在每次会话结束或完成子任务时，必须更新本文件的对应板块。
 
+## T-M3-5 DIRECTION_SPEC 分期加注（2026-10-01，P3/M3 批次）
+
+> Q8 裁决的 spec 加注（纯文档，无代码/迁移改动）：Phase-1 MUST=方向 CRUD+六维+candidate-confirmed；Phase-2 MUST=knowledge+统计+合成工作流（不降级、仅后置）。
+
+- [x] **§21 MVP Boundary**：MUST 清单 11 项逐项标注 Phase 归属与落地锚点——Phase-1 ✅：Direction entity（T-M3-1）、six-dimensional filters（T-M3-1/2）、candidate/confirmed states（T-M3-2）、personal direction expressions（M2 本体 + T-M3-4 方向检索）；Phase-2：corpus statistics、knowledge item storage、source references、personal direction gaps（M9/T-M3-6 极简版先行）、basic synthesis workflow；特例注记：Direction↔Job association 方向侧 Phase-1/Job 侧 P4 `Job.directionId`（Q7）、direction page 按 Q1 改为并入 JD 报告页+dashboard（独立页取消）。
+- [x] **§22 Acceptance Criteria**：验收项分期映射（Phase-1 面=3/9 及第 1 条方向侧；Phase-2 面=2/4/5/6/7/8/10，依赖 knowledge/统计/反哺）。
+- ⚠️ **「§25」指针无目标（如实记录）**：DIRECTION_SPEC 实际仅 §1–§22，文件内不存在 §25；Q8/矩阵写作「§21/§25」，最接近且语义对应的承载是 §22（MUST 的验收对照，已一并加注）。docs 树内其他 §25（EXPERIENCE_SPEC §25 上传摄取=Q2 独立加注事项、PM §25 投递、SYSTEM_SPEC §25 validation）均与方向分期无关。若裁决原意指向其他文件，指出后补加注即可。
+- ⚠️ **docs/ 整目录在 `.gitignore:77`**（DIRECTION_SPEC/PRD/矩阵/TODO 均为本地文件）→ 本次 spec 加注不产生 spec 的 git 提交，入库仅本节；TODO 行内 ✅ 为本地记录。
+- **验收**：encoding 383/0（spec UTF-8 通过）、ruff check/format、pytest **994 passed / 7 skipped** 复跑全绿。
+
 ## T-M3-4 按 direction_id 结构化检索表达/卡片（2026-10-01，P3/M3 批次）
 
 > 复用链路的表达腿 + 卡片腿（矩阵 Q4-v1 / PRD §5.3 / 解封 DB-03 cards/search 消费）。无迁移，全部落在既有 expression/experience_card 表上；方向→Job 关联仍归 P4 `Job.directionId`。
