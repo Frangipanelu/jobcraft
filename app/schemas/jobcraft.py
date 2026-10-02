@@ -333,6 +333,21 @@ class ExpressionListResponse(BaseModel):
     )
 
 
+class ExpressionSearchResponse(BaseModel):
+    """跨卡表达检索响应（T-M3-4 / PRD §5.3 方向结构化检索）"""
+
+    items: List[ExpressionRead] = Field(
+        default_factory=list, description="表达行（updated_at 降序，不折叠版本链）"
+    )
+    total: int = 0
+    page: int = 1
+    page_size: int = 20
+    total_pages: int = 0
+    direction_id: Optional[int] = Field(
+        None, description="方向过滤回显（缺省=全量检索）"
+    )
+
+
 # ============================================================
 # 方向（Direction，T-M3-1 / Q7=c 两级分离 / U-P2a′ 编码）
 # ============================================================

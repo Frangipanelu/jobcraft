@@ -15,13 +15,14 @@ expression 表是 V0009 的唯一落点，不在本模块补充运行时 DDL。
 
 import json
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from app.tools.db_conn import (
     execute,
     execute_lastrowid,
     query_all,
     query_one,
+    query_scalar,
     transaction,
 )
 from app.tools.db_conn import _parse_json
@@ -237,6 +238,102 @@ def get_all(user_id: int) -> List[Dict[str, Any]]:
         (user_id,),
     )
     return [_row_to_expression(r) for r in rows]
+
+
+def _build_user_expression_filters(
+    user_id: int,
+    direction_id: Optional[int],
+    expr_type: Optional[str],
+    status: Optional[str],
+) -> Tuple[str, List[Any]]:
+    """拼装 list/count 共用的 WHERE 片段与参数（T-M3-4 方向结构化检索）。
+
+    :param user_id: 归属用户（始终过滤，保证所有权安全）。
+    :param direction_id: 可选方向过滤。
+    :param expr_type: 可选表达类型（standardized/direction/job_specific）。
+    :param status: 可选状态（candidate/active/deprecated）。
+    :return: ``(where_clause, params)``；where_clause 不含 WHERE 关键字。
+    :raises ValueError: expr_type/status 不在枚举内。
+    """
+    if expr_type is not None and expr_type not in EXPRESSION_TYPES:
+        raise ValueError(f"type 仅允许 {'/'.join(EXPRESSION_TYPES)}，收到: {expr_type}")
+    if status is not None and status not in EXPRESSION_STATUSES:
+        raise ValueError(
+            f"status 仅允许 {'/'.join(EXPRESSION_STATUSES)}，收到: {status}"
+        )
+    conditions = ["user_id=%s"]
+    params: List[Any] = [user_id]
+    if direction_id is not None:
+        conditions.append("direction_id=%s")
+        params.append(direction_id)
+    if expr_type is not None:
+        conditions.append("type=%s")
+        params.append(expr_type)
+    if status is not None:
+        conditions.append("status=%s")
+        params.append(status)
+    return " AND ".join(conditions), params
+
+
+def list_user_expressions(
+    user_id: int,
+    direction_id: Optional[int] = None,
+    expr_type: Optional[str] = None,
+    status: Optional[str] = None,
+    limit: int = 50,
+    offset: int = 0,
+) -> List[Dict[str, Any]]:
+    """跨卡按方向/类型/状态检索用户表达（复用链路表达腿，T-M3-4 / PRD §5.3）。
+
+    与 ``get_expressions_by_experience``（单卡视角）不同，本函数跨全部经历卡；
+    始终以 user_id 过滤所有权，direction_id 为可选过滤（不校验其归属，
+    归属校验由 API 层按 P2C-07 完成）。返回按 updated_at 倒序的表达版本行
+    （不折叠版本链，调用方可自行按 (experience_id, type, direction_id, job_id) 取链头）。
+
+    :param user_id: 归属用户。
+    :param direction_id: 可选方向 id 过滤。
+    :param expr_type: 可选表达类型。
+    :param status: 可选状态。
+    :param limit: 返回条数上限。
+    :param offset: 偏移量。
+    :return: 表达行列表（``_row_to_expression`` 形状）。
+    :raises ValueError: expr_type/status 不在枚举内。
+    """
+    where_clause, params = _build_user_expression_filters(
+        user_id, direction_id, expr_type, status
+    )
+    rows = query_all(
+        f"SELECT * FROM expression WHERE {where_clause} "
+        "ORDER BY updated_at DESC, id DESC LIMIT %s OFFSET %s",
+        (*params, limit, offset),
+    )
+    return [_row_to_expression(r) for r in rows]
+
+
+def count_user_expressions(
+    user_id: int,
+    direction_id: Optional[int] = None,
+    expr_type: Optional[str] = None,
+    status: Optional[str] = None,
+) -> int:
+    """统计 list_user_expressions 同条件的总条数（分页 total 用）。
+
+    :param user_id: 归属用户。
+    :param direction_id: 可选方向 id 过滤。
+    :param expr_type: 可选表达类型。
+    :param status: 可选状态。
+    :return: 匹配总条数。
+    :raises ValueError: expr_type/status 不在枚举内。
+    """
+    where_clause, params = _build_user_expression_filters(
+        user_id, direction_id, expr_type, status
+    )
+    return int(
+        query_scalar(
+            f"SELECT COUNT(*) FROM expression WHERE {where_clause}", tuple(params)
+        )
+        or 0
+    )
 
 
 def update_status(expression_id: int, status: str, user_id: int) -> bool:

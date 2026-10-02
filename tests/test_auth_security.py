@@ -35,6 +35,8 @@ _BUSINESS_ENDPOINTS = [
     # experience
     ("GET", "/api/jobcraft/experience/cards", None),
     ("GET", "/api/jobcraft/experience/cards/search?q=python", None),
+    # 表达方向结构化检索（T-M3-4）
+    ("GET", "/api/jobcraft/experience/expressions?direction_id=3", None),
     ("POST", "/api/jobcraft/experience/cards", {"title": "t", "raw_text": "x"}),
     ("PATCH", "/api/jobcraft/experience/cards/1", {"title": "t"}),
     ("DELETE", "/api/jobcraft/experience/cards/1", None),

@@ -134,8 +134,13 @@ def fake_db(monkeypatch):
         cursor._rowcount = holder["rowcount"]
         return holder["rowcount"]
 
+    def _query_scalar(sql, params=None):
+        cursor.executed.append((sql, params))
+        return holder.get("scalar", 0)
+
     monkeypatch.setattr(mod, "query_one", _query_one)
     monkeypatch.setattr(mod, "query_all", _query_all)
+    monkeypatch.setattr(mod, "query_scalar", _query_scalar)
     monkeypatch.setattr(mod, "execute", _execute)
     monkeypatch.setattr(mod, "execute_lastrowid", _lastrowid)
     monkeypatch.setattr(
@@ -310,6 +315,63 @@ class TestListByExperience:
         mod.get_expressions_by_experience(10, 7, direction_id=3)
         last_sql = fake_db["cursor"].executed[-1][0]
         assert "AND direction_id=%s" in last_sql
+
+
+class TestListUserExpressions:
+    """T-M3-4 跨卡方向结构化检索（list_user_expressions）。"""
+
+    def test_base_query_filters_user_and_pages(self, fake_db):
+        fake_db["cursor"]._rows = [_fake_expression_row()]
+        out = mod.list_user_expressions(7, limit=20, offset=40)
+        assert len(out) == 1
+        sql, params = fake_db["cursor"].executed[-1]
+        assert sql.startswith("SELECT * FROM expression WHERE user_id=%s")
+        assert "ORDER BY updated_at DESC, id DESC" in sql
+        assert sql.rstrip().endswith("LIMIT %s OFFSET %s")
+        assert "direction_id" not in sql
+        assert params == (7, 20, 40)
+
+    def test_direction_type_status_filters_in_order(self, fake_db):
+        fake_db["cursor"]._rows = []
+        mod.list_user_expressions(
+            7, direction_id=3, expr_type="direction", status="active", limit=10
+        )
+        sql, params = fake_db["cursor"].executed[-1]
+        assert "WHERE user_id=%s AND direction_id=%s AND type=%s AND status=%s" in sql
+        assert params == (7, 3, "direction", "active", 10, 0)
+
+    def test_invalid_type_rejected(self, fake_db):
+        with pytest.raises(ValueError, match="type 仅允许"):
+            mod.list_user_expressions(7, expr_type="bad")
+        assert fake_db["cursor"].executed == []
+
+    def test_invalid_status_rejected(self, fake_db):
+        with pytest.raises(ValueError, match="status 仅允许"):
+            mod.list_user_expressions(7, status="frozen")
+        assert fake_db["cursor"].executed == []
+
+
+class TestCountUserExpressions:
+    """T-M3-4 list 同条件计数（分页 total）。"""
+
+    def test_counts_with_filters(self, fake_db):
+        fake_db["scalar"] = 42
+        assert mod.count_user_expressions(7, direction_id=3) == 42
+        sql, params = fake_db["cursor"].executed[-1]
+        assert (
+            sql
+            == "SELECT COUNT(*) FROM expression WHERE user_id=%s AND direction_id=%s"
+        )
+        assert params == (7, 3)
+
+    def test_counts_without_filters(self, fake_db):
+        fake_db["scalar"] = None
+        assert mod.count_user_expressions(7) == 0
+
+    def test_invalid_type_rejected(self, fake_db):
+        with pytest.raises(ValueError, match="type 仅允许"):
+            mod.count_user_expressions(7, expr_type="bad")
+        assert fake_db["cursor"].executed == []
 
 
 class TestVersionChain:

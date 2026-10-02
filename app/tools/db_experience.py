@@ -206,52 +206,63 @@ def search_cards(
     include_inactive: bool = False,
     offset: int = 0,
     limit: int = 20,
+    direction_id: Optional[int] = None,
 ) -> List[Dict[str, Any]]:
     """
     搜索用户经历卡
 
-    支持按标题、公司、角色、标签、内容进行全文搜索。
+    支持按标题、公司、角色、标签、内容进行关键词搜索；direction_id 提供时
+    追加方向结构化过滤（限定为在该方向下有表达的卡，T-M3-4 / DB-03 解封）。
+
+    - query 非空：LIKE 关键词组（OR）；
+    - direction_id 非空：EXISTS 子查询限定方向（与关键词组 AND 叠加）；
+    - 仅传 direction_id、query 为空：纯结构化检索（无 LIKE 条件）；
+    - 二者皆空时返回用户全部卡（是否合法由 API 层校验，本函数不校验）。
 
     :param user_id: 用户 ID
-    :param query: 搜索关键词
+    :param query: 搜索关键词（可为空串，见上）
     :param include_inactive: 是否包含归档卡片
     :param offset: 偏移量
     :param limit: 限制数量
+    :param direction_id: 可选方向 id（卡需在该方向有表达）
     :return: 匹配的经历卡列表
     """
     _ensure_experience_card_columns()
 
-    # 构建搜索条件
-    search_pattern = f"%{query}%"
     conditions = ["user_id=%s"]
     params: List[Any] = [user_id]
 
     if not include_inactive:
         conditions.append("is_active=1")
 
-    # 搜索标题、公司、角色、原始内容
-    search_conditions = [
-        "title LIKE %s",
-        "company LIKE %s",
-        "role LIKE %s",
-        "raw_text LIKE %s",
-        "JSON_CONTAINS(tags, %s)",  # 搜索JSON数组中的标签
-    ]
+    if direction_id is not None:
+        conditions.append(
+            "EXISTS (SELECT 1 FROM expression e "
+            "WHERE e.experience_id=experience_card.id "
+            "AND e.user_id=%s AND e.direction_id=%s)"
+        )
+        params.extend([user_id, direction_id])
 
-    # 为每个搜索条件添加参数
-    for _ in search_conditions:
-        params.append(search_pattern)
-
-    # 添加标签搜索的JSON格式
-    params[-1] = json.dumps(query, ensure_ascii=False)
+    if query and query.strip():
+        search_pattern = f"%{query}%"
+        search_conditions = [
+            "title LIKE %s",
+            "company LIKE %s",
+            "role LIKE %s",
+            "raw_text LIKE %s",
+            "JSON_CONTAINS(tags, %s)",  # 搜索JSON数组中的标签
+        ]
+        conditions.append("(" + " OR ".join(search_conditions) + ")")
+        params.extend([search_pattern] * len(search_conditions))
+        # 标签按 JSON 精确元素匹配（放最后一组参数位）
+        params[-1] = json.dumps(query, ensure_ascii=False)
 
     where_clause = " AND ".join(conditions)
-    search_where = " OR ".join(search_conditions)
 
     rows = query_all(
         f"""
         SELECT * FROM experience_card
-        WHERE {where_clause} AND ({search_where})
+        WHERE {where_clause}
         ORDER BY updated_at DESC
         LIMIT %s OFFSET %s
         """,
@@ -264,43 +275,52 @@ def count_search_cards(
     user_id: int,
     query: str,
     include_inactive: bool = False,
+    direction_id: Optional[int] = None,
 ) -> int:
     """
-    统计搜索结果数量
+    统计搜索结果数量（条件与 search_cards 一致）
 
     :param user_id: 用户 ID
-    :param query: 搜索关键词
+    :param query: 搜索关键词（可为空串，见 search_cards）
     :param include_inactive: 是否包含归档卡片
+    :param direction_id: 可选方向 id（卡需在该方向有表达）
     :return: 匹配数量
     """
     _ensure_experience_card_columns()
 
-    search_pattern = f"%{query}%"
     conditions = ["user_id=%s"]
     params: List[Any] = [user_id]
 
     if not include_inactive:
         conditions.append("is_active=1")
 
-    search_conditions = [
-        "title LIKE %s",
-        "company LIKE %s",
-        "role LIKE %s",
-        "raw_text LIKE %s",
-        "JSON_CONTAINS(tags, %s)",
-    ]
+    if direction_id is not None:
+        conditions.append(
+            "EXISTS (SELECT 1 FROM expression e "
+            "WHERE e.experience_id=experience_card.id "
+            "AND e.user_id=%s AND e.direction_id=%s)"
+        )
+        params.extend([user_id, direction_id])
 
-    for _ in search_conditions:
-        params.append(search_pattern)
-    params[-1] = json.dumps(query, ensure_ascii=False)
+    if query and query.strip():
+        search_pattern = f"%{query}%"
+        search_conditions = [
+            "title LIKE %s",
+            "company LIKE %s",
+            "role LIKE %s",
+            "raw_text LIKE %s",
+            "JSON_CONTAINS(tags, %s)",
+        ]
+        conditions.append("(" + " OR ".join(search_conditions) + ")")
+        params.extend([search_pattern] * len(search_conditions))
+        params[-1] = json.dumps(query, ensure_ascii=False)
 
     where_clause = " AND ".join(conditions)
-    search_where = " OR ".join(search_conditions)
 
     return query_scalar(
         f"""
         SELECT COUNT(*) FROM experience_card
-        WHERE {where_clause} AND ({search_where})
+        WHERE {where_clause}
         """,
         tuple(params),
     )

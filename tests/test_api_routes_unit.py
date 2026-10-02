@@ -129,19 +129,226 @@ class TestExperienceSearch:
         resp = client.get("/api/jobcraft/experience/cards/search?q=")
         assert resp.status_code == 400
 
+    def test_search_no_q_and_no_direction_returns_400(self, monkeypatch):
+        """q 缺省（原 422 契约）在方向检索引入后归一为业务 400。"""
+        resp = client.get("/api/jobcraft/experience/cards/search")
+        assert resp.status_code == 400
+
     def test_search_normal(self, monkeypatch):
         monkeypatch.setattr(
-            "app.api.experience.db_tools.count_search_cards", lambda *a: 1
+            "app.api.experience.db_tools.count_search_cards",
+            lambda *a, **k: 1,
         )
         monkeypatch.setattr(
             "app.api.experience.db_tools.search_cards",
-            lambda *a: [{"id": 1, "title": "match"}],
+            lambda *a, **k: [{"id": 1, "title": "match"}],
         )
         resp = client.get("/api/jobcraft/experience/cards/search?q=python")
         assert resp.status_code == 200
         data = resp.json()
         assert data["total"] == 1
         assert data["query"] == "python"
+        assert data["direction_id"] is None
+
+    def test_search_direction_only_mode(self, monkeypatch):
+        """仅 direction_id（无 q）= 结构化检索，keywords 走空串分支。"""
+        captured = {}
+
+        def fake_count(user_id, query, include_inactive=False, direction_id=None):
+            captured["count_direction"] = direction_id
+            captured["count_query"] = query
+            return 2
+
+        def fake_search(
+            user_id,
+            query,
+            include_inactive=False,
+            offset=0,
+            limit=20,
+            direction_id=None,
+        ):
+            captured["search_direction"] = direction_id
+            captured["search_query"] = query
+            return [{"id": 1, "title": "方向卡"}]
+
+        monkeypatch.setattr(
+            "app.api.experience.db_tools.count_search_cards", fake_count
+        )
+        monkeypatch.setattr("app.api.experience.db_tools.search_cards", fake_search)
+        monkeypatch.setattr(
+            "app.tools.db_direction.get_direction",
+            lambda *a, **k: {"id": 3, "name": "策略运营"},
+        )
+
+        resp = client.get("/api/jobcraft/experience/cards/search?direction_id=3")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["total"] == 2
+        assert data["direction_id"] == 3
+        assert data["query"] is None
+        assert captured["search_direction"] == 3
+        assert captured["search_query"] == ""
+        assert captured["count_direction"] == 3
+
+    def test_search_direction_and_query_combined(self, monkeypatch):
+        captured = {}
+
+        def fake_count(user_id, query, include_inactive=False, direction_id=None):
+            captured["direction"] = direction_id
+            captured["query"] = query
+            return 1
+
+        def fake_search(
+            user_id,
+            query,
+            include_inactive=False,
+            offset=0,
+            limit=20,
+            direction_id=None,
+        ):
+            return []
+
+        monkeypatch.setattr(
+            "app.api.experience.db_tools.count_search_cards", fake_count
+        )
+        monkeypatch.setattr("app.api.experience.db_tools.search_cards", fake_search)
+        monkeypatch.setattr(
+            "app.tools.db_direction.get_direction",
+            lambda *a, **k: {"id": 3, "name": "策略运营"},
+        )
+
+        resp = client.get(
+            "/api/jobcraft/experience/cards/search?q=python&direction_id=3"
+        )
+        assert resp.status_code == 200
+        assert captured["direction"] == 3
+        assert captured["query"] == "python"
+        assert resp.json()["direction_id"] == 3
+
+    def test_search_direction_not_owned_returns_404(self, monkeypatch):
+        monkeypatch.setattr(
+            "app.tools.db_direction.get_direction", lambda *a, **k: None
+        )
+        resp = client.get("/api/jobcraft/experience/cards/search?direction_id=99")
+        assert resp.status_code == 404
+
+
+class TestExpressionSearch:
+    """GET /api/jobcraft/experience/expressions（T-M3-4 方向结构化检索）"""
+
+    @staticmethod
+    def _row(**over):
+        row = {
+            "id": 11,
+            "user_id": 1,
+            "experience_id": 10,
+            "direction_id": 3,
+            "job_id": None,
+            "type": "direction",
+            "content": "面向策略运营的方向表达",
+            "version": 2,
+            "validation_level": 1,
+            "usage_count": 0,
+            "source_refs": [],
+            "status": "active",
+            "created_at": None,
+            "updated_at": None,
+        }
+        row.update(over)
+        return row
+
+    def test_search_by_direction(self, monkeypatch):
+        monkeypatch.setattr(
+            "app.tools.db_direction.get_direction",
+            lambda *a, **k: {"id": 3, "name": "策略运营"},
+        )
+        monkeypatch.setattr(
+            "app.tools.db_expression.count_user_expressions", lambda *a: 1
+        )
+        monkeypatch.setattr(
+            "app.tools.db_expression.list_user_expressions",
+            lambda *a: [self._row()],
+        )
+        resp = client.get("/api/jobcraft/experience/expressions?direction_id=3")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["total"] == 1
+        assert data["direction_id"] == 3
+        assert data["page"] == 1
+        assert data["items"][0]["content"] == "面向策略运营的方向表达"
+
+    def test_search_passes_type_status_and_pagination(self, monkeypatch):
+        captured = {}
+
+        def fake_count(user_id, direction_id=None, expr_type=None, status=None):
+            captured["count"] = (user_id, direction_id, expr_type, status)
+            return 0
+
+        def fake_list(
+            user_id,
+            direction_id=None,
+            expr_type=None,
+            status=None,
+            limit=50,
+            offset=0,
+        ):
+            captured["list"] = (user_id, direction_id, expr_type, status, limit, offset)
+            return []
+
+        monkeypatch.setattr(
+            "app.tools.db_expression.count_user_expressions", fake_count
+        )
+        monkeypatch.setattr("app.tools.db_expression.list_user_expressions", fake_list)
+
+        resp = client.get(
+            "/api/jobcraft/experience/expressions"
+            "?type=direction&status=active&page=2&page_size=10"
+        )
+        assert resp.status_code == 200
+        assert captured["count"] == (1, None, "direction", "active")
+        assert captured["list"] == (1, None, "direction", "active", 10, 10)
+        data = resp.json()
+        assert data["page"] == 2
+        assert data["page_size"] == 10
+        assert data["total_pages"] == 0
+
+    def test_search_direction_not_owned_returns_404(self, monkeypatch):
+        monkeypatch.setattr(
+            "app.tools.db_direction.get_direction", lambda *a, **k: None
+        )
+        resp = client.get("/api/jobcraft/experience/expressions?direction_id=99")
+        assert resp.status_code == 404
+
+    def test_search_invalid_type_returns_400(self, monkeypatch):
+        resp = client.get("/api/jobcraft/experience/expressions?type=bogus")
+        assert resp.status_code == 400
+
+    def test_search_invalid_status_returns_400(self, monkeypatch):
+        resp = client.get("/api/jobcraft/experience/expressions?status=frozen")
+        assert resp.status_code == 400
+
+    def test_search_invalid_page_clamps(self, monkeypatch):
+        monkeypatch.setattr(
+            "app.tools.db_expression.count_user_expressions", lambda *a: 0
+        )
+        monkeypatch.setattr(
+            "app.tools.db_expression.list_user_expressions", lambda *a: []
+        )
+        resp = client.get("/api/jobcraft/experience/expressions?page=0&page_size=999")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["page"] == 1
+        assert data["page_size"] == 100
+
+    def test_search_db_error_returns_500(self, monkeypatch):
+        monkeypatch.setattr(
+            "app.tools.db_expression.count_user_expressions",
+            lambda *a: (_ for _ in ()).throw(Exception("db down")),
+        )
+        resp = client.get("/api/jobcraft/experience/expressions")
+        assert resp.status_code == 500
+        body = resp.json()
+        assert body["error"]["code"] == "INTERNAL_ERROR"
 
 
 class TestExperienceCreate:

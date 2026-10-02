@@ -861,6 +861,107 @@ class TestDbExperience:
         assert text == ""
 
 
+class TestSearchCardsDirection:
+    """T-M3-4 search_cards/count_search_cards 方向结构化过滤（mock DB）。"""
+
+    @pytest.fixture
+    def exp_db(self, monkeypatch):
+        import app.tools.db_experience as m
+
+        holder = {"rows": [], "scalar": 0, "calls": []}
+
+        def _query_all(sql, params=None):
+            holder["calls"].append((sql, params))
+            return holder["rows"]
+
+        def _query_scalar(sql, params=None):
+            holder["calls"].append((sql, params))
+            return holder["scalar"]
+
+        monkeypatch.setattr(m, "query_all", _query_all)
+        monkeypatch.setattr(m, "query_scalar", _query_scalar)
+        monkeypatch.setattr(m, "_ensure_experience_card_columns", lambda: None)
+        return holder
+
+    def test_direction_only_has_exists_and_no_like(self, exp_db):
+        from app.tools.db_experience import search_cards
+
+        out = search_cards(1, "", direction_id=3)
+        assert out == []
+        sql, params = exp_db["calls"][-1]
+        assert "EXISTS (SELECT 1 FROM expression e" in sql
+        assert "e.direction_id=%s" in sql
+        assert "LIKE" not in sql
+        assert params == (1, 1, 3, 20, 0)
+
+    def test_direction_and_query_param_order(self, exp_db):
+        from app.tools.db_experience import search_cards
+
+        search_cards(1, "python", direction_id=3, offset=5, limit=10)
+        sql, params = exp_db["calls"][-1]
+        assert "EXISTS" in sql
+        assert "(title LIKE %s OR company LIKE %s" in sql
+        # user_id / EXISTS(user_id, direction_id) / LIKE×4 / tags JSON / limit / offset
+        assert params == (
+            1,
+            1,
+            3,
+            "%python%",
+            "%python%",
+            "%python%",
+            "%python%",
+            json.dumps("python", ensure_ascii=False),
+            10,
+            5,
+        )
+
+    def test_keyword_only_regression_no_exists(self, exp_db):
+        """原关键词契约回归：不带 direction_id 时不出现 EXISTS，LIKE 参数齐备。"""
+        from app.tools.db_experience import search_cards, count_search_cards
+
+        search_cards(1, "python")
+        sql, params = exp_db["calls"][-1]
+        assert "EXISTS" not in sql
+        assert sql.count("LIKE") == 4
+        assert params[0] == 1
+        assert params[-1] == 0  # offset
+
+        exp_db["scalar"] = 2
+        assert count_search_cards(1, "python") == 2
+        sql, params = exp_db["calls"][-1]
+        assert "EXISTS" not in sql
+
+    def test_empty_query_without_direction_returns_all(self, exp_db):
+        """API 层保证二者至少其一；DAO 层空查询+无方向 = 全量（无 LIKE）。"""
+        from app.tools.db_experience import search_cards
+
+        search_cards(1, "")
+        sql, params = exp_db["calls"][-1]
+        assert "LIKE" not in sql
+        assert "EXISTS" not in sql
+        assert params == (1, 20, 0)
+
+    def test_count_with_direction(self, exp_db):
+        from app.tools.db_experience import count_search_cards
+
+        exp_db["scalar"] = 5
+        assert count_search_cards(1, "", direction_id=3) == 5
+        sql, params = exp_db["calls"][-1]
+        assert "SELECT COUNT(*) FROM experience_card" in sql
+        assert "e.direction_id=%s" in sql
+        assert params == (1, 1, 3)
+
+    def test_is_active_predicate_precedes_exists(self, exp_db):
+        """默认 include_inactive=False：is_active=1 条件先于 EXISTS 拼接。"""
+        from app.tools.db_experience import search_cards
+
+        search_cards(1, "", direction_id=3)
+        sql, params = exp_db["calls"][-1]
+        assert "is_active=1" in sql
+        assert sql.index("is_active=1") < sql.index("EXISTS")
+        assert params == (1, 1, 3, 20, 0)
+
+
 # ============================================================
 # Helper: create mock connection for DB tests
 # ============================================================

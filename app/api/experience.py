@@ -16,6 +16,7 @@ from app.schemas.jobcraft import (
     ExpressionCreate,
     ExpressionListResponse,
     ExpressionRead,
+    ExpressionSearchResponse,
     ExpressionVersionCreate,
 )
 from app.tools import db_tools
@@ -499,15 +500,26 @@ def jobcraft_experience_list(
 
 @router.get("/cards/search")
 def jobcraft_experience_search(
-    q: str,
+    q: Optional[str] = None,
     current_user: int = Depends(get_current_user),
     include_inactive: bool = False,
     page: int = 1,
     page_size: int = 20,
+    direction_id: Optional[int] = None,
 ):
+    """关键词 + 方向结构化搜索经历卡（T-M3-4 / DB-03 解封）。
+
+    - 仅关键词（原契约）：q 非空；
+    - 方向检索（新增）：direction_id 提供，q 可缺省（纯结构化，无 LIKE）；
+    - q 与 direction_id 可叠加（AND）；二者皆缺 → 400「搜索关键词不能为空」。
+    """
+    from app.tools.db_direction import get_direction
+
     try:
-        if not q or not q.strip():
+        if (q is None or not q.strip()) and direction_id is None:
             raise HTTPException(status_code=400, detail="搜索关键词不能为空")
+        if direction_id is not None and not get_direction(direction_id, current_user):
+            raise HTTPException(status_code=404, detail="方向不存在")
         if page < 1:
             page = 1
         if page_size < 1:
@@ -517,9 +529,16 @@ def jobcraft_experience_search(
 
         offset = (page - 1) * page_size
 
-        total = db_tools.count_search_cards(current_user, q, include_inactive)
+        total = db_tools.count_search_cards(
+            current_user, q or "", include_inactive, direction_id=direction_id
+        )
         cards = db_tools.search_cards(
-            current_user, q, include_inactive, offset, page_size
+            current_user,
+            q or "",
+            include_inactive,
+            offset,
+            page_size,
+            direction_id=direction_id,
         )
 
         total_pages = (total + page_size - 1) // page_size if page_size > 0 else 0
@@ -531,6 +550,7 @@ def jobcraft_experience_search(
             "page_size": page_size,
             "total_pages": total_pages,
             "query": q,
+            "direction_id": direction_id,
         }
     except HTTPException:
         raise
@@ -670,6 +690,71 @@ def jobcraft_experience_expressions(
         return ExpressionListResponse(experience_id=card_id, items=items)
     except HTTPException:
         raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"查询表达失败: {e}")
+
+
+@router.get("/expressions", response_model=ExpressionSearchResponse)
+def jobcraft_expression_search(
+    current_user: int = Depends(get_current_user),
+    direction_id: Optional[int] = None,
+    type: Optional[str] = None,
+    status: Optional[str] = None,
+    page: int = 1,
+    page_size: int = 20,
+):
+    """跨卡按方向结构化检索表达（T-M3-4 / PRD §5.3 / 复用链路表达腿）。
+
+    direction_id 归属校验同 POST /expressions（P2C-07，越权 404）；
+    type/status 枚举非法 400；分页信封与 /cards/search 一致。
+    """
+    from app.tools.db_direction import get_direction
+    from app.tools.db_expression import (
+        EXPRESSION_STATUSES,
+        EXPRESSION_TYPES,
+        count_user_expressions,
+        list_user_expressions,
+    )
+
+    try:
+        if page < 1:
+            page = 1
+        if page_size < 1:
+            page_size = 20
+        if page_size > 100:
+            page_size = 100
+        if direction_id is not None and not get_direction(direction_id, current_user):
+            raise HTTPException(status_code=404, detail="方向不存在")
+        if type is not None and type not in EXPRESSION_TYPES:
+            raise HTTPException(
+                status_code=400,
+                detail=f"type 仅允许 {'/'.join(EXPRESSION_TYPES)}，收到: {type}",
+            )
+        if status is not None and status not in EXPRESSION_STATUSES:
+            raise HTTPException(
+                status_code=400,
+                detail=f"status 仅允许 {'/'.join(EXPRESSION_STATUSES)}，收到: {status}",
+            )
+
+        offset = (page - 1) * page_size
+        total = count_user_expressions(current_user, direction_id, type, status)
+        items = list_user_expressions(
+            current_user, direction_id, type, status, page_size, offset
+        )
+        total_pages = (total + page_size - 1) // page_size if page_size > 0 else 0
+
+        return ExpressionSearchResponse(
+            items=items,
+            total=total,
+            page=page,
+            page_size=page_size,
+            total_pages=total_pages,
+            direction_id=direction_id,
+        )
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"查询表达失败: {e}")
 
