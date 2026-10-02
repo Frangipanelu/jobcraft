@@ -861,6 +861,88 @@ class TestDbExperience:
         assert text == ""
 
 
+class TestGetCardsSummary:
+    """T-M1-2：GET /cards 内嵌摘要的 DAO（版本数 + 表达计数 + 降级）。"""
+
+    @pytest.fixture
+    def exp_db(self, monkeypatch):
+        import app.tools.db_experience as m
+
+        holder = {
+            "version_rows": [],
+            "expr_rows": [],
+            "expr_error": None,
+            "calls": [],
+        }
+
+        def _query_all(sql, params=None):
+            holder["calls"].append((sql, params))
+            if "FROM expression" in sql:
+                if holder["expr_error"] is not None:
+                    raise holder["expr_error"]
+                return holder["expr_rows"]
+            return holder["version_rows"]
+
+        monkeypatch.setattr(m, "query_all", _query_all)
+        monkeypatch.setattr(m, "_ensure_card_versions_table", lambda: None)
+        return holder
+
+    def test_empty_ids_returns_empty_without_query(self, exp_db):
+        from app.tools.db_experience import get_cards_summary
+
+        assert get_cards_summary(1, []) == {}
+        assert exp_db["calls"] == []
+
+    def test_aggregates_counts_with_zero_defaults(self, exp_db):
+        from app.tools.db_experience import get_cards_summary
+
+        exp_db["version_rows"] = [(7, 4)]
+        exp_db["expr_rows"] = [(7, 3, 1)]
+        summary = get_cards_summary(1, [7, 8])
+        assert summary[7] == {
+            "version_count": 4,
+            "expression_summary": {"active": 1, "total": 3},
+        }
+        assert summary[8] == {
+            "version_count": 0,
+            "expression_summary": {"active": 0, "total": 0},
+        }
+
+    def test_version_query_filters_ownership(self, exp_db):
+        from app.tools.db_experience import get_cards_summary
+
+        get_cards_summary(9, [7])
+        sql, params = exp_db["calls"][0]
+        assert "JOIN experience_card" in sql
+        assert "c.user_id = %s" in sql
+        assert params[0] == 9
+
+    def test_expression_table_missing_degrades_to_zero(self, exp_db):
+        """expression 表缺失（未迁移库 errno 1146）→ 按 0 计，不抛错"""
+        from app.tools.db_experience import get_cards_summary
+
+        class _Err(Exception):
+            errno = 1146
+
+        exp_db["version_rows"] = [(7, 2)]
+        exp_db["expr_error"] = _Err("Table 'expression' doesn't exist")
+        summary = get_cards_summary(1, [7])
+        assert summary[7] == {
+            "version_count": 2,
+            "expression_summary": {"active": 0, "total": 0},
+        }
+
+    def test_expression_other_error_propagates(self, exp_db):
+        from app.tools.db_experience import get_cards_summary
+
+        class _Err(Exception):
+            errno = 1054
+
+        exp_db["expr_error"] = _Err("Unknown column")
+        with pytest.raises(Exception, match="Unknown column"):
+            get_cards_summary(1, [7])
+
+
 class TestSearchCardsDirection:
     """T-M3-4 search_cards/count_search_cards 方向结构化过滤（mock DB）。"""
 

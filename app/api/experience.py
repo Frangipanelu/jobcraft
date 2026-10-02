@@ -463,6 +463,43 @@ async def jobcraft_experience_upload(
         raise HTTPException(status_code=500, detail=f"创建经历卡失败: {e}")
 
 
+def _attach_cards_summary(user_id: int, cards: List[Dict[str, Any]]) -> None:
+    """为 /cards 列表内嵌版本/表达摘要（T-M1-2 / 矩阵 Q3，首屏 N+1→1）。
+
+    每张卡补三个字段：
+    - ``current_version``：既有 ``version`` 列别名（零迁移，语义与版本端点一致）；
+    - ``version_count``：``card_versions`` 快照数；
+    - ``expression_summary``：``{active, total}``（表达状态计数）。
+
+    摘要查询属增值字段：失败时降级为 ``null`` 并记 warning（列表仍可用），
+    ``current_version`` 不依赖额外查询恒写入。
+    """
+    for card in cards:
+        card["current_version"] = card.get("version")
+
+    card_ids = [card["id"] for card in cards if card.get("id") is not None]
+    if not card_ids:
+        return
+
+    from app.tools.db_experience import get_cards_summary
+
+    try:
+        summaries = get_cards_summary(user_id, card_ids)
+    except Exception:
+        logger.warning("经历卡版本/表达摘要查询失败，降级为 null", exc_info=True)
+        for card in cards:
+            card["version_count"] = None
+            card["expression_summary"] = None
+        return
+
+    for card in cards:
+        entry = summaries.get(card.get("id"))
+        card["version_count"] = entry["version_count"] if entry else 0
+        card["expression_summary"] = (
+            entry["expression_summary"] if entry else {"active": 0, "total": 0}
+        )
+
+
 @router.get("/cards")
 def jobcraft_experience_list(
     current_user: int = Depends(get_current_user),
@@ -484,6 +521,7 @@ def jobcraft_experience_list(
         cards = db_tools.list_cards_paginated(
             current_user, include_inactive, offset, page_size
         )
+        _attach_cards_summary(current_user, cards)
 
         total_pages = (total + page_size - 1) // page_size if page_size > 0 else 0
 

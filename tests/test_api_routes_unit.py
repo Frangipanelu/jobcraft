@@ -121,6 +121,66 @@ class TestExperienceCards:
         body = resp.json()
         assert body["error"]["code"] == "INTERNAL_ERROR"
 
+    def test_cards_embeds_summary_fields(self, monkeypatch):
+        """T-M1-2：列表内嵌 current_version/version_count/expression_summary"""
+        fake_cards = [
+            {"id": 7, "title": "a", "version": 3},
+            {"id": 8, "title": "b", "version": 1},
+        ]
+        monkeypatch.setattr("app.api.experience.db_tools.count_cards", lambda *a: 2)
+        monkeypatch.setattr(
+            "app.api.experience.db_tools.list_cards_paginated", lambda *a: fake_cards
+        )
+        monkeypatch.setattr(
+            "app.tools.db_experience.get_cards_summary",
+            lambda user_id, ids: {
+                cid: {
+                    "version_count": 4 if cid == 7 else 0,
+                    "expression_summary": {"active": 1, "total": 3},
+                }
+                for cid in ids
+            },
+        )
+        resp = client.get("/api/jobcraft/experience/cards")
+        assert resp.status_code == 200
+        items = resp.json()["items"]
+        assert items[0]["current_version"] == 3
+        assert items[0]["version_count"] == 4
+        assert items[0]["expression_summary"] == {"active": 1, "total": 3}
+        assert items[1]["current_version"] == 1
+        assert items[1]["version_count"] == 0
+
+    def test_cards_summary_failure_degrades_to_null(self, monkeypatch):
+        """摘要查询失败只降级增值字段，列表本身不 500"""
+        fake_cards = [{"id": 7, "title": "a", "version": 3}]
+        monkeypatch.setattr("app.api.experience.db_tools.count_cards", lambda *a: 1)
+        monkeypatch.setattr(
+            "app.api.experience.db_tools.list_cards_paginated", lambda *a: fake_cards
+        )
+        monkeypatch.setattr(
+            "app.tools.db_experience.get_cards_summary",
+            lambda *a: (_ for _ in ()).throw(Exception("summary down")),
+        )
+        resp = client.get("/api/jobcraft/experience/cards")
+        assert resp.status_code == 200
+        item = resp.json()["items"][0]
+        assert item["current_version"] == 3
+        assert item["version_count"] is None
+        assert item["expression_summary"] is None
+
+    def test_cards_empty_list_skips_summary_query(self, monkeypatch):
+        monkeypatch.setattr("app.api.experience.db_tools.count_cards", lambda *a: 0)
+        monkeypatch.setattr(
+            "app.api.experience.db_tools.list_cards_paginated", lambda *a: []
+        )
+        monkeypatch.setattr(
+            "app.tools.db_experience.get_cards_summary",
+            lambda *a: (_ for _ in ()).throw(Exception("不该被调用")),
+        )
+        resp = client.get("/api/jobcraft/experience/cards")
+        assert resp.status_code == 200
+        assert resp.json()["items"] == []
+
 
 class TestExperienceSearch:
     """GET /api/jobcraft/experience/cards/search"""

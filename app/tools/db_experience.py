@@ -326,6 +326,68 @@ def count_search_cards(
     )
 
 
+_TABLE_MISSING_ERRNO = 1146
+
+
+def get_cards_summary(user_id: int, card_ids: List[int]) -> Dict[int, Dict[str, Any]]:
+    """批量取经历卡的版本数与表达摘要（T-M1-2 / 矩阵 Q3，首屏去 N+1）。
+
+    为 ``GET /cards`` 单页结果一次性内嵌两组派生字段的来源：
+
+    - ``version_count``：``card_versions`` 行数（按 card_id GROUP BY，
+      JOIN ``experience_card`` 断言所有权）；
+    - ``expression_summary``：``expression`` 行数与其中 ``status='active'``
+      条数（按 experience_id GROUP BY，始终带 user_id 过滤）。
+
+    降级语义：``expression`` 表缺失（errno 1146，未迁移库）按全 0 计并记
+    warning（该场景下语义必为 0，不阻断列表）；``card_versions`` 由运行时
+    ``_ensure_card_versions_table`` 保证存在。
+
+    :param user_id: 归属用户（所有权过滤）。
+    :param card_ids: 本页卡 id（调用方已按用户过滤）；空列表不发查询。
+    :return: ``{card_id: {"version_count": int,
+        "expression_summary": {"active": int, "total": int}}}``；
+        入参每个 id 都有条目（无行时为 0/0）。
+    """
+    if not card_ids:
+        return {}
+    placeholders = ",".join(["%s"] * len(card_ids))
+    summary: Dict[int, Dict[str, Any]] = {
+        int(cid): {"version_count": 0, "expression_summary": {"active": 0, "total": 0}}
+        for cid in card_ids
+    }
+
+    _ensure_card_versions_table()
+    version_rows = query_all(
+        "SELECT v.card_id, COUNT(*) FROM card_versions v "
+        "JOIN experience_card c ON c.id = v.card_id AND c.user_id = %s "
+        f"WHERE v.card_id IN ({placeholders}) "
+        "GROUP BY v.card_id",
+        (user_id, *card_ids),
+    )
+    for cid, count in version_rows:
+        summary[int(cid)]["version_count"] = int(count)
+
+    try:
+        expression_rows = query_all(
+            "SELECT experience_id, COUNT(*), COALESCE(SUM(status = 'active'), 0) "
+            f"FROM expression WHERE user_id = %s AND experience_id IN ({placeholders}) "
+            "GROUP BY experience_id",
+            (user_id, *card_ids),
+        )
+    except Exception as e:
+        if getattr(e, "errno", None) == _TABLE_MISSING_ERRNO:
+            logger.warning("expression 表缺失（未迁移），表达摘要按 0 计")
+            return summary
+        raise
+    for cid, total, active in expression_rows:
+        summary[int(cid)]["expression_summary"] = {
+            "active": int(active),
+            "total": int(total),
+        }
+    return summary
+
+
 def get_card(card_id: int, user_id: Optional[int] = None) -> Optional[Dict[str, Any]]:
     """按主键获取单张经历卡（可选按 user_id 过滤所有权）"""
     _ensure_experience_card_columns()
