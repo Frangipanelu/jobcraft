@@ -33,6 +33,9 @@ class CreateSubmissionPayload(BaseModel):
     is_manual: bool = False
     # P11-a：创建 ≠ 投递，默认「待投递」；「已投递」需用户确认（delivered=1）
     status: str = "PREPARED"
+    # T-M5-1 / Q2：「标记投递」创建 submission 时创建即 delivered=1
+    # （缺省 False，additive，旧调用方行为不变）
+    delivered: bool = False
 
 
 class UpdateSubmissionPayload(BaseModel):

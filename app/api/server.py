@@ -20,6 +20,7 @@ from fastapi.responses import JSONResponse
 from app.api.direction import router as direction_router
 from app.api.experience import router as experience_router
 from app.api.job_analysis import router as job_analysis_router
+from app.api.job_entity import router as job_entity_router
 from app.api.profile import router as profile_router
 from app.api.submission import router as submission_router
 from app.api.interview_prep import router as interview_prep_router
@@ -49,6 +50,9 @@ app.include_router(experience_router)
 app.include_router(direction_router)
 app.include_router(job_analysis_router)
 app.include_router(submission_router)
+# T-M5-1：Job 实体 CRUD 必须注册在 job_analysis 之后（其 {job_id} 参数路由
+# 不能抢先匹配 /job/analyses、/job/analyze/{id} 等字面量路径）
+app.include_router(job_entity_router)
 app.include_router(interview_prep_router)
 app.include_router(interview_review_router)
 

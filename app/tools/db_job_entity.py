@@ -256,6 +256,54 @@ def list_jobs(user_id: int) -> List[Dict[str, Any]]:
     return [_row_to_job(r) for r in rows]
 
 
+def update_job(
+    job_id: int,
+    user_id: Optional[int] = None,
+    company: Optional[str] = None,
+    position: Optional[str] = None,
+    status: Optional[str] = None,
+    is_active: Optional[bool] = None,
+) -> Optional[Dict[str, Any]]:
+    """按字段更新岗位（仅覆盖传入项，None 表示不改动）。
+
+    T-M5-1 / M5-Q2：job 增删查改不碰 submission；删除走 is_active=0。
+
+    :param job_id: 岗位 id
+    :param user_id: 归属校验（可选）
+    :param company: 新公司名（去空白；None 不改动）
+    :param position: 新岗位名（去空白；空串抛 ValueError）
+    :param status: 新状态（调用方应先 normalize_status）
+    :param is_active: 是否在用（False = 停用岗位）
+    :return: 更新后的岗位；不存在/无归属返回 None
+    :raises ValueError: position 归一化后为空
+    """
+    _ensure_job_table()
+    current = get_job(job_id, user_id)
+    if not current:
+        return None
+    sets: List[str] = []
+    values: List[Any] = []
+    if company is not None:
+        sets.append("company=%s")
+        values.append(company.strip())
+    if position is not None:
+        position_key = position.strip()
+        if not position_key:
+            raise ValueError("岗位名称不能为空")
+        sets.append("position=%s")
+        values.append(position_key)
+    if status is not None:
+        sets.append("status=%s")
+        values.append(status)
+    if is_active is not None:
+        sets.append("is_active=%s")
+        values.append(1 if is_active else 0)
+    if sets:
+        values.append(job_id)
+        execute(f"UPDATE job SET {', '.join(sets)} WHERE id=%s", tuple(values))
+    return get_job(job_id, user_id)
+
+
 def get_job_by_submission(
     submission_id: int, user_id: int = 1
 ) -> Optional[Dict[str, Any]]:

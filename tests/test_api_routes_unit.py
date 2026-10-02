@@ -1935,6 +1935,52 @@ class TestSubmissionCreate:
         assert resp.json()["id"] == 1
         assert resp.json()["status"] == "APPLIED"
 
+    def test_create_passes_delivered_through(self, monkeypatch):
+        """T-M5-1：「标记投递」创建 submission 可携带 delivered=1（additive 字段）"""
+        captured = {}
+
+        def fake_insert(data):
+            captured.update(data)
+            return 9
+
+        monkeypatch.setattr(
+            "app.api.submission.db_tools.insert_submission", fake_insert
+        )
+        monkeypatch.setattr(
+            "app.api.submission.db_tools.get_submission",
+            lambda *a: {"id": 9, "delivered": captured.get("delivered")},
+        )
+        resp = client.post(
+            "/api/jobcraft/submission",
+            json={
+                "position": "SWE",
+                "company": "G",
+                "status": "APPLIED",
+                "delivered": True,
+            },
+        )
+        assert resp.status_code == 200
+        assert captured["delivered"] is True
+        assert resp.json()["delivered"] is True
+
+    def test_create_defaults_delivered_false(self, monkeypatch):
+        """缺省 delivered=False：「创建 ≠ 投递」语义不变（P11-a）"""
+        captured = {}
+
+        def fake_insert(data):
+            captured.update(data)
+            return 1
+
+        monkeypatch.setattr(
+            "app.api.submission.db_tools.insert_submission", fake_insert
+        )
+        monkeypatch.setattr(
+            "app.api.submission.db_tools.get_submission", lambda *a: {"id": 1}
+        )
+        resp = client.post("/api/jobcraft/submission", json={"position": "SWE"})
+        assert resp.status_code == 200
+        assert captured["delivered"] is False
+
 
 class TestSubmissionGet:
     """GET /api/jobcraft/submission/{submission_id}"""
@@ -2790,3 +2836,173 @@ class TestJdClassification:
         resp = client.get("/api/jobcraft/job/55/jd-classification")
         assert resp.status_code == 404
         assert "分类未录入" in resp.json()["error"]["message"]
+
+
+# ============================================================
+# 10. job_entity.py — Job 实体 CRUD 路由（T-M5-1 / M5-Q2）
+# ============================================================
+
+
+class TestJobEntityCreate:
+    """POST /api/jobcraft/job — find-or-create 幂等，不建 submission"""
+
+    def test_create_uses_current_user_and_returns_job(self, monkeypatch):
+        seen = {}
+
+        def fake_find_or_create(
+            user_id, position, company=None, job_analysis_id=None, raw_jd_id=None
+        ):
+            seen.update(
+                user_id=user_id,
+                position=position,
+                company=company,
+                job_analysis_id=job_analysis_id,
+            )
+            return 12
+
+        monkeypatch.setattr(
+            "app.api.job_entity.db_job_entity.find_or_create_job",
+            fake_find_or_create,
+        )
+        monkeypatch.setattr(
+            "app.api.job_entity.db_job_entity.get_job",
+            lambda jid, uid: {
+                "id": jid,
+                "user_id": uid,
+                "company": "字节",
+                "position": "PM",
+                "status": "PREPARED",
+            },
+        )
+        resp = client.post(
+            "/api/jobcraft/job",
+            json={"company": "字节", "position": "PM", "job_analysis_id": 7},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["id"] == 12
+        assert seen == {
+            "user_id": 1,
+            "position": "PM",
+            "company": "字节",
+            "job_analysis_id": 7,
+        }
+
+    def test_create_empty_position_returns_400(self, monkeypatch):
+        monkeypatch.setattr(
+            "app.api.job_entity.db_job_entity.find_or_create_job",
+            lambda *a, **k: None,
+        )
+        resp = client.post("/api/jobcraft/job", json={"company": "C", "position": "  "})
+        assert resp.status_code == 400
+        assert "岗位名称不能为空" in resp.json()["error"]["message"]
+
+
+class TestJobEntityListGet:
+    """GET /api/jobcraft/job 与 /{job_id}"""
+
+    def test_list_returns_jobs_for_current_user(self, monkeypatch):
+        monkeypatch.setattr(
+            "app.api.job_entity.db_job_entity.list_jobs",
+            lambda uid: [{"id": 1, "user_id": uid}],
+        )
+        resp = client.get("/api/jobcraft/job")
+        assert resp.status_code == 200
+        assert resp.json()[0]["id"] == 1
+
+    def test_get_found_passes_ownership(self, monkeypatch):
+        seen = {}
+
+        def fake_get(jid, uid=None):
+            seen.update(job_id=jid, user_id=uid)
+            return {"id": jid, "position": "PM"}
+
+        monkeypatch.setattr("app.api.job_entity.db_job_entity.get_job", fake_get)
+        resp = client.get("/api/jobcraft/job/123")
+        assert resp.status_code == 200
+        assert resp.json()["id"] == 123
+        assert seen == {"job_id": 123, "user_id": 1}
+
+    def test_get_not_found_returns_404(self, monkeypatch):
+        monkeypatch.setattr(
+            "app.api.job_entity.db_job_entity.get_job", lambda *a, **k: None
+        )
+        resp = client.get("/api/jobcraft/job/404")
+        assert resp.status_code == 404
+
+
+class TestJobEntityUpdate:
+    """PATCH /api/jobcraft/job/{job_id}"""
+
+    def test_invalid_status_returns_400(self, monkeypatch):
+        resp = client.patch("/api/jobcraft/job/1", json={"status": "NOT_A_STATUS"})
+        assert resp.status_code == 400
+        assert "无效的岗位状态" in resp.json()["error"]["message"]
+
+    def test_update_passes_normalized_status(self, monkeypatch):
+        seen = {}
+
+        def fake_update(job_id, user_id=None, **kw):
+            seen.update(job_id=job_id, user_id=user_id, **kw)
+            return {"id": job_id, **kw}
+
+        monkeypatch.setattr("app.api.job_entity.db_job_entity.update_job", fake_update)
+        resp = client.patch(
+            "/api/jobcraft/job/5", json={"status": "APPLIED", "is_active": False}
+        )
+        assert resp.status_code == 200
+        assert seen["status"] == "APPLIED"
+        assert seen["is_active"] is False
+        assert seen["user_id"] == 1
+
+    def test_legacy_cn_status_normalized(self, monkeypatch):
+        """旧中文词表在写路径同样归一（与读路径共用 normalize_status）"""
+        seen = {}
+
+        def fake_update(job_id, user_id=None, **kw):
+            seen.update(**kw)
+            return {"id": job_id, **kw}
+
+        monkeypatch.setattr("app.api.job_entity.db_job_entity.update_job", fake_update)
+        resp = client.patch("/api/jobcraft/job/5", json={"status": "已投递"})
+        assert resp.status_code == 200
+        assert seen["status"] == "APPLIED"
+
+    def test_not_found_returns_404(self, monkeypatch):
+        monkeypatch.setattr(
+            "app.api.job_entity.db_job_entity.update_job", lambda *a, **k: None
+        )
+        resp = client.patch("/api/jobcraft/job/404", json={"company": "X"})
+        assert resp.status_code == 404
+
+    def test_empty_position_returns_400(self, monkeypatch):
+        def raise_value_error(*a, **k):
+            raise ValueError("岗位名称不能为空")
+
+        monkeypatch.setattr(
+            "app.api.job_entity.db_job_entity.update_job", raise_value_error
+        )
+        resp = client.patch("/api/jobcraft/job/5", json={"position": "  "})
+        assert resp.status_code == 400
+        assert "岗位名称不能为空" in resp.json()["error"]["message"]
+
+
+class TestJobEntityRouteOrder:
+    """路由注册顺序回归：job_analysis 字面量路径不被 {job_id} 参数路由吞掉"""
+
+    def test_list_analyses_still_hits_job_analysis(self, monkeypatch):
+        monkeypatch.setattr(
+            "app.api.job_analysis.db_tools.list_job_analyses",
+            lambda uid, limit=20: [{"id": 3, "match_score": 71}],
+        )
+        resp = client.get("/api/jobcraft/job/analyses")
+        assert resp.status_code == 200
+        assert resp.json()["analyses"][0]["id"] == 3
+
+    def test_get_by_id_hits_job_entity_not_analysis(self, monkeypatch):
+        monkeypatch.setattr(
+            "app.api.job_entity.db_job_entity.get_job",
+            lambda jid, uid=None: {"id": jid, "position": "PM"},
+        )
+        resp = client.get("/api/jobcraft/job/123")
+        assert resp.status_code == 200
+        assert resp.json()["position"] == "PM"

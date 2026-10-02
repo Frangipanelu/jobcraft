@@ -2237,6 +2237,86 @@ class TestDbJobEntity:
         assert "user_id=%s AND is_active=1" in sql
         assert params == (1,)
 
+    def test_update_job_updates_provided_fields_only(self):
+        """T-M5-1：update_job 仅更新传入字段，归属校验先行"""
+        from app.tools import db_job_entity
+
+        current = {"id": 5, "user_id": 1, "position": "PM", "status": "PREPARED"}
+        updated = {"id": 5, "user_id": 1, "position": "PM", "status": "APPLIED"}
+        with (
+            patch("app.tools.db_job_entity._ensure_job_table"),
+            patch(
+                "app.tools.db_job_entity.get_job",
+                side_effect=[current, updated],
+            ),
+            patch("app.tools.db_job_entity.execute", return_value=1) as mock_exec,
+        ):
+            result = db_job_entity.update_job(5, user_id=1, status="APPLIED")
+        assert result == updated
+        sql, params = mock_exec.call_args[0]
+        assert "status=%s" in sql
+        assert "company=%s" not in sql and "position=%s" not in sql
+        assert params == ("APPLIED", 5)
+
+    def test_update_job_missing_returns_none(self):
+        from app.tools import db_job_entity
+
+        with (
+            patch("app.tools.db_job_entity._ensure_job_table"),
+            patch("app.tools.db_job_entity.get_job", return_value=None),
+            patch("app.tools.db_job_entity.execute") as mock_exec,
+        ):
+            assert db_job_entity.update_job(404, user_id=1, company="X") is None
+        mock_exec.assert_not_called()
+
+    def test_update_job_empty_position_raises(self):
+        from app.tools import db_job_entity
+
+        with (
+            patch("app.tools.db_job_entity._ensure_job_table"),
+            patch(
+                "app.tools.db_job_entity.get_job",
+                return_value={"id": 5, "position": "PM"},
+            ),
+        ):
+            try:
+                db_job_entity.update_job(5, position="   ")
+            except ValueError as e:
+                assert "岗位名称不能为空" in str(e)
+            else:
+                raise AssertionError("空 position 应抛 ValueError")
+
+    def test_update_job_without_fields_is_read_only(self):
+        from app.tools import db_job_entity
+
+        current = {"id": 5, "position": "PM"}
+        with (
+            patch("app.tools.db_job_entity._ensure_job_table"),
+            patch("app.tools.db_job_entity.get_job", side_effect=[current, current]),
+            patch("app.tools.db_job_entity.execute") as mock_exec,
+        ):
+            assert db_job_entity.update_job(5, user_id=1) == current
+        mock_exec.assert_not_called()
+
+    def test_update_job_deactivate_sets_inactive(self):
+        """Q2：删除 = is_active=0（停用，不物理删除）"""
+        from app.tools import db_job_entity
+
+        current = {"id": 5, "is_active": True}
+        updated = {"id": 5, "is_active": False}
+        with (
+            patch("app.tools.db_job_entity._ensure_job_table"),
+            patch(
+                "app.tools.db_job_entity.get_job",
+                side_effect=[current, updated],
+            ),
+            patch("app.tools.db_job_entity.execute", return_value=1) as mock_exec,
+        ):
+            assert db_job_entity.update_job(5, user_id=1, is_active=False) == updated
+        sql, params = mock_exec.call_args[0]
+        assert "is_active=%s" in sql
+        assert params == (0, 5)
+
 
 class TestUpdateInterviewQaPairFields:
     """BE-QT-01：QA 对字段级更新（问题表 upsert）的白名单与 SQL 组装"""
