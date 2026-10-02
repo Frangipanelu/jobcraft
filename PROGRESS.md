@@ -2,6 +2,18 @@
 
 > 本文件用于追踪项目整体进度。AI 在每次会话结束或完成子任务时，必须更新本文件的对应板块。
 
+## T-M3-2 jd_classification 六维分类提案表与 API（2026-10-01，P3/M3 批次）
+
+> Q7=c 两级分离的第二级落地：direction=方向定义（T-M3-1），本表=JD 侧六维分类提案/确认。附带修复一个被新测试暴露的 422 信封序列化缺陷。
+
+- [x] **V0019 迁移 `9c9dad9`**：新建 `jd_classification`（仅建表，不动既有，前向兼容）——`user_id`/`job_analysis_id`（UNIQUE，一行一分析）/`direction_id` 可空逻辑外键（PRD「关键列」非穷举；承接 T-M3-3 find-or-create 指向 + direction 删除守卫计数，无 FK 约束同 V0009 风格）/六维与 direction 同构同宽（100/100/100/200/200/500）/`confidence` varchar(8)（high·medium·low，manual 空串）/`source` varchar(16)（manual·rule·ai 留位，默认 manual）/`status` varchar(16)（proposed·confirmed，默认 proposed）+ `idx_user(user_id,status)` + `idx_direction(direction_id)`；`CREATE TABLE IF NOT EXISTS` 幂等（单语句块，注释避免字面 `;--SPLIT--` 防误切）。
+- [x] **DAO `db_jd_classification`**：`upsert_jd_classification`（白名单+枚举+六维至少一维非空校验；INSERT…ON DUPLICATE KEY UPDATE VALUES() 同 db_experience 先例；回读校验）/ `get_jd_classification`（可选 user_id 过滤）；errno 1146 缺表 → ValueError「先执行 migrations.runner migrate」（读写两路径）。
+- [x] **API `job_analysis.py` 扩展**：`POST/GET /api/jobcraft/job/{job_analysis_id}/jd-classification`（PRD §5.3 规划路径；router 既有 prefix 复用，无路由冲突）——分析归属 404（`db_tools.get_job_analysis(id, user_id)`）、direction_id 越权 400、DAO ValueError 400；`JdClassificationPayload`（Literal 枚举 + max_length → 422；model_validator 至少一维非空 → 422）。
+- [x] **direction 删除守卫补全**：`count_direction_references` 增计 `jd_classifications`（direction_id 引用）；缺表 1146 → warning + 按 0 计（表不存在则语义必为 0，不阻断删除）。
+- [x] **修复 `73cd091`**：`server.py validation_exception_handler` 无法序列化 model_validator 抛出的 `ctx.error=ValueError` → 本应 422 变 500；新增 `_jsonable_validation_errors` 把非标量 ctx 降级 str（存量缺陷，被本批「至少一维」校验测试暴露）。
+- [x] **测试 +30**：迁移约定/runner 入库 2、`test_jd_classification_db_unit` 15（行映射/白名单/枚举/≥1 维/upsert 语句与回读/1146 迁移提示）、API `TestJdClassification` 10（200/404/400/422 与 upsert 覆盖语义）、auth +2 端点、`TestCountReferences` 扩展至双计数 + 缺表按 0 计 1。
+- **验收**：encoding 380/0、ruff check/format 全绿、pytest **960 passed / 7 skipped**（930+30）；**scratch 库真库端到端**（一次性 `jobcraft_v0019_scratch`，MySQL，用后即删）：从零 19 迁移全量 → 13 列类型/NULL 性/默认值断言 → 唯一键+两索引在位 → V0019 整份重放幂等 → direction_id 指向/悬空均放行（无 FK 设计约定）→ UNIQUE(job_analysis_id) 拦截 1062 + DAO 同款 upsert 全量覆盖（单行/confirmed）→ updated_at ON UPDATE。**部署需 `python -m migrations.runner migrate`**（V0019 不在 docker 基线）。
+
 ## T-M3-1 direction 六维列 + DIR-n 编码与 CRUD API（2026-10-01，P3/M3 批次启动）
 
 > P3 方向体系（模块 M3 / B 切片）第 1 项，用户确认范围 T-M3-1~5 全批 + 编码前缀 DIR-1/DIR-2。裁决落点：Q7=c 两级分离（direction=方向定义，JD 侧提案归 V0019 的 jd_classification）+ U-P2a′ 采纳 DIR- 前缀方案（与能力维度 D1-D8 区分；展示 label 落既有 name 字段，不新增 label 列）。
