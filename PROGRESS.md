@@ -2,6 +2,16 @@
 
 > 本文件用于追踪项目整体进度。AI 在每次会话结束或完成子任务时，必须更新本文件的对应板块。
 
+## T-M3-1 direction 六维列 + DIR-n 编码与 CRUD API（2026-10-01，P3/M3 批次启动）
+
+> P3 方向体系（模块 M3 / B 切片）第 1 项，用户确认范围 T-M3-1~5 全批 + 编码前缀 DIR-1/DIR-2。裁决落点：Q7=c 两级分离（direction=方向定义，JD 侧提案归 V0019 的 jd_classification）+ U-P2a′ 采纳 DIR- 前缀方案（与能力维度 D1-D8 区分；展示 label 落既有 name 字段，不新增 label 列）。
+
+- [x] **V0018 迁移 `f47ae13`**：direction 加 7 列——`code VARCHAR(16)` + 六维 `job_function/primary_role/industry/product/scenario/skills`（NOT NULL DEFAULT ''；列名避 MySQL 保留字 FUNCTION/ROLE；多值维逗号分隔 B 切片约定）+ `UNIQUE(user_id, code)` / `UNIQUE(user_id, name)`；information_schema COLUMNS/STATISTICS 探测 + PREPARE/EXECUTE 幂等（9 组探测各 5 条 + 回填 1 条 = 46 语句块）；存量回填 `ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY id)` → DIR-n（P3 前无 CRUD 入口零写入，空表 no-op）；前向兼容只加列/索引，方向表仍零运行时 DDL（V0009 建表唯一落点）。
+- [x] **DAO `db_direction` 扩 CRUD**：`create_direction`（事务内 max DIR-n+1 → UNIQUE 冲突重试 3 次；同名→ValueError；errno 1054 缺列→「先执行 migrations.runner migrate」提示）/ `list_directions`（status 校验+过滤+创建序）/ `get_direction`（越权 None，签名兼容 P2C-07 调用方）/ `update_direction`（白名单部分更新、code 不可改、等值 UPDATE 经存在性预检防误判）/ `delete_direction` / `count_direction_references`（expression 引用计数，jd_classification 计数留 T-M3-2）；`_row_to_direction` 新列 `.get` 兜底（未迁移库读路径不炸）。
+- [x] **API `app/api/direction.py`**：prefix `/api/jobcraft/direction`（单数集合，同 submission 先例），`GET/POST ""` + `GET/PATCH/DELETE /{direction_id}`；删除被引用 → **409** 提示改归档，不存在/越权 404，ValueError → 400，统一信封由 server.py handler 包装；`DirectionCreate/Update/Read` schema（code 服务端生成不进请求体），server.py 注册。
+- [x] **测试 +52**：迁移约定/runner 入库 2、`test_direction_db_unit.py` 30（行映射/编码生成与重试/校验/CRUD/引用计数）、API `TestDirections` 15（含 409/404/400/422 与 DIR 序列断言）、`test_auth_security._BUSINESS_ENDPOINTS` +5 端点。
+- **验收**：encoding 377/0、ruff check/format 全绿、pytest **930 passed / 7 skipped**（878+52）；**scratch 库真库端到端**（一次性 `jobcraft_v0018_scratch`，MySQL 8.4.9，用后即删）：从零 18 迁移全量 → 7 列/2 唯一键在位（类型+默认值断言）→ V0018 整份重放幂等 → 唯一键按 user_id 作用域正确拦截（同用户 code/name 撞 1062）放行（跨用户）→ 造 `code=''` 存量重放回填 DIR-1/DIR-2 且唯一键重建 → 既有列前向兼容。本地 jobcraft 库仍受 DB-VERIFY-02 阻塞（V0007 无记录），未对其执行；**部署需 `python -m migrations.runner migrate`**（V0018 不在 docker 基线）。
+
 ## FE-LAYER-02 组件层残余 api 直调收敛（2026-10-01，P2 批次追加）
 
 > P2 批次范围外发现（FE-LAYER-01 立项、用户指定优先）。3 个组件的运行时 api 直调收敛至 features hooks，组件层直调清零。同会话清除 63 个 phantom M（stash pop 后 stat 缓存过期；`git add -u` 刷新即清，`git diff --cached` 确认零内容入暂存）。
