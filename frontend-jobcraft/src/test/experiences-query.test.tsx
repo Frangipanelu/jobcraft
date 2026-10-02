@@ -347,15 +347,16 @@ describe('T-M1-2 版本明细懒加载（N+1→1）', () => {
 
 describe('T-M1-1 structure 失败重试入口', () => {
   it('STAR 为空的卡展示「重新结构化」，点击调用 structureCard 并 toast 成功', async () => {
-    experience.structureCard.mockImplementation(async (cardId: number) => {
+    experience.structureCard.mockImplementation(async (cardId: number): Promise<ExperienceCard> => {
       const card = serverCards.find((c) => c.id === cardId);
+      if (!card) throw new Error(`card ${cardId} not found`);
       return {
         ...card,
         ai_structured: {
-          background: '业务背景', problem: '核心职责',
-          actions: ['动作1'], results: ['结果1'], achievements: ['成果1'],
+          summary: '结构化摘要',
+          achievements: [{ title: '落地量化', result: '留存 +22.8%' }],
         },
-      } as ExperienceCard;
+      };
     });
 
     renderWithProviders(
