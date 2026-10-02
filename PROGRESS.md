@@ -2,6 +2,17 @@
 
 > 本文件用于追踪项目整体进度。AI 在每次会话结束或完成子任务时，必须更新本文件的对应板块。
 
+## T-M3-4 按 direction_id 结构化检索表达/卡片（2026-10-01，P3/M3 批次）
+
+> 复用链路的表达腿 + 卡片腿（矩阵 Q4-v1 / PRD §5.3 / 解封 DB-03 cards/search 消费）。无迁移，全部落在既有 expression/experience_card 表上；方向→Job 关联仍归 P4 `Job.directionId`。
+
+- [x] **表达腿 DAO** `636970d`：`db_expression.list_user_expressions` / `count_user_expressions`（共享 `_build_user_expression_filters`：始终 `user_id` 过滤 + 可选 direction_id/type/status，枚举非法 ValueError；`ORDER BY updated_at DESC, id DESC`，不折叠版本链），新增 `query_scalar` 导入。
+- [x] **表达腿 API**：`GET /api/jobcraft/experience/expressions?direction_id=&type=&status=&page=&page_size=`（跨卡集合检索，与 `POST /experience/expressions` 同路径不同方法）；direction 归属校验同 P2C-07（越权/不存在 404），type/status 枚举非法 400，分页信封与 `/cards/search` 一致；响应 schema 新增 `ExpressionSearchResponse {items, total, page, page_size, total_pages, direction_id}`。
+  - **路径归一说明**：PRD §5.3 写作 `/api/jobcraft/expressions`，实际落在 `/api/jobcraft/experience/expressions`——与 PRD §5.2 既有表达端点命名空间一致（`/experience/*`），同类归一先例为 T-M3-1（PRD `/directions` → 实际 `/direction`）。
+- [x] **卡片腿（DB-03 解封）**：`search_cards` / `count_search_cards` 增加可选 `direction_id`（`EXISTS` 子查询限定「该方向下有表达的卡」，与关键词 LIKE 组 AND 叠加；`q` 放宽为 q/direction_id 至少其一，二者皆缺 400）；`/cards/search` 响应增加 `direction_id` 回显（additive）。**关键词 LIKE 语义零改动**（DB-03 DEFERRED 修订已记 TODO 行内，FULLTEXT 方案 A 触发条件不变）。
+- [x] **测试 +25**：表达 DAO list/count（7，fixture 补 `query_scalar` 假实现）、search_cards 方向过滤（6，含关键词回归与 is_active/EXISTS 顺序）、API 表达检索（7）、API 卡片检索扩展（4）、auth +1 端点。
+- **验收**：encoding 383/0、ruff check/format 全绿、pytest **994 passed / 7 skipped**（969+25）；**scratch 全链路 E2E**（一次性 `jobcraft_m34_scratch`，19 迁移 + `db_conn._jc_config` 指向 scratch，TestClient 走真实 JWT 鉴权 → DAO → MySQL，用后即删）8/8 PASS：方向 D1 仅返回该方向版本链 2 行、D2 仅 1 行、type/status 过滤、全量 total=3、分页 page=2、枚举 400/越权 404/未认证 401、cards/search 仅方向（B/C 排除）、关键词 python 回归、关键词+方向 AND 双侧、二者皆缺 400。
+
 ## T-M3-3 方向 find-or-create 接线（2026-10-01，P3/M3 批次）
 
 > 表单方向字段的数据侧能力（供 T-M4-3 前端结构化表单调用）：一次提交 `name` 即可拿到稳定 `direction_id`，再接 T-M3-2 分类 upsert 完成方向字段落库链路。分类 upsert 端点已由 T-M3-2 提供，本任务不新增迁移。
