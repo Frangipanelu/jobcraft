@@ -3,20 +3,15 @@ import type { QueryClient } from '@tanstack/react-query';
 import * as authApi from '../../api/auth';
 import * as jobApi from '../../api/job';
 import * as tasksApi from '../../api/tasks';
-import type { JobAnalysisResult, ATSProfile } from '../../api/types';
+import type { JobAnalysisResult } from '../../api/types';
 import type { Experience, JDAnalysis, Job } from '../../types/jobcraft';
 import {
   JD_ANALYSES_QUERY_KEY,
   analysisDetailToJD,
   analysisToJD,
-  dutiesText,
-  requirementsText,
-  structuredResultToJD,
 } from './mappers';
 import { JOBS_QUERY_KEY, deriveJobStatus } from '../jobs/mappers';
 import { EXPERIENCES_QUERY_KEY } from '../experiences/mappers';
-
-type StructuredJdResult = Awaited<ReturnType<typeof jobApi.analyzeStructuredJd>>;
 
 
 function readJdAnalyses(client: QueryClient): JDAnalysis[] {
@@ -147,9 +142,11 @@ export function useCreateJdAnalysisMutation() {
 }
 
 /**
- * 创建结构化 JD 分析。与 legacy `JobCraftContext.createStructuredJDAnalysis` 行为等价：
+ * 创建结构化 JD 分析。T-M4-1：结构化字段注入后端 4 节点工作流（Q2 裁决 C）。
  * find-or-create 岗位 → runTaskOrSync('jd_analyze_structured', fallback=analyzeStructuredJd) →
- * structuredResultToJD 构建本地分析记录（合成 id + matchScore 0）并前置 cache。
+ * analysisToJD 回填 cache；完成后将岗位 jdAnalysisId 更新为后端真实 job_analysis_id
+ * （合成 id 仅作 find-or-create 占位，FE-JD-REPORT-01 双轨 id 根因消除，
+ * 报告页降级展示自此仅作兜底）。
  *
  * 区别于 fire-and-forget 的 legacy 实现：本 hook 返回 Promise，完成（或失败）时 resolve/reject。
  */
@@ -176,32 +173,32 @@ export function useCreateStructuredJdAnalysisMutation() {
         nextAction: '已完成结构化 JD 分析，可开始定制简历并投递'
       });
 
+      // 与 legacy useCreateJdAnalysisMutation 同语义：评分节点以缓存中的全部经历卡为准
+      const cardIds = (queryClient.getQueryData<Experience[]>([...EXPERIENCES_QUERY_KEY]) || [])
+        .map((e) => parseInt(e.id))
+        .filter((id) => !isNaN(id));
 
-      const result = await tasksApi.runTaskOrSync<StructuredJdResult>(
+      const result = await tasksApi.runTaskOrSync<JobAnalysisResult>(
         'jd_analyze_structured',
         {
           user_id: user.id,
           company: data.company,
           position: data.role,
           duties: data.duties,
-          requirements: data.requirements
+          requirements: data.requirements,
+          card_ids: cardIds
         },
         () => jobApi.analyzeStructuredJd({
           company: data.company,
           position: data.role,
           duties: data.duties,
-          requirements: data.requirements
+          requirements: data.requirements,
+          card_ids: cardIds
         }),
         { timeout: 120_000 }
       );
 
-      const newAnalysis = structuredResultToJD(result as { ats_profile?: ATSProfile | null }, {
-        id: newId,
-        jobId: targetJobId,
-        company: data.company,
-        role: data.role,
-        rawText: [dutiesText(data.duties), requirementsText(data.requirements)].join('\n')
-      });
+      const newAnalysis = analysisToJD(result, targetJobId);
       queryClient.setQueryData(
         [...JD_ANALYSES_QUERY_KEY],
         (prev: JDAnalysis[] | undefined) => [newAnalysis, ...(prev || [])]
@@ -211,7 +208,12 @@ export function useCreateStructuredJdAnalysisMutation() {
       const jobs = readJobs(queryClient);
       const nextJobs = jobs.map((j) =>
         j.id === targetJobId
-          ? { ...j, jdAnalysisId: newId, steps: { ...j.steps, jdAnalysis: true } }
+          ? {
+              ...j,
+              jdAnalysisId: String(result.job_analysis_id),
+              matchScore: result.match_score || 0,
+              steps: { ...j.steps, jdAnalysis: true, expMatched: true }
+            }
           : j
       );
       queryClient.setQueryData([...JOBS_QUERY_KEY], nextJobs);

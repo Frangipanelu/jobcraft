@@ -12,7 +12,6 @@ import type {
   SaveResumeResult,
   ResumePersonalInfo,
   ResumeSuggestionWire,
-  ATSProfile,
   ExperienceCard,
 } from './types'
 
@@ -98,7 +97,8 @@ export async function analyzeStructuredJd(payload: {
   position: string
   duties: string[]
   requirements: StructuredRequirementItem[]
-}): Promise<{ ats_profile: ATSProfile; raw: Record<string, unknown>; company: string; position: string }> {
+  card_ids: number[]
+}): Promise<JobAnalysisResult> {
   return request('/api/jobcraft/job/analyze-ats-structured', {
     method: 'POST',
     body: JSON.stringify(payload),

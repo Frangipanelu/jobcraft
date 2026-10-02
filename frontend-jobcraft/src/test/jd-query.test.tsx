@@ -134,16 +134,30 @@ const STRUCTURED_ATS: ATSProfile = {
   raw_summary: '',
 };
 
-function buildStructuredResult() {
-  return {
+function buildStructuredResult(): JobAnalysisResult {
+  return buildResult({
+    job_analysis_id: 88,
+    jd_text: '1. 负责策略制定\n1. （硬性门槛）3年经验',
+    jd_requirements: {
+      position_title: 'AI 产品经理',
+      hard_skills: ['3年经验'],
+      soft_skills: [],
+      keywords: [],
+      nice_to_have: ['英语'],
+      responsibilities: ['负责策略制定'],
+      dimension_requirements: [],
+      salary_range: null,
+      work_mode: null,
+      location: null,
+    },
     ats_profile: {
       ...STRUCTURED_ATS,
       subtext_decoded: [{ surface_requirement: '强自驱', hidden_meaning: '能主动推进', key_ability: '结果导向' }],
-    } as unknown as ATSProfile,
-    raw: {},
-    company: '字节跳动',
-    position: 'AI 产品经理',
-  };
+    } as ATSProfile,
+    match_score: 71,
+    match_level: '基本匹配',
+    gap_analysis: '结构化分析完成',
+  });
 }
 
 const JdCacheCount = () => {
@@ -387,7 +401,7 @@ describe('JDReportDetailView 结构化分析降级展示', () => {
 });
 
 describe('JD create 迁移（features/jd/hooks）', () => {
-  it('结构化分析：无 jobId 时自动创建岗位，runTaskOrSync 降级 analyzeStructuredJd，双写 jd + jobs cache', async () => {
+  it('结构化分析：无 jobId 时自动创建岗位，runTaskOrSync 降级 analyzeStructuredJd，回填真实 job_analysis_id', async () => {
     renderWithProviders(
       <>
         <StructuredCreateHarness />
@@ -398,11 +412,11 @@ describe('JD create 迁移（features/jd/hooks）', () => {
 
     fireEvent.click(await screen.findByText('发起结构化分析'));
 
-    await waitFor(() => expect(screen.getByTestId('structured-result').textContent).toMatch(/^jd-\d+\|0\|结构化分析完成\|1$/));
+    await waitFor(() => expect(screen.getByTestId('structured-result').textContent).toMatch(/^88\|71\|结构化分析完成\|0$/));
 
     expect(tasks.runTaskOrSync).toHaveBeenCalledWith(
       'jd_analyze_structured',
-      expect.objectContaining({ user_id: 1, duties: ['负责策略制定'] }),
+      expect.objectContaining({ user_id: 1, duties: ['负责策略制定'], card_ids: [] }),
       expect.any(Function),
       expect.objectContaining({ timeout: 120_000 }),
     );
@@ -411,13 +425,14 @@ describe('JD create 迁移（features/jd/hooks）', () => {
       position: 'AI 产品经理',
       duties: ['负责策略制定'],
       requirements: [{ text: '3年经验', tag: 'required' }],
+      card_ids: [],
     });
 
     expect(screen.getByTestId('jd-cache-count').textContent).toBe('3');
-    expect(screen.getByTestId('jobs-cache-state').textContent).toMatch(/^1\|jd-\d+\|0$/);
+    expect(screen.getByTestId('jobs-cache-state').textContent).toMatch(/^1\|88\|71$/);
   });
 
-  it('结构化分析：提供 jobId 时复用已有岗位并回填 jdAnalysisId（合成 id）', async () => {
+  it('结构化分析：提供 jobId 时复用已有岗位并回填真实 job_analysis_id 与 matchScore', async () => {
     job.getDashboard.mockResolvedValue({ submissions: [DASH_JOB] });
 
     renderWithProviders(
@@ -431,8 +446,8 @@ describe('JD create 迁移（features/jd/hooks）', () => {
     await waitFor(() => expect(screen.getByTestId('jobs-cache-state').textContent).toBe('1|12|0'));
     fireEvent.click(screen.getByText('发起结构化分析'));
 
-    await waitFor(() => expect(screen.getByTestId('structured-result').textContent).toMatch(/^jd-\d+\|0\|结构化分析完成\|1$/));
-    expect(screen.getByTestId('jobs-cache-state').textContent).toMatch(/^1\|jd-\d+\|0$/);
+    await waitFor(() => expect(screen.getByTestId('structured-result').textContent).toMatch(/^88\|71\|结构化分析完成\|0$/));
+    expect(screen.getByTestId('jobs-cache-state').textContent).toMatch(/^1\|88\|71$/);
     expect(screen.getByTestId('jd-cache-count').textContent).toBe('3');
   });
 
