@@ -415,6 +415,53 @@ describe('JDReportDetailView 结构化分析降级展示', () => {
   });
 });
 
+describe('JDReportDetailView 改写任务清单与参考分（T-M4-2 / Q3）', () => {
+  const GAP_ITEM = {
+    id: 7,
+    job_analysis_id: 13,
+    user_id: 1,
+    dimension: 'D6',
+    kind: 'rewrite' as const,
+    status: 'weak' as const,
+    severity: 'high' as const,
+    jd_evidence: '独立完成用户研究并形成决策',
+    current: '协助完成调研',
+    rewrite_hint: '突出独立主导与决策闭环',
+    card_id: null,
+    note: '示例备注',
+  };
+
+  it('capability_gaps 非空 → 改写任务清单渲染，verdict 计数改写任务，评分标参考分', async () => {
+    job.listJobAnalyses.mockResolvedValue({
+      analyses: [{ ...DETAIL_B, capability_gaps: [GAP_ITEM] }, DETAIL_A],
+    });
+    renderWithProviders(<JDReportDetailView analysisId="13" />);
+
+    expect(await screen.findByText('改写任务清单')).toBeInTheDocument();
+    expect(screen.getAllByTestId('rewrite-task')).toHaveLength(1);
+    expect(screen.getByText('D6 数据复盘')).toBeInTheDocument();
+    expect(screen.getByText('表述改写')).toBeInTheDocument();
+    expect(screen.getByText('表述不对口')).toBeInTheDocument();
+    expect(screen.getByText('高优先')).toBeInTheDocument();
+    expect(screen.getByText('独立完成用户研究并形成决策')).toBeInTheDocument();
+    expect(screen.getByText('协助完成调研')).toBeInTheDocument();
+    expect(screen.getByText('突出独立主导与决策闭环')).toBeInTheDocument();
+    expect(screen.getByTestId('verdict-gaps').textContent).toContain('1 项改写任务');
+    expect(screen.getByTestId('score-caption').textContent).toBe('参考分');
+    expect(screen.getByTestId('score-caption').parentElement?.textContent).toContain('55%');
+    expect(screen.queryByText('暂无能力匹配数据')).not.toBeInTheDocument();
+  });
+
+  it('capability_gaps 缺省（旧分析）→ 回退能力匹配表与缺口文案', async () => {
+    renderWithProviders(<JDReportDetailView analysisId="13" />);
+
+    expect(await screen.findByText('能力匹配')).toBeInTheDocument();
+    expect(screen.queryByTestId('rewrite-task-list')).not.toBeInTheDocument();
+    expect(screen.getByTestId('verdict-gaps').textContent).toContain('项能力缺口');
+    expect(screen.getByTestId('score-caption').textContent).toBe('参考分');
+  });
+});
+
 describe('JD create 迁移（features/jd/hooks）', () => {
   it('结构化分析：无 jobId 时自动创建岗位，runTaskOrSync 降级 analyzeStructuredJd，回填真实 job_analysis_id', async () => {
     renderWithProviders(

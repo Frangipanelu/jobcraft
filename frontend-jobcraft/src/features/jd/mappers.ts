@@ -1,6 +1,6 @@
-import type { JobAnalysisResult } from '../../api/types';
+import type { JobAnalysisResult, CapabilityGapWire } from '../../api/types';
 import type { JobAnalysisDetail } from '../../api/job';
-import type { JDAnalysis } from '../../types/jobcraft';
+import type { CapabilityGap, JDAnalysis } from '../../types/jobcraft';
 
 /** analysisDetailToJD 的输入结构：JobAnalysisResult（创建路径）与 JobAnalysisDetail（列表路径）均满足。 */
 type JDDetailInput = Pick<
@@ -13,8 +13,26 @@ type JDDetailInput = Pick<
   | 'match_score'
   | 'gap_analysis'
   | 'dimension_requirements'
+  | 'capability_gaps'
   | 'created_at'
 >;
+
+/** wire 改写任务清单 → 领域模型（T-M4-2；缺省/非数组一律归空，报告页回退渲染）。 */
+function wireToCapabilityGaps(list: CapabilityGapWire[] | undefined): CapabilityGap[] {
+  if (!Array.isArray(list)) return [];
+  return list.map((g, i) => ({
+    id: g.id != null ? String(g.id) : `gap-${i}`,
+    dimension: g.dimension || 'EXT',
+    kind: g.kind === 'rewrite' ? 'rewrite' : 'evidence',
+    status: g.status === 'weak' ? 'weak' : 'missing',
+    severity: g.severity === 'high' || g.severity === 'low' ? g.severity : 'medium',
+    jdEvidence: g.jd_evidence || '',
+    current: g.current || '',
+    rewriteHint: g.rewrite_hint || '',
+    cardId: g.card_id != null ? String(g.card_id) : null,
+    note: g.note || '',
+  }));
+}
 
 /** JD 分析查询缓存 key（react-query 唯读源）。 */
 export const JD_ANALYSES_QUERY_KEY = ['jdAnalyses'] as const;
@@ -83,6 +101,7 @@ export function analysisToJD(result: JobAnalysisResult, jobId?: string): JDAnaly
         };
       });
     })(),
+    capabilityGaps: wireToCapabilityGaps(result.capability_gaps),
     recommendedExperiences: result.per_card_scores?.map(ps => ({
       experienceId: String(ps.card_id),
       matchScore: ps.score,
@@ -154,6 +173,7 @@ export function analysisDetailToJD(detail: JDDetailInput): JDAnalysis {
     },
     subtextAnalysis: [],
     skillGaps,
+    capabilityGaps: wireToCapabilityGaps(detail.capability_gaps),
     goal: goalText,
     recommendedExperiences: [],
     createdAt: detail.created_at || '',

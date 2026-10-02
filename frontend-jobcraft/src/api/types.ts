@@ -203,6 +203,21 @@ export interface SuggestionItem {
   optimization: string | null
 }
 
+/** 能力缺口改写任务清单条目（T-M4-2 / Q3 定稿，wire snake_case）。 */
+export interface CapabilityGapWire {
+  id?: number
+  job_analysis_id?: number
+  dimension: string
+  kind: 'evidence' | 'rewrite'
+  status: 'missing' | 'weak'
+  severity: 'high' | 'medium' | 'low'
+  jd_evidence: string
+  current: string
+  rewrite_hint: string
+  card_id: number | null
+  note: string
+}
+
 // ============================================================
 // 岗位分析结果
 // ============================================================
@@ -223,6 +238,8 @@ export interface JobAnalysisResult {
   gap_items: string[]
   per_card_scores: PerCardScore[]
   suggestions: SuggestionItem[]
+  /** 改写任务清单（T-M4-2 additive 字段；旧分析为 []，报告页回退能力匹配表） */
+  capability_gaps?: CapabilityGapWire[]
   dimension_requirements: DimensionRequirement[]
   resume_markdown: string | null
   created_at: string | null

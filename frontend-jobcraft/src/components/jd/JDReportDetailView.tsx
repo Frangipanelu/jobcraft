@@ -3,6 +3,7 @@ import { useJobCraft, useToastActions } from '../../context/JobCraftContext';
 import { useTabNavigate } from '../../router/tabPaths';
 import type { Experience } from '../../types/jobcraft';
 import { useJdAnalysesQuery } from '../../features/jd/hooks';
+import { dimensionLabel } from '../../utils/dimensions';
 import { useJobsQuery } from '../../features/jobs/hooks';
 import { useExperiencesQuery } from '../../features/experiences/hooks';
 import {
@@ -110,6 +111,10 @@ export const JDReportDetailView: React.FC<JDReportDetailViewProps> = ({
       }))
   );
 
+  // T-M4-2 / Q3：改写任务清单（旧分析缺省 → 回退 skillGaps 能力匹配渲染）
+  const capabilityGaps = currentAnalysis?.capabilityGaps || [];
+  const hasCapabilityGaps = capabilityGaps.length > 0;
+
   const competencyMatch = (currentAnalysis?.skillGaps || []).map((g) => ({
     ability: g.capability,
     requirement: g.requirement || '',
@@ -169,7 +174,11 @@ export const JDReportDetailView: React.FC<JDReportDetailViewProps> = ({
       matchLabel: currentAnalysis?.whyMatch || (hasMatchScore ? 'MATCH' : '待分析'),
       why: currentAnalysis?.verdictSummary || '待分析',
       advantagesCount: (currentAnalysis?.recommendedExperiences || []).length,
-      gapsCount: (currentAnalysis?.skillGaps || []).length,
+      gapsCount: hasCapabilityGaps
+        ? capabilityGaps.length
+        : (currentAnalysis?.skillGaps || []).length,
+      gapsLabel: hasCapabilityGaps ? '项改写任务' : '项能力缺口',
+      gapsHint: hasCapabilityGaps ? '按清单改写' : '需要补强',
       weaknessCount: 0,
       risk: currentAnalysis?.keyRisks || '待分析',
       suggestions: currentAnalysis?.resumeAdvice || []
@@ -410,15 +419,15 @@ export const JDReportDetailView: React.FC<JDReportDetailViewProps> = ({
                   <span className="text-[#737873]">高度匹配</span>
                 </div>
 
-                {/* 2. Capability Gaps */}
-                <div className="flex items-center gap-1.5 text-xs">
+                {/* 2. Capability Gaps → 改写任务（T-M4-2 / Q3） */}
+                <div className="flex items-center gap-1.5 text-xs" data-testid="verdict-gaps">
                   <span className="text-warning text-[13px] font-bold shrink-0">
                     ⚠️
                   </span>
                   <span className="font-bold text-[#111814]">
-                    {data.verdict.gapsCount} 项能力缺口
+                    {data.verdict.gapsCount} {data.verdict.gapsLabel}
                   </span>
-                  <span className="text-[#737873]">需要补强</span>
+                  <span className="text-[#737873]">{data.verdict.gapsHint}</span>
                 </div>
 
                 {/* 3. Experience Shortage */}
@@ -451,8 +460,8 @@ export const JDReportDetailView: React.FC<JDReportDetailViewProps> = ({
                   <span key={i}>★</span>
                 ))}
               </div>
-              <div className="text-[11px] text-[#737873] font-medium">
-                匹配度
+              <div className="text-[11px] text-[#737873] font-medium" data-testid="score-caption">
+                参考分
               </div>
             </div>
 
@@ -499,14 +508,84 @@ export const JDReportDetailView: React.FC<JDReportDetailViewProps> = ({
           </div>
         </div>
 
-        {/* ── 02 能力匹配 (Exact Match with Image 1 Table) ── */}
+        {/* ── 02 能力匹配 / 改写任务清单（T-M4-2 / Q3：缺口输出=改写任务） ── */}
         <div className="mb-9">
           <SectionHeaderImageStyle
             num="02"
-            title="能力匹配"
-            subtitle="你的能力与岗位要求的匹配情况"
+            title={hasCapabilityGaps ? '改写任务清单' : '能力匹配'}
+            subtitle={
+              hasCapabilityGaps
+                ? '把经历表述成能胜任目标岗位的表达'
+                : '你的能力与岗位要求的匹配情况'
+            }
           />
 
+          {hasCapabilityGaps ? (
+            <div className="space-y-3" data-testid="rewrite-task-list">
+              {capabilityGaps.map((gap) => (
+                <div
+                  key={gap.id}
+                  data-testid="rewrite-task"
+                  className="bg-white border border-[#E2E6E2] rounded-xl p-4 sm:p-5 shadow-2xs"
+                >
+                  <div className="flex flex-wrap items-center gap-2 mb-2.5">
+                    <span className="text-[11px] font-black px-2 py-0.5 rounded bg-[#111814] text-white">
+                      {dimensionLabel(gap.dimension)}
+                    </span>
+                    <span
+                      className={`text-[11px] font-bold px-2 py-0.5 rounded ${
+                        gap.kind === 'rewrite'
+                          ? 'bg-sage-soft text-sage'
+                          : 'bg-[#EEF2EE] text-[#526058]'
+                      }`}
+                    >
+                      {gap.kind === 'rewrite' ? '表述改写' : '补充素材'}
+                    </span>
+                    <span className="text-[11px] font-bold px-2 py-0.5 rounded bg-[#F2F4F1] text-[#526058]">
+                      {gap.status === 'weak' ? '表述不对口' : '缺少证据'}
+                    </span>
+                    <span
+                      className={`text-[11px] font-bold px-2 py-0.5 rounded ${
+                        gap.severity === 'high'
+                          ? 'bg-error-bg text-error'
+                          : gap.severity === 'medium'
+                          ? 'bg-warning-bg text-warning'
+                          : 'bg-[#F2F4F1] text-muted'
+                      }`}
+                    >
+                      {gap.severity === 'high'
+                        ? '高优先'
+                        : gap.severity === 'medium'
+                        ? '中优先'
+                        : '低优先'}
+                    </span>
+                    <span className="ml-auto text-[11px] text-[#737873]">
+                      {gap.cardId
+                        ? `锚点：${expById.get(gap.cardId)?.title || '未命名经历'}`
+                        : '未关联经历卡'}
+                    </span>
+                  </div>
+                  <div className="space-y-1 text-xs sm:text-[13px] leading-relaxed">
+                    <p className="m-0">
+                      <span className="font-bold text-[#111814]">岗位要求 </span>
+                      <span className="text-[#526058]">{gap.jdEvidence || '—'}</span>
+                    </p>
+                    <p className="m-0">
+                      <span className="font-bold text-[#111814]">现有表述 </span>
+                      <span className="text-[#2B3830]">{gap.current || '—'}</span>
+                    </p>
+                    <p className="m-0">
+                      <span className="font-bold text-[#1E4D3C]">改写方向 </span>
+                      <span className="text-[#1E4D3C]">{gap.rewriteHint || '—'}</span>
+                    </p>
+                    {gap.note ? (
+                      <p className="m-0 text-muted">备注：{gap.note}</p>
+                    ) : null}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
           <div className="bg-white border border-[#E2E6E2] rounded-xl overflow-hidden shadow-2xs">
             {/* Table Header */}
             <div className="grid grid-cols-[140px_1fr_1fr_110px] bg-[#FAFBF9] px-5 py-3 border-b border-[#E2E6E2] text-xs font-bold text-[#737873]">
@@ -545,6 +624,7 @@ export const JDReportDetailView: React.FC<JDReportDetailViewProps> = ({
             </div>
             )}
           </div>
+          )}
         </div>
 
         {/* ── 03 关键词匹配 (ATS) (Exact Match with Image 1) ── */}
@@ -770,7 +850,7 @@ export const JDReportDetailView: React.FC<JDReportDetailViewProps> = ({
               </div>
               <p className="text-xs text-[#737873] m-0">
                 {verdictScore > 0
-                  ? `当前岗位综合匹配度 ${verdictScore}%，建议重点突出与岗位核心要求最相关的经历。`
+                  ? `参考分 ${verdictScore}%（仅供参考），建议重点突出与岗位核心要求最相关的经历${hasCapabilityGaps ? '，并按「改写任务清单」逐项落实' : ''}。`
                   : '完成 JD 分析后，AI 将基于匹配结果给出简历定制建议。'}
               </p>
             </div>

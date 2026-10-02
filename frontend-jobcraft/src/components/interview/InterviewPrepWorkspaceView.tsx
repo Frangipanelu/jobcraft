@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useToastActions } from '../../context/JobCraftContext';
 import { useTabNavigate } from '../../router/tabPaths';
 import { useInterviewsQuery, useSavePrepDraftsMutation } from '../../features/interview/hooks';
+import { DIMENSION_LABELS } from '../../utils/dimensions';
 import { CompanyResearchShape } from '../../api/types';
 import {
   ArrowLeft,
@@ -324,10 +325,7 @@ export const InterviewPrepWorkspaceView: React.FC<InterviewPrepWorkspaceViewProp
 
   const renderRoundStrategy = () => {
     const keyFocus = prep?.aiStrategy?.keyFocusAreas || [];
-    const dimensionTitles: Record<string, string> = {
-      D1: '技术深度', D2: '业务理解', D3: '问题拆解', D4: '方案设计',
-      D5: '落地执行', D6: '数据复盘', D7: '协作沟通', D8: '职业规划'
-    };
+    const dimensionTitles: Record<string, string> = DIMENSION_LABELS;
     const focusAreas = keyFocus.length
       ? keyFocus
       : (src?.dimension_questions || []).map((dq) => ({

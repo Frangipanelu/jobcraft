@@ -162,3 +162,44 @@ describe('analysisDetailToJD', () => {
     ]);
   });
 });
+
+describe('capability_gaps 映射（T-M4-2 / Q3）', () => {
+  const GAP_WIRE = {
+    id: 7,
+    dimension: 'D6',
+    kind: 'rewrite' as const,
+    status: 'weak' as const,
+    severity: 'high' as const,
+    jd_evidence: '独立完成用户研究',
+    current: '协助调研',
+    rewrite_hint: '突出独立主导',
+    card_id: 3,
+    note: 'n',
+  };
+
+  it('analysisToJD：wire → camelCase 任务清单，缺省归空', () => {
+    const withGap = analysisToJD(buildResult({ capability_gaps: [GAP_WIRE] }));
+    expect(withGap.capabilityGaps).toEqual([
+      {
+        id: '7',
+        dimension: 'D6',
+        kind: 'rewrite',
+        status: 'weak',
+        severity: 'high',
+        jdEvidence: '独立完成用户研究',
+        current: '协助调研',
+        rewriteHint: '突出独立主导',
+        cardId: '3',
+        note: 'n',
+      },
+    ]);
+    expect(analysisToJD(buildResult()).capabilityGaps).toEqual([]);
+  });
+
+  it('analysisDetailToJD：detail.capability_gaps 透传，card_id null → cardId null', () => {
+    const jd = analysisDetailToJD(buildResult({ capability_gaps: [{ ...GAP_WIRE, card_id: null }] }));
+    expect(jd.capabilityGaps).toHaveLength(1);
+    expect(jd.capabilityGaps?.[0].cardId).toBeNull();
+    expect(analysisDetailToJD(buildResult()).capabilityGaps).toEqual([]);
+  });
+});

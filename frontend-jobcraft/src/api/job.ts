@@ -7,6 +7,7 @@ import type {
   JobAnalysisResult,
   JDRequirements,
   DimensionRequirement,
+  CapabilityGapWire,
   Submission,
   DashboardItem,
   SaveResumeResult,
@@ -73,6 +74,8 @@ export interface JobAnalysisDetail {
   match_score: number | null;
   gap_analysis: unknown;
   dimension_requirements: DimensionRequirement[];
+  /** 改写任务清单（T-M4-2 additive；旧分析缺省 → 报告页回退能力匹配表） */
+  capability_gaps?: CapabilityGapWire[];
   created_at: string | null;
 }
 

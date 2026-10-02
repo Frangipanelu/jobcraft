@@ -83,6 +83,28 @@ export interface Experience {
   isConfirmed: boolean;
 }
 
+/** 能力缺口改写任务清单条目（T-M4-2 / Q3 定稿；camelCase 领域模型）。 */
+export interface CapabilityGap {
+  id: string;
+  /** 维度编码 D1-D8 / EXT（对齐 JD 要求侧同一把尺子） */
+  dimension: string;
+  /** A/B 类：evidence=证据缺口(换卡/补经历)，rewrite=表述缺口(改写) */
+  kind: 'evidence' | 'rewrite';
+  /** missing=无证据，weak=有素材但表述不对口 */
+  status: 'missing' | 'weak';
+  severity: 'high' | 'medium' | 'low';
+  /** JD 原文要求（为什么改） */
+  jdEvidence: string;
+  /** 现有表述（现状） */
+  current: string;
+  /** 改写方向（怎么改） */
+  rewriteHint: string;
+  /** 锚点经历卡 id（在哪改） */
+  cardId?: string | null;
+  /** 开放字段，只展示不统计 */
+  note: string;
+}
+
 export interface JDAnalysis {
   id: string;
   jobId?: string;
@@ -121,6 +143,8 @@ export interface JDAnalysis {
     gap: string;
     recommendation: string;
   }[];
+  /** 改写任务清单（T-M4-2；旧分析缺省 → 报告页回退 skillGaps 能力匹配表） */
+  capabilityGaps?: CapabilityGap[];
   goal?: string;
   recommendedExperiences: {
     experienceId: string;
