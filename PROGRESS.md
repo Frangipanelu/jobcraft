@@ -2,6 +2,15 @@
 
 > 本文件用于追踪项目整体进度。AI 在每次会话结束或完成子任务时，必须更新本文件的对应板块。
 
+## T-M3-3 方向 find-or-create 接线（2026-10-01，P3/M3 批次）
+
+> 表单方向字段的数据侧能力（供 T-M4-3 前端结构化表单调用）：一次提交 `name` 即可拿到稳定 `direction_id`，再接 T-M3-2 分类 upsert 完成方向字段落库链路。分类 upsert 端点已由 T-M3-2 提供，本任务不新增迁移。
+
+- [x] **DAO `find_or_create_direction(user_id, data) → (direction, created)`** `21c33e0`：`_find_by_name`（UNIQUE(user_id,name) 保证至多一行）→ 命中原样返回**不覆盖六维/状态**（方向定义稳定，修改走 PATCH）→ 未命中走 `create_direction`（DIR-n 编码 + 校验）→ 并发同名竞态（create 报「方向名称已存在」）回读已存在行返回 created=False，回读缺失原样抛出；空白名 ValueError 先于任何查询。
+- [x] **API `POST /api/jobcraft/direction/find-or-create`**：复用 `DirectionCreate` 请求体（name min/max_length → 422），响应新 schema `DirectionFindOrCreateResponse {direction: DirectionRead, created: bool}`（created 供表单分支提示）；注册于 `POST ""` 之后，无路由冲突（无 POST /{direction_id} 路由）。
+- [x] **测试 +9**：DAO `TestFindOrCreate` 5（空白名先拒不查/命中不建不覆盖（归档行原样）/未命中建 DIR-1+trim/同名竞态回读/其他建错误原样上抛）、API find-or-create 3（created=true/false/空白名 400）、auth +1 端点。
+- **验收**：encoding 383/0、ruff check/format 全绿、pytest **969 passed / 7 skipped**（960+9）；**scratch 真库直调 DAO 冒烟**（一次性 `jobcraft_m33_scratch`，19 迁移全量后 `db_conn._jc_config` 指向 scratch，用后即删）：未命中创建 DIR-1（trim）→ 同名复用不覆盖六维 → 第二方向 DIR-2 → 空白名 ValueError → 跨用户独立命名空间（user 2 自己的 DIR-1）→ 归档行命中原样返回，6/6 PASS。
+
 ## T-M3-2 jd_classification 六维分类提案表与 API（2026-10-01，P3/M3 批次）
 
 > Q7=c 两级分离的第二级落地：direction=方向定义（T-M3-1），本表=JD 侧六维分类提案/确认。附带修复一个被新测试暴露的 422 信封序列化缺陷。
