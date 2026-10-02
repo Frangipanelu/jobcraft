@@ -12,7 +12,6 @@ import {
   useJdAnalysesQuery,
 } from '../features/jd/hooks';
 import { useJobsQuery } from '../features/jobs/hooks';
-import { structuredResultToJD } from '../features/jd/mappers';
 import type { DashboardItem, JobAnalysisResult, ATSProfile } from '../api/types';
 import type { JDAnalysis } from '../types/jobcraft';
 import type { QueryClient } from '@tanstack/react-query';
@@ -334,17 +333,33 @@ describe('JDReportDetailView 迁移读路径', () => {
 });
 
 describe('JDReportDetailView 结构化分析降级展示', () => {
-  const STRUCT_ANALYSIS = structuredResultToJD(
-    buildStructuredResult(),
-    {
-      id: 'jd-1700000000000',
-      company: '字节跳动',
-      role: 'AI 产品经理',
-      rawText: '1. 负责策略制定\n1. （硬性门槛）3年经验',
-    },
-  );
+  /** 历史合成 id 分析（matchScore 0）：降级展示自此为兜底（FE-JD-REPORT-01）。 */
+  const STRUCT_ANALYSIS: JDAnalysis = {
+    id: 'jd-1700000000000',
+    company: '字节跳动',
+    role: 'AI 产品经理',
+    salaryRange: '面议',
+    rawText: '1. 负责策略制定\n1. （硬性门槛）3年经验',
+    createdAt: '2026-01-01',
+    matchScore: 0,
+    recommendationStars: 0,
+    verdictSummary: '结构化分析完成',
+    whyMatch: '',
+    keyRisks: '',
+    resumeAdvice: [],
+    coreRequirements: [
+      { category: '核心职责', items: ['负责策略制定'] },
+      { category: '任职资格', items: [] },
+    ],
+    atsKeywords: { hardSkills: [], softSkills: [], expKeywords: [], coveragePercent: 0 },
+    subtextAnalysis: [
+      { id: 'sub-0', rawJD: '强自驱', literalMeaning: '能主动推进', realEvaluation: '结果导向' },
+    ],
+    skillGaps: [],
+    recommendedExperiences: [],
+  };
 
-  /** 预置结构化分析（合成 id + matchScore 0）到查询缓存，避免 useJdAnalysesQuery 重新拉取覆盖。 */
+  /** 预置历史合成 id 分析到查询缓存，避免 useJdAnalysesQuery 重新拉取覆盖。 */
   function seedStructuredClient(): QueryClient {
     const client = createTestQueryClient();
     client.setQueryDefaults(['jdAnalyses'], { staleTime: Infinity });

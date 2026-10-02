@@ -5,7 +5,6 @@
   可选 duties/requirements 结构化注入（T-M4-1 / Q2 裁决 C）
 - run_structured_job_analysis_workflow: 结构化前端分析（跳过 structurer，
   注入 §14.2 结构化状态跑完整 4 节点，产出真实 job_analysis_id 与 match 字段）
-- run_structured_ats_workflow: 结构化 ATS 单节点入口（保留供仅需 ATS 画像的调用方）
 - run_structured_ats_split: 把粘贴的原始 JD 拆成结构化块（职责/要求，含 preferred 分流）
 """
 
@@ -50,14 +49,6 @@ class JobAnalysisState(TypedDict):
     jd_req: Optional[Any]
     match: Optional[Dict[str, Any]]
     suggestions: Optional[Any]
-    result: Optional[Dict[str, Any]]
-
-
-class StructuredATSState(TypedDict):
-    company: str
-    position: str
-    duties: List[str]
-    requirements: List[StructuredRequirementItem]
     result: Optional[Dict[str, Any]]
 
 
@@ -330,23 +321,6 @@ def run_structured_job_analysis_workflow(
     )
 
 
-def _run_structured_ats(state: Dict[str, Any]) -> Dict[str, Any]:
-    out = analyze_structured_jd(
-        duties=state["duties"],
-        requirements=state["requirements"],
-    )
-    company = state.get("company", "")
-    position = state.get("position", "")
-    return {
-        "result": {
-            "ats_profile": out["ats"],
-            "raw": out["raw"],
-            "company": company,
-            "position": position or out["ats"].get("job_title", ""),
-        }
-    }
-
-
 def prepare_structured_jd(
     duties: List[Any],
     requirements: List[Any],
@@ -374,37 +348,6 @@ def prepare_structured_jd(
     if not clean_duties and not reqs:
         raise ValueError("岗位职责与任职要求不能同时为空")
     return clean_duties, [StructuredRequirementItem(**r) for r in reqs]
-
-
-def run_structured_ats_workflow(
-    company: str,
-    position: str,
-    duties: List[str],
-    requirements: List[StructuredRequirementItem],
-) -> Dict[str, Any]:
-    """结构化 JD 分析：用户标签已确定 required/preferred，LLM 只分析细节。
-
-    :param company: 公司名称。
-    :param position: 岗位名称（优先采用，空则回落 ATS 岗位名）。
-    :param duties: 岗位职责逐条。
-    :param requirements: 任职要求逐条（含标签）。
-    :return: {"ats_profile": ATSProfile dict, "raw": ..., "company": str, "position": str}。
-    """
-    workflow = StateGraph(StructuredATSState)
-    workflow.add_node("structured_ats", _run_structured_ats)
-    workflow.add_edge(START, "structured_ats")
-    workflow.add_edge("structured_ats", END)
-
-    app = workflow.compile()
-    initial_state: StructuredATSState = {
-        "company": company,
-        "position": position,
-        "duties": duties,
-        "requirements": requirements,
-        "result": None,
-    }
-    result = app.invoke(initial_state)
-    return result.get("result", {})
 
 
 def run_structured_ats_split(jd_text: str) -> Dict[str, Any]:

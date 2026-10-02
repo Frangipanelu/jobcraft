@@ -841,41 +841,6 @@ class TestJobAnalysisFlow:
                 card_ids=[1],
             )
 
-    def test_structured_ats_workflow_normal(self, monkeypatch):
-        """结构化 JD 分析（前端已分好类）"""
-        from app.schemas.jobcraft import StructuredRequirementItem
-        from app.workflows.job_analysis_flow import run_structured_ats_workflow
-
-        def fake_structured_analyze(duties, requirements):
-            return {
-                "ats": {
-                    **_fake_ats_profile(),
-                    "required_skills": ["Python"],
-                    "preferred_skills": ["高并发"],
-                    "job_title": "AI 产品经理",
-                },
-                "raw": {"job_title": "AI 产品经理"},
-            }
-
-        monkeypatch.setattr(
-            "app.workflows.job_analysis_flow.analyze_structured_jd",
-            fake_structured_analyze,
-        )
-
-        result = run_structured_ats_workflow(
-            company="字节跳动",
-            position="AI 产品经理",
-            duties=["主导端侧大模型交互设计"],
-            requirements=[
-                StructuredRequirementItem(text="3年以上经验", tag="hard"),
-                StructuredRequirementItem(text="熟悉 Python", tag="required"),
-            ],
-        )
-        assert result["ats_profile"] is not None
-        assert result["ats_profile"]["job_title"] == "AI 产品经理"
-        assert result["ats_profile"]["required_skills"] == ["Python"]
-        assert result["position"] == "AI 产品经理"
-
     def test_structured_ats_split_extracts_blocks(self, monkeypatch):
         """把粘贴的原始 JD 拆成结构化块（含 preferred 分流）"""
         from app.workflows.job_analysis_flow import run_structured_ats_split
