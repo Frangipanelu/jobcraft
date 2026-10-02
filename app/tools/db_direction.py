@@ -274,16 +274,35 @@ def delete_direction(direction_id: int, user_id: int) -> bool:
 def count_direction_references(direction_id: int, user_id: int) -> Dict[str, int]:
     """统计引用该方向的下游行数（删除守卫用，越权方向计 0）。
 
-    :return: {"expressions": n}（jd_classification 计数随 T-M3-2 接入）。
+    :return: {"expressions": n, "jd_classifications": n}——后者为
+    jd_classification.direction_id 引用计数（T-M3-2 / V0019 接入；表缺失
+    时语义上必为 0，记 warning 后按 0 计，不阻断方向删除）。
     """
     owned = query_one(
         "SELECT id FROM direction WHERE id=%s AND user_id=%s",
         (direction_id, user_id),
     )
     if not owned:
-        return {"expressions": 0}
-    row = query_one(
+        return {"expressions": 0, "jd_classifications": 0}
+    expr_row = query_one(
         "SELECT COUNT(*) AS c FROM expression WHERE direction_id=%s AND user_id=%s",
         (direction_id, user_id),
     )
-    return {"expressions": int((row or {}).get("c") or 0)}
+    try:
+        cls_row = query_one(
+            "SELECT COUNT(*) AS c FROM jd_classification "
+            "WHERE direction_id=%s AND user_id=%s",
+            (direction_id, user_id),
+        )
+    except MySQLError as exc:
+        if getattr(exc, "errno", None) == 1146:
+            logger.warning(
+                "jd_classification 缺表（未迁移 V0019），方向引用计数按 0 计: %s", exc
+            )
+            cls_row = None
+        else:
+            raise
+    return {
+        "expressions": int((expr_row or {}).get("c") or 0),
+        "jd_classifications": int((cls_row or {}).get("c") or 0),
+    }

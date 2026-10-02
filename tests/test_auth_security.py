@@ -47,6 +47,13 @@ _BUSINESS_ENDPOINTS = [
     ("GET", "/api/jobcraft/direction/1", None),
     ("PATCH", "/api/jobcraft/direction/1", {"name": "方向B"}),
     ("DELETE", "/api/jobcraft/direction/1", None),
+    # jd_classification（T-M3-2）
+    ("GET", "/api/jobcraft/job/1/jd-classification", None),
+    (
+        "POST",
+        "/api/jobcraft/job/1/jd-classification",
+        {"job_function": "用户增长", "industry": "电商"},
+    ),
     # job_analysis
     ("GET", "/api/jobcraft/job/analyses", None),
     ("GET", "/api/jobcraft/job/analyze/1", None),

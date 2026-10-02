@@ -1009,3 +1009,50 @@ def test_v0018_migrate_is_applied_via_runner(fake_conn):
         if e[0].strip().startswith("INSERT INTO schema_migrations")
     ]
     assert "0018" in inserted
+
+
+def test_v0019_jd_classification_follows_convention():
+    """T-M3-2：V0019 新建 jd_classification（Q7=c 第二级），仅建表不改既有，
+    幂等（CREATE TABLE IF NOT EXISTS），遵守 SPLIT 约定。"""
+    v0019 = os.path.join(runner.MIGRATIONS_DIR, "V0019__jd_classification.sql")
+    assert os.path.exists(v0019)
+    with open(v0019, encoding="utf-8") as fh:
+        sql = fh.read()
+    assert "CREATE TABLE IF NOT EXISTS jd_classification" in sql
+    for frag in (
+        "job_analysis_id INT NOT NULL",
+        "direction_id INT NULL",
+        "job_function VARCHAR(100) NOT NULL DEFAULT ''",
+        "primary_role VARCHAR(100) NOT NULL DEFAULT ''",
+        "industry VARCHAR(100) NOT NULL DEFAULT ''",
+        "product VARCHAR(200) NOT NULL DEFAULT ''",
+        "scenario VARCHAR(200) NOT NULL DEFAULT ''",
+        "skills VARCHAR(500) NOT NULL DEFAULT ''",
+        "confidence VARCHAR(8) NOT NULL DEFAULT ''",
+        "source VARCHAR(16) NOT NULL DEFAULT 'manual'",
+        "status VARCHAR(16) NOT NULL DEFAULT 'proposed'",
+        "UNIQUE KEY uk_jd_classification_analysis (job_analysis_id)",
+        "KEY idx_jd_classification_user (user_id, status)",
+        "KEY idx_jd_classification_direction (direction_id)",
+        "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+    ):
+        assert frag in sql, f"V0019 缺少定义: {frag}"
+    # 前向兼容：仅新建表，不动既有表/列（AGENTS §4.4）
+    stmts = [s.strip() for s in sql.split(";--SPLIT--") if s.strip()]
+    assert len(stmts) == 1, f"V0019 应含 1 条语句块，实际 {len(stmts)}"
+    stmt = stmts[0]
+    upper = stmt.upper()
+    assert not upper.startswith(("DROP", "ALTER", "RENAME", "TRUNCATE", "UPDATE"))
+    assert "MODIFY COLUMN" not in upper, "V0019 不得改列"
+    assert not stmt.endswith(";"), f"V0019 语句块含尾分号: {stmt[:60]}"
+
+
+def test_v0019_migrate_is_applied_via_runner(fake_conn):
+    """T-M3-2：V0019 与既有迁移共存，runner.migrate() 不抛错且入库。"""
+    runner.migrate()
+    inserted = [
+        e[1][0]
+        for e in fake_conn.cursor_obj.executed
+        if e[0].strip().startswith("INSERT INTO schema_migrations")
+    ]
+    assert "0019" in inserted

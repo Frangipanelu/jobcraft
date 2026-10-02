@@ -1,12 +1,12 @@
 import logging
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from app.auth.dependencies import get_current_user
-from app.tools import db_tools, jobcraft_resume
+from app.tools import db_direction, db_jd_classification, db_tools, jobcraft_resume
 from app.workflows.job_analysis_flow import run_job_analysis_workflow
 
 router = APIRouter(prefix="/api/jobcraft/job", tags=["job_analysis"])
@@ -30,6 +30,40 @@ class StructuredJDRequest(BaseModel):
     position: str = ""
     duties: List[str]
     requirements: List[Dict[str, Any]]
+
+
+class JdClassificationPayload(BaseModel):
+    """六维分类提案载荷（T-M3-2：POST 为全量 upsert，缺省走列默认值）。
+
+    六维与 direction（V0018）同构同宽；confidence/source/status 用 Literal
+    收紧枚举（违约 422），「至少一维非空」用 model_validator（违约 422）——
+    DAO 层另有同款校验（供 T-M3-3 代码路径直调时兜底，违约 400）。
+    """
+
+    direction_id: Optional[int] = None
+    job_function: str = Field(default="", max_length=100)
+    primary_role: str = Field(default="", max_length=100)
+    industry: str = Field(default="", max_length=100)
+    product: str = Field(default="", max_length=200)
+    scenario: str = Field(default="", max_length=200)
+    skills: str = Field(default="", max_length=500)
+    confidence: Literal["", "high", "medium", "low"] = ""
+    source: Literal["manual", "rule", "ai"] = "manual"
+    status: Literal["proposed", "confirmed"] = "proposed"
+
+    @model_validator(mode="after")
+    def _require_any_dimension(self) -> "JdClassificationPayload":
+        dims = (
+            self.job_function,
+            self.primary_role,
+            self.industry,
+            self.product,
+            self.scenario,
+            self.skills,
+        )
+        if not any(dim.strip() for dim in dims):
+            raise ValueError("六维分类至少填写一维")
+        return self
 
 
 class SaveResumePayload(BaseModel):
@@ -201,3 +235,48 @@ def jobcraft_resume_download(path: str, current_user: int = Depends(get_current_
     from fastapi.responses import FileResponse
 
     return FileResponse(abs_path, filename=abs_path.name, media_type="text/markdown")
+
+
+@router.post("/{job_analysis_id}/jd-classification")
+def jobcraft_job_jd_classification_post(
+    job_analysis_id: int,
+    payload: JdClassificationPayload,
+    current_user: int = Depends(get_current_user),
+):
+    """提交/更新该分析的六维分类提案（Q7=c：全量 upsert，proposed/confirmed）。
+
+    分析不存在或越权 → 404；direction_id 不归属当前用户 → 400；
+    DAO 校验失败（含缺表未迁移）→ 400；其余异常 → 500。
+    """
+    if not db_tools.get_job_analysis(job_analysis_id, current_user):
+        raise HTTPException(status_code=404, detail="记录不存在")
+    data = payload.model_dump()
+    if data.get("direction_id") is not None and not db_direction.get_direction(
+        int(data["direction_id"]), current_user
+    ):
+        raise HTTPException(status_code=400, detail="方向不存在或不属于当前用户")
+    try:
+        return db_jd_classification.upsert_jd_classification(
+            current_user, job_analysis_id, data
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.exception("六维分类保存失败")
+        raise HTTPException(status_code=500, detail=f"保存失败: {e}")
+
+
+@router.get("/{job_analysis_id}/jd-classification")
+def jobcraft_job_jd_classification_get(
+    job_analysis_id: int,
+    current_user: int = Depends(get_current_user),
+):
+    """查询该分析的六维分类（分析不存在/越权或未录入 → 404）。"""
+    if not db_tools.get_job_analysis(job_analysis_id, current_user):
+        raise HTTPException(status_code=404, detail="记录不存在")
+    classification = db_jd_classification.get_jd_classification(
+        job_analysis_id, current_user
+    )
+    if not classification:
+        raise HTTPException(status_code=404, detail="分类未录入")
+    return classification

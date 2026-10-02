@@ -382,8 +382,13 @@ class TestDeleteDirection:
 
 
 class TestCountReferences:
-    def _patch_query_one(self, monkeypatch, responses):
+    def _patch_query_one(self, monkeypatch, responses, missing_table_for=None):
         def _fake_query_one(sql, params=None):
+            if missing_table_for and missing_table_for in sql:
+                raise MySQLError(
+                    msg=f"Table 'jobcraft.{missing_table_for}' doesn't exist",
+                    errno=1146,
+                )
             for marker, row in responses:
                 if marker in sql:
                     return row
@@ -396,21 +401,47 @@ class TestCountReferences:
             monkeypatch,
             [
                 ("SELECT id FROM direction", {"id": 1}),
-                ("COUNT(*)", {"c": 5}),
+                ("FROM expression", {"c": 5}),
+                ("FROM jd_classification", {"c": 2}),
             ],
         )
-        assert mod.count_direction_references(1, 7) == {"expressions": 5}
+        assert mod.count_direction_references(1, 7) == {
+            "expressions": 5,
+            "jd_classifications": 2,
+        }
 
     def test_owned_without_references(self, monkeypatch):
         self._patch_query_one(
             monkeypatch,
             [
                 ("SELECT id FROM direction", {"id": 1}),
-                ("COUNT(*)", {"c": 0}),
+                ("FROM expression", {"c": 0}),
+                ("FROM jd_classification", {"c": 0}),
             ],
         )
-        assert mod.count_direction_references(1, 7) == {"expressions": 0}
+        assert mod.count_direction_references(1, 7) == {
+            "expressions": 0,
+            "jd_classifications": 0,
+        }
 
     def test_not_owned_counts_zero(self, monkeypatch):
         self._patch_query_one(monkeypatch, [("SELECT id FROM direction", None)])
-        assert mod.count_direction_references(999, 7) == {"expressions": 0}
+        assert mod.count_direction_references(999, 7) == {
+            "expressions": 0,
+            "jd_classifications": 0,
+        }
+
+    def test_missing_jd_classification_table_counts_zero(self, monkeypatch):
+        """未迁移 V0019（缺表 1146）时方向删除守卫按 0 计，不上抛。"""
+        self._patch_query_one(
+            monkeypatch,
+            [
+                ("SELECT id FROM direction", {"id": 1}),
+                ("FROM expression", {"c": 3}),
+            ],
+            missing_table_for="jd_classification",
+        )
+        assert mod.count_direction_references(1, 7) == {
+            "expressions": 3,
+            "jd_classifications": 0,
+        }

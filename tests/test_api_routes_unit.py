@@ -2230,3 +2230,164 @@ class TestProfileGithub:
         resp = client.get("/api/auth/profile")
         assert resp.status_code == 200
         assert resp.json()["github"] == ""
+
+
+class TestJdClassification:
+    """六维分类提案（T-M3-2：/api/jobcraft/job/{id}/jd-classification，Q7=c）"""
+
+    def _mock_db(self, monkeypatch, analysis_exists=True):
+        """把 job_analysis / direction / jd_classification 的调用替换为假实现。"""
+        from app.tools import db_direction as dir_mod
+        from app.tools import db_jd_classification as cls_mod
+        from app.tools import db_tools as tools_mod
+
+        store = {"rows": {}, "owned_directions": {1}}
+
+        def _fake_analysis(job_id, user_id=None):
+            if analysis_exists and user_id == 1:
+                return {"id": job_id, "user_id": user_id}
+            return None
+
+        def _fake_get_direction(direction_id, user_id=None):
+            if direction_id in store["owned_directions"] and user_id == 1:
+                return {"id": direction_id, "user_id": user_id}
+            return None
+
+        def _fake_upsert(user_id, job_analysis_id, fields):
+            rec = {
+                "id": len(store["rows"]) + 1,
+                "user_id": user_id,
+                "job_analysis_id": job_analysis_id,
+                "direction_id": fields.get("direction_id"),
+                "job_function": fields.get("job_function") or "",
+                "primary_role": fields.get("primary_role") or "",
+                "industry": fields.get("industry") or "",
+                "product": fields.get("product") or "",
+                "scenario": fields.get("scenario") or "",
+                "skills": fields.get("skills") or "",
+                "confidence": fields.get("confidence") or "",
+                "source": fields.get("source") or "manual",
+                "status": fields.get("status") or "proposed",
+                "created_at": "2026-10-02T09:00:00",
+                "updated_at": "2026-10-02T09:00:00",
+            }
+            store["rows"][job_analysis_id] = rec
+            return rec
+
+        def _fake_get(job_analysis_id, user_id=None):
+            rec = store["rows"].get(job_analysis_id)
+            if rec and user_id is not None and rec["user_id"] != user_id:
+                return None
+            return rec
+
+        monkeypatch.setattr(tools_mod, "get_job_analysis", _fake_analysis)
+        monkeypatch.setattr(dir_mod, "get_direction", _fake_get_direction)
+        monkeypatch.setattr(cls_mod, "upsert_jd_classification", _fake_upsert)
+        monkeypatch.setattr(cls_mod, "get_jd_classification", _fake_get)
+        return store
+
+    def test_post_creates_classification(self, monkeypatch):
+        self._mock_db(monkeypatch)
+        resp = client.post(
+            "/api/jobcraft/job/55/jd-classification",
+            json={
+                "job_function": "用户增长",
+                "industry": "电商",
+                "direction_id": 1,
+            },
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["job_analysis_id"] == 55
+        assert body["job_function"] == "用户增长"
+        assert body["direction_id"] == 1
+        assert body["status"] == "proposed"
+        assert body["source"] == "manual"
+
+    def test_post_confirm_overwrites_existing(self, monkeypatch):
+        store = self._mock_db(monkeypatch)
+        client.post(
+            "/api/jobcraft/job/55/jd-classification",
+            json={"job_function": "用户增长"},
+        )
+        resp = client.post(
+            "/api/jobcraft/job/55/jd-classification",
+            json={"job_function": "策略运营", "status": "confirmed"},
+        )
+        assert resp.status_code == 200
+        assert store["rows"][55]["status"] == "confirmed"
+        assert store["rows"][55]["job_function"] == "策略运营"
+
+    def test_post_missing_analysis_returns_404(self, monkeypatch):
+        self._mock_db(monkeypatch, analysis_exists=False)
+        resp = client.post(
+            "/api/jobcraft/job/999/jd-classification",
+            json={"job_function": "运营"},
+        )
+        assert resp.status_code == 404
+
+    def test_post_foreign_direction_returns_400(self, monkeypatch):
+        self._mock_db(monkeypatch)
+        resp = client.post(
+            "/api/jobcraft/job/55/jd-classification",
+            json={"job_function": "运营", "direction_id": 999},
+        )
+        assert resp.status_code == 400
+        assert "方向不存在" in resp.json()["error"]["message"]
+
+    def test_post_invalid_status_returns_422(self, monkeypatch):
+        self._mock_db(monkeypatch)
+        resp = client.post(
+            "/api/jobcraft/job/55/jd-classification",
+            json={"job_function": "运营", "status": "archived"},
+        )
+        assert resp.status_code == 422
+
+    def test_post_all_dimensions_empty_returns_422(self, monkeypatch):
+        self._mock_db(monkeypatch)
+        resp = client.post(
+            "/api/jobcraft/job/55/jd-classification", json={"industry": " "}
+        )
+        assert resp.status_code == 422
+
+    def test_post_oversize_dimension_returns_422(self, monkeypatch):
+        self._mock_db(monkeypatch)
+        resp = client.post(
+            "/api/jobcraft/job/55/jd-classification",
+            json={"job_function": "x" * 101},
+        )
+        assert resp.status_code == 422
+
+    def test_get_returns_classification(self, monkeypatch):
+        store = self._mock_db(monkeypatch)
+        store["rows"][55] = {
+            "id": 1,
+            "user_id": 1,
+            "job_analysis_id": 55,
+            "direction_id": None,
+            "job_function": "策略运营",
+            "primary_role": "",
+            "industry": "",
+            "product": "",
+            "scenario": "",
+            "skills": "",
+            "confidence": "",
+            "source": "manual",
+            "status": "proposed",
+            "created_at": "2026-10-02T09:00:00",
+            "updated_at": "2026-10-02T09:00:00",
+        }
+        resp = client.get("/api/jobcraft/job/55/jd-classification")
+        assert resp.status_code == 200
+        assert resp.json()["job_function"] == "策略运营"
+
+    def test_get_missing_analysis_returns_404(self, monkeypatch):
+        self._mock_db(monkeypatch, analysis_exists=False)
+        resp = client.get("/api/jobcraft/job/999/jd-classification")
+        assert resp.status_code == 404
+
+    def test_get_without_classification_returns_404(self, monkeypatch):
+        self._mock_db(monkeypatch)
+        resp = client.get("/api/jobcraft/job/55/jd-classification")
+        assert resp.status_code == 404
+        assert "分类未录入" in resp.json()["error"]["message"]
