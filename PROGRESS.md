@@ -25,6 +25,13 @@
 - [x] **T-M1-4（本地，无提交）**：`EXPERIENCE_SPEC` §25.1 加注 3 条——① `raw_text` 归卡片、`base_resume` 底座为独立版本列表、**无双写义务**（Q2 解耦裁决）；② 底座记录写失败必须 `catch → error toast` + 复验结论（`handleConfirmUpload` / `ResumeStep` / `applyUploadResume` 三处均已覆盖并有单测）；③ 重试入口由 structure 端点承接。`docs/` 在 `.gitignore` 内，spec 加注不产生 git 提交。
 - **验收（本批）**：encoding **387/0**；`ruff check`/`format` 0；pytest **1023 passed / 7 skipped**；前端 tsc 0、vitest **212 passed**（30 文件）、`npm run build` ✓。
 - **边界**：未碰 `recommend-tags` / `backfill` / `POST /upload`（属 T-M1-5）；未跑 docker 真库（全程 mock 单测）；未新增迁移。
+
+## T-M1-5 下线裁决执行：POST /upload 死端点 + backfill 转维护脚本（2026-10-02，C 窗口第二轮）
+
+- [x] **代码**（`4500697`，矩阵 Q1③④）：删 `POST /api/jobcraft/experience/upload`（死端点，前端消费者 0；**复盘域 `interview_review.py` 的 `/upload` 属 M8-5/Q4 目标，未动**）；删 `POST /cards/backfill` + `BackfillPayload`，能力转 `scripts/backfill_cards.py`（`--user-id` 必填防误操作他人数据、`--min-chars` 默认 100 同原 payload，内部仍调 `run_backfill_workflow`）；`uploadResume` 死导出经全仓复核已由 P2-1（`27a51f0`）清零，本轮核销即后端端点本身。
+- [x] **测试同步**：删 `TestExperienceBackfill`（2 条）与 `_BUSINESS_ENDPOINTS` 的 backfill 行；`test_upload_and_form_endpoints_require_auth` 的 upload 段改打 `/upload/preview`（文件上传 401 断言保留）；新增 `tests/test_backfill_script_unit.py` 4 条（参数透传 / min_chars 默认 / 缺 --user-id 拒绝 / workflow 失败退出码 1）。
+- [x] **门禁**：pytest **1043 passed / 7 skipped**、ruff 全绿、encoding 388 文件 0 错、前端 tsc 0 + build 通过（本轮前端零改动）；`run_backfill_workflow` 既有 4 条 workflow 单测不动。
+- **边界**：`recommend-tags` 按 Q1② 留待下轮裁决（未动）；全程 mock 单测（互斥约束 1/5）；零迁移；未碰 B/D 窗口在途文件。
 - **⚠️共享工作区**：同一 worktree 内 B 窗口（interview / jobs 域）存在未提交改动，本批按 hunk 精确暂存 C 域文件（`types/jobcraft.ts` 只入 C 侧 hunk），提交前逐文件核对 `git diff --cached --stat`。
 
 ## T-M4-2 缺口重构=改写任务清单（2026-10-02，P4/M4 批次）
