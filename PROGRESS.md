@@ -2,6 +2,20 @@
 
 > 本文件用于追踪项目整体进度。AI 在每次会话结束或完成子任务时，必须更新本文件的对应板块。
 
+## T-M6-1 resume_version 表与版本 CRUD/设当前端点（2026-10-02，M6 批次首任务）
+
+> M6-Q1-B 核心字段版落地：简历版本独立落库——结构化 sections JSON 是 diff/溯源/缺口列（M6-3/4）的前提，且 M5-Q2 后投递前简历不再有 submission 可存（T-M6-2 接线）。迁移号 V0021 先登记后写 SQL（V0014-V0020 均已占用）。
+
+- [x] **迁移** `0e1b176`：`V0021__resume_versions.sql` 新表 `resume_version`（`user_id/job_id 可空/direction_id/version_no/version_name/sections JSON/resume_markdown/selected_for_application/source_expression_refs` + 时间戳 + 3 索引）；`CREATE TABLE IF NOT EXISTS` 幂等 + SPLIT 约定；factualCheck/userStatus/type/baseResumeId/customizationFocus 按 Q1 留空后置（只加列前向兼容）。测试断言仅建表、后置字段不建、runner 入库 `0021`。
+- [x] **DAO** `app/tools/db_resume_version.py`：`_ensure_resume_version_table()` 运行时兜底（仿 db_job_entity，`is_schema_ready` 短路）；list（user + 可选 job 过滤，version_no DESC）/get/create（**每岗 version_no=MAX+1**，sections/source_refs 入参 `json.dumps`）/update（仅传入项）/delete（归属硬删）/**set_current**——单条 UPDATE `IF(id=%s,1,0)` + `job_id <=> %s` NULL 安全比较，同岗单选原子清其他（RESUME_SPEC §11「用户确认实际投递的版本」，Q5 切换当前版本，M6-7 归档依据）。
+- [x] **API** `app/api/resume_version.py` 五端点：`GET /api/jobcraft/resume-version?job_id=`、`POST`（create 前置 `get_job` 归属 404、ValueError→400）、`PATCH/{id}`（空 payload 400「无有效更新字段」、非本人 404）、`DELETE/{id}`（`{"deleted": true}`）、`POST/{id}/current`；错误走 04 统一信封；独立字面量前缀无 `{param}` 吞路径问题。
+- [x] **启动引导注册** `1c50ac9`（fix）：`db_bootstrap._BOOTSTRAP_STEPS` +`db_resume_version._ensure_resume_version_table`——不注册则 schema 置位后请求路径 `_ensure` 短路、缺表环境永不建表；+回归测试锁定。
+- [x] **测试** +27 → pytest **1069 passed / 7 skipped**：迁移约定 3、DAO 11（MAX+1、JSON 序列化/坏数据回退、单选 SQL 断言、归属、过滤排序）、API 12（列表传参、create 归属/字段透传/400、patch 仅传入/空 400/404、delete、设当前）、bootstrap 注册 1。
+- **门禁**：encoding **393/0**、ruff check/format 0、pytest **1069/7**（纯后端任务，前端零改动）。
+- **契约（additive，零破坏，零存量改动）**：新 5 端点，`POST /resume-version` body `job_id` 必填；无既有接口变更。
+- **⚠️ 部署序**：先 `python -m migrations.runner migrate`（V0021）再发后端；bootstrap `_ensure` 为缺表兜底、迁移为准。
+- **边界**：save-resume 改写本表 + 存量快照迁 v1 归 T-M6-2；FE 版本列表/设当前消费归 M6-4/5；M6-7 以 `selected_for_application` 为归档依据；未动 docker 基线（job/capability_gap 等新表均不在基线，先例一致）。
+
 ## T-M5-1 Job CRUD + 新建岗位 Job 先行（2026-10-02，M5 批次首任务）
 
 > M5-Q2 裁决落地：创建岗位 = 只建 job 表（find-or-create 幂等），**创建 ≠ 投递**；标记投递才首建 submission 并回挂 submission_id。本批为「双源并存」最小实现（dashboard submission 主 + job-only 行合并进列表），单源切换留 T-M5-2。
