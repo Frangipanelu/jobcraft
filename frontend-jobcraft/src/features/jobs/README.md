@@ -5,11 +5,13 @@
 ## 数据流（cache 为权威，context 为过渡镜像）
 
 ```
-jobApi.getDashboard ──► useJobsQuery ──► react-query cache(['jobs']) ──► 已迁移视图
+jobApi.getDashboard + listJobEntities ──► useJobsQuery ──► react-query cache(['jobs']) ──► 已迁移视图
                                           │  onSync ──► context.jobs ──► 未迁移视图
 legacy writer (JobCraftContext.createJob/t…)
   ── 写入 cache ─────────────────────────┘
 ```
+
+- **T-M5-1 双源并存**：主源仍是 dashboard submission 行；`listJobEntities` 补「已建岗未投递」的 job-only 行（`submission_id == null` 且未被 `job_id` 覆盖），实体列表失败降级为空不阻断主源。单源切换见 T-M5-2。
 
 - **已迁移视图只读 cache**；`context.jobs` 仅是给未迁移视图（JobWorkspace / JD 详情 / 面试记录 / *Create 表单等）保留的**只读镜像**。
 - 两侧双写：hooks 的 mutation 通过 `onSync` 调 `useJobCraft().syncJobs` 同步镜像；context 的 legacy writer 反向 `setQueryData` 写回 cache。
@@ -19,19 +21,20 @@ legacy writer (JobCraftContext.createJob/t…)
 
 | 文件 | 内容 |
 |------|------|
-| `mappers.ts` | `JOBS_QUERY_KEY`、`submissionToJob`（后端 `DashboardItem` → 前端 `Job`）、`deriveJobStatus`（steps → status 单一事实源） |
-| `hooks.ts` | `useJobsQuery` 查询；`useCreateJobMutation` / `useTerminateJobMutation` / `useResumeJobMutation` 变更 |
+| `mappers.ts` | `JOBS_QUERY_KEY`、`submissionToJob`（后端 `DashboardItem` → 前端 `Job`）、`jobEntityToJob`（job-only 行 → `Job`，T-M5-1）、`deriveJobStatus`（steps → status 单一事实源） |
+| `hooks.ts` | `useJobsQuery` 查询；`useCreateJobMutation` / `useTerminateJobMutation` / `useResumeJobMutation` / `useSetDeliveredMutation` 变更 |
 
 ## Hooks API
 
 | Hook | 说明 |
 |------|------|
-| `useJobsQuery()` | 取当前用户岗位列表。queryFn：`authApi.getCurrentUser()` → `jobApi.getDashboard(user.id)` → `submissionToJob`。返回 `UseQueryResult<Job[]>`。 |
-| `useCreateJobMutation({ onSync })` | 与 legacy `createJob` 等价：本地乐观 Job（`steps` 初始 → pending）→ `createSubmission` 回填 `id`/`backendId`（失败静默保留本地 Job）→ `onSuccess` cache 前置插入 + `onSync`。`mutateAsync` 返回最终 `Job`（含回填后的 `id`，供跳转）。 |
-| `useTerminateJobMutation({ onSync })` | 纯本地更新（无后端调用）：目标 Job `steps.terminated=true`，`status=deriveJobStatus(steps)`。 |
-| `useResumeJobMutation({ onSync })` | 纯本地更新：`steps.terminated=false`，重算 status。 |
+| `useJobsQuery()` | 取当前用户岗位列表（T-M5-1 双源）。queryFn：`authApi.getCurrentUser()` → `getDashboard` submission 行 + `listJobEntities` job-only 行合并去重。返回 `UseQueryResult<Job[]>`。 |
+| `useCreateJobMutation()` | **T-M5-1 Job 先行（创建 ≠ 投递）**：本地乐观 Job → `createJobEntity`（`POST /job`）回填 `jobId`（失败静默保留本地 Job）→ `onSuccess` cache 前置插入 + jobId 存在时 invalidate（job-only 合并行带回）。`mutateAsync` 返回最终 `Job`（供跳转）。 |
+| `useTerminateJobMutation()` | 乐观 `steps.terminated=true` → 有 `backendId` 时 PATCH `status=CLOSED`（P11-b 持久化）→ invalidate。 |
+| `useResumeJobMutation()` | 乐观 `steps.terminated=false` → 有 `backendId` 时 PATCH reopen（按 delivered 落 APPLIED/PREPARED）→ invalidate。 |
+| `useSetDeliveredMutation(delivered)` | P0-1 手工确认投递。**T-M5-1**：标记 + 无 `backendId` 有 `jobId` → `POST /submission`（APPLIED+delivered）首建投递并回填 `backendId`/`jobId`；其余（已有 submission 的标记/取消）→ PATCH `delivered`。均乐观更新 + invalidate。 |
 
-变更统一 `{ onSync: syncJobs }` 用法：`const { syncJobs } = useJobCraft()`，把 `syncJobs` 注入 mutation，缓存更新后同步镜像。
+变更统一读 cache 做乐观更新；后端失败静默保留本地乐观状态（fire-and-forget）。
 
 ## 新视图迁移清单（对照 FE-CONTEXT-REMOVE）
 
@@ -42,5 +45,5 @@ legacy writer (JobCraftContext.createJob/t…)
 
 ## 测试
 
-- `mappers.test.ts`：映射参数与 `deriveJobStatus` 优先级。
-- `jobs-query.test.tsx`：视图渲染、create 前置写入 + 镜像同步、terminate/resume 乐观更新、Workbench 统计；通过 `vi.mock('../api/job')` + mock `../api/auth` 隔离后端。
+- `mappers.test.ts`：`submissionToJob` / `jobEntityToJob` 映射参数与 `deriveJobStatus` 优先级。
+- `jobs-query.test.tsx`：视图渲染、create 改建 job 实体（不建 submission）、job-only 行合并 + 标记投递首建 submission、terminate/resume 乐观更新、Workbench 统计；通过 `vi.mock('../api/job')` + mock `../api/auth` 隔离后端（有状态 mock server 服务 FE-CACHE-01）。

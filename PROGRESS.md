@@ -2,6 +2,18 @@
 
 > 本文件用于追踪项目整体进度。AI 在每次会话结束或完成子任务时，必须更新本文件的对应板块。
 
+## T-M5-1 Job CRUD + 新建岗位 Job 先行（2026-10-02，M5 批次首任务）
+
+> M5-Q2 裁决落地：创建岗位 = 只建 job 表（find-or-create 幂等），**创建 ≠ 投递**；标记投递才首建 submission 并回挂 submission_id。本批为「双源并存」最小实现（dashboard submission 主 + job-only 行合并进列表），单源切换留 T-M5-2。
+
+- [x] **后端** `cec7704`：`app/api/job_entity.py` 四端点——`POST /api/jobcraft/job`（find-or-create 幂等，空 position 400）、`GET /job`（列表）、`GET /job/{id}`（归属校验 404）、`PATCH /job/{id}`（normalize_status 校验 400、中文旧词写路径归一、`is_active=0` 停用）；`db_job_entity.update_job()`（仅更新传入项、归属校验先行）；**路由注册在 job_analysis_router 之后**（`{job_id}` 参数路由不吞字面量 `/analyses`、`/analyze/{id}`，`TestJobEntityRouteOrder` 回归锁定）；`CreateSubmissionPayload` +`delivered: bool = False`（additive——标记投递创建必须传 APPLIED+delivered=True，否则 `effective_status(APPLIED, 0)` 读回 PREPARED）。
+- [x] **前端** `f4ba9ac`：`api/job.ts` +`JobEntity`/`createJobEntity`/`listJobEntities`；`useCreateJobMutation` 改 `POST /job`（**不再顺带建 submission**，回填 jobId，invalidate 条件 backendId→jobId）；`useSetDeliveredMutation(true)` 新分支（无 backendId 有 jobId → `POST /submission` {status:APPLIED, delivered:true, job_analysis_id} **首建投递**并回填 backendId/jobId，后续取消走原 PATCH；其余 PATCH delivered 不变）；`useJobsQuery` 双源合并（job-only 行补列表、job_id 覆盖去重、实体列表失败降级不阻断 dashboard 主源）；`jobEntityToJob` 最小 mapper（分析事实取 `job.job_analysis_id`，submission 派生态按 pending，T-M5-2 统一 join）。
+- [x] **测试**：后端 +19 → pytest **1042 passed / 7 skipped**（TestDbJobEntity update_job ×5、job_entity API/路由序 ×12、submission delivered ×2；基线 1023 含 C 窗口并行批次）；前端 +4 → vitest **216**（create 改建 job 断言 createSubmission 不触发、job-only 合并可见 + 标记投递首建 submission、jobEntityToJob ×3）。
+- **门禁**：encoding **387/0**、ruff check/format 0、pytest **1042 passed / 7 skipped**；前端 tsc 0、vitest **216 passed**（30 文件）、vite build ✓。
+- **契约（additive，零迁移）**：新增 `POST/GET/PATCH /api/jobcraft/job`；`POST /submission` 请求 +`delivered`（默认 false）。job/submission 表均为既有表。
+- **边界**：/jobs、/workbench 数据源仍以 dashboard submission 为主（T-M5-2 切单源）；简历选中版本快照归档归 T-M6-7（本批投递创建只挂 status/delivered/job_analysis_id 链接）；job-only 行的终止/恢复持久化（PATCH is_active）留 T-M5-2/3。
+- **⚠️ 共享工作区**：B 窗口（interview/prep 域）在途改动全程未碰，按显式路径 `git add`；期间 B/C 窗口交叉提交（`cafc6c7` 等）无冲突。
+
 ## T-M1-1/T-M1-2/T-M1-4 structure 重试 + /cards 摘要去 N+1 + §25.1 加注（2026-10-02，C 窗口批次）
 
 > 矩阵 C：Q1 `structure` 卡片页重试接线（零消费状态关闭）、Q3 `GET /cards` 首屏去 N+1、Q2 底座写失败报错复验。文件域 `app/api/experience.py` / `db_experience` / 经历域前端组件；**零迁移**（复用既有 `version` 列别名 `current_version`）。
