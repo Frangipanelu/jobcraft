@@ -14,6 +14,10 @@ import {
 /** updateCard 可提交的 payload（Experience 四槽位 + 可选 raw_text 原文回滚）。 */
 type ExperienceUpdatePayload = Partial<Experience> & { raw_text?: string };
 
+/** 某张经历卡的版本明细缓存 key（T-M1-2 懒加载：面板打开才拉）。 */
+export const experienceVersionsQueryKey = (cardId: number) =>
+  ['experience-versions', cardId] as const;
+
 /**
  * 从后端拉取经历卡版本历史（EXP-P1-05 §28 / §34.6）。
  * 版本服务失败时返回 null（列表/写入不阻塞，回退保留现有信息）。
@@ -31,6 +35,25 @@ async function loadVersionMeta(cardId: number): Promise<{
   } catch {
     return null;
   }
+}
+
+/**
+ * 版本历史明细查询（T-M1-2 懒加载腿）。
+ *
+ * 列表首屏不再逐卡拉版本（N+1→1，摘要走 GET /cards 内嵌字段）；
+ * 仅当面板挂载（enabled）时按卡拉明细。失败回退 null，由调用方
+ * 回落 cache 内的 exp.versionHistory（写路径回流的历史仍可用）。
+ */
+export function useCardVersionsQuery(cardId: number, enabled: boolean) {
+  return useQuery<{
+    currentVersion: string;
+    versionHistory: ExperienceVersionRecord[];
+  } | null>({
+    queryKey: experienceVersionsQueryKey(cardId),
+    queryFn: () => loadVersionMeta(cardId),
+    enabled: enabled && !isNaN(cardId),
+    staleTime: 30_000,
+  });
 }
 
 /** 把前端 Experience 更新字段翻译为后端 updateCard payload（四槽位 + 定稿）。 */
@@ -60,26 +83,34 @@ function toUpdateCardPayload(
 /**
  * 查询当前用户的经历卡列表（listCards → cardToExperience）。
  * 数据源：experienceApi.listCards；userId 取自已认证用户的 auth profile。
- * 版本历史（EXP-P1-05 §34.6）：列表并行拉取各卡 card_versions 快照，
- * versionHistory/currentVersion 以后端为准（失败静默保留空历史）。
+ *
+ * T-M1-2：版本/表达摘要由 GET /cards 内嵌（current_version/version_count/
+ * expression_summary），首屏单请求（原逐卡 listCardVersions 的 N+1 已移除）；
+ * 版本历史明细改由 useCardVersionsQuery 在面板打开时懒加载。
  */
 export function useExperiencesQuery() {
+  const queryClient = useQueryClient();
+
   return useQuery({
     queryKey: [...EXPERIENCES_QUERY_KEY],
     queryFn: async () => {
       const user = await authApi.getCurrentUser();
       const cards = await experienceApi.listCards(user.id);
-      return Promise.all(
-        cards.map(async (card) => {
-          const exp = cardToExperience(card);
-          const meta = await loadVersionMeta(card.id);
-          if (meta) {
-            exp.currentVersion = meta.currentVersion;
-            exp.versionHistory = meta.versionHistory;
-          }
-          return exp;
-        }),
-      );
+      // 列表响应不含版本明细（N+1→1 后明细只走 useCardVersionsQuery）；
+      // refetch 时保留写路径（加版本/复盘反哺）已回流的 versionHistory，
+      // 避免 invalidate 后明细被空数组抹掉。currentVersion 始终以后端列为准。
+      const cached = queryClient.getQueryData<Experience[]>([
+        ...EXPERIENCES_QUERY_KEY,
+      ]);
+      const cachedById = new Map((cached ?? []).map((e) => [e.id, e]));
+      return cards.map((card) => {
+        const exp = cardToExperience(card);
+        const prev = cachedById.get(exp.id);
+        if (prev && (prev.versionHistory?.length ?? 0) > 0) {
+          exp.versionHistory = prev.versionHistory;
+        }
+        return exp;
+      });
     },
   });
 }
@@ -198,6 +229,28 @@ export function useUpdateExperienceMutation() {
       queryClient.setQueryData([...EXPERIENCES_QUERY_KEY], next);
       // FE-CACHE-01：服务端 updateCard（usage/tags 派生字段）落库后重验
       queryClient.invalidateQueries({ queryKey: [...EXPERIENCES_QUERY_KEY] });
+      // T-M1-2：版本明细懒加载缓存同步失效（面板打开时拉到新版本链）
+      const cardId = parseInt(id);
+      if (!isNaN(cardId)) {
+        queryClient.invalidateQueries({
+          queryKey: experienceVersionsQueryKey(cardId),
+        });
+      }
+    },
+  });
+}
+
+/**
+ * 重新执行 AI 结构化抽取（T-M1-1 失败重试入口）。
+ * 成功后重验经历列表（新 ai_structured/tags 以后端为准），失败上抛由视图 toast。
+ */
+export function useStructureExperienceMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation<ExperienceCard, unknown, string>({
+    mutationFn: (id) => experienceApi.structureCard(parseInt(id)),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [...EXPERIENCES_QUERY_KEY] });
     },
   });
 }
@@ -277,6 +330,13 @@ export function useAddExperienceVersionMutation() {
       queryClient.setQueryData([...EXPERIENCES_QUERY_KEY], next);
       // FE-CACHE-01：升级落库（updateCard 版本化）后重验，版本号以后端为准
       queryClient.invalidateQueries({ queryKey: [...EXPERIENCES_QUERY_KEY] });
+      // T-M1-2：版本明细懒加载缓存同步失效
+      const cardId = parseInt(expId);
+      if (!isNaN(cardId)) {
+        queryClient.invalidateQueries({
+          queryKey: experienceVersionsQueryKey(cardId),
+        });
+      }
     },
   });
 }

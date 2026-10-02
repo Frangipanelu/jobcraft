@@ -15,9 +15,14 @@ context 内部写入方（review 落盘已迁 FE-REVIEW-01：useApplyReviewFeedb
 - **权威与镜像**：react-query cache 是 views 的读源；`context.experiences` 为只读镜像（ResumeEditorView /
   JDReportDetailView / UserProfileView 仍读 context），由两侧写入方双向同步。
 - **hooks API**：`useExperiencesQuery`、`useCreateExperienceMutation`、`useUpdateExperienceMutation`、
-  `useDeleteExperienceMutation`、`useAddExperienceVersionMutation`（onSync 由消费方注入 `syncExperiences`）。
-- **版本演进为纯本地**：后端无经历版本端点，`useAddExperienceVersionMutation` 仅更新 cache 内
-  `currentVersion` / `versionHistory`，不发网络请求。
+  `useDeleteExperienceMutation`、`useAddExperienceVersionMutation`（onSync 由消费方注入 `syncExperiences`）、
+  `useStructureExperienceMutation`（T-M1-1 重试）、`useCardVersionsQuery`（T-M1-2 懒加载）。
+- **列表摘要内嵌、版本明细懒加载（T-M1-2 / 矩阵 Q3）**：首屏只打 `listCards(userId)`，
+  `current_version` / `version_count` / `expression_summary` 由 `GET /cards` 内嵌（原逐卡
+  `listCardVersions` 的 N+1 已移除）；`card_versions` 明细由 `useCardVersionsQuery` 在「版本演进」
+  面板挂载时才请求，失败回落 cache 内写路径回流的历史。
+- **写路径仍走后端版本化**：`useUpdate/AddExperienceVersionMutation` → `updateCard` 落库（服务端
+  `version+1` + `card_versions` 快照）→ `loadVersionMeta` 回流明细，成功后同时失效列表与明细缓存。
 - 移除触发器：FE-CONTEXT-REMOVE 删除 `context.experiences` / legacy 动作 / `syncExperiences`。
 
 ## 目标边界

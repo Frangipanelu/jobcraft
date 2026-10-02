@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { renderWithProviders } from './test-utils';
+import { ToastContainer } from '../components/common/Toast';
 import { ExperiencesView } from '../components/experiences/ExperiencesView';
 import { NewExperienceModal } from '../components/experiences/NewExperienceModal';
 import {
@@ -27,6 +28,7 @@ const experience = vi.hoisted(() => ({
   updateCard: vi.fn(),
   deleteCard: vi.fn(),
   listCardVersions: vi.fn(),
+  structureCard: vi.fn(),
 }));
 
 vi.mock('../api/auth', () => ({ ...auth }));
@@ -98,10 +100,15 @@ beforeEach(() => {
   auth.getSettings.mockResolvedValue({ model_name: 'test', provider: 'x', status: 'running' });
   serverCards = [{ ...CARD_A }, { ...CARD_B }];
   experience.listCards.mockImplementation(async () => serverCards);
+  // T-M1-2：currentVersion 只来自 GET /cards 的 version 列，故 mock 需模拟后端
+  // updateCard 同事务 version+1（真实契约见 EXPERIENCE_SPEC §28）。
   experience.updateCard.mockImplementation(
     async (cardId: number, payload: Partial<ExperienceCard>) => {
       const card = serverCards.find((c) => c.id === cardId);
-      if (card) Object.assign(card, payload);
+      if (card) {
+        Object.assign(card, payload);
+        card.version = (card.version ?? 1) + 1;
+      }
       return card;
     },
   );
@@ -267,29 +274,28 @@ describe('useUpdateExperienceMutation / 版本保存（EXP-P1-06b 后端回流�
   });
 
   it('加版本：updateCard 持久化四槽位，versionHistory/currentVersion 以后端回流为准', async () => {
-    // 前两次调用 = 初始列表拉取（CARD_A / CARD_B，空历史）；
-    // 点击「加版本」后的第三次调用 = mutation 回流（后端已新增 user_edit 快照 V4）。
-    let versionCalls = 0;
+    // 版本明细按服务端 version 列回流：首屏不逐卡请求（见下方懒加载用例），
+    // mutation 内的 loadVersionMeta 拿到 version+1 后的新快照链。
     experience.listCardVersions.mockImplementation(async (cardId: number) => {
-      versionCalls += 1;
-      if (versionCalls <= 2) {
-        return { card_id: cardId, current_version: cardId === 7 ? 3 : 1, versions: [] };
-      }
+      const card = serverCards.find((c) => c.id === cardId);
+      const currentVersion = card?.version ?? 1;
       return {
         card_id: cardId,
-        current_version: 4,
-        versions: [
-          {
-            id: 2, card_id: cardId, version_type: 'user_edit', source_type: 'card_edit',
-            source_id: 0, title: '端侧大模型量化评测', raw_text: '移动端端侧生成式体验的量产方案。',
-            tags: ['端侧大模型'], note: '编辑保存 V4', created_at: '2026-09-23T10:00:00',
-          },
-          {
-            id: 1, card_id: cardId, version_type: 'original', source_type: 'original',
-            source_id: 0, title: '端侧大模型量化评测', raw_text: '移动端端侧生成式体验的量产方案。',
-            tags: ['端侧大模型'], note: 'V1 哨兵基线（确认定稿）', created_at: '2026-09-20T10:00:00',
-          },
-        ],
+        current_version: currentVersion,
+        versions: currentVersion >= 4
+          ? [
+              {
+                id: 2, card_id: cardId, version_type: 'user_edit', source_type: 'card_edit',
+                source_id: 0, title: '端侧大模型量化评测', raw_text: '移动端端侧生成式体验的量产方案。',
+                tags: ['端侧大模型'], note: '编辑保存 V4', created_at: '2026-09-23T10:00:00',
+              },
+              {
+                id: 1, card_id: cardId, version_type: 'original', source_type: 'original',
+                source_id: 0, title: '端侧大模型量化评测', raw_text: '移动端端侧生成式体验的量产方案。',
+                tags: ['端侧大模型'], note: 'V1 哨兵基线（确认定稿）', created_at: '2026-09-20T10:00:00',
+              },
+            ]
+          : [],
       };
     });
 
@@ -297,6 +303,8 @@ describe('useUpdateExperienceMutation / 版本保存（EXP-P1-06b 后端回流�
 
     expect(await screen.findByText('V3')).toBeInTheDocument();
     await waitFor(() => expect(screen.getByTestId('hist').textContent).toBe('0'));
+    // T-M1-2：首屏列表不再逐卡调用 listCardVersions（N+1→1）
+    expect(experience.listCardVersions).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByText('加版本'));
 
@@ -306,5 +314,64 @@ describe('useUpdateExperienceMutation / 版本保存（EXP-P1-06b 后端回流�
       7,
       expect.objectContaining({ results: ['留存 +22.8%'], is_confirmed: true }),
     );
+  });
+});
+
+describe('T-M1-2 版本明细懒加载（N+1→1）', () => {
+  it('首屏不拉 card_versions，展开「版本演进」面板才按卡请求', async () => {
+    experience.listCardVersions.mockResolvedValue({
+      card_id: 7,
+      current_version: 3,
+      versions: [
+        {
+          id: 1, card_id: 7, version_type: 'original', source_type: 'original',
+          source_id: 0, title: '端侧大模型量化评测', raw_text: '移动端端侧生成式体验的量产方案。',
+          tags: ['端侧大模型'], note: 'V1 哨兵基线（确认定稿）', created_at: '2026-09-20T10:00:00',
+        },
+      ],
+    });
+
+    renderWithProviders(<ExperiencesView />);
+
+    expect(await screen.findByText('端侧大模型量化评测')).toBeInTheDocument();
+    expect(screen.getByText('CLI 工具开源贡献')).toBeInTheDocument();
+    expect(experience.listCards).toHaveBeenCalled();
+    expect(experience.listCardVersions).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getAllByRole('button', { name: /版本演进/ })[0]);
+
+    await waitFor(() => expect(experience.listCardVersions).toHaveBeenCalledWith(7));
+    expect(await screen.findByText('V1 哨兵基线（确认定稿）')).toBeInTheDocument();
+  });
+});
+
+describe('T-M1-1 structure 失败重试入口', () => {
+  it('STAR 为空的卡展示「重新结构化」，点击调用 structureCard 并 toast 成功', async () => {
+    experience.structureCard.mockImplementation(async (cardId: number) => {
+      const card = serverCards.find((c) => c.id === cardId);
+      return {
+        ...card,
+        ai_structured: {
+          background: '业务背景', problem: '核心职责',
+          actions: ['动作1'], results: ['结果1'], achievements: ['成果1'],
+        },
+      } as ExperienceCard;
+    });
+
+    renderWithProviders(
+      <>
+        <ExperiencesView />
+        <ToastContainer />
+      </>,
+    );
+
+    expect(await screen.findByText('端侧大模型量化评测')).toBeInTheDocument();
+    // 两张卡 ai_structured 均为 null 且 A/R 槽位空 → 都展示入口
+    expect(screen.getAllByRole('button', { name: /重新结构化/ })).toHaveLength(2);
+
+    fireEvent.click(screen.getAllByRole('button', { name: /重新结构化/ })[0]);
+
+    await waitFor(() => expect(experience.structureCard).toHaveBeenCalledWith(7));
+    expect(await screen.findByText('AI 结构化完成')).toBeInTheDocument();
   });
 });

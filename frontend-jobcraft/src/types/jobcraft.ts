@@ -79,6 +79,13 @@ export interface Experience {
   tags: string[];
   currentVersion: string;
   versionHistory: ExperienceVersionRecord[];
+  // T-M1-2：GET /cards 内嵌摘要（首屏不再逐卡拉版本），缺失为 null/undefined
+  /** card_versions 快照数 */
+  versionCount?: number | null;
+  /** 标准化表达计数 {active, total} */
+  expressionSummary?: { active: number; total: number } | null;
+  // T-M1-1：STAR 未结构化（ai_structured 空且 A/R 槽位空）→ 展示 structure 重试入口
+  starMissing?: boolean;
   // EXP-P1-03：False 表示 confirmUpload 草稿（未定稿，卡片页保存即转 True）
   isConfirmed: boolean;
 }

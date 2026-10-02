@@ -55,8 +55,15 @@ export function cardToExperience(card: ExperienceCard): Experience {
         : achievements.map((a) => a.result || '').filter(Boolean)),
     tags: card.tags,
     category: cardTypeToCategory(card.card_type),
-    currentVersion: `V${card.version}`,
+    // T-M1-2：current_version 为 GET /cards 内嵌别名（旧响应/单卡响应回退 version 列）
+    currentVersion: `V${card.current_version ?? card.version}`,
     versionHistory: [],
+    versionCount: card.version_count ?? null,
+    expressionSummary: card.expression_summary ?? null,
+    // T-M1-1：AI 结构化缺失（无 ai_structured 且 A/R 槽位为空）→ 卡片页重试入口
+    starMissing: !card.ai_structured?.achievements?.length
+      && !(card.actions && card.actions.length > 0)
+      && !(card.results && card.results.length > 0),
     // EXP-P1-03：草稿状态透传，false 时列表展示「待定稿」标记
     isConfirmed: card.is_confirmed ?? true,
   };

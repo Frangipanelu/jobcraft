@@ -18,14 +18,17 @@ import {
   Edit3,
   Check,
   Undo2,
-  Target
+  Target,
+  Wand2
 } from 'lucide-react';
 import {
   useExperiencesQuery,
   useUpdateExperienceMutation,
   useDeleteExperienceMutation,
   useAddExperienceVersionMutation,
-  usePolishExperienceMutation
+  usePolishExperienceMutation,
+  useStructureExperienceMutation,
+  useCardVersionsQuery
 } from '../../features/experiences/hooks';
 import { NewExperienceModal } from './NewExperienceModal';
 import { ExpressionPanel } from './ExpressionPanel';
@@ -33,6 +36,20 @@ import { ExpressionPanel } from './ExpressionPanel';
 interface ExperiencesViewProps {
   initialSelectedExpId?: string;
 }
+
+/** 版本来源徽标（纯函数，供 ExperiencesView 与版本抽屉共用）。 */
+const getSourceBadge = (source: ExperienceVersionRecord['source']) => {
+  switch (source) {
+    case 'interview_review':
+      return { label: '面试实战反哺', color: 'bg-sage-soft text-sage border-sage-soft' };
+    case 'jd_alignment':
+      return { label: 'JD 深度对齐', color: 'bg-warning-bg text-warning border-warning-bg' };
+    case 'standardized':
+      return { label: '标准化表达', color: 'bg-sage-soft text-sage border-sage-soft' };
+    default:
+      return { label: '经历维护更新', color: 'bg-page text-muted border-edge' };
+  }
+};
 
 export const ExperiencesView: React.FC<ExperiencesViewProps> = ({ initialSelectedExpId }) => {
   const { showToast } = useToastActions();
@@ -42,6 +59,7 @@ export const ExperiencesView: React.FC<ExperiencesViewProps> = ({ initialSelecte
   const deleteExperience = useDeleteExperienceMutation();
   const addExperienceVersion = useAddExperienceVersionMutation();
   const polishExperience = usePolishExperienceMutation();
+  const structureExperience = useStructureExperienceMutation();
   const experiences = experiencesData ?? [];
 
   const [activeCategory, setActiveCategory] = useState<'all' | ExperienceCategory>('all');
@@ -100,19 +118,6 @@ export const ExperiencesView: React.FC<ExperiencesViewProps> = ({ initialSelecte
         return '实习经历';
       default:
         return '核心经历';
-    }
-  };
-
-  const getSourceBadge = (source: ExperienceVersionRecord['source']) => {
-    switch (source) {
-      case 'interview_review':
-        return { label: '面试实战反哺', color: 'bg-sage-soft text-sage border-sage-soft' };
-      case 'jd_alignment':
-        return { label: 'JD 深度对齐', color: 'bg-warning-bg text-warning border-warning-bg' };
-      case 'standardized':
-        return { label: '标准化表达', color: 'bg-sage-soft text-sage border-sage-soft' };
-      default:
-        return { label: '经历维护更新', color: 'bg-page text-muted border-edge' };
     }
   };
 
@@ -182,6 +187,21 @@ export const ExperiencesView: React.FC<ExperiencesViewProps> = ({ initialSelecte
       title: `已激活版本 ${versionRecord.version}`,
       message: `已恢复至 ${versionRecord.date} 的版本状态。`
     });
+  };
+
+  // T-M1-1：structure 失败重试入口（仅 STAR 为空的卡展示按钮）
+  const handleStructureRetry = async (exp: Experience) => {
+    try {
+      await structureExperience.mutateAsync(exp.id);
+      showToast({
+        type: 'success',
+        title: 'AI 结构化完成',
+        message: `「${exp.title}」的 STAR 与能力标签已重新抽取。`
+      });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : '结构化抽取失败';
+      showToast({ type: 'error', title: '结构化失败', message: msg });
+    }
   };
 
   return (
@@ -274,6 +294,9 @@ export const ExperiencesView: React.FC<ExperiencesViewProps> = ({ initialSelecte
           const isVersionExpanded = !!expandedVersionExpIds[exp.id];
           const isExpressionExpanded = !!expandedExpressionExpIds[exp.id];
           const historyList = exp.versionHistory || [];
+          // T-M1-2：首屏计数走 GET /cards 内嵌摘要（懒加载明细前的展示口径）
+          const versionCount = exp.versionCount ?? historyList.length ?? 1;
+          const exprSummary = exp.expressionSummary;
 
           return (
             <div
@@ -317,6 +340,18 @@ export const ExperiencesView: React.FC<ExperiencesViewProps> = ({ initialSelecte
 
                 {/* Card Action Buttons */}
                 <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                  {exp.starMissing && (
+                    <button
+                      onClick={() => handleStructureRetry(exp)}
+                      disabled={structureExperience.isPending}
+                      className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-warning-bg hover:bg-warning/20 text-warning text-xs font-bold border border-warning-bg transition cursor-pointer disabled:opacity-60"
+                      title="STAR 结构化缺失 · 重跑 AI 结构化抽取（写 ai_structured 并补写能力标签）"
+                    >
+                      <Wand2 className="w-3.5 h-3.5 text-warning" />
+                      <span>{structureExperience.isPending ? '抽取中…' : '重新结构化'}</span>
+                    </button>
+                  )}
+
                   <button
                     onClick={() => handleAIRefine(exp)}
                     className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-sage-soft hover:bg-edge-deep text-sage text-xs font-bold border border-sage-soft transition cursor-pointer"
@@ -335,7 +370,7 @@ export const ExperiencesView: React.FC<ExperiencesViewProps> = ({ initialSelecte
                     }`}
                   >
                     <History className="w-3.5 h-3.5" />
-                    <span>版本演进 ({historyList.length || 1})</span>
+                    <span>版本演进 ({versionCount})</span>
                     {isVersionExpanded ? (
                       <ChevronUp className="w-3.5 h-3.5" />
                     ) : (
@@ -353,7 +388,12 @@ export const ExperiencesView: React.FC<ExperiencesViewProps> = ({ initialSelecte
                     title="标准化表达版本链 · diff 对比 · 生成/激活/弃用"
                   >
                     <Sparkles className="w-3.5 h-3.5" />
-                    <span>标准化表达</span>
+                    <span>
+                      标准化表达
+                      {exprSummary && exprSummary.total > 0
+                        ? ` (${exprSummary.active}/${exprSummary.total})`
+                        : ''}
+                    </span>
                     {isExpressionExpanded ? (
                       <ChevronUp className="w-3.5 h-3.5" />
                     ) : (
@@ -392,93 +432,9 @@ export const ExperiencesView: React.FC<ExperiencesViewProps> = ({ initialSelecte
                 </div>
               </div>
 
-              {/* Version History Drawer (if expanded) */}
+              {/* Version History Drawer (if expanded) — T-M1-2 懒加载：挂载才拉版本明细 */}
               {isVersionExpanded && (
-                <div className="p-5 bg-warning-bg/40 border-b border-warning-bg space-y-3 animate-in fade-in">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <History className="w-4 h-4 text-warning" />
-                      <span className="text-xs font-bold text-warning">
-                        版本演进时间轴（累计迭代 {historyList.length || 1} 个版本）
-                      </span>
-                    </div>
-                    <span className="text-[11px] text-faint">
-                      支持一键激活或查看历史演进证据
-                    </span>
-                  </div>
-
-                  <div className="space-y-3 pt-1">
-                    {historyList.map((ver, idx) => {
-                      const badge = getSourceBadge(ver.source);
-                      const isCurrent = exp.currentVersion === ver.version;
-
-                      return (
-                        <div
-                          key={idx}
-                          className={`p-3.5 rounded-lg border text-xs space-y-2 transition ${
-                            isCurrent
-                              ? 'bg-white border-sage shadow-2xs'
-                              : 'bg-canvas border-edge'
-                          }`}
-                        >
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <span className="font-bold text-ink text-xs font-mono">
-                                {ver.version}
-                              </span>
-                              {isCurrent && (
-                                <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-sage-soft text-sage border border-sage-soft">
-                                  当前激活版本
-                                </span>
-                              )}
-                              <span
-                                className={`px-2 py-0.5 rounded text-[10px] font-semibold border ${badge.color}`}
-                              >
-                                {badge.label}
-                              </span>
-                              <span className="text-[11px] text-faint">{ver.date}</span>
-                            </div>
-
-                            {!isCurrent && (
-                              <button
-                                onClick={() => handleRestoreVersion(exp, ver)}
-                                className="flex items-center gap-1 text-[11px] font-semibold text-sage hover:underline cursor-pointer"
-                              >
-                                <Undo2 className="w-3 h-3" />
-                                <span>激活此版本</span>
-                              </button>
-                            )}
-                          </div>
-
-                          <p className="text-ink font-medium">{ver.reason}</p>
-
-                          {(ver.changes || []).length > 0 && (
-                            <div className="space-y-1.5 pt-1">
-                              {(ver.changes || []).map((ch, cIdx) => (
-                                <div
-                                  key={cIdx}
-                                  className="text-[11px] p-2 rounded bg-page border border-edge space-y-0.5"
-                                >
-                                  <div className="font-semibold text-muted">
-                                    修改字段：{ch.field}
-                                  </div>
-                                  {ch.from && (
-                                    <div className="text-faint line-through">
-                                      原版：{ch.from}
-                                    </div>
-                                  )}
-                                  <div className="text-sage font-medium">
-                                    新版：{ch.to}
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
+                <VersionHistoryPanel exp={exp} onRestore={handleRestoreVersion} />
               )}
 
               {/* Expression Panel (if expanded) */}
@@ -616,6 +572,122 @@ export const ExperiencesView: React.FC<ExperiencesViewProps> = ({ initialSelecte
           onClose={() => setEditingExp(null)}
         />
       )}
+    </div>
+  );
+};
+
+interface VersionHistoryPanelProps {
+  exp: Experience;
+  onRestore: (exp: Experience, versionRecord: ExperienceVersionRecord) => void;
+}
+
+/**
+ * 版本演进抽屉（T-M1-2 懒加载）：面板挂载才拉该卡版本明细，
+ * 首屏列表只消费 GET /cards 内嵌 version_count（原逐卡 N+1→1）。
+ * 明细查询失败回退 exp.versionHistory（写路径回流的历史）。
+ */
+const VersionHistoryPanel: React.FC<VersionHistoryPanelProps> = ({
+  exp,
+  onRestore
+}) => {
+  const cardId = parseInt(exp.id.replace('exp-', ''), 10);
+  const versionsQuery = useCardVersionsQuery(cardId, true);
+  const currentVersion = versionsQuery.data?.currentVersion ?? exp.currentVersion;
+  const historyList =
+    versionsQuery.data?.versionHistory ?? exp.versionHistory ?? [];
+  const isLoading = versionsQuery.isPending && historyList.length === 0;
+
+  return (
+    <div className="p-5 bg-warning-bg/40 border-b border-warning-bg space-y-3 animate-in fade-in">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <History className="w-4 h-4 text-warning" />
+          <span className="text-xs font-bold text-warning">
+            版本演进时间轴（累计迭代 {historyList.length || 1} 个版本）
+          </span>
+        </div>
+        <span className="text-[11px] text-faint">
+          支持一键激活或查看历史演进证据
+        </span>
+      </div>
+
+      <div className="space-y-3 pt-1">
+        {isLoading ? (
+          <div className="text-xs text-muted py-2">版本明细加载中…</div>
+        ) : historyList.length === 0 ? (
+          <div className="text-xs text-muted py-2">
+            暂无版本快照（当前为 V1 初次入库）
+          </div>
+        ) : (
+          historyList.map((ver, idx) => {
+            const badge = getSourceBadge(ver.source);
+            const isCurrent = currentVersion === ver.version;
+
+            return (
+              <div
+                key={idx}
+                className={`p-3.5 rounded-lg border text-xs space-y-2 transition ${
+                  isCurrent
+                    ? 'bg-white border-sage shadow-2xs'
+                    : 'bg-canvas border-edge'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-bold text-ink text-xs font-mono">
+                      {ver.version}
+                    </span>
+                    {isCurrent && (
+                      <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-sage-soft text-sage border border-sage-soft">
+                        当前激活版本
+                      </span>
+                    )}
+                    <span
+                      className={`px-2 py-0.5 rounded text-[10px] font-semibold border ${badge.color}`}
+                    >
+                      {badge.label}
+                    </span>
+                    <span className="text-[11px] text-faint">{ver.date}</span>
+                  </div>
+
+                  {!isCurrent && (
+                    <button
+                      onClick={() => onRestore(exp, ver)}
+                      className="flex items-center gap-1 text-[11px] font-semibold text-sage hover:underline cursor-pointer"
+                    >
+                      <Undo2 className="w-3 h-3" />
+                      <span>激活此版本</span>
+                    </button>
+                  )}
+                </div>
+
+                <p className="text-ink font-medium">{ver.reason}</p>
+
+                {(ver.changes || []).length > 0 && (
+                  <div className="space-y-1.5 pt-1">
+                    {(ver.changes || []).map((ch, cIdx) => (
+                      <div
+                        key={cIdx}
+                        className="text-[11px] p-2 rounded bg-page border border-edge space-y-0.5"
+                      >
+                        <div className="font-semibold text-muted">
+                          修改字段：{ch.field}
+                        </div>
+                        {ch.from && (
+                          <div className="text-faint line-through">
+                            原版：{ch.from}
+                          </div>
+                        )}
+                        <div className="text-sage font-medium">新版：{ch.to}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })
+        )}
+      </div>
     </div>
   );
 };

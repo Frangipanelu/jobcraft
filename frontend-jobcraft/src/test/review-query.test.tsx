@@ -409,10 +409,15 @@ beforeEach(() => {
   job.listJobAnalyses.mockResolvedValue({ analyses: [] });
   experience.listCards.mockImplementation(async () => serverCards);
   // EXP-P1-06b：复盘反哺持久化 + 版本回流（updateCard 后 listCardVersions 返回 V2 + 2 条快照）
+  // T-M1-2：currentVersion 只来自 GET /cards 的 version 列 → mock 需模拟后端
+  // updateCard 同事务 version+1（否则 invalidate refetch 后回落 V1）。
   experience.updateCard.mockImplementation(
     async (cardId: number, payload: Partial<ExperienceCard>) => {
       const card = serverCards.find((c) => c.id === cardId);
-      if (card) Object.assign(card, payload);
+      if (card) {
+        Object.assign(card, payload);
+        card.version = (card.version ?? 1) + 1;
+      }
       return card;
     },
   );

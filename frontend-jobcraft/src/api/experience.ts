@@ -70,6 +70,17 @@ export async function listCardVersions(
 }
 
 /**
+ * 重新执行 AI 结构化抽取（T-M1-1 失败重试入口：STAR 为空时卡片页调用）。
+ * 后端写 ai_structured 并在 tags 为空时补写 v3 返回的标签。
+ */
+export async function structureCard(cardId: number): Promise<ExperienceCard> {
+  return request<ExperienceCard>(
+    `/api/jobcraft/experience/cards/${cardId}/structure`,
+    { method: 'POST', body: JSON.stringify({}) }
+  )
+}
+
+/**
  * 列出经历卡的标准化表达（§8.1，EXP-P2-02）。
  * 同版本链按 version 降序（最新在前）；支持 type/direction/job 过滤。
  */
