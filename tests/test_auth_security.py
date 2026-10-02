@@ -41,6 +41,12 @@ _BUSINESS_ENDPOINTS = [
     ("POST", "/api/jobcraft/experience/cards/1/structure", None),
     ("POST", "/api/jobcraft/experience/cards/1/recommend-tags", None),
     ("POST", "/api/jobcraft/experience/cards/backfill", {"min_chars": 100}),
+    # direction（T-M3-1）
+    ("GET", "/api/jobcraft/direction", None),
+    ("POST", "/api/jobcraft/direction", {"name": "方向A"}),
+    ("GET", "/api/jobcraft/direction/1", None),
+    ("PATCH", "/api/jobcraft/direction/1", {"name": "方向B"}),
+    ("DELETE", "/api/jobcraft/direction/1", None),
     # job_analysis
     ("GET", "/api/jobcraft/job/analyses", None),
     ("GET", "/api/jobcraft/job/analyze/1", None),

@@ -432,6 +432,199 @@ class TestBaseResume:
         assert resp.status_code == 404
 
 
+class TestDirections:
+    """方向 CRUD（T-M3-1：/api/jobcraft/direction，Q7=c / U-P2a′）"""
+
+    def _mock_db(self, monkeypatch, refs=None):
+        """把 db_direction 的函数替换为可控假实现。"""
+        from app.tools import db_direction as mod
+
+        store = {"rows": [], "seq": 1, "refs": refs or {}}
+
+        def _fake_create(data):
+            if data.get("status") not in (None, "active", "archived"):
+                raise ValueError("status 仅允许 active/archived")
+            name = (data.get("name") or "").strip()
+            if not name:
+                raise ValueError("方向名称不能为空")
+            if any(r["name"] == name for r in store["rows"]):
+                raise ValueError("方向名称已存在（同名方向只允许一个）")
+            rec = {
+                "id": store["seq"],
+                "user_id": data["user_id"],
+                "code": f"DIR-{store['seq']}",
+                "name": name,
+                "job_function": data.get("job_function") or "",
+                "primary_role": data.get("primary_role") or "",
+                "industry": data.get("industry") or "",
+                "product": data.get("product") or "",
+                "scenario": data.get("scenario") or "",
+                "skills": data.get("skills") or "",
+                "status": data.get("status") or "active",
+                "created_at": "2026-10-01T00:00:00",
+                "updated_at": "2026-10-01T00:00:00",
+            }
+            store["seq"] += 1
+            store["rows"].append(rec)
+            return rec
+
+        def _fake_list(user_id, status=None):
+            if status is not None and status not in ("active", "archived"):
+                raise ValueError("status 仅允许 active/archived")
+            rows = [r for r in store["rows"] if r["user_id"] == user_id]
+            if status is not None:
+                rows = [r for r in rows if r["status"] == status]
+            return rows
+
+        def _fake_get(direction_id, user_id=None):
+            for r in store["rows"]:
+                if r["id"] == direction_id and (
+                    user_id is None or r["user_id"] == user_id
+                ):
+                    return r
+            return None
+
+        def _fake_update(direction_id, user_id, fields):
+            rec = _fake_get(direction_id, user_id)
+            if rec is None:
+                return None
+            if fields.get("status") not in (None, "active", "archived"):
+                raise ValueError("status 仅允许 active/archived")
+            if "name" in fields and not (fields["name"] or "").strip():
+                raise ValueError("方向名称不能为空")
+            rec.update(
+                {k: v for k, v in fields.items() if k != "code" and v is not None}
+            )
+            return rec
+
+        def _fake_delete(direction_id, user_id):
+            rec = _fake_get(direction_id, user_id)
+            if rec is None:
+                return False
+            store["rows"].remove(rec)
+            return True
+
+        def _fake_refs(direction_id, user_id):
+            if _fake_get(direction_id, user_id) is None:
+                return {"expressions": 0}
+            return {"expressions": store["refs"].get(direction_id, 0)}
+
+        monkeypatch.setattr(mod, "create_direction", _fake_create)
+        monkeypatch.setattr(mod, "list_directions", _fake_list)
+        monkeypatch.setattr(mod, "get_direction", _fake_get)
+        monkeypatch.setattr(mod, "update_direction", _fake_update)
+        monkeypatch.setattr(mod, "delete_direction", _fake_delete)
+        monkeypatch.setattr(mod, "count_direction_references", _fake_refs)
+        return store
+
+    def test_create_generates_dir_code(self, monkeypatch):
+        store = self._mock_db(monkeypatch)
+        resp = client.post(
+            "/api/jobcraft/direction",
+            json={"name": "策略运营-跨境电商", "job_function": "策略运营"},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["code"] == "DIR-1"
+        assert data["name"] == "策略运营-跨境电商"
+        assert data["status"] == "active"
+        assert len(store["rows"]) == 1
+
+    def test_create_duplicate_name_returns_400(self, monkeypatch):
+        self._mock_db(monkeypatch)
+        client.post("/api/jobcraft/direction", json={"name": "方向A"})
+        resp = client.post("/api/jobcraft/direction", json={"name": "方向A"})
+        assert resp.status_code == 400
+        assert resp.json()["error"]["code"] == "VALIDATION_ERROR"
+
+    def test_create_empty_name_returns_422(self, monkeypatch):
+        self._mock_db(monkeypatch)
+        resp = client.post("/api/jobcraft/direction", json={"name": ""})
+        assert resp.status_code == 422
+
+    def test_create_name_too_long_returns_422(self, monkeypatch):
+        self._mock_db(monkeypatch)
+        resp = client.post("/api/jobcraft/direction", json={"name": "x" * 201})
+        assert resp.status_code == 422
+
+    def test_list_returns_created(self, monkeypatch):
+        self._mock_db(monkeypatch)
+        client.post("/api/jobcraft/direction", json={"name": "方向A"})
+        client.post("/api/jobcraft/direction", json={"name": "方向B"})
+        resp = client.get("/api/jobcraft/direction")
+        assert resp.status_code == 200
+        items = resp.json()
+        assert [d["code"] for d in items] == ["DIR-1", "DIR-2"]
+
+    def test_list_status_filter(self, monkeypatch):
+        store = self._mock_db(monkeypatch)
+        client.post("/api/jobcraft/direction", json={"name": "方向A"})
+        store["rows"][0]["status"] = "archived"
+        resp = client.get("/api/jobcraft/direction?status=archived")
+        assert resp.status_code == 200
+        assert len(resp.json()) == 1
+
+    def test_list_invalid_status_returns_400(self, monkeypatch):
+        self._mock_db(monkeypatch)
+        resp = client.get("/api/jobcraft/direction?status=bogus")
+        assert resp.status_code == 400
+
+    def test_get_normal(self, monkeypatch):
+        self._mock_db(monkeypatch)
+        client.post("/api/jobcraft/direction", json={"name": "方向A"})
+        resp = client.get("/api/jobcraft/direction/1")
+        assert resp.status_code == 200
+        assert resp.json()["id"] == 1
+
+    def test_get_missing_returns_404(self, monkeypatch):
+        self._mock_db(monkeypatch)
+        resp = client.get("/api/jobcraft/direction/99")
+        assert resp.status_code == 404
+
+    def test_patch_normal(self, monkeypatch):
+        self._mock_db(monkeypatch)
+        client.post("/api/jobcraft/direction", json={"name": "方向A"})
+        resp = client.patch(
+            "/api/jobcraft/direction/1", json={"name": "方向B", "industry": "游戏"}
+        )
+        assert resp.status_code == 200
+        assert resp.json()["name"] == "方向B"
+        assert resp.json()["industry"] == "游戏"
+        assert resp.json()["code"] == "DIR-1"
+
+    def test_patch_missing_returns_404(self, monkeypatch):
+        self._mock_db(monkeypatch)
+        resp = client.patch("/api/jobcraft/direction/99", json={"name": "x"})
+        assert resp.status_code == 404
+
+    def test_patch_invalid_status_returns_400(self, monkeypatch):
+        self._mock_db(monkeypatch)
+        client.post("/api/jobcraft/direction", json={"name": "方向A"})
+        resp = client.patch("/api/jobcraft/direction/1", json={"status": "bogus"})
+        assert resp.status_code == 400
+
+    def test_delete_normal(self, monkeypatch):
+        store = self._mock_db(monkeypatch)
+        client.post("/api/jobcraft/direction", json={"name": "方向A"})
+        resp = client.delete("/api/jobcraft/direction/1")
+        assert resp.status_code == 200
+        assert resp.json()["deleted"] is True
+        assert len(store["rows"]) == 0
+
+    def test_delete_missing_returns_404(self, monkeypatch):
+        self._mock_db(monkeypatch)
+        resp = client.delete("/api/jobcraft/direction/99")
+        assert resp.status_code == 404
+
+    def test_delete_referenced_returns_409(self, monkeypatch):
+        store = self._mock_db(monkeypatch, refs={1: 3})
+        client.post("/api/jobcraft/direction", json={"name": "方向A"})
+        resp = client.delete("/api/jobcraft/direction/1")
+        assert resp.status_code == 409
+        assert "归档" in resp.json()["error"]["message"]
+        assert len(store["rows"]) == 1
+
+
 class TestExperienceExpressions:
     """GET /api/jobcraft/experience/cards/{card_id}/expressions（EXP-P2-02 §8.1）"""
 

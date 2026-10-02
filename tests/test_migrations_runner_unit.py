@@ -950,3 +950,62 @@ def test_interview_runtime_creates_carry_all_baseline_columns():
     )[0]
     for fragment in ("submission_id INT", "round_label VARCHAR(32) DEFAULT ''"):
         assert fragment in records_block, f"docker 基线 records 缺 {fragment}"
+
+
+def test_v0018_direction_six_dims_follows_convention():
+    """T-M3-1：V0018 为 direction 加六维标量列 + DIR-n 编码 + 唯一键，
+    幂等（information_schema 探测 + PREPARE/EXECUTE），遵守 SPLIT 约定，只加不改/删。"""
+    v0018 = os.path.join(runner.MIGRATIONS_DIR, "V0018__direction_six_dims.sql")
+    assert os.path.exists(v0018)
+    with open(v0018, encoding="utf-8") as fh:
+        sql = fh.read()
+    for frag in (
+        "ADD COLUMN code VARCHAR(16) NOT NULL DEFAULT ''",
+        "ADD COLUMN job_function VARCHAR(100)",
+        "ADD COLUMN primary_role VARCHAR(100)",
+        "ADD COLUMN industry VARCHAR(100)",
+        "ADD COLUMN product VARCHAR(200)",
+        "ADD COLUMN scenario VARCHAR(200)",
+        "ADD COLUMN skills VARCHAR(500)",
+    ):
+        assert frag in sql, f"V0018 缺少列声明: {frag}"
+    assert (
+        "ALTER TABLE direction ADD UNIQUE KEY uk_direction_code (user_id, code)" in sql
+    ), "U-P2a′：缺 UNIQUE(user_id, code)"
+    assert (
+        "ALTER TABLE direction ADD UNIQUE KEY uk_direction_user_name (user_id, name)"
+        in sql
+    ), "缺 UNIQUE(user_id, name)"
+    assert "information_schema.COLUMNS" in sql
+    assert "information_schema.STATISTICS" in sql
+    # 存量回填 DIR-n（ROW_NUMBER 按用户内 id 序，空表 no-op）
+    assert "ROW_NUMBER() OVER (PARTITION BY user_id" in sql
+    assert "CONCAT('DIR-', t.rn)" in sql
+    assert sql.count("\nPREPARE _mig_stmt_") == 9
+    assert sql.count("\nEXECUTE _mig_stmt_") == 9
+    assert sql.count("\nDEALLOCATE PREPARE _mig_stmt_") == 9
+    # direction 表零运行时 DDL：迁移是唯一落点，不新建表
+    assert "CREATE TABLE" not in sql
+    # 前向兼容：只加列/索引 + 回填，禁止破坏性 DDL
+    for stmt in sql.split(";--SPLIT--"):
+        upper = stmt.strip().upper()
+        assert not upper.startswith(("DROP", "RENAME", "TRUNCATE")), (
+            f"V0018 不得含破坏性 DDL: {stmt[:50]}"
+        )
+        assert "MODIFY COLUMN" not in upper, f"V0018 不得改列: {stmt[:50]}"
+    # SPLIT 约定：9 组探测（各 5 条）+ 1 条回填 = 46 条语句，均无尾分号
+    stmts = [s.strip() for s in sql.split(";--SPLIT--") if s.strip()]
+    assert len(stmts) == 46, f"V0018 应含 46 条语句块，实际 {len(stmts)}"
+    for stmt in stmts:
+        assert not stmt.endswith(";"), f"V0018 语句块含尾分号: {stmt[:60]}"
+
+
+def test_v0018_migrate_is_applied_via_runner(fake_conn):
+    """T-M3-1：V0018 与既有迁移共存，runner.migrate() 不抛错且入库。"""
+    runner.migrate()
+    inserted = [
+        e[1][0]
+        for e in fake_conn.cursor_obj.executed
+        if e[0].strip().startswith("INSERT INTO schema_migrations")
+    ]
+    assert "0018" in inserted

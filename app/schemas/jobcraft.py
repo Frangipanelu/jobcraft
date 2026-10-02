@@ -334,6 +334,66 @@ class ExpressionListResponse(BaseModel):
 
 
 # ============================================================
+# 方向（Direction，T-M3-1 / Q7=c 两级分离 / U-P2a′ 编码）
+# ============================================================
+
+
+class DirectionCreate(BaseModel):
+    """创建方向的请求体（DIRECTION_SPEC §3 + JD_ANALYSIS_SPEC §4 六维）。
+
+    code 由服务端生成（DIR-n，用户内自增顺序码），不在请求体暴露。
+    """
+
+    name: str = Field(
+        ..., min_length=1, max_length=200, description="方向名（展示 label）"
+    )
+    job_function: str = Field("", max_length=100, description="六维 Function（主值）")
+    primary_role: str = Field("", max_length=100, description="六维 Role 主角色")
+    industry: str = Field("", max_length=100, description="六维 Industry")
+    product: str = Field(
+        "", max_length=200, description="六维 Product（多值，英文逗号分隔）"
+    )
+    scenario: str = Field(
+        "", max_length=200, description="六维 Scenario（多值，英文逗号分隔）"
+    )
+    skills: str = Field(
+        "", max_length=500, description="六维 Skills（多值，英文逗号分隔）"
+    )
+    status: str = Field("active", description="active / archived")
+
+
+class DirectionUpdate(BaseModel):
+    """部分更新方向的请求体（None 字段忽略；code 不可改）"""
+
+    name: Optional[str] = Field(None, min_length=1, max_length=200)
+    job_function: Optional[str] = Field(None, max_length=100)
+    primary_role: Optional[str] = Field(None, max_length=100)
+    industry: Optional[str] = Field(None, max_length=100)
+    product: Optional[str] = Field(None, max_length=200)
+    scenario: Optional[str] = Field(None, max_length=200)
+    skills: Optional[str] = Field(None, max_length=500)
+    status: Optional[str] = Field(None, description="active / archived")
+
+
+class DirectionRead(BaseModel):
+    """方向响应结构（direction 表 6 标量列 + code/label 的满足子集）"""
+
+    id: int
+    user_id: int = Field(default=1)
+    code: str = ""
+    name: str
+    job_function: str = ""
+    primary_role: str = ""
+    industry: str = ""
+    product: str = ""
+    scenario: str = ""
+    skills: str = ""
+    status: str = "active"
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+
+
+# ============================================================
 # JD / ATS 相关
 # ============================================================
 

@@ -17,6 +17,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from app.api.direction import router as direction_router
 from app.api.experience import router as experience_router
 from app.api.job_analysis import router as job_analysis_router
 from app.api.profile import router as profile_router
@@ -45,6 +46,7 @@ app = FastAPI(title="JobCraft API", lifespan=lifespan)
 app.include_router(auth_router)
 app.include_router(profile_router)
 app.include_router(experience_router)
+app.include_router(direction_router)
 app.include_router(job_analysis_router)
 app.include_router(submission_router)
 app.include_router(interview_prep_router)
