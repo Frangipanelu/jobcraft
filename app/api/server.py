@@ -169,12 +169,30 @@ async def http_exception_handler(_request: Request, exc: HTTPException) -> JSONR
     )
 
 
+def _jsonable_validation_errors(errors: list) -> list:
+    """把 pydantic 错误结构转成可 JSON 序列化的形态。
+
+    model_validator 抛 ValueError 时，pydantic 会把异常对象放进 ``ctx["error"]``
+    直接 json.dumps 会 TypeError → 500（应为 422）；此处把非标量 ctx 值降级为 str。
+    """
+    for err in errors:
+        ctx = err.get("ctx")
+        if isinstance(ctx, dict):
+            err["ctx"] = {
+                key: value
+                if isinstance(value, (str, int, float, bool, type(None)))
+                else str(value)
+                for key, value in ctx.items()
+            }
+    return errors
+
+
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(
     _request: Request, exc: RequestValidationError
 ) -> JSONResponse:
     """统一处理请求参数校验失败（422），返回统一错误契约"""
-    errors = exc.errors()
+    errors = _jsonable_validation_errors(exc.errors())
     first = errors[0] if errors else {}
     loc = " -> ".join(str(x) for x in first.get("loc", []))
     msg = f"参数校验失败 [{loc}]: {first.get('msg', '未知错误')}"
