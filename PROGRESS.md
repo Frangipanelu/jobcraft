@@ -2,6 +2,21 @@
 
 > 本文件用于追踪项目整体进度。AI 在每次会话结束或完成子任务时，必须更新本文件的对应板块。
 
+## ✅ P3/M3 B 批次验收（2026-10-01，T-M3-1~5 全部完成）
+
+| 任务 | feat/docs commit | 交付 |
+|---|---|---|
+| T-M3-1 | `f47ae13` / `a83785f` | direction 表六维+code（V0018）+ CRUD API |
+| T-M3-2 | `73cd091`(fix) `9c9dad9` / `72279dc` | jd_classification 表（V0019）+ API + 422 序列化修复 |
+| T-M3-3 | `21c33e0` / `917a59f` | find-or-create 接线（表单方向字段数据侧） |
+| T-M3-4 | `636970d` / `2010794` | direction_id 结构化检索表达/卡片（DB-03 消费解封） |
+| T-M3-5 | `a742cc5` | DIRECTION_SPEC §21/§22 分期加注（Q8，spec 无 §25 已记录） |
+
+- **T-M3-6 不在本批**（依赖 T-M4-2，随 M4 批次）。前端接线不在本批：方向分类管理按 Q1 并入 M4 JD 报告页。
+- **迁移**：V0018/V0019 需部署时 `python -m migrations.runner migrate`（docker 基线不含）。
+- **门禁终态**：encoding 383/0、ruff check/format 0、pytest **994 passed / 7 skipped**；scratch 真库 E2E ×3 全 PASS（V0018/19、M3-3 find-or-create、M3-4 全链路 HTTP）。
+- **DB 纪律回看**：无删列/改列，全部新增可空/带默认列（前向兼容 ✓）；方向→Job 关联仍待 P4 `Job.directionId`。
+
 ## T-M3-5 DIRECTION_SPEC 分期加注（2026-10-01，P3/M3 批次）
 
 > Q8 裁决的 spec 加注（纯文档，无代码/迁移改动）：Phase-1 MUST=方向 CRUD+六维+candidate-confirmed；Phase-2 MUST=knowledge+统计+合成工作流（不降级、仅后置）。
