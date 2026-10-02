@@ -164,7 +164,7 @@ def test_ensure_still_runs_ddl_when_not_ready(monkeypatch):
 
 
 def test_worker_and_lifespan_hooks_reference_bootstrap():
-    """server lifespan 与任务 worker 都应接线 run_schema_bootstrap。"""
+    """server lifespan 与任一 worker 都应接线 run_schema_bootstrap。"""
     import inspect
 
     from app.api import server
@@ -175,3 +175,14 @@ def test_worker_and_lifespan_hooks_reference_bootstrap():
 
     run_worker_src = inspect.getsource(worker.run_worker)
     assert "run_schema_bootstrap" in run_worker_src
+
+
+def test_resume_version_ensure_is_registered():
+    """T-M6-1：resume_version 建表必须进启动引导清单（否则置位后
+    请求路径 _ensure 短路，缺表环境永不建表）。"""
+    from app.tools import db_bootstrap
+
+    assert (
+        "app.tools.db_resume_version",
+        "_ensure_resume_version_table",
+    ) in db_bootstrap._BOOTSTRAP_STEPS
