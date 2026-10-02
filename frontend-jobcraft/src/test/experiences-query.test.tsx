@@ -29,6 +29,7 @@ const experience = vi.hoisted(() => ({
   deleteCard: vi.fn(),
   listCardVersions: vi.fn(),
   structureCard: vi.fn(),
+  searchCards: vi.fn(),
 }));
 
 vi.mock('../api/auth', () => ({ ...auth }));
@@ -118,6 +119,16 @@ beforeEach(() => {
     current_version: cardId === 7 ? 3 : 1,
     versions: [],
   }));
+  // T-M1-3：服务端搜索默认空结果（各用例按需覆写；避免 undefined 返回触发错误 toast）
+  experience.searchCards.mockResolvedValue({
+    items: [],
+    total: 0,
+    page: 1,
+    page_size: 100,
+    total_pages: 0,
+    query: null,
+    direction_id: null,
+  });
 });
 
 afterEach(() => {
@@ -374,5 +385,68 @@ describe('T-M1-1 structure 失败重试入口', () => {
 
     await waitFor(() => expect(experience.structureCard).toHaveBeenCalledWith(7));
     expect(await screen.findByText('AI 结构化完成')).toBeInTheDocument();
+  });
+});
+
+describe('T-M1-3 服务端搜索接线（DB-03 解封：cards/search 消费者 0→1）', () => {
+  const searchInput = () =>
+    screen.getByPlaceholderText('搜索经历名称、公司、能力标签、量化指标...');
+
+  it('关键词静止过 debounce 后调 searchCards，并以服务端结果为准', async () => {
+    // 服务端返回与本地匹配不同的卡（本地 '量化评测' 只命中 A）→ 断言列表显示 B，
+    // 证明展示结果来自服务端而非本地过滤。
+    experience.searchCards.mockResolvedValue({
+      items: [CARD_B],
+      total: 1,
+      page: 1,
+      page_size: 100,
+      total_pages: 1,
+      query: '量化评测',
+      direction_id: null,
+    });
+
+    renderWithProviders(<ExperiencesView />);
+    expect(await screen.findByText('端侧大模型量化评测')).toBeInTheDocument();
+
+    fireEvent.change(searchInput(), { target: { value: '量化评测' } });
+
+    await waitFor(
+      () => expect(experience.searchCards).toHaveBeenCalledWith({ q: '量化评测', pageSize: 100 }),
+      { timeout: 2000 },
+    );
+    expect(await screen.findByText('CLI 工具开源贡献')).toBeInTheDocument();
+    expect(screen.queryByText('端侧大模型量化评测')).not.toBeInTheDocument();
+  });
+
+  it('未输入关键词不请求 searchCards，列表保持全量本地', async () => {
+    renderWithProviders(<ExperiencesView />);
+    expect(await screen.findByText('端侧大模型量化评测')).toBeInTheDocument();
+
+    // 等过 debounce 窗口，确认空关键词不产生请求
+    await new Promise((resolve) => setTimeout(resolve, 350));
+
+    expect(experience.searchCards).not.toHaveBeenCalled();
+    expect(screen.getByText('CLI 工具开源贡献')).toBeInTheDocument();
+    expect(screen.getByText('全部资产 (2)')).toBeInTheDocument();
+  });
+
+  it('服务端搜索失败 → toast 报错并回落本地过滤（不隐藏问题）', async () => {
+    experience.searchCards.mockRejectedValue(new Error('boom'));
+
+    renderWithProviders(
+      <>
+        <ExperiencesView />
+        <ToastContainer />
+      </>,
+    );
+    expect(await screen.findByText('端侧大模型量化评测')).toBeInTheDocument();
+
+    fireEvent.change(searchInput(), { target: { value: '开源' } });
+
+    await waitFor(() => expect(experience.searchCards).toHaveBeenCalled(), { timeout: 2000 });
+    expect(await screen.findByText('搜索失败')).toBeInTheDocument();
+    // 回落本地：'开源' 仍能过滤出本地匹配的卡
+    expect(screen.getByText('CLI 工具开源贡献')).toBeInTheDocument();
+    expect(screen.queryByText('端侧大模型量化评测')).not.toBeInTheDocument();
   });
 });

@@ -19,7 +19,8 @@ import {
   Check,
   Undo2,
   Target,
-  Wand2
+  Wand2,
+  Loader2
 } from 'lucide-react';
 import {
   useExperiencesQuery,
@@ -28,7 +29,8 @@ import {
   useAddExperienceVersionMutation,
   usePolishExperienceMutation,
   useStructureExperienceMutation,
-  useCardVersionsQuery
+  useCardVersionsQuery,
+  useCardSearchQuery
 } from '../../features/experiences/hooks';
 import { NewExperienceModal } from './NewExperienceModal';
 import { ExpressionPanel } from './ExpressionPanel';
@@ -64,6 +66,30 @@ export const ExperiencesView: React.FC<ExperiencesViewProps> = ({ initialSelecte
 
   const [activeCategory, setActiveCategory] = useState<'all' | ExperienceCategory>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  // T-M1-3 检索 v1：300ms debounce → 后端 GET /cards/search（DB-03 解封，
+  // cards/search 前端消费者 0→1）。请求 pending / 失败时回落本地过滤保持可用，
+  // 失败另 toast 报错（暴露问题而非隐藏）。
+  const [debouncedQuery, setDebouncedQuery] = useState('');
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedQuery(searchQuery), 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+  const searchResult = useCardSearchQuery(debouncedQuery);
+  // 仅当输入已静止到 debounce 值（关键词同步）才采用服务端结果：
+  // 打字瞬间/清空瞬间回落本地过滤（保持即时反馈与既有测试语义）。
+  const keywordInSync =
+    debouncedQuery.trim().length > 0 && searchQuery.trim() === debouncedQuery.trim();
+  const serverFiltered =
+    keywordInSync && searchResult.data !== undefined && !searchResult.isError;
+  useEffect(() => {
+    if (searchResult.isError) {
+      showToast({
+        type: 'error',
+        title: '搜索失败',
+        message: '服务端检索暂不可用，已回落本地筛选'
+      });
+    }
+  }, [searchResult.isError, showToast]);
   const [isNewModalOpen, setIsNewModalOpen] = useState(false);
   const [editingExp, setEditingExp] = useState<Experience | null>(null);
   const [expandedVersionExpIds, setExpandedVersionExpIds] = useState<Record<string, boolean>>({});
@@ -94,8 +120,13 @@ export const ExperiencesView: React.FC<ExperiencesViewProps> = ({ initialSelecte
     }));
   };
 
-  const filteredExperiences = experiences.filter((exp) => {
+  // 搜索态：服务端已按 q 过滤（LIKE title/company/role/raw_text/tags），
+  // 只叠加本地 category 维度；回落态维持原本地关键词过滤。
+  const sourceExperiences = serverFiltered ? searchResult.data : experiences;
+  const countBase = sourceExperiences;
+  const filteredExperiences = sourceExperiences.filter((exp) => {
     const matchesCat = activeCategory === 'all' || exp.category === activeCategory;
+    if (serverFiltered) return matchesCat;
     const q = searchQuery.toLowerCase().trim();
     if (!q) return matchesCat;
     const matchesSearch =
@@ -212,7 +243,7 @@ export const ExperiencesView: React.FC<ExperiencesViewProps> = ({ initialSelecte
           <div className="flex items-center gap-2.5">
             <h1 className="text-2xl font-bold text-ink tracking-tight">经历资产库</h1>
             <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-sage-soft text-sage border border-sage-soft">
-              共 {experiences.length} 项核心资产
+              共 {countBase.length} 项核心资产
             </span>
           </div>
           <p className="text-xs md:text-sm text-muted mt-1">
@@ -241,7 +272,7 @@ export const ExperiencesView: React.FC<ExperiencesViewProps> = ({ initialSelecte
                 : 'text-muted hover:bg-page'
             }`}
           >
-            全部资产 ({experiences.length})
+            全部资产 ({countBase.length})
           </button>
           <button
             onClick={() => setActiveCategory('project')}
@@ -251,7 +282,7 @@ export const ExperiencesView: React.FC<ExperiencesViewProps> = ({ initialSelecte
                 : 'text-muted hover:bg-page'
             }`}
           >
-            项目经历 ({experiences.filter((e) => e.category === 'project' || !e.category).length})
+            项目经历 ({countBase.filter((e) => e.category === 'project' || !e.category).length})
           </button>
           <button
             onClick={() => setActiveCategory('work')}
@@ -261,7 +292,7 @@ export const ExperiencesView: React.FC<ExperiencesViewProps> = ({ initialSelecte
                 : 'text-muted hover:bg-page'
             }`}
           >
-            工作经历 ({experiences.filter((e) => e.category === 'work').length})
+            工作经历 ({countBase.filter((e) => e.category === 'work').length})
           </button>
           <button
             onClick={() => setActiveCategory('intern')}
@@ -271,11 +302,11 @@ export const ExperiencesView: React.FC<ExperiencesViewProps> = ({ initialSelecte
                 : 'text-muted hover:bg-page'
             }`}
           >
-            实习经历 ({experiences.filter((e) => e.category === 'intern').length})
+            实习经历 ({countBase.filter((e) => e.category === 'intern').length})
           </button>
         </div>
 
-        {/* Search input */}
+        {/* Search input（T-M1-3：debounce 后走服务端 /cards/search） */}
         <div className="relative w-full md:w-72">
           <Search className="w-3.5 h-3.5 text-faint absolute left-3 top-1/2 -translate-y-1/2" />
           <input
@@ -283,8 +314,11 @@ export const ExperiencesView: React.FC<ExperiencesViewProps> = ({ initialSelecte
             placeholder="搜索经历名称、公司、能力标签、量化指标..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-8 pr-3 py-1.5 text-xs rounded-lg border border-edge bg-white text-ink placeholder:text-faint focus:border-sage focus:outline-none"
+            className="w-full pl-8 pr-8 py-1.5 text-xs rounded-lg border border-edge bg-white text-ink placeholder:text-faint focus:border-sage focus:outline-none"
           />
+          {keywordInSync && searchResult.isFetching && (
+            <Loader2 className="w-3.5 h-3.5 text-faint animate-spin absolute right-3 top-1/2 -translate-y-1/2" />
+          )}
         </div>
       </div>
 

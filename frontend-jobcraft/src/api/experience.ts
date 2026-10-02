@@ -4,6 +4,7 @@
 
 import { request } from './client'
 import type {
+  CardSearchResponse,
   ExperienceCard,
   ExperienceCardVersionList,
   Expression,
@@ -78,6 +79,29 @@ export async function structureCard(cardId: number): Promise<ExperienceCard> {
     `/api/jobcraft/experience/cards/${cardId}/structure`,
     { method: 'POST', body: JSON.stringify({}) }
   )
+}
+
+/**
+ * 关键词 + 方向结构化搜索经历卡（T-M1-3 检索 v1 / DB-03 解封接线）。
+ *
+ * q 与 direction_id 至少其一（否则后端 400）；匹配语义为
+ * title/company/role/raw_text/tags 的 LIKE（FULLTEXT 方案经评估维持 DEFERRED）。
+ */
+export async function searchCards(params: {
+  q?: string
+  directionId?: number
+  page?: number
+  pageSize?: number
+  includeInactive?: boolean
+}): Promise<CardSearchResponse> {
+  const qs = new URLSearchParams()
+  if (params.q !== undefined && params.q !== '') qs.append('q', params.q)
+  if (params.directionId !== undefined) qs.append('direction_id', String(params.directionId))
+  if (params.page !== undefined) qs.append('page', String(params.page))
+  if (params.pageSize !== undefined) qs.append('page_size', String(params.pageSize))
+  if (params.includeInactive !== undefined) qs.append('include_inactive', String(params.includeInactive))
+  const suffix = qs.toString() ? `?${qs.toString()}` : ''
+  return request<CardSearchResponse>(`/api/jobcraft/experience/cards/search${suffix}`)
 }
 
 /**

@@ -116,6 +116,36 @@ export function useExperiencesQuery() {
 }
 
 /**
+ * 服务端搜索缓存 key（T-M1-3 检索 v1）。
+ *
+ * 以 EXPERIENCES_QUERY_KEY 为前缀 → 写路径（update/delete/addVersion）
+ * 对 `['experiences']` 的既有 invalidate 自动覆盖搜索缓存，无需逐处补失效。
+ * 读取时 getQueryData(['experiences']) 为精确匹配，不受前缀 key 影响。
+ */
+export const experienceSearchQueryKey = (keyword: string) =>
+  [...EXPERIENCES_QUERY_KEY, 'search', keyword] as const;
+
+/**
+ * 经历卡服务端搜索（T-M1-3 检索 v1 / DB-03 解封：cards/search 前端消费者 0→1）。
+ *
+ * 关键词为空不请求（enabled=false，调用方回落本地过滤）；
+ * 单页 pageSize=100（后端上限），更大数据量由 total 信封反映。
+ * 失败时 isError=true，由调用方回落本地过滤并 toast（不隐藏问题）。
+ */
+export function useCardSearchQuery(keyword: string) {
+  const q = keyword.trim();
+  return useQuery<Experience[]>({
+    queryKey: experienceSearchQueryKey(q),
+    enabled: q.length > 0,
+    staleTime: 30_000,
+    queryFn: async () => {
+      const res = await experienceApi.searchCards({ q, pageSize: 100 });
+      return res.items.map(cardToExperience);
+    },
+  });
+}
+
+/**
  * 创建经历卡。与 legacy `JobCraftContext.createExperience` 行为等价：
  * 后端 createCard 成功 → 前端 Experience（cardToExperience + 草稿前端扩展字段）→ cache 前置插入；
  * 后端失败向上抛出（由消费方 toast）。

@@ -102,6 +102,17 @@ export interface ExperienceCardVersionList {
   versions: ExperienceCardVersion[]
 }
 
+/** GET /cards/search 分页信封（T-M1-3 检索 v1；q / direction_id 至少其一，后端 400） */
+export interface CardSearchResponse {
+  items: ExperienceCard[]
+  total: number
+  page: number
+  page_size: number
+  total_pages: number
+  query: string | null
+  direction_id: number | null
+}
+
 // ============================================================
 // 标准化表达（Expression，EXP-P2-02 §8 / DATA_MODEL §6 wire 层）
 // ============================================================
