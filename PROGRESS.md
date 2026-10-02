@@ -40,6 +40,14 @@
 - [x] **DB-03 解封评估结论**（已同步 TODO DB-03 条目）：触发条件「前端正式接入搜索」满足（`cards/search` 关键词消费者 0→1，第二接入点为 T-M3-4 结构化检索）；**FULLTEXT 方案 A（V0006 nGram + MATCH...AGAINST 双轨）经复评维持 DEFERRED**——LIKE↔MATCH 语义差异证据仍成立（`Java`→LIKE 1/MATCH 0，英文词漏检风险），无相关性排序需求前切换只有风险无收益，`test_keyword_only_regression_no_exists` 护栏不变；后续与 **v2 embedding 选型 ADR（矩阵 Q4，3-5d）** 一并作为独立 Search Optimization Task 重评（ADR 本轮按矩阵「可后置」不做）。
 - [x] **门禁**：tsc 0 错、vitest **222 passed**（30 files）、build 通过、encoding 390 文件 0 错；**后端零改动、零迁移**（search 端点/DAO 为 T-M3-4 既有产物，本轮纯接线）。
 - **边界**：未碰他窗口在途的 `resume_version`/`V0021`（认领归他方）、B 的 interview/prep 域；`recommend-tags` 留下轮裁决。
+
+## T-M2-1 EXPERIENCE_SPEC 三处加注（§8 / §32，2026-10-02，C 窗口）
+
+- [x] **三处加注写入**（`docs/` 在 .gitignore，本地文档变更**无 git 提交**，格式对齐 §25.1 / T-M1-4 风格）：
+  1. **§8 `resumeVersionId` 不加列**（矩阵 U-P2a）：复用粒度裁决=**方向**，P6 简历表带 `direction_id` 即完成关联；空窗期靠中文命名（职位-公司-日期）肉眼挑选不建临时机制；spec 字段保留为远期契约占位。
+  2. **§8 `type` 生产入口依赖**（U-P2c）：`standardized`✅ → `direction`（P3 验收清单含生产入口+方向选择器）→ `job_specific`（P4，含 `job_id` 归属校验）；对应模块落地前仅有存量消费、**前端不得暴露创建入口**。
+  3. **§32 沉淀闸门**（U-P2b）：消费链**不静默自动入库**，沉淀=AI 建议+用户确认闸门（=§24.2 Feedback Candidate，复盘结束汇总一次确认）；现行 `useApplyReviewFeedbackMutation` 绕闸直改+强制定稿违规，修复落点 **P9**（T-M8-1/T-M9-1）；prep 手动沉淀（T-M9-3）属用户主动触发、合规。
+- [x] 验证：`check_encoding` 393 文件 0 错；TODO 总表 T-M2-1 已勾选。**M2 模块任务全部完成**（仅此一项）。
 - **⚠️共享工作区**：同一 worktree 内 B 窗口（interview / jobs 域）存在未提交改动，本批按 hunk 精确暂存 C 域文件（`types/jobcraft.ts` 只入 C 侧 hunk），提交前逐文件核对 `git diff --cached --stat`。
 
 ## T-M4-2 缺口重构=改写任务清单（2026-10-02，P4/M4 批次）
