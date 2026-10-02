@@ -1,8 +1,10 @@
-"""方向（Direction）路由（T-M3-1：P3 方向体系 CRUD）。
+"""方向（Direction）路由（T-M3-1/T-M3-3：P3 方向体系 CRUD + 表单接线）。
 
 约定（Q7=c 两级分离 + U-P2a′ 编码裁决）：
 - 集合前缀 ``/api/jobcraft/direction``（单数集合，同 submission 先例）；
 - code（DIR-n）服务端生成，创建响应回带；
+- ``POST /find-or-create``（T-M3-3 表单方向字段数据侧接线）：按 name 复用
+  已有方向，无则创建；命中不覆盖六维，响应 ``{direction, created}``；
 - 删除守卫：被 expression 等下游引用 → 409 提示改用归档
   （PATCH status=archived，DIRECTION_SPEC §15 状态机）；
 - 统一错误信封由 server.py exception handler 包装，此处只抛 HTTPException。
@@ -14,7 +16,12 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.auth.dependencies import get_current_user
-from app.schemas.jobcraft import DirectionCreate, DirectionRead, DirectionUpdate
+from app.schemas.jobcraft import (
+    DirectionCreate,
+    DirectionFindOrCreateResponse,
+    DirectionRead,
+    DirectionUpdate,
+)
 from app.tools import db_direction
 
 router = APIRouter(prefix="/api/jobcraft/direction", tags=["direction"])
@@ -52,6 +59,27 @@ def create_direction(
     except Exception as e:
         logger.exception("方向创建失败")
         raise HTTPException(status_code=500, detail=f"创建失败: {e}")
+
+
+@router.post("/find-or-create", response_model=DirectionFindOrCreateResponse)
+def find_or_create_direction(
+    payload: DirectionCreate,
+    current_user: int = Depends(get_current_user),
+):
+    """按 name 查找或创建方向（T-M3-3：结构化表单方向字段数据侧接线）。
+
+    命中已有（含归档）原样返回不覆盖六维；未命中创建（DIR-n）；
+    并发同名竞态回读已存在行。响应 ``{direction, created}``。
+    """
+    try:
+        data = payload.model_dump()
+        direction, created = db_direction.find_or_create_direction(current_user, data)
+        return {"direction": direction, "created": created}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.exception("方向 find-or-create 失败")
+        raise HTTPException(status_code=500, detail=f"find-or-create 失败: {e}")
 
 
 @router.get("/{direction_id}", response_model=DirectionRead)

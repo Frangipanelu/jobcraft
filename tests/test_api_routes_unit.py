@@ -509,12 +509,30 @@ class TestDirections:
                 return {"expressions": 0}
             return {"expressions": store["refs"].get(direction_id, 0)}
 
+        def _fake_find_or_create(user_id, data):
+            name = (data.get("name") or "").strip()
+            if not name:
+                raise ValueError("方向名称不能为空")
+            existing = next(
+                (
+                    r
+                    for r in store["rows"]
+                    if r["user_id"] == user_id and r["name"] == name
+                ),
+                None,
+            )
+            if existing:
+                return existing, False
+            rec = _fake_create({**data, "user_id": user_id, "name": name})
+            return rec, True
+
         monkeypatch.setattr(mod, "create_direction", _fake_create)
         monkeypatch.setattr(mod, "list_directions", _fake_list)
         monkeypatch.setattr(mod, "get_direction", _fake_get)
         monkeypatch.setattr(mod, "update_direction", _fake_update)
         monkeypatch.setattr(mod, "delete_direction", _fake_delete)
         monkeypatch.setattr(mod, "count_direction_references", _fake_refs)
+        monkeypatch.setattr(mod, "find_or_create_direction", _fake_find_or_create)
         return store
 
     def test_create_generates_dir_code(self, monkeypatch):
@@ -546,6 +564,40 @@ class TestDirections:
         self._mock_db(monkeypatch)
         resp = client.post("/api/jobcraft/direction", json={"name": "x" * 201})
         assert resp.status_code == 422
+
+    def test_find_or_create_missing_creates(self, monkeypatch):
+        """T-M3-3：未命中 → 新建（created=true，回带 DIR-n）。"""
+        self._mock_db(monkeypatch)
+        resp = client.post(
+            "/api/jobcraft/direction/find-or-create",
+            json={"name": "  策略运营-跨境电商 ", "industry": "跨境电商"},
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["created"] is True
+        assert body["direction"]["code"] == "DIR-1"
+        assert body["direction"]["name"] == "策略运营-跨境电商"
+
+    def test_find_or_create_existing_reuses(self, monkeypatch):
+        """T-M3-3：同名再次提交 → 复用既有方向（created=false，不建重复行）。"""
+        store = self._mock_db(monkeypatch)
+        client.post("/api/jobcraft/direction/find-or-create", json={"name": "策略运营"})
+        resp = client.post(
+            "/api/jobcraft/direction/find-or-create",
+            json={"name": " 策略运营 ", "industry": "新值"},
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["created"] is False
+        assert body["direction"]["id"] == 1
+        assert len(store["rows"]) == 1
+
+    def test_find_or_create_blank_name_returns_400(self, monkeypatch):
+        """T-M3-3：纯空白名过 schema min_length，由 DAO 校验 → 400。"""
+        self._mock_db(monkeypatch)
+        resp = client.post("/api/jobcraft/direction/find-or-create", json={"name": " "})
+        assert resp.status_code == 400
+        assert "不能为空" in resp.json()["error"]["message"]
 
     def test_list_returns_created(self, monkeypatch):
         self._mock_db(monkeypatch)

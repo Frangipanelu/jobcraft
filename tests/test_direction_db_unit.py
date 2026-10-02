@@ -291,6 +291,83 @@ class TestGetDirection:
         assert mod.get_direction(999, user_id=7) is None
 
 
+class TestFindOrCreate:
+    """T-M3-3：表单方向字段 find-or-create（命中不覆盖 / 竞态回读）。"""
+
+    def test_empty_name_rejected_before_query(self, fake_db):
+        with pytest.raises(ValueError, match="方向名称不能为空"):
+            mod.find_or_create_direction(7, {"name": "   "})
+        assert not fake_db["cursor"].executed
+
+    def test_existing_returns_without_create(self, fake_db):
+        fake_db["cursor"]._row = _fake_direction_row(status="archived")
+        out, created = mod.find_or_create_direction(
+            7, {"name": " 策略运营-跨境电商 ", "industry": "新值"}
+        )
+        assert created is False
+        assert out["id"] == 1
+        assert out["status"] == "archived", "命中已有不改状态"
+        assert out["industry"] == "跨境电商", "命中已有不覆盖六维"
+        sqls = [s for s, _ in fake_db["cursor"].executed]
+        assert any("AND name=%s" in s for s in sqls)
+        assert not any(s.strip().upper().startswith("INSERT") for s in sqls)
+
+    def test_missing_creates_with_dir_code(self, fake_db, monkeypatch):
+        cursor = fake_db["cursor"]
+        cursor._rows = []  # 无既有编码 → DIR-1
+        row = _fake_direction_row(id=11, code="DIR-1", name="新方向")
+
+        def _query_one(sql, params=None):
+            cursor.executed.append((sql, params))
+            if "AND name=%s" in sql:
+                return None  # 首次查找未命中
+            if "WHERE id=%s" in sql:
+                return row  # create 后回读
+            return None
+
+        monkeypatch.setattr(mod, "query_one", _query_one)
+        out, created = mod.find_or_create_direction(7, {"name": "  新方向 "})
+        assert created is True
+        assert out["code"] == "DIR-1"
+        inserts = [
+            (s, p) for s, p in cursor.executed if s.strip().upper().startswith("INSERT")
+        ]
+        assert len(inserts) == 1
+        assert inserts[0][1][2] == "新方向", "创建时 name 应已 trim"
+
+    def test_concurrent_duplicate_name_rereads_existing(self, fake_db, monkeypatch):
+        cursor = fake_db["cursor"]
+        cursor._rows = []
+        existing = _fake_direction_row(id=5, code="DIR-2")
+        state = {"finds": 0}
+
+        def _query_one(sql, params=None):
+            cursor.executed.append((sql, params))
+            if "AND name=%s" in sql:
+                state["finds"] += 1
+                return None if state["finds"] == 1 else existing
+            if "WHERE id=%s" in sql:
+                return existing
+            return None
+
+        monkeypatch.setattr(mod, "query_one", _query_one)
+        cursor.insert_errors = [_dup_error("uk_direction_user_name")]
+        out, created = mod.find_or_create_direction(7, {"name": "策略运营-跨境电商"})
+        assert created is False, "竞态应按已存在返回"
+        assert out["id"] == 5
+
+    def test_other_create_error_reraises(self, fake_db):
+        cursor = fake_db["cursor"]
+        cursor._rows = []
+        cursor.insert_errors = [
+            _dup_error("uk_direction_code"),
+            _dup_error("uk_direction_code"),
+            _dup_error("uk_direction_code"),
+        ]
+        with pytest.raises(ValueError, match="方向编码冲突"):
+            mod.find_or_create_direction(7, {"name": "新方向"})
+
+
 class TestListDirections:
     def test_ordered_by_id_with_status_filter(self, fake_db):
         fake_db["cursor"]._rows = [_fake_direction_row()]

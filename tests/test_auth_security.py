@@ -47,6 +47,8 @@ _BUSINESS_ENDPOINTS = [
     ("GET", "/api/jobcraft/direction/1", None),
     ("PATCH", "/api/jobcraft/direction/1", {"name": "方向B"}),
     ("DELETE", "/api/jobcraft/direction/1", None),
+    # direction find-or-create（T-M3-3）
+    ("POST", "/api/jobcraft/direction/find-or-create", {"name": "方向A"}),
     # jd_classification（T-M3-2）
     ("GET", "/api/jobcraft/job/1/jd-classification", None),
     (

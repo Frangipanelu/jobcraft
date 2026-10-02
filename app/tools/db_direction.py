@@ -180,6 +180,51 @@ def create_direction(data: Dict[str, Any]) -> Dict[str, Any]:
     return created
 
 
+def _find_by_name(user_id: int, name: str) -> Optional[Dict[str, Any]]:
+    """按 (user_id, name) 精确查找方向（UNIQUE(user_id,name) 保证至多一行）。"""
+    row = query_one(
+        "SELECT * FROM direction WHERE user_id=%s AND name=%s", (user_id, name)
+    )
+    return _row_to_direction(row) if row else None
+
+
+def find_or_create_direction(
+    user_id: int, data: Dict[str, Any]
+) -> tuple[Dict[str, Any], bool]:
+    """按 name 查找或创建方向（T-M3-3：结构化表单方向字段数据侧接线）。
+
+    语义：
+    - 命中已有（含归档行）→ 原样返回，不覆盖六维（方向定义稳定，修改走
+      update_direction/PATCH）；
+    - 未命中 → 走 create_direction（DIR-n 编码 + 唯一约束），返回 created=True；
+    - 并发同名竞态（create 报「方向名称已存在」）→ 回读已存在行并返回
+      created=False；回读仍缺失则原样抛出。
+
+    :param user_id: 归属用户。
+    :param data: 含 name（必填），可选六维与 status（缺省 active）。
+    :return: (direction, created)。
+    :raises ValueError: 名称为空 / 状态非法等 create_direction 校验错误。
+    """
+    name = (data.get("name") or "").strip()
+    if not name:
+        raise ValueError("方向名称不能为空")
+    existing = _find_by_name(user_id, name)
+    if existing:
+        return existing, False
+    payload = dict(data)
+    payload["user_id"] = user_id
+    payload.setdefault("status", "active")
+    try:
+        return create_direction(payload), True
+    except ValueError as exc:
+        if "方向名称已存在" in str(exc):
+            raced = _find_by_name(user_id, name)
+            if raced:
+                logger.info("方向同名竞态回读命中 user_id=%s name=%s", user_id, name)
+                return raced, False
+        raise
+
+
 def list_directions(user_id: int, status: Optional[str] = None) -> List[Dict[str, Any]]:
     """列出用户方向（创建序 DIR-1 在前），可按 status 过滤。
 

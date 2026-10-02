@@ -393,6 +393,13 @@ class DirectionRead(BaseModel):
     updated_at: Optional[str] = None
 
 
+class DirectionFindOrCreateResponse(BaseModel):
+    """find-or-create 方向响应（T-M3-3：created 区分命中/新建，供表单分支提示）。"""
+
+    direction: DirectionRead
+    created: bool
+
+
 # ============================================================
 # JD / ATS 相关
 # ============================================================
