@@ -2378,3 +2378,200 @@ class TestUpdateInterviewQaPairFields:
         assert (
             db_interview.update_interview_qa_pair_fields(404, {"intent": ""}) is False
         )
+
+
+class TestDbResumeVersion:
+    """T-M6-1 / M6-Q1-B：resume_version DAO（每岗自增版本、单选设当前、归属校验）"""
+
+    def test_create_assigns_version_no_max_plus_one(self):
+        from app.tools import db_resume_version
+
+        with (
+            patch("app.tools.db_resume_version._ensure_resume_version_table"),
+            patch(
+                "app.tools.db_resume_version.query_one",
+                return_value={"next_no": 3},
+            ),
+            patch(
+                "app.tools.db_resume_version.execute_lastrowid", return_value=41
+            ) as mock_insert,
+            patch(
+                "app.tools.db_resume_version.get_resume_version",
+                return_value={"id": 41, "version_no": 4},
+            ),
+        ):
+            created = db_resume_version.create_resume_version(
+                1, 9, version_name="产品-字节-2026/10/02", resume_markdown="# 简历"
+            )
+        assert created["id"] == 41
+        sql, params = mock_insert.call_args[0]
+        assert "INSERT INTO resume_version" in sql
+        # (user_id, job_id, direction_id, version_no, version_name, ...)
+        assert params[0] == 1
+        assert params[1] == 9
+        assert params[3] == 4
+        assert params[4] == "产品-字节-2026/10/02"
+
+    def test_create_without_job_raises(self):
+        from app.tools import db_resume_version
+
+        with patch("app.tools.db_resume_version._ensure_resume_version_table"):
+            with pytest.raises(ValueError, match="job_id"):
+                db_resume_version.create_resume_version(1, None)
+
+    def test_create_serializes_sections_to_json_string(self):
+        from app.tools import db_resume_version
+
+        with (
+            patch("app.tools.db_resume_version._ensure_resume_version_table"),
+            patch("app.tools.db_resume_version.query_one", return_value={"next_no": 0}),
+            patch(
+                "app.tools.db_resume_version.execute_lastrowid", return_value=2
+            ) as mock_insert,
+            patch(
+                "app.tools.db_resume_version.get_resume_version",
+                return_value={"id": 2},
+            ),
+        ):
+            db_resume_version.create_resume_version(
+                1, 9, sections=[{"type": "summary", "content": "你好"}]
+            )
+        params = mock_insert.call_args[0][1]
+        assert json.loads(params[5]) == [{"type": "summary", "content": "你好"}]
+
+    def test_update_only_provided_fields(self):
+        from app.tools import db_resume_version
+
+        with (
+            patch("app.tools.db_resume_version._ensure_resume_version_table"),
+            patch(
+                "app.tools.db_resume_version.get_resume_version",
+                return_value={"id": 5, "user_id": 1},
+            ),
+            patch("app.tools.db_resume_version.execute", return_value=1) as mock_exec,
+        ):
+            result = db_resume_version.update_resume_version(
+                5, user_id=1, resume_markdown="# 新内容"
+            )
+        assert result == {"id": 5, "user_id": 1}
+        sql, params = mock_exec.call_args[0]
+        assert "resume_markdown=%s" in sql
+        assert "version_name" not in sql
+        assert "sections" not in sql
+        assert params == ("# 新内容", 5)
+
+    def test_update_without_ownership_returns_none(self):
+        from app.tools import db_resume_version
+
+        with (
+            patch("app.tools.db_resume_version._ensure_resume_version_table"),
+            patch("app.tools.db_resume_version.get_resume_version", return_value=None),
+            patch("app.tools.db_resume_version.execute") as mock_exec,
+        ):
+            assert (
+                db_resume_version.update_resume_version(
+                    404, user_id=1, version_name="x"
+                )
+                is None
+            )
+        mock_exec.assert_not_called()
+
+    def test_delete_requires_ownership(self):
+        from app.tools import db_resume_version
+
+        with (
+            patch("app.tools.db_resume_version._ensure_resume_version_table"),
+            patch("app.tools.db_resume_version.execute", return_value=1) as mock_exec,
+        ):
+            assert db_resume_version.delete_resume_version(5, user_id=1) is True
+        sql, params = mock_exec.call_args[0]
+        assert "DELETE FROM resume_version" in sql
+        assert "user_id=%s" in sql
+        assert params == (5, 1)
+
+    def test_delete_not_owned_returns_false(self):
+        from app.tools import db_resume_version
+
+        with (
+            patch("app.tools.db_resume_version._ensure_resume_version_table"),
+            patch("app.tools.db_resume_version.execute", return_value=0),
+        ):
+            assert db_resume_version.delete_resume_version(404, user_id=1) is False
+
+    def test_set_current_clears_others_in_single_statement(self):
+        """RESUME_SPEC §11 单选：同岗清其他，单条 UPDATE 原子完成。"""
+        from app.tools import db_resume_version
+
+        with (
+            patch("app.tools.db_resume_version._ensure_resume_version_table"),
+            patch(
+                "app.tools.db_resume_version.get_resume_version",
+                return_value={"id": 7, "job_id": 9, "selected_for_application": True},
+            ),
+            patch("app.tools.db_resume_version.execute", return_value=3) as mock_exec,
+        ):
+            result = db_resume_version.set_current_resume_version(7, user_id=1)
+        assert result["selected_for_application"] is True
+        sql, params = mock_exec.call_args[0]
+        assert "IF(id=%s, 1, 0)" in sql
+        assert "job_id <=> %s" in sql
+        assert params == (7, 1, 9)
+
+    def test_set_current_without_ownership_returns_none(self):
+        from app.tools import db_resume_version
+
+        with (
+            patch("app.tools.db_resume_version._ensure_resume_version_table"),
+            patch("app.tools.db_resume_version.get_resume_version", return_value=None),
+            patch("app.tools.db_resume_version.execute") as mock_exec,
+        ):
+            assert db_resume_version.set_current_resume_version(404, user_id=1) is None
+        mock_exec.assert_not_called()
+
+    def test_list_filters_by_job_and_orders_desc(self):
+        from app.tools import db_resume_version
+
+        with (
+            patch("app.tools.db_resume_version._ensure_resume_version_table"),
+            patch("app.tools.db_resume_version.query_all", return_value=[]) as mock_q,
+        ):
+            assert db_resume_version.list_resume_versions(1, job_id=9) == []
+        sql, params = mock_q.call_args[0]
+        assert "job_id=%s" in sql
+        assert "ORDER BY version_no DESC" in sql
+        assert params == (1, 9)
+
+    def test_row_json_columns_parsed(self):
+        """JSON 列（str）读出解析为结构，坏数据回退 None。"""
+        from app.tools.db_resume_version import _row_to_version
+
+        out = _row_to_version(
+            {
+                "id": 1,
+                "user_id": 1,
+                "job_id": 9,
+                "direction_id": None,
+                "version_no": 2,
+                "version_name": "v2",
+                "sections": '[{"type": "summary"}]',
+                "resume_markdown": "# md",
+                "selected_for_application": 1,
+                "source_expression_refs": '["expr-1"]',
+                "created_at": None,
+                "updated_at": None,
+            }
+        )
+        assert out["sections"] == [{"type": "summary"}]
+        assert out["source_expression_refs"] == ["expr-1"]
+        assert out["selected_for_application"] is True
+
+        bad = _row_to_version(
+            {
+                "id": 2,
+                "user_id": 1,
+                "sections": "{broken",
+                "source_expression_refs": None,
+            }
+        )
+        assert bad["sections"] is None
+        assert bad["source_expression_refs"] is None

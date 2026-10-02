@@ -22,6 +22,7 @@ from app.api.experience import router as experience_router
 from app.api.job_analysis import router as job_analysis_router
 from app.api.job_entity import router as job_entity_router
 from app.api.profile import router as profile_router
+from app.api.resume_version import router as resume_version_router
 from app.api.submission import router as submission_router
 from app.api.interview_prep import router as interview_prep_router
 from app.api.interview_review import router as interview_review_router
@@ -55,6 +56,8 @@ app.include_router(submission_router)
 app.include_router(job_entity_router)
 app.include_router(interview_prep_router)
 app.include_router(interview_review_router)
+# T-M6-1：简历版本 CRUD（独立字面量前缀 /api/jobcraft/resume-version，无参数路由冲突）
+app.include_router(resume_version_router)
 
 setup_monitoring(app)
 

@@ -2978,3 +2978,185 @@ class TestJobEntityRouteOrder:
         resp = client.get("/api/jobcraft/job/123")
         assert resp.status_code == 200
         assert resp.json()["position"] == "PM"
+
+
+class TestResumeVersionListCreate:
+    """GET/POST /api/jobcraft/resume-version — T-M6-1 / M6-Q1-B"""
+
+    def test_list_passes_user_and_job_filter(self, monkeypatch):
+        seen = {}
+
+        def fake_list(uid, job_id=None):
+            seen.update(user_id=uid, job_id=job_id)
+            return [{"id": 1, "version_no": 2, "selected_for_application": False}]
+
+        monkeypatch.setattr(
+            "app.api.resume_version.db_resume_version.list_resume_versions", fake_list
+        )
+        resp = client.get("/api/jobcraft/resume-version?job_id=9")
+        assert resp.status_code == 200
+        assert resp.json()[0]["version_no"] == 2
+        assert seen == {"user_id": 1, "job_id": 9}
+
+    def test_list_without_job_filter_passes_none(self, monkeypatch):
+        seen = {}
+
+        def fake_list(uid, job_id=None):
+            seen.update(user_id=uid, job_id=job_id)
+            return []
+
+        monkeypatch.setattr(
+            "app.api.resume_version.db_resume_version.list_resume_versions", fake_list
+        )
+        resp = client.get("/api/jobcraft/resume-version")
+        assert resp.status_code == 200
+        assert resp.json() == []
+        assert seen == {"user_id": 1, "job_id": None}
+
+    def test_create_owns_job_and_passes_fields(self, monkeypatch):
+        seen = {}
+
+        def fake_create(**kw):
+            seen.update(kw)
+            return {"id": 30, **kw}
+
+        monkeypatch.setattr(
+            "app.api.resume_version.db_job_entity.get_job",
+            lambda jid, uid=None: {"id": jid, "user_id": uid},
+        )
+        monkeypatch.setattr(
+            "app.api.resume_version.db_resume_version.create_resume_version",
+            fake_create,
+        )
+        resp = client.post(
+            "/api/jobcraft/resume-version",
+            json={
+                "job_id": 9,
+                "version_name": "产品-字节-2026/10/02",
+                "resume_markdown": "# 简历",
+                "sections": [{"type": "summary"}],
+            },
+        )
+        assert resp.status_code == 200
+        assert resp.json()["id"] == 30
+        assert seen["user_id"] == 1
+        assert seen["job_id"] == 9
+        assert seen["version_name"] == "产品-字节-2026/10/02"
+        assert seen["sections"] == [{"type": "summary"}]
+        assert seen["resume_markdown"] == "# 简历"
+
+    def test_create_without_owns_job_returns_404(self, monkeypatch):
+        create = MagicMock()
+        monkeypatch.setattr(
+            "app.api.resume_version.db_job_entity.get_job", lambda *a, **k: None
+        )
+        monkeypatch.setattr(
+            "app.api.resume_version.db_resume_version.create_resume_version", create
+        )
+        resp = client.post("/api/jobcraft/resume-version", json={"job_id": 404})
+        assert resp.status_code == 404
+        assert "岗位不存在" in resp.json()["error"]["message"]
+        create.assert_not_called()
+
+    def test_create_value_error_returns_400(self, monkeypatch):
+        def raise_value_error(**k):
+            raise ValueError("job_id 不能为空")
+
+        monkeypatch.setattr(
+            "app.api.resume_version.db_job_entity.get_job",
+            lambda jid, uid=None: {"id": jid},
+        )
+        monkeypatch.setattr(
+            "app.api.resume_version.db_resume_version.create_resume_version",
+            raise_value_error,
+        )
+        resp = client.post("/api/jobcraft/resume-version", json={"job_id": 9})
+        assert resp.status_code == 400
+        assert "job_id 不能为空" in resp.json()["error"]["message"]
+
+
+class TestResumeVersionPatchDeleteCurrent:
+    """PATCH/DELETE/设当前 — T-M6-1"""
+
+    def test_patch_passes_only_provided_fields(self, monkeypatch):
+        seen = {}
+
+        def fake_update(vid, user_id=None, **kw):
+            seen.update(vid=vid, user_id=user_id, **kw)
+            return {"id": vid, **kw}
+
+        monkeypatch.setattr(
+            "app.api.resume_version.db_resume_version.update_resume_version",
+            fake_update,
+        )
+        resp = client.patch(
+            "/api/jobcraft/resume-version/5",
+            json={"version_name": "新名", "resume_markdown": "# x"},
+        )
+        assert resp.status_code == 200
+        assert seen["vid"] == 5
+        assert seen["user_id"] == 1
+        assert seen["version_name"] == "新名"
+        assert seen["resume_markdown"] == "# x"
+        assert "sections" not in seen
+
+    def test_patch_empty_payload_returns_400(self, monkeypatch):
+        update = MagicMock()
+        monkeypatch.setattr(
+            "app.api.resume_version.db_resume_version.update_resume_version", update
+        )
+        resp = client.patch("/api/jobcraft/resume-version/5", json={})
+        assert resp.status_code == 400
+        assert "无有效更新字段" in resp.json()["error"]["message"]
+        update.assert_not_called()
+
+    def test_patch_not_found_returns_404(self, monkeypatch):
+        monkeypatch.setattr(
+            "app.api.resume_version.db_resume_version.update_resume_version",
+            lambda *a, **k: None,
+        )
+        resp = client.patch(
+            "/api/jobcraft/resume-version/404", json={"version_name": "x"}
+        )
+        assert resp.status_code == 404
+
+    def test_delete_success_returns_deleted(self, monkeypatch):
+        monkeypatch.setattr(
+            "app.api.resume_version.db_resume_version.delete_resume_version",
+            lambda vid, user_id: True,
+        )
+        resp = client.delete("/api/jobcraft/resume-version/5")
+        assert resp.status_code == 200
+        assert resp.json() == {"deleted": True}
+
+    def test_delete_not_owned_returns_404(self, monkeypatch):
+        monkeypatch.setattr(
+            "app.api.resume_version.db_resume_version.delete_resume_version",
+            lambda vid, user_id: False,
+        )
+        resp = client.delete("/api/jobcraft/resume-version/404")
+        assert resp.status_code == 404
+
+    def test_set_current_returns_updated_version(self, monkeypatch):
+        seen = {}
+
+        def fake_set(vid, user_id):
+            seen.update(vid=vid, user_id=user_id)
+            return {"id": vid, "selected_for_application": True}
+
+        monkeypatch.setattr(
+            "app.api.resume_version.db_resume_version.set_current_resume_version",
+            fake_set,
+        )
+        resp = client.post("/api/jobcraft/resume-version/7/current")
+        assert resp.status_code == 200
+        assert resp.json()["selected_for_application"] is True
+        assert seen == {"vid": 7, "user_id": 1}
+
+    def test_set_current_not_found_returns_404(self, monkeypatch):
+        monkeypatch.setattr(
+            "app.api.resume_version.db_resume_version.set_current_resume_version",
+            lambda *a, **k: None,
+        )
+        resp = client.post("/api/jobcraft/resume-version/404/current")
+        assert resp.status_code == 404

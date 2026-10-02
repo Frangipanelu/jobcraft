@@ -1105,3 +1105,53 @@ def test_v0020_migrate_is_applied_via_runner(fake_conn):
         if e[0].strip().startswith("INSERT INTO schema_migrations")
     ]
     assert "0020" in inserted
+
+
+def test_v0021_resume_versions_follows_convention():
+    """T-M6-1：V0021 新建 resume_version（M6-Q1-B 核心字段），仅建表不动既有，
+    幂等（CREATE TABLE IF NOT EXISTS），遵守 SPLIT 约定。"""
+    v0021 = os.path.join(runner.MIGRATIONS_DIR, "V0021__resume_versions.sql")
+    assert os.path.exists(v0021)
+    with open(v0021, encoding="utf-8") as fh:
+        sql = fh.read()
+    flat = " ".join(sql.split())
+    assert "CREATE TABLE IF NOT EXISTS resume_version" in flat
+    for frag in (
+        "user_id INT NOT NULL DEFAULT 1",
+        "job_id INT",
+        "direction_id INT",
+        "version_no INT NOT NULL DEFAULT 1",
+        "version_name VARCHAR(200)",
+        "sections JSON",
+        "resume_markdown LONGTEXT",
+        "selected_for_application TINYINT(1) NOT NULL DEFAULT 0",
+        "source_expression_refs JSON",
+        "KEY idx_resume_version_owner (user_id, job_id)",
+        "KEY idx_resume_version_job (job_id)",
+        "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+    ):
+        assert frag in flat, f"V0021 缺少定义: {frag}"
+    # Q1-B 核心字段：factualCheck/userStatus/type 等后置，不在本期建列
+    # （只查 CREATE 体，跳过头注释里的裁决说明）
+    create_body = flat[flat.index("CREATE TABLE IF NOT EXISTS resume_version") :]
+    for absent in ("factual", "user_status", "base_resume_id"):
+        assert absent not in create_body.lower(), f"V0021 不应包含后置字段: {absent}"
+    # 前向兼容：仅新建表（AGENTS §4.4）
+    stmts = [s.strip() for s in sql.split(";--SPLIT--") if s.strip()]
+    assert len(stmts) == 1, f"V0021 应含 1 条语句块，实际 {len(stmts)}"
+    stmt = stmts[0]
+    upper = stmt.upper()
+    assert not upper.startswith(("DROP", "ALTER", "RENAME", "TRUNCATE", "UPDATE"))
+    assert "MODIFY COLUMN" not in upper, "V0021 不得改列"
+    assert not stmt.endswith(";"), f"V0021 语句块含尾分号: {stmt[:60]}"
+
+
+def test_v0021_migrate_is_applied_via_runner(fake_conn):
+    """T-M6-1：V0021 与既有迁移共存，runner.migrate() 不抛错且入库。"""
+    runner.migrate()
+    inserted = [
+        e[1][0]
+        for e in fake_conn.cursor_obj.executed
+        if e[0].strip().startswith("INSERT INTO schema_migrations")
+    ]
+    assert "0021" in inserted
