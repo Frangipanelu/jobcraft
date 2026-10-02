@@ -2,6 +2,19 @@
 
 > 本文件用于追踪项目整体进度。AI 在每次会话结束或完成子任务时，必须更新本文件的对应板块。
 
+## T-M4-1 结构化分析接入 4 节点工作流（2026-10-01，P4/M4 批次首任务）
+
+> Q2 裁决 C（乙）落地：结构化字段直接注入 job_analysis_flow §14.2 结构化状态，跳过 structurer，3 档标签作 priority 初值，classifier 不覆盖用户标签，4 节点照跑；FE-JD-REPORT-01 根因（单节点无 match 字段 + 合成 id）修复，前端降级展示自此仅作兜底。
+
+- [x] **后端 workflow** `859f9b0`：`JobAnalysisState` 增可选 duties/requirements；卡片加载抽公共 `_load_cards`（原文/结构化两路同语义）；新节点 `_run_structured_full_ats`（`analyze_structured_jd` 跳过 structurer、`_build_structured_from_input` 标签确定性入桶 hard/required→hard_skills、preferred→soft_skills 即 priority 初值）；`run_job_analysis_workflow` 增可选结构化注入参数；新入口 `run_structured_job_analysis_workflow`（jd_text 由 `_structured_to_text` 重建供 raw_jd 快照）——score/suggestions/collate 零改动复用。
+- [x] **API/异步任务** `859f9b0`：`StructuredJDRequest` +`card_ids`；`POST /analyze-ats-structured` 校验顺序 prepare(400)→card_ids(400「请至少选择 1 张经历卡」)→workflow，返回 JobAnalysisResult 全量（真实 job_analysis_id + match 字段，与 `/analyze` 同构）；`execute_jd_analyze_structured` 透传 user_id/card_ids，缺一 ValueError→任务 FAILED（prepare 先行，非法 tag/空输入语义不变）。
+- [x] **前端** `ca1c10f`：`analyzeStructuredJd` 返回 JobAnalysisResult、payload +card_ids（取 EXPERIENCES 缓存全量，镜像 legacy `useCreateJdAnalysisMutation`）；structured mutation 改 `analysisToJD` 映射 + `jdAnalysisId = String(result.job_analysis_id)` 回填真实 id（合成 id 仅 find-or-create 占位）、jobs cache 同步 matchScore；JDAnalysisCenterView 无需改动（`analysis.id` 即真实 id 路由报告页）。
+- [x] **死码清理** `28d1f22`：后端移除单节点 `run_structured_ats_workflow`/`_run_structured_ats`/`StructuredATSState` 及其测试；前端移除孤儿 `structuredResultToJD`/`dutiesText`/`requirementsText`/`StructuredJDAnalysisMeta`（jd-query 降级测试改字面量种子，降级展示代码保留为兜底）。
+- [x] **测试**：后端 +4→**997 passed**（结构化 4 节点注入断言：标签 priority 入桶、jd_text 重建、真实 id/71 分落库；API 全量契约 + 缺卡 400；task user_id/card_ids 透传与缺失）；前端结构化 mutation 断言改 `88|71|…|0`、payload +`card_ids: []`，mappers 死码测试随迁 → vitest 206。
+- **门禁**：encoding 383/0、ruff check/format 0、pytest **997 passed / 7 skipped**；前端 tsc 0、vitest **206 passed**（30 文件）、vite build ✓。
+- **契约变更（同步更新调用方+测试）**：`POST /analyze-ats-structured` 请求 +`card_ids`（必填，空 400）、响应 `{ats_profile,raw,company,position}` → JobAnalysisResult 全量；任务 `jd_analyze_structured` 参数 +user_id/card_ids（缺即 FAILED）。
+- **⚠️ 部署序**：前后端必须同批部署（旧前端不带 card_ids → 400）；经历缓存为空时与原文路径同样 400（同语义，非回归）。
+
 ## ✅ P3/M3 B 批次验收（2026-10-01，T-M3-1~5 全部完成）
 
 | 任务 | feat/docs commit | 交付 |
