@@ -2,6 +2,19 @@
 
 > 本文件用于追踪项目整体进度。AI 在每次会话结束或完成子任务时，必须更新本文件的对应板块。
 
+## T-M4-2 缺口重构=改写任务清单（2026-10-02，P4/M4 批次）
+
+> Q3 定稿落地（矩阵 line 207-234）：缺口输出=改写任务清单而非评价总结；全局 match_score 降参考分；dimension=D1-D8+EXT；本批=生产 join+落库+报告页渲染，T-M6-3 左栏任务列后置。迁移号勘误：原定 V0014 已被 BE-INDEX-01 占用 → 顺延 **V0020**（矩阵/TODO「落库 V0014」笔误已改）。
+
+- [x] **后端 schema/prompt** `df7054b`：`CapabilityGap`（dimension D1-D8|EXT、kind evidence|rewrite、status missing|weak、severity high|medium|low、jd_evidence/current/rewrite_hint/card_id/note）+ `SuggestionsResult.capability_gaps`（≤50）+ `JobAnalysisResult.capability_gaps`；`suggestions_v2.txt`（+dimension_lines 注入，prompt_version=2，单次 LLM 内 0 额外调用）；`build_rule_capability_gaps()` 规则兜底仅产 A 类 missing（维度证据×covered 判定，EXT 归类）；ANALYSIS_VERSION v1→v2。
+- [x] **落库/读取** `df7054b`：`V0020__capability_gaps.sql`（列名 `current_text` 避 MySQL 关键字 ↔ wire 字段 `current`）；`db_capability_gap.insert/list/list_grouped`（1146 缺表：写→ValueError 提示迁移、读→降级 []）；`get_job_analysis` 附 gaps、`list_job_analyses` 批量 2 SQL 消 N+1；collate 后 LLM 空 gaps→规则补齐、insert 失败仅 warn 不阻断主链路。
+- [x] **前端** `587a564`：api/types/api/jobcraft 三层 CapabilityGap（camelCase，additive 可选→存量 fixture 零改动）；共享 `utils/dimensions.ts`（D1-D8 词表，InterviewPrepWorkspaceView 内联词表去重）；`JDReportDetailView` section 02 在 capabilityGaps 非空时渲染**改写任务清单**（维度徽标 + 表述改写/补充素材 + 表述不对口/缺少证据 + 优先级色块 + 岗位要求→现有表述→改写方向 + 卡锚点显示经历标题），缺省回退旧能力匹配表；verdict 计数改读 gaps（文案「N 项改写任务 / 项能力缺口」按有无任务切换）；评分「匹配度」→「参考分」+ 底部文案改参考分口径。
+- [x] **测试**：后端 +15（迁移 convention、规则兜底、SugAgent v2、db_capability_gap CRUD/批量、structured 扩展断言 gap_inserted+v2）；前端 mappers +2（wire↔camelCase 双路径）、jd-query +2（任务清单渲染+参考分、缺省回退）→ vitest **210**。
+- **门禁**：encoding **387/0**、ruff check/format 0、pytest **1012 passed / 7 skipped**；前端 tsc 0、vitest **210 passed**（30 文件）、vite build ✓。
+- **契约变更（additive）**：`/job/analyze`、`/job/analyses` 响应 +可选 `capability_gaps`；DB 新表 capability_gap（只加不改，前向兼容 ✓）。旧分析无 gaps → FE 回退能力匹配表，零迁移。
+- **⚠️ 部署序**：先 `python -m migrations.runner migrate`（V0020）再发后端；缺表不中断分析主链路（写报错/读降级）。
+- **后续解锁**：T-M3-6 方向沉淀 dashboard（依赖本任务）；T-M6-3 左栏任务列消费同一份 capability_gaps。
+
 ## T-M4-1 结构化分析接入 4 节点工作流（2026-10-01，P4/M4 批次首任务）
 
 > Q2 裁决 C（乙）落地：结构化字段直接注入 job_analysis_flow §14.2 结构化状态，跳过 structurer，3 档标签作 priority 初值，classifier 不覆盖用户标签，4 节点照跑；FE-JD-REPORT-01 根因（单节点无 match 字段 + 合成 id）修复，前端降级展示自此仅作兜底。
