@@ -82,6 +82,8 @@ _REQUIRED_FIELDS = {
 # 非默认版本额外占位符（对应各 loader 自己的填充实参，如 jd_ats_analysis v4 额外传 structured_summary）
 _VERSION_EXTRA_FIELDS = {
     ("jd", "jd_ats_analysis", 4): {"structured_summary"},
+    # T-M4-2：suggestions v2 注入能力维度要求（Q3 缺口重构）
+    ("jd", "suggestions", 2): {"dimension_lines"},
 }
 
 

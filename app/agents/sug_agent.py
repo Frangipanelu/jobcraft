@@ -1,7 +1,8 @@
 """
 优化建议 Agent
 
-根据岗位要求与卡片匹配情况，生成 3-5 条具体优化建议（单次 LLM 调用）。
+根据岗位要求、能力维度与卡片匹配情况，生成 3-5 条具体优化建议及
+能力缺口改写任务清单（单次 LLM 调用，T-M4-2 / Q3 定稿）。
 """
 
 from typing import Any, Dict
@@ -20,7 +21,7 @@ class SugAgent(BaseAgent):
         return SuggestionsResult
 
     def run(self, state: Dict[str, Any]) -> Dict[str, Any]:
-        """生成优化建议。
+        """生成优化建议与能力缺口任务清单。
 
         :param state: {"jd_req": JDRequirements dict, "cards": [card dict],
                        "per_card_scores": [PerCardScore dict]}
@@ -39,10 +40,19 @@ class SugAgent(BaseAgent):
                 f"matched={pc.get('matched', []) if pc else []} missing={pc.get('missing', []) if pc else []}"
             )
         cards_lines = "\n".join(cards_text)
+        dimension_lines = (
+            "\n".join(
+                f"{d.dimension} 等级{d.level}：{d.evidence}"
+                for d in (jd_req.dimension_requirements or [])
+            )
+            or "（无维度要求，缺口归 EXT）"
+        )
         prompt = load_prompt(
             "jd",
             "suggestions",
+            version=2,
             jd_requirements=", ".join(jd_req.hard_skills + jd_req.soft_skills),
+            dimension_lines=dimension_lines,
             cards_lines=cards_lines,
         )
         parsed = invoke_structured(
@@ -50,6 +60,6 @@ class SugAgent(BaseAgent):
             SuggestionsResult,
             prompt,
             debug_label="suggest",
-            prompt_version="1",
+            prompt_version="2",
         )
         return {"suggestions": parsed.model_dump()}

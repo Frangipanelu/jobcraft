@@ -66,6 +66,12 @@ from app.tools.db_job import (  # noqa: E402, F401
     upsert_job_mapping,
 )
 
+from app.tools.db_capability_gap import (  # noqa: E402, F401
+    insert_capability_gaps,
+    list_capability_gaps,
+    list_capability_gaps_grouped,
+)
+
 from app.tools.db_submission import (  # noqa: E402, F401
     delete_submission,
     get_dashboard,

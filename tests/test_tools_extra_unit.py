@@ -1025,6 +1025,8 @@ class TestDbJob:
             assert result["position"] == "Engineer"
             assert result["match_score"] == 85.5
             assert result["jd_requirements"] == {"hard_skills": ["Python"]}
+            # T-M4-2：详情附改写任务清单（mock fetchall 空 → 降级 []）
+            assert result["capability_gaps"] == []
 
     def test_delete_job_analysis_returns_false_when_not_found(self):
         from app.tools.db_job import delete_job_analysis
@@ -1164,6 +1166,139 @@ class TestDbJob:
             "app.tools.db_job_entity.find_or_create_job", side_effect=Exception("无表")
         ):
             assert _attach_job_entity({"user_id": 1, "position": "Eng"}, 5) is None
+
+
+# ============================================================
+# 7b. db_capability_gap.py — T-M4-2 改写任务清单落库
+# ============================================================
+
+
+class TestDbCapabilityGap:
+    def test_insert_capability_gaps_writes_rows(self):
+        """T-M4-2：逐条插入，wire current 映射 DB 列 current_text。"""
+        from app.tools.db_capability_gap import insert_capability_gaps
+
+        with patch("app.tools.db_capability_gap.execute", return_value=1) as mock_exec:
+            n = insert_capability_gaps(
+                42,
+                1,
+                [
+                    {
+                        "dimension": "D6",
+                        "kind": "rewrite",
+                        "status": "weak",
+                        "severity": "high",
+                        "jd_evidence": "独立完成用户研究",
+                        "current": "协助调研",
+                        "rewrite_hint": "突出独立主导",
+                        "card_id": 3,
+                        "note": "备注",
+                    },
+                    {"dimension": "EXT"},
+                ],
+            )
+        assert n == 2
+        sql, params = mock_exec.call_args_list[0][0]
+        assert "INSERT INTO capability_gap" in sql
+        assert "current_text" in sql
+        assert params == (
+            42,
+            1,
+            "D6",
+            "rewrite",
+            "weak",
+            "high",
+            "独立完成用户研究",
+            "协助调研",
+            "突出独立主导",
+            3,
+            "备注",
+        )
+        # 第二条缺省字段走 schema 默认
+        assert mock_exec.call_args_list[1][0][1][1:] == (
+            1,
+            "EXT",
+            "evidence",
+            "missing",
+            "medium",
+            "",
+            "",
+            "",
+            None,
+            "",
+        )
+
+    def test_insert_capability_gaps_missing_table_raises(self):
+        """缺表（errno 1146）翻译为 ValueError 提示先迁移（collate 降级告警）。"""
+        from mysql.connector import Error as MySQLError
+
+        from app.tools.db_capability_gap import insert_capability_gaps
+
+        err = MySQLError("Table 'capability_gap' doesn't exist")
+        err.errno = 1146
+        with (
+            patch("app.tools.db_capability_gap.execute", side_effect=err),
+            pytest.raises(ValueError, match="migrations.runner"),
+        ):
+            insert_capability_gaps(42, 1, [{"dimension": "D6"}])
+
+    def test_list_capability_gaps_grouped_empty_ids_skips_query(self):
+        from app.tools.db_capability_gap import list_capability_gaps_grouped
+
+        with patch("app.tools.db_capability_gap.query_all") as mock_q:
+            assert list_capability_gaps_grouped([]) == {}
+        mock_q.assert_not_called()
+
+    def test_list_capability_gaps_grouped_maps_wire_fields(self):
+        """DB 行 → wire：current_text 映射回 current，缺省字段兜底。"""
+        from app.tools.db_capability_gap import list_capability_gaps_grouped
+
+        rows = [
+            {
+                "id": 7,
+                "job_analysis_id": 42,
+                "dimension": "D6",
+                "kind": "evidence",
+                "status": "missing",
+                "severity": "high",
+                "jd_evidence": "独立完成用户研究",
+                "current_text": "协助调研",
+                "rewrite_hint": "突出独立主导",
+                "card_id": None,
+                "note": None,
+            }
+        ]
+        with patch("app.tools.db_capability_gap.query_all", return_value=rows):
+            grouped = list_capability_gaps_grouped([42])
+        assert grouped[42][0]["current"] == "协助调研"
+        assert grouped[42][0]["note"] == ""
+        assert grouped[42][0]["card_id"] is None
+
+    def test_list_capability_gaps_grouped_degrades_on_missing_table(self):
+        from mysql.connector import Error as MySQLError
+
+        from app.tools.db_capability_gap import list_capability_gaps_grouped
+
+        err = MySQLError("Table missing")
+        err.errno = 1146
+        with patch("app.tools.db_capability_gap.query_all", side_effect=err):
+            assert list_capability_gaps_grouped([42]) == {}
+
+    def test_list_capability_gaps_single_returns_list(self):
+        from app.tools.db_capability_gap import list_capability_gaps
+
+        rows = [
+            {
+                "id": 1,
+                "job_analysis_id": 42,
+                "dimension": "EXT",
+                "current_text": "",
+            }
+        ]
+        with patch("app.tools.db_capability_gap.query_all", return_value=rows):
+            gaps = list_capability_gaps(42)
+        assert len(gaps) == 1
+        assert gaps[0]["dimension"] == "EXT"
 
 
 # ============================================================

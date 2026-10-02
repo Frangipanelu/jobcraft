@@ -7,13 +7,20 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from app.schemas.jobcraft import ATSProfile, JDRequirements, PerCardScore
+from app.schemas.jobcraft import (
+    ATSProfile,
+    DimensionRequirement,
+    JDRequirements,
+    PerCardScore,
+)
 from app.tools.jobcraft_analyze import (
     _build_gap_text,
     _match_level,
     _match_term_to_blob,
     _normalize,
     _ats_to_jdreq,
+    build_rule_capability_gaps,
+    build_rule_suggestions,
     compute_match,
 )
 
@@ -222,3 +229,68 @@ def test_rebuild_entry_text_empty_achievements():
 
     text = _rebuild_entry_text({"company": "A", "summary": "总括"})
     assert text == "A\n总括"
+
+
+# ---------- build_rule_capability_gaps（T-M4-2 / Q3 规则兜底） ----------
+
+
+def _gap_jd_req(dimension="D6", level=4, evidence="独立完成用户研究并形成决策"):
+    return JDRequirements(
+        hard_skills=["用户研究"],
+        dimension_requirements=[
+            DimensionRequirement(dimension=dimension, level=level, evidence=evidence)
+        ],
+    )
+
+
+def test_rule_capability_gaps_uncovered_dimension_produces_missing():
+    """维度证据未被任何卡片命中 → evidence/missing 缺口，severity 随维度等级。"""
+    gaps = build_rule_capability_gaps(
+        _gap_jd_req(level=4),
+        [PerCardScore(card_id=1, score=40, matched=["Python"], missing=[])],
+    )
+    dim_gaps = [g for g in gaps if g.dimension == "D6"]
+    assert len(dim_gaps) == 1
+    g = dim_gaps[0]
+    assert g.kind == "evidence"
+    assert g.status == "missing"
+    assert g.severity == "high"
+    assert g.jd_evidence == "独立完成用户研究并形成决策"
+    assert g.rewrite_hint
+
+
+def test_rule_capability_gaps_covered_dimension_produces_none():
+    """已命中术语出现在维度证据中 → 视为已覆盖，不产缺口。"""
+    gaps = build_rule_capability_gaps(
+        _gap_jd_req(),
+        [PerCardScore(card_id=1, score=90, matched=["用户研究"], missing=[])],
+    )
+    assert [g for g in gaps if g.dimension == "D6"] == []
+
+
+def test_rule_capability_gaps_unmapped_term_goes_ext():
+    """未命中且不归属任何维度的术语归 EXT 扩展码（Q3-a）。"""
+    jd = JDRequirements(hard_skills=["Redis"], dimension_requirements=[])
+    gaps = build_rule_capability_gaps(
+        jd, [PerCardScore(card_id=1, score=50, matched=[], missing=["Redis"])]
+    )
+    assert len(gaps) == 1
+    assert gaps[0].dimension == "EXT"
+    assert gaps[0].jd_evidence == "Redis"
+    assert gaps[0].kind == "evidence"
+
+
+def test_rule_capability_gaps_empty_scores_returns_empty():
+    assert build_rule_capability_gaps(_gap_jd_req(), []) == []
+
+
+def test_build_rule_suggestions_includes_capability_gaps():
+    """规则兜底建议同时携带任务清单（LLM 失败时报告页仍有清单可渲染）。"""
+    result = build_rule_suggestions(
+        _gap_jd_req(),
+        [PerCardScore(card_id=1, score=40, matched=["Python"], missing=[])],
+    )
+    assert result.capability_gaps
+    assert any(g.dimension == "D6" for g in result.capability_gaps)
+    # 空评分早退路径不产缺口
+    assert build_rule_suggestions(_gap_jd_req(), []).capability_gaps == []

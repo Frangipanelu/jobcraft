@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional
 
 from app.schemas.jobcraft import (
     ATSProfile,
+    CapabilityGap,
     JDRequirements,
     PerCardScore,
     SuggestionItem,
@@ -166,6 +167,70 @@ def _match_level(score: float) -> str:
     return "匹配度低"
 
 
+def build_rule_capability_gaps(
+    jd_req: JDRequirements,
+    per_card_scores: List[PerCardScore],
+) -> List[CapabilityGap]:
+    """规则兜底：无 LLM 时确定性产出能力缺口任务清单（T-M4-2 / Q3）。
+
+    口径：dimension_requirements × per_card_scores 覆盖的结构化 join——
+    维度证据与已命中术语有交集 → 已覆盖不产缺口；未覆盖维度产
+    evidence/missing 缺口（仅 B 类 weak 无法规则判定，规则只产 A 类）；
+    未命中且不归属任何维度的术语归 EXT 扩展码（Q3-a）。
+
+    :param jd_req: JD 需求（含 dimension_requirements）。
+    :param per_card_scores: 逐卡评分（提供 matched 覆盖事实）。
+    :return: 缺口列表（维度缺口在前，EXT 在后，至多 50 条）。
+    """
+    if not per_card_scores:
+        return []
+    covered: set = set()
+    for pc in per_card_scores:
+        covered.update(pc.matched)
+    covered_norm = {t for t in (_normalize(x) for x in covered) if t}
+
+    gaps: List[CapabilityGap] = []
+    dim_requirements = jd_req.dimension_requirements or []
+    evidence_blob = _normalize(" ".join((d.evidence or "") for d in dim_requirements))
+    for d in dim_requirements:
+        evidence = (d.evidence or "").strip()
+        if not evidence or not _normalize(evidence):
+            continue
+        if any(t in _normalize(evidence) for t in covered_norm):
+            continue
+        gaps.append(
+            CapabilityGap(
+                dimension=d.dimension,
+                kind="evidence",
+                status="missing",
+                severity="high" if d.level >= 4 else "medium",
+                jd_evidence=evidence,
+                rewrite_hint=f"围绕「{evidence[:40]}」补充可量化经历，或改写相关经历卡表述",
+            )
+        )
+
+    all_terms = list(
+        dict.fromkeys(jd_req.hard_skills + jd_req.soft_skills + jd_req.keywords)
+    )
+    ext_terms = [
+        t
+        for t in all_terms
+        if t not in covered and _normalize(t) and _normalize(t) not in evidence_blob
+    ][:6]
+    for term in ext_terms:
+        gaps.append(
+            CapabilityGap(
+                dimension="EXT",
+                kind="evidence",
+                status="missing",
+                severity="medium",
+                jd_evidence=term,
+                rewrite_hint=f"补充或改写一条能体现「{term}」的经历",
+            )
+        )
+    return gaps[:50]
+
+
 def build_rule_suggestions(
     jd_req: JDRequirements,
     per_card_scores: List[PerCardScore],
@@ -204,4 +269,5 @@ def build_rule_suggestions(
         gap_analysis=_build_gap_text(jd_req, per_card_scores),
         gap_items=gap_items,
         suggestions=suggestions,
+        capability_gaps=build_rule_capability_gaps(jd_req, per_card_scores),
     )

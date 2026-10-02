@@ -1056,3 +1056,52 @@ def test_v0019_migrate_is_applied_via_runner(fake_conn):
         if e[0].strip().startswith("INSERT INTO schema_migrations")
     ]
     assert "0019" in inserted
+
+
+def test_v0020_capability_gaps_follows_convention():
+    """T-M4-2：V0020 新建 capability_gap（Q3 改写任务清单），仅建表不改既有，
+    幂等（CREATE TABLE IF NOT EXISTS），遵守 SPLIT 约定。"""
+    v0020 = os.path.join(runner.MIGRATIONS_DIR, "V0020__capability_gaps.sql")
+    assert os.path.exists(v0020)
+    with open(v0020, encoding="utf-8") as fh:
+        sql = fh.read()
+    assert "CREATE TABLE IF NOT EXISTS capability_gap" in sql
+    for frag in (
+        "job_analysis_id INT NOT NULL",
+        "user_id INT NOT NULL DEFAULT 1",
+        "dimension VARCHAR(8) NOT NULL DEFAULT 'EXT'",
+        "kind VARCHAR(16) NOT NULL DEFAULT 'evidence'",
+        "status VARCHAR(16) NOT NULL DEFAULT 'missing'",
+        "severity VARCHAR(16) NOT NULL DEFAULT 'medium'",
+        "jd_evidence TEXT",
+        "current_text TEXT",
+        "rewrite_hint TEXT",
+        "card_id INT NULL",
+        "note TEXT",
+        "KEY idx_capability_gap_analysis (job_analysis_id)",
+        "KEY idx_capability_gap_user_dimension (user_id, dimension)",
+        "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+    ):
+        assert frag in sql, f"V0020 缺少定义: {frag}"
+    # Q3 定稿字段 current 以 current_text 落列（MySQL 关键字安全）
+    assert "current text" not in sql.lower(), "不得使用 MySQL 关键字 current 作列名"
+    # 前向兼容：仅新建表，不动既有表/列（AGENTS §4.4）
+    stmts = [s.strip() for s in sql.split(";--SPLIT--") if s.strip()]
+    assert len(stmts) == 1, f"V0020 应含 1 条语句块，实际 {len(stmts)}"
+    stmt = stmts[0]
+    upper = stmt.upper()
+    assert not upper.startswith(("DROP", "ALTER", "RENAME", "TRUNCATE", "UPDATE"))
+    assert "MODIFY COLUMN" not in upper, "V0020 不得改列"
+    assert not stmt.endswith(";"), f"V0020 语句块含尾分号: {stmt[:60]}"
+
+
+def test_v0020_migrate_is_applied_via_runner(fake_conn):
+    """T-M4-2：V0020 与既有迁移共存，runner.migrate() 不抛错且入库
+    （V0014 编号已被 BE-INDEX-01 占用，缺口表顺延 V0020）。"""
+    runner.migrate()
+    inserted = [
+        e[1][0]
+        for e in fake_conn.cursor_obj.executed
+        if e[0].strip().startswith("INSERT INTO schema_migrations")
+    ]
+    assert "0020" in inserted

@@ -585,12 +585,43 @@ class SuggestionItem(BaseModel):
     optimization: Optional[str] = Field(None, description="改写建议或补充文案")
 
 
+class CapabilityGap(BaseModel):
+    """能力缺口条目（Q3 定稿：报告页改写任务清单的一条任务）。
+
+    链式结构（Q3-c）：维级 gap=头（为什么改）→ suggestion=尾（怎么改）
+    → card=锚点（在哪改）。dimension 对齐 JD 要求侧 D1-D8 尺子（Q3-a），
+    EXT 为门槛/格式类非能力缺口扩展码；note 开放字段只展示不统计。
+    """
+
+    dimension: str = Field("", description="维度编码 D1-D8 或 EXT（Q3-a）")
+    kind: Literal["evidence", "rewrite"] = Field(
+        "evidence",
+        description="A/B 类：evidence=证据缺口(换卡/补经历)，rewrite=表述缺口(改写)",
+    )
+    status: Literal["missing", "weak"] = Field(
+        "missing", description="missing=无证据，weak=有素材但表述不对口"
+    )
+    severity: Literal["high", "medium", "low"] = Field(
+        "medium", description="严重度：high/medium/low"
+    )
+    jd_evidence: str = Field("", description="JD 原文要求（为什么改）")
+    current: str = Field("", description="现有表述（现状）")
+    rewrite_hint: str = Field("", description="改写方向（怎么改）")
+    card_id: Optional[int] = Field(None, description="锚点经历卡 id（在哪改）")
+    note: str = Field("", description="自由文本备注（只展示不统计）")
+
+
 class SuggestionsResult(BaseModel):
     """优化建议集合"""
 
     gap_analysis: str = ""
     gap_items: List[str] = Field(default_factory=list)
     suggestions: List[SuggestionItem] = Field(default_factory=list)
+    capability_gaps: List[CapabilityGap] = Field(
+        default_factory=list,
+        max_length=50,
+        description="能力缺口改写任务清单（Q3 定稿，与 suggestions 同次 LLM 产出）",
+    )
 
 
 class CardLLMMatchItem(BaseModel):
@@ -626,6 +657,10 @@ class JobAnalysisResult(BaseModel):
     gap_items: List[str] = Field(default_factory=list)
     per_card_scores: List[PerCardScore] = Field(default_factory=list)
     suggestions: List[SuggestionItem] = Field(default_factory=list)
+    capability_gaps: List[CapabilityGap] = Field(
+        default_factory=list,
+        description="能力缺口改写任务清单（T-M4-2 / Q3，additive 字段）",
+    )
     dimension_requirements: List[DimensionRequirement] = Field(default_factory=list)
     resume_markdown: Optional[str] = None
     created_at: Optional[str] = None

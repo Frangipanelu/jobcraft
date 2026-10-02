@@ -393,6 +393,76 @@ def test_sug_agent_with_mock_llm(monkeypatch):
     assert len(out["suggestions"]["suggestions"]) == 1
 
 
+def test_sug_agent_prompt_v2_dimensions_and_capability_gaps(monkeypatch):
+    """T-M4-2 / Q3：suggestions prompt v2 注入维度要求，capability_gaps 同次输出。"""
+    from app.agents.sug_agent import SugAgent
+
+    captured = {}
+
+    def _fake_invoke(model, schema, prompt, **kwargs):
+        captured["prompt"] = prompt
+        captured.update(kwargs)
+        return schema(
+            gap_analysis="缺口概览",
+            gap_items=[],
+            suggestions=[],
+            capability_gaps=[
+                {
+                    "dimension": "D6",
+                    "kind": "rewrite",
+                    "status": "weak",
+                    "severity": "high",
+                    "jd_evidence": "独立完成用户研究并形成决策",
+                    "current": "协助完成调研",
+                    "rewrite_hint": "突出独立主导与决策闭环",
+                    "card_id": 1,
+                    "note": "",
+                }
+            ],
+        )
+
+    monkeypatch.setattr("app.agents.sug_agent.invoke_structured", _fake_invoke)
+    out = SugAgent().run(
+        {
+            "jd_req": {
+                "hard_skills": ["用户研究"],
+                "dimension_requirements": [
+                    {
+                        "dimension": "D6",
+                        "level": 5,
+                        "evidence": "独立完成用户研究并形成决策",
+                    }
+                ],
+            },
+            "cards": [],
+            "per_card_scores": [],
+        }
+    )
+    # 版本化（AGENTS §7）：prompt v2 + 审计 prompt_version=2
+    assert captured["prompt_version"] == "2"
+    # 维度要求已注入 prompt（D1-D8 尺子对齐 Q3-a）
+    assert "D6 等级5：独立完成用户研究并形成决策" in captured["prompt"]
+    gaps = out["suggestions"]["capability_gaps"]
+    assert gaps[0]["dimension"] == "D6"
+    assert gaps[0]["kind"] == "rewrite"
+    assert gaps[0]["card_id"] == 1
+
+
+def test_sug_agent_prompt_v2_empty_dimensions_hint(monkeypatch):
+    """无维度要求时 prompt 给出 EXT 兜底提示，不缺占位符实参。"""
+    from app.agents.sug_agent import SugAgent
+
+    captured = {}
+
+    def _fake_invoke(model, schema, prompt, **kwargs):
+        captured["prompt"] = prompt
+        return schema(gap_analysis="", gap_items=[], suggestions=[])
+
+    monkeypatch.setattr("app.agents.sug_agent.invoke_structured", _fake_invoke)
+    SugAgent().run({"jd_req": {}, "cards": [], "per_card_scores": []})
+    assert "（无维度要求，缺口归 EXT）" in captured["prompt"]
+
+
 # ---------- QuestionIntentAgent ----------
 
 

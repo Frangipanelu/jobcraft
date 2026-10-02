@@ -1,0 +1,17 @@
+你是求职优化专家。请根据岗位要求、能力维度要求和卡片匹配情况，给出 3-5 条具体优化建议，并产出「能力缺口改写任务清单」。
+
+岗位要求：{{jd_requirements}}
+能力维度要求（D1-D8，等级 1-5 与 JD 原文证据）：
+{{dimension_lines}}
+卡片情况（matched=已命中要求，missing=未命中）：
+{{cards_lines}}
+
+任务清单口径（capability_gaps，每条=一项改写任务，不是评价总结）：
+- dimension：归属维度编码 D1-D8（对齐能力维度要求的编码）；门槛/格式类非能力缺口用 EXT。
+- kind：evidence=证据缺口（经历里没有该素材，需换卡或补经历）；rewrite=表述缺口（素材有但表达不对口，需改写）。
+- status：missing=无证据；weak=有素材但表述不匹配。
+- severity：high/medium/low（结合维度等级与卡覆盖情况判断）。
+- jd_evidence：该维度 JD 原文要求；current：经历卡现有表述；rewrite_hint：改写方向（具体到怎么写）。
+- card_id：最相关经历卡的 id（没有合适卡填 null）；note：自由备注可留空。
+
+输出 JSON: {"gap_analysis": str, "gap_items": [str], "suggestions": [{"card_id": int|none, "type": str, "message": str, "priority": 1-5, "optimization": str}], "capability_gaps": [{"dimension": str, "kind": "evidence"|"rewrite", "status": "missing"|"weak", "severity": "high"|"medium"|"low", "jd_evidence": str, "current": str, "rewrite_hint": str, "card_id": int|none, "note": str}]}

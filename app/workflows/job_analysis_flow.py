@@ -26,13 +26,20 @@ from app.schemas.jobcraft import (
     StructuredRequirementItem,
     SuggestionsResult,
 )
-from app.tools import db_job_entity, db_raw_jd, db_tools, jobcraft_analyze
+from app.tools import (
+    db_capability_gap,
+    db_job_entity,
+    db_raw_jd,
+    db_tools,
+    jobcraft_analyze,
+)
 
 logger = logging.getLogger(__name__)
 
 # P4-1：分析产物版本标记（Prompt 版本化，AGENTS §7）。
 # 落库到 job_analysis.analysis_version，供历史分析回溯「哪一版分析逻辑产出」。
-ANALYSIS_VERSION = "v1"
+# v2（T-M4-2）：suggestions 节点 prompt v2 扩 capability_gaps 改写任务清单（Q3）。
+ANALYSIS_VERSION = "v2"
 
 
 class JobAnalysisState(TypedDict):
@@ -159,6 +166,12 @@ def _run_legacy_collate(state: Dict[str, Any]) -> Dict[str, Any]:
     jd_text = state["jd_text"]
     match_level = jobcraft_analyze._match_level(match["overall"])
 
+    # T-M4-2 / Q3：LLM 成功但未产出任务清单时，用规则确定性补齐
+    # （报告页任务清单永不留空；规则只产 A 类 missing，B 类 weak 依赖 LLM）
+    capability_gaps = list(suggestions.capability_gaps) or (
+        jobcraft_analyze.build_rule_capability_gaps(jd_req, match["per_card"])
+    )
+
     db_data = {
         "user_id": state["user_id"],
         "company": company,
@@ -178,6 +191,18 @@ def _run_legacy_collate(state: Dict[str, Any]) -> Dict[str, Any]:
         "analysis_version": ANALYSIS_VERSION,
     }
     job_id = db_tools.insert_job_analysis(db_data)
+
+    # T-M4-2 / Q3：改写任务清单整批落 capability_gap（V0020）。
+    # 缺表/写失败仅告警不阻断（读侧降级 []，报告页回退既有能力匹配渲染）。
+    if capability_gaps:
+        try:
+            db_capability_gap.insert_capability_gaps(
+                job_id,
+                state["user_id"],
+                [g.model_dump() for g in capability_gaps],
+            )
+        except Exception as e:
+            logger.warning("capability_gap 落库失败（分析已落库，任务清单缺失）: %s", e)
 
     # P4-2：原始 JD 以不可变快照入库（raw_jd），权威原文以此为准；
     # job_analysis.jd_text 仅作展示副本，后续不再被覆写。
@@ -218,6 +243,7 @@ def _run_legacy_collate(state: Dict[str, Any]) -> Dict[str, Any]:
         gap_items=suggestions.gap_items,
         per_card_scores=match["per_card"],
         suggestions=suggestions.suggestions,
+        capability_gaps=capability_gaps,
         dimension_requirements=ats.dimension_requirements or [],
     )
     return {"result": result.model_dump()}

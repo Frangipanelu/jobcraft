@@ -499,6 +499,15 @@ class TestJobAnalysisFlow:
             "app.workflows.job_analysis_flow.db_tools.upsert_job_mapping",
             lambda jid, cid: None,
         )
+        # T-M4-2：任务清单整批落 capability_gap（捕获参数，避免真实 DB）
+        gap_inserted = {}
+        monkeypatch.setattr(
+            "app.workflows.job_analysis_flow.db_capability_gap.insert_capability_gaps",
+            lambda jid, uid, gaps: (
+                gap_inserted.update({"job_id": jid, "user_id": uid, "gaps": list(gaps)})
+                or len(gaps)
+            ),
+        )
 
         result = run_structured_job_analysis_workflow(
             user_id=1,
@@ -524,6 +533,14 @@ class TestJobAnalysisFlow:
         # 3 档标签作 priority 初值：hard/required → hard_skills，preferred → soft_skills
         assert inserted["jd_requirements"]["hard_skills"] == ["Python"]
         assert inserted["jd_requirements"]["soft_skills"] == ["Kafka"]
+        # T-M4-2 / Q3：任务清单产出并整批落库（LLM 未给 gaps → 规则兜底补齐）
+        assert result["capability_gaps"]
+        assert all(g["dimension"] == "EXT" for g in result["capability_gaps"])
+        assert gap_inserted["job_id"] == 42
+        assert gap_inserted["user_id"] == 1
+        assert gap_inserted["gaps"] == result["capability_gaps"]
+        # 分析版本随 prompt v2 升版（capability_gaps 产出逻辑变更）
+        assert inserted["analysis_version"] == "v2"
 
     def test_legacy_workflow_persists_analysis_artifacts(self, monkeypatch):
         """P4-1：collate 节点落库时写入分析物五列（ats_profile / suggestions /
