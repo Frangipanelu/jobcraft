@@ -2,6 +2,19 @@
 
 > 本文件用于追踪项目整体进度。AI 在每次会话结束或完成子任务时，必须更新本文件的对应板块。
 
+## T-M1-1/T-M1-2/T-M1-4 structure 重试 + /cards 摘要去 N+1 + §25.1 加注（2026-10-02，C 窗口批次）
+
+> 矩阵 C：Q1 `structure` 卡片页重试接线（零消费状态关闭）、Q3 `GET /cards` 首屏去 N+1、Q2 底座写失败报错复验。文件域 `app/api/experience.py` / `db_experience` / 经历域前端组件；**零迁移**（复用既有 `version` 列别名 `current_version`）。
+
+- [x] **T-M1-1 后端** `20e218e`：`POST /cards/{id}/structure` 写 `ai_structured` 时，若卡 `tags` 为空则补写 v3 同次 tags（`recommend_tags_from_pool` 规则池优先 → workflow `tags` 兜底），卡上已有 tags 视为用户编辑**不覆盖**；+3 单测（补写 / 不覆盖 / 池空回退）。
+- [x] **T-M1-2 后端** `c83b91c`：`db_experience.get_cards_summary`（`card_versions` JOIN `experience_card` 断所有权 + `expression` GROUP BY 计 active/total；expression 表 1146 缺表降级 0 记 warning）；`GET /cards` 内嵌 `current_version`/`version_count`/`expression_summary`，摘要查询失败降级 `null` + warning，**列表不 500**；+7 单测（DAO 4 + API 3，含空页不发查询）。
+- [x] **前端** `aa92853`：`cardToExperience` 映射 `versionCount`/`expressionSummary`/`starMissing`；`useExperiencesQuery` 移除逐卡 `listCardVersions`（**N+1→1**，refetch 保留写路径已回流的 `versionHistory`）；新增 `useCardVersionsQuery` 懒加载（「版本演进」面板挂载才拉，失败回落 cache 历史）+ `useStructureExperienceMutation`；卡片页「重新结构化」按钮（仅 STAR 为空展示，成功/失败 toast）+ 版本数 / 表达计数徽标 + `structureCard` API；vitest **212**（+2：懒加载首屏不拉明细、重试入口调用）。
+- [x] **测试契约同步**：`experiences-query`「加版本」与 `review-query` 反哺 mock 改为模拟后端 `updateCard` 同事务 `version+1`（`currentVersion` 现只来自 `version` 列）。
+- [x] **T-M1-4（本地，无提交）**：`EXPERIENCE_SPEC` §25.1 加注 3 条——① `raw_text` 归卡片、`base_resume` 底座为独立版本列表、**无双写义务**（Q2 解耦裁决）；② 底座记录写失败必须 `catch → error toast` + 复验结论（`handleConfirmUpload` / `ResumeStep` / `applyUploadResume` 三处均已覆盖并有单测）；③ 重试入口由 structure 端点承接。`docs/` 在 `.gitignore` 内，spec 加注不产生 git 提交。
+- **验收（本批）**：encoding **387/0**；`ruff check`/`format` 0；pytest **1023 passed / 7 skipped**；前端 tsc 0、vitest **212 passed**（30 文件）、`npm run build` ✓。
+- **边界**：未碰 `recommend-tags` / `backfill` / `POST /upload`（属 T-M1-5）；未跑 docker 真库（全程 mock 单测）；未新增迁移。
+- **⚠️共享工作区**：同一 worktree 内 B 窗口（interview / jobs 域）存在未提交改动，本批按 hunk 精确暂存 C 域文件（`types/jobcraft.ts` 只入 C 侧 hunk），提交前逐文件核对 `git diff --cached --stat`。
+
 ## T-M4-2 缺口重构=改写任务清单（2026-10-02，P4/M4 批次）
 
 > Q3 定稿落地（矩阵 line 207-234）：缺口输出=改写任务清单而非评价总结；全局 match_score 降参考分；dimension=D1-D8+EXT；本批=生产 join+落库+报告页渲染，T-M6-3 左栏任务列后置。迁移号勘误：原定 V0014 已被 BE-INDEX-01 占用 → 顺延 **V0020**（矩阵/TODO「落库 V0014」笔误已改）。
