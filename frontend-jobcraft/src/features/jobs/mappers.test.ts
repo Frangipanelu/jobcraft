@@ -1,6 +1,24 @@
 import { describe, expect, it } from 'vitest';
+import type { JobEntity } from '../../api/job';
 import { DashboardItem } from '../../api/types';
-import { deriveJobStatus, submissionToJob } from './mappers';
+import { deriveJobStatus, jobEntityToJob, submissionToJob } from './mappers';
+
+function makeEntity(overrides: Partial<JobEntity> = {}): JobEntity {
+  return {
+    id: 42,
+    user_id: 1,
+    company: '快手',
+    position: 'AI 策略产品',
+    raw_jd_id: null,
+    job_analysis_id: null,
+    submission_id: null,
+    status: 'PREPARED',
+    is_active: true,
+    created_at: '2026-09-08T10:00:00',
+    updated_at: null,
+    ...overrides,
+  };
+}
 
 function makeItem(overrides: Partial<DashboardItem> = {}): DashboardItem {
   return {
@@ -93,5 +111,40 @@ describe('deriveJobStatus 优先级', () => {
 
   it('已投递优先级高于待投递（applied 优先于 jdAnalysis）', () => {
     expect(deriveJobStatus({ ...base, jdAnalysis: true, applied: true })).toBe('submitted');
+  });
+});
+
+describe('jobEntityToJob 映射（T-M5-1 job-only 行）', () => {
+  it('无分析 job-only 行 → pending / jobId 归一 / submission 派生态全 pending', () => {
+    const job = jobEntityToJob(makeEntity());
+    expect(job.id).toBe('job-42');
+    expect(job.jobId).toBe(42);
+    expect(job.backendId).toBeUndefined();
+    expect(job.company).toBe('快手');
+    expect(job.role).toBe('AI 策略产品');
+    expect(job.status).toBe('pending');
+    expect(job.currentStage).toBe('待投递');
+    expect(job.applyDate).toBe('2026-09-08');
+    expect(job.jdAnalysisId).toBeUndefined();
+    expect(job.steps).toMatchObject({
+      jdAnalysis: false,
+      applied: false,
+      prepStage: 'pending',
+      reviewStage: 'pending',
+    });
+    expect(job.interviewIds).toEqual([]);
+  });
+
+  it('已挂分析 → delivered + jdAnalysisId 归一为字符串，nextAction 切到简历', () => {
+    const job = jobEntityToJob(makeEntity({ job_analysis_id: 7 }));
+    expect(job.status).toBe('delivered');
+    expect(job.jdAnalysisId).toBe('7');
+    expect(job.steps.jdAnalysis).toBe(true);
+    expect(job.nextAction).toBe('基于 JD 生成定制简历');
+  });
+
+  it('created_at 为空回退今天（YYYY-MM-DD）', () => {
+    const job = jobEntityToJob(makeEntity({ created_at: null }));
+    expect(job.applyDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });
 });

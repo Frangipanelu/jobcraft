@@ -5,6 +5,7 @@ import { useJobsQuery } from '../features/jobs/hooks';
 import { JobsListView } from '../components/jobs/JobsListView';
 import { NewJobModal } from '../components/jobs/NewJobModal';
 import { WorkbenchView } from '../components/workbench/WorkbenchView';
+import type { JobEntity } from '../api/job';
 
 const auth = vi.hoisted(() => ({
   autoLogin: vi.fn(),
@@ -25,6 +26,8 @@ const job = vi.hoisted(() => ({
   deleteSubmission: vi.fn(),
   listBaseResumes: vi.fn(),
   listJobAnalyses: vi.fn(),
+  createJobEntity: vi.fn(),
+  listJobEntities: vi.fn(),
 }));
 
 vi.mock('../api/auth', () => ({ ...auth }));
@@ -127,6 +130,8 @@ interface Sub {
   updated_at: string | null;
 }
 let serverSubs: Sub[] = [];
+// T-M5-1：job 表状态服务端（与 serverSubs 同理——invalidate refetch 必须回放本次写入）
+let serverJobs: JobEntity[] = [];
 
 beforeEach(() => {
   vi.resetAllMocks();
@@ -136,34 +141,72 @@ beforeEach(() => {
   auth.updateProfile.mockResolvedValue({});
   auth.getSettings.mockResolvedValue({ model_name: 'test', provider: 'x', status: 'running' });
   serverSubs = SUBMISSIONS.map((s) => ({ ...s }));
+  serverJobs = [];
   job.getDashboard.mockImplementation(async () => ({ submissions: serverSubs }));
+  job.listJobEntities.mockImplementation(async () => serverJobs);
+  job.createJobEntity.mockImplementation(async (payload: { company: string; position: string }) => {
+    const entity: JobEntity = {
+      id: 42,
+      user_id: 1,
+      company: payload.company,
+      position: payload.position,
+      raw_jd_id: null,
+      job_analysis_id: null,
+      submission_id: null,
+      status: 'PREPARED',
+      is_active: true,
+      created_at: '2026-09-10T00:00:00',
+      updated_at: null,
+    };
+    serverJobs = [...serverJobs, entity];
+    return entity;
+  });
   job.updateSubmission.mockImplementation(async (id: number, patch: Partial<Sub>) => {
     const row = serverSubs.find((s) => s.id === id);
     if (row) Object.assign(row, patch);
     return row;
   });
-  job.createSubmission.mockImplementation(async (payload: { position: string; company: string }) => {
-    const row: Sub = {
-      id: 99,
-      position: payload.position,
-      company: payload.company,
-      status: 'PREPARED',
-      job_analysis_id: null,
-      job_id: 42,
-      has_analysis: false,
-      card_version_count: 0,
-      card_count: 0,
-      has_resume: false,
-      is_manual: false,
-      delivered: false,
-      prep_count: 0,
-      review_count: 0,
-      created_at: '2026-09-10T00:00:00',
-      updated_at: '2026-09-10T00:00:00',
-    };
-    serverSubs = [row, ...serverSubs];
-    return { ...MIRROR_JOB, position: payload.position, company: payload.company };
-  });
+  job.createSubmission.mockImplementation(
+    async (payload: {
+      position: string;
+      company: string;
+      status?: string;
+      delivered?: boolean;
+      job_analysis_id?: number | null;
+    }) => {
+      const row: Sub = {
+        id: 99,
+        position: payload.position,
+        company: payload.company,
+        status: payload.status ?? 'PREPARED',
+        job_analysis_id: payload.job_analysis_id ?? null,
+        job_id: 42,
+        has_analysis: false,
+        card_version_count: 0,
+        card_count: 0,
+        has_resume: false,
+        is_manual: false,
+        delivered: payload.delivered ?? false,
+        prep_count: 0,
+        review_count: 0,
+        created_at: '2026-09-10T00:00:00',
+        updated_at: '2026-09-10T00:00:00',
+      };
+      serverSubs = [row, ...serverSubs];
+      // Q2 回挂：submission 创建后 job.submission_id 已由后端 find-or-create 挂上
+      serverJobs = serverJobs.map((e) =>
+        e.id === row.job_id ? { ...e, submission_id: row.id, status: row.status } : e,
+      );
+      return {
+        ...MIRROR_JOB,
+        position: payload.position,
+        company: payload.company,
+        status: row.status,
+        job_analysis_id: row.job_analysis_id,
+        delivered: row.delivered,
+      };
+    },
+  );
   job.listBaseResumes.mockResolvedValue([]);
   job.listJobAnalyses.mockResolvedValue([]);
 });
@@ -180,7 +223,7 @@ describe('useJobsQuery 迁移视图', () => {
     expect(job.getDashboard).toHaveBeenCalledWith(1);
   });
 
-  it('create：cache 前置写入（未迁移视图可读）', async () => {
+  it('create：建 job 实体（Q2 Job 先行，创建 ≠ 投递），cache 前置写入', async () => {
     renderWithProviders(
       <>
         <JobsListView onOpenNewJob={() => {}} />
@@ -202,14 +245,66 @@ describe('useJobsQuery 迁移视图', () => {
     expect(await screen.findByText('快手')).toBeInTheDocument();
     expect(screen.getByText('全部 (3)')).toBeInTheDocument();
     expect(screen.getByText('待处理 (2)')).toBeInTheDocument();
-    expect(job.createSubmission).toHaveBeenCalledWith({
-      position: 'AI 策略产品',
+    // T-M5-1：创建走 job 表，不再顺带建 submission（创建 ≠ 投递）
+    expect(job.createJobEntity).toHaveBeenCalledWith({
       company: '快手',
+      position: 'AI 策略产品',
     });
+    expect(job.createSubmission).not.toHaveBeenCalled();
     // P4-4a：创建成功后缓存岗位实体 id
     expect(screen.getByTestId('cache-job-ids').textContent).toContain('42');
     await screen.findByTestId('cache-count');
     expect(screen.getByTestId('cache-count').textContent).toBe('3');
+    // refetch 后 job-only 合并行仍带回（双源去重：无 submission 不被覆盖）
+    await waitFor(() => expect(job.listJobEntities).toHaveBeenCalled());
+    expect(screen.getByTestId('cache-count').textContent).toBe('3');
+  });
+
+  it('T-M5-1：job-only 行合并可见；标记已投递首次建 submission 并回填 backendId', async () => {
+    serverJobs = [
+      {
+        id: 42,
+        user_id: 1,
+        company: '快手',
+        position: 'AI 策略产品',
+        raw_jd_id: null,
+        job_analysis_id: 5,
+        submission_id: null,
+        status: 'PREPARED',
+        is_active: true,
+        created_at: '2026-09-08T00:00:00',
+        updated_at: null,
+      },
+    ];
+
+    renderWithProviders(
+      <>
+        <JobsListView onOpenNewJob={() => {}} />
+        <CacheSpy />
+      </>,
+    );
+
+    // 双源合并：2 个 submission 行 + 1 个 job-only 行
+    expect(await screen.findByText('快手')).toBeInTheDocument();
+    expect(screen.getByTestId('cache-count').textContent).toBe('3');
+    expect(screen.getByTestId('cache-job-ids').textContent).toContain('42');
+    // 已分析的 job-only 行 → 状态「待投递」→ 可标记投递
+    expect(await screen.findByText('标记已投递')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('标记已投递'));
+
+    await waitFor(() =>
+      expect(job.createSubmission).toHaveBeenCalledWith({
+        position: 'AI 策略产品',
+        company: '快手',
+        job_analysis_id: 5,
+        status: 'APPLIED',
+        delivered: true,
+      }),
+    );
+    // 标记投递建的是 submission，绝不动 job PATCH；refetch 后双源去重不产生重复行
+    expect(job.updateSubmission).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.getByTestId('cache-count').textContent).toBe('3'));
   });
 
   it('terminate/resume：乐观更新 cache 并持久化到后端（P11-b）', async () => {

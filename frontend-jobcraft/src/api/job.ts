@@ -119,6 +119,41 @@ export async function splitJd(jdText: string): Promise<{
 }
 
 // ============================================================
+// 岗位实体（T-M5-1 / M5-Q2 Job 先行：创建岗位 ≠ 投递）
+// ============================================================
+
+export interface JobEntity {
+  id: number
+  user_id: number
+  company: string
+  position: string
+  raw_jd_id: number | null
+  job_analysis_id: number | null
+  submission_id: number | null
+  status: string
+  is_active: boolean
+  created_at: string | null
+  updated_at: string | null
+}
+
+/** 创建岗位实体（find-or-create 幂等：同用户同公司同岗位名返回既有行）。 */
+export async function createJobEntity(payload: {
+  company?: string
+  position: string
+  job_analysis_id?: number | null
+  raw_jd_id?: number | null
+}): Promise<JobEntity> {
+  return request<JobEntity>('/api/jobcraft/job', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function listJobEntities(): Promise<JobEntity[]> {
+  return request<JobEntity[]>('/api/jobcraft/job')
+}
+
+// ============================================================
 // 投递记录
 // ============================================================
 
@@ -128,6 +163,7 @@ export async function createSubmission(payload: {
   jd_text?: string
   job_analysis_id?: number | null
   status?: string
+  delivered?: boolean
 }): Promise<Submission> {
   return request<Submission>('/api/jobcraft/submission', {
     method: 'POST',
