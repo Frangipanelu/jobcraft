@@ -42,7 +42,7 @@ describe('prepRecordToInterview', () => {
     expect(iv.role).toBe('AI 产品经理');
     expect(iv.roundType).toBe('tech');
     expect(iv.status).toBe('preparing');
-    expect(iv.readinessPercent).toBe(40);
+    expect(iv.readinessPercent).toBeUndefined();
     expect(iv.time).toBe('2026-09-18 08:30');
     expect(iv.preparation.highFreqQuestions).toHaveLength(1);
     expect(iv.preparation.highFreqQuestions[0].question).toBe('如何设计 RAG 评测体系？');
@@ -60,7 +60,6 @@ describe('prepRecordToInterview', () => {
     });
     expect(iv.preparation.recommendedExperiences[0]).toEqual({
       experienceId: '3',
-      recommendScore: 90,
       proves: ['拆分评测维度', '离线指标 + 线上 A/B'],
     });
   });
@@ -68,7 +67,7 @@ describe('prepRecordToInterview', () => {
   it('缺 company_research / dimension_questions 时兜底不抛错', () => {
     const iv = prepRecordToInterview(buildRecord({ company_research: null, dimension_questions: [] }));
 
-    expect(iv.preparation.companyResearch.background).toBe('字节跳动核心业务线');
+    expect(iv.preparation.companyResearch.background).toBe('');
     expect(iv.preparation.companyResearch.recentNews).toEqual([]);
     expect(iv.preparation.highFreqQuestions).toEqual([]);
     expect(iv.preparation.recommendedExperiences).toEqual([]);

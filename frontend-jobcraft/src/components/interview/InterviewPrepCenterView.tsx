@@ -4,17 +4,14 @@ import { useInterviewsQuery } from '../../features/interview/hooks';
 import {
   Plus,
   Calendar,
-  Search,
-  Play
+  Search
 } from 'lucide-react';
 
 interface InterviewPrepCenterViewProps {
-  onOpenMockInterview: (interviewId: string) => void;
   onOpenNewInterview: () => void;
 }
 
 export const InterviewPrepCenterView: React.FC<InterviewPrepCenterViewProps> = ({
-  onOpenMockInterview,
   onOpenNewInterview
 }) => {
   const { navigateTo } = useJobCraft();
@@ -168,15 +165,12 @@ export const InterviewPrepCenterView: React.FC<InterviewPrepCenterViewProps> = (
                       </div>
                     </td>
 
-                    {/* Readiness */}
+                    {/* Readiness（真实值：已攻克题数占比，无数据显占位 —；假 40% 已清，FE-FAKE-01） */}
                     <td className="p-3.5 align-top">
                       <div className="flex items-center gap-2">
                         <span className="px-2 py-0.5 rounded text-xs font-bold bg-sage-soft text-sage border border-sage-soft">
-                          {interview.readinessPercent}%
+                          {highFreqCount > 0 ? `已攻克 ${preparedCount}/${highFreqCount} 题` : '—'}
                         </span>
-                      </div>
-                      <div className="text-[10px] text-faint mt-1">
-                        已攻克 {preparedCount}/{highFreqCount} 题
                       </div>
                     </td>
 
@@ -194,14 +188,12 @@ export const InterviewPrepCenterView: React.FC<InterviewPrepCenterViewProps> = (
                     <td className="p-3.5 align-top text-right space-y-1.5">
                       <div className="flex items-center justify-end gap-1.5">
                         {isUpcoming && (
-                          <button
-                            onClick={() => onOpenMockInterview(interview.id)}
-                            className="px-2.5 py-1 rounded bg-sage-soft hover:bg-edge-deep text-sage text-xs font-bold border border-sage-soft transition flex items-center gap-1 cursor-pointer"
-                            title="进入实时 AI 模拟面试"
+                          <span
+                            className="px-2.5 py-1 rounded bg-page text-faint text-xs font-semibold border border-edge cursor-not-allowed"
+                            title="AI 模拟面试功能待开发，暂未开放"
                           >
-                            <Play className="w-3 h-3 text-sage" />
-                            <span>模拟面试</span>
-                          </button>
+                            模拟面试 · 待开发
+                          </span>
                         )}
                         <button
                           onClick={() =>

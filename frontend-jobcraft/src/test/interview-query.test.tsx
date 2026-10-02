@@ -183,7 +183,7 @@ describe('useInterviewsQuery 迁移视图', () => {
 
     renderWithProviders(
       <>
-        <InterviewPrepCenterView onOpenMockInterview={vi.fn()} onOpenNewInterview={vi.fn()} />
+        <InterviewPrepCenterView onOpenNewInterview={vi.fn()} />
         <IvCacheCount />
       </>,
     );

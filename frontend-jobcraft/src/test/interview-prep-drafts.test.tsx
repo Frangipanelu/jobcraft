@@ -101,9 +101,9 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** 打开「维度题准备」分区并等待内容渲染。 */
+/** 打开「演练」分区（T-M7-2 3-tab，原 03 维度题准备）并等待内容渲染。 */
 async function openQuestionSection() {
-  fireEvent.click(screen.getByText('03 维度题准备'));
+  fireEvent.click(screen.getByText('02 演练'));
   await screen.findByText(/共 1 道维度题/);
   return screen.getByPlaceholderText(/STAR 结构/);
 }
@@ -120,7 +120,7 @@ describe('FE-PREP-01 备战草稿落库', () => {
 
     renderWithProviders(
       <>
-        <InterviewPrepWorkspaceView interviewId="prep-7" onOpenMockInterview={vi.fn()} />
+        <InterviewPrepWorkspaceView interviewId="prep-7" />
         <ToastContainer />
       </>
     );
@@ -144,7 +144,7 @@ describe('FE-PREP-01 备战草稿落库', () => {
 
     renderWithProviders(
       <>
-        <InterviewPrepWorkspaceView interviewId="prep-7" onOpenMockInterview={vi.fn()} />
+        <InterviewPrepWorkspaceView interviewId="prep-7" />
         <ToastContainer />
       </>
     );
@@ -204,11 +204,11 @@ describe('FE-PREP-01 备战草稿落库', () => {
 describe('FE-LOGIC-01 前端逻辑 bug 修复', () => {
   it('① 真实 duration 直接展示（|| 先于 ?: 的优先级修复）', async () => {
     renderWithProviders(
-      <InterviewPrepWorkspaceView interviewId="prep-7" onOpenMockInterview={vi.fn()} />
+      <InterviewPrepWorkspaceView interviewId="prep-7" />
     );
 
-    fireEvent.click(screen.getByText('02 本场判断'));
-    await screen.findByText(/本场面试定位与考察维度研判/);
+    fireEvent.click(screen.getByText('01 总览'));
+    await screen.findByText(/本场面试定位与考察维度研判|核心考察方向拆解/);
     expect(await screen.findByText('预计时长：45分钟')).toBeInTheDocument();
     expect(screen.queryByText('预计时长：见下方说明')).not.toBeInTheDocument();
   });
@@ -240,3 +240,4 @@ describe('FE-LOGIC-01 前端逻辑 bug 修复', () => {
     expect(onRoundChange).toHaveBeenCalledWith(5, '第5面 · 终面');
   });
 });
+

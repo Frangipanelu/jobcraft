@@ -232,7 +232,8 @@ export interface PreparedAnswer {
 export interface InterviewQuestion {
   id: string;
   question: string;
-  probabilityStars: number;
+  /** 出题概率星级：无真实来源，不再伪造（FE-FAKE-01），缺省不渲染。 */
+  probabilityStars?: number;
   evaluationFocus: string;
   recommendedExperienceId: string;
   preparedAnswer: PreparedAnswer;
@@ -240,7 +241,8 @@ export interface InterviewQuestion {
 }
 
 export interface InterviewPreparation {
-  readinessPercent: number;
+  /** 综合备战度：无真实来源时不填（FE-FAKE-01），由消费方按真实数据计算或显示占位。 */
+  readinessPercent?: number;
   companyResearch: {
     background: string;
     coreBusiness: string;
@@ -251,11 +253,12 @@ export interface InterviewPreparation {
   };
   aiStrategy: {
     roundTypeDesc: string;
-    keyFocusAreas: { name: string; importance: string; desc: string }[];
+    keyFocusAreas: { name: string; importance?: string; desc: string }[];
   };
   recommendedExperiences: {
     experienceId: string;
-    recommendScore: number;
+    /** 推荐分：无真实来源，不再伪造（FE-FAKE-01）。 */
+    recommendScore?: number;
     proves: string[];
   }[];
   highFreqQuestions: InterviewQuestion[];
@@ -377,7 +380,8 @@ export interface Interview {
   format: InterviewFormat;
   interviewer?: string;
   supplementNotes?: string;
-  readinessPercent: number;
+  /** 综合备战度：mappers 不再伪造 40（FE-FAKE-01），缺省时消费方显示占位或隐藏。 */
+  readinessPercent?: number;
   status: 'upcoming' | 'preparing' | 'completed';
   preparation: InterviewPreparation;
   review?: InterviewReview;

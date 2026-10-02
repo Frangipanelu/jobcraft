@@ -30,17 +30,15 @@ interface DqShape {
 
 interface InterviewPrepWorkspaceViewProps {
   interviewId?: string;
-  onOpenMockInterview: (interviewId: string) => void;
-  onOpenNewInterview?: (jobId?: string) => void;
 }
 
-const SECTIONS = [
-  '公司调研',
-  '本场判断',
-  '维度题准备',
-  '面试逐字稿',
-  '模拟面试'
-] as const;
+/**
+ * 工作区 3-tab（T-M7-2 裁决）：
+ * 01 总览 = 公司调研 + 本场判断（信息聚合）
+ * 02 演练 = 维度题准备（演练心脏，答题草稿）
+ * 03 模拟 = 面试逐字稿（AI 模拟面试已下线为「待开发」，不再占 tab）
+ */
+const SECTIONS = ['总览', '演练', '模拟'] as const;
 
 type SectionType = (typeof SECTIONS)[number];
 
@@ -87,8 +85,7 @@ function InfoRow({ label, value }: { label: string; value?: string }) {
 }
 
 export const InterviewPrepWorkspaceView: React.FC<InterviewPrepWorkspaceViewProps> = ({
-  interviewId,
-  onOpenMockInterview
+  interviewId
 }) => {
   const { showToast } = useToastActions();
   const go = useTabNavigate();
@@ -100,7 +97,7 @@ export const InterviewPrepWorkspaceView: React.FC<InterviewPrepWorkspaceViewProp
   const prep = currentInterview?.preparation;
   const cr = src?.company_research || ({} as CompanyResearchShape);
 
-  const [activeSection, setActiveSection] = useState<SectionType>('公司调研');
+  const [activeSection, setActiveSection] = useState<SectionType>('总览');
   const [selectedQIdForAnswer, setSelectedQIdForAnswer] = useState<string>('');
   const [answerDrafts, setAnswerDrafts] = useState<Record<string, string>>({});
   const saveDrafts = useSavePrepDraftsMutation();
@@ -128,25 +125,32 @@ export const InterviewPrepWorkspaceView: React.FC<InterviewPrepWorkspaceViewProp
         q: dq.question || `第 ${idx + 1} 题`,
         type: String(dimName).replace(/^D\d+\s*/, ''),
         prepared: !!dq.isPrepared,
-        starSuggestion: answerTxt || '根据自身经历准备 STAR 应答（背景→任务→行动→结果）。',
+        starSuggestion: answerTxt || '暂无 AI 生成的应答要点（完成岗位分析后可重新生成）。',
       };
     });
   }, [src, prep]);
 
   const sectionStatus: Record<SectionType, boolean> = {
-    '公司调研': !!(cr?.basic || prep?.companyResearch?.background),
-    '本场判断': !!(prep?.aiStrategy?.roundTypeDesc || src?.round_type),
-    '维度题准备': questions.length > 0,
-    '面试逐字稿': !!(src?.full_version || src?.elevator_pitch),
-    '模拟面试': questions.length > 0
+    '总览': !!(
+      cr?.basic ||
+      prep?.companyResearch?.background ||
+      prep?.aiStrategy?.roundTypeDesc ||
+      src?.round_type
+    ),
+    '演练': questions.length > 0,
+    '模拟': !!(src?.full_version || src?.elevator_pitch)
   };
+
+  // 综合备战度 = 三个分区的真实完成占比（不再伪造 40%，FE-FAKE-01）
+  const readiness = Math.round(
+    (Object.values(sectionStatus).filter(Boolean).length / SECTIONS.length) * 100
+  );
 
   const iv = {
     company: currentInterview?.company || src?.company || '目标公司',
     position: currentInterview?.role || src?.position || '目标岗位',
     round: currentInterview?.roundName || src?.round_type || '面试准备',
-    time: currentInterview?.time || src?.created_at || '',
-    readiness: currentInterview?.readinessPercent || 0
+    time: currentInterview?.time || src?.created_at || ''
   };
 
   const handleSaveAnswer = async () => {
@@ -199,9 +203,7 @@ export const InterviewPrepWorkspaceView: React.FC<InterviewPrepWorkspaceViewProp
       : (prep?.companyResearch?.keyProducts as string[]) || [];
 
     return (
-      <div className="space-y-6 animate-in fade-in duration-200">
-        <SectionHeader num={1} title="目标雇主背景与业务全景研究" done />
-
+      <>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-5">
           <div className="bg-white border-2 border-[#CCD8D1] rounded-2xl p-5 sm:p-6 shadow-2xs">
             <div className="text-xs font-black text-[#1A5340] uppercase tracking-wider mb-3">
@@ -319,7 +321,7 @@ export const InterviewPrepWorkspaceView: React.FC<InterviewPrepWorkspaceViewProp
             <InfoRow label="关键高管" value={team?.key_executives} />
           </div>
         </div>
-      </div>
+      </>
     );
   };
 
@@ -330,21 +332,21 @@ export const InterviewPrepWorkspaceView: React.FC<InterviewPrepWorkspaceViewProp
       ? keyFocus
       : (src?.dimension_questions || []).map((dq) => ({
           name: dtTitle(dq.dimension, dimensionTitles),
-          importance: '★★★★★',
           desc: dq.question
         }));
 
     return (
-      <div className="space-y-6 animate-in fade-in duration-200">
-        <SectionHeader num={2} title="本场面试定位与考察维度研判" done />
+      <>
         <div className="bg-[#F2F8F5] border-2 border-[#A2CAB8] rounded-2xl p-6 sm:p-7 mb-5 shadow-xs">
           <div className="flex justify-between items-center mb-3 flex-wrap gap-2">
             <span className="text-xs font-black text-[#1A5340] uppercase tracking-wider bg-[#DCEDE4] px-2.5 py-1 rounded-md border border-[#B6DBCB]">
               AI 策略研判
             </span>
-            <span className="text-xs font-bold text-[#1F4D3D] bg-white px-3 py-1 rounded-full border border-[#B6DBCB] shadow-2xs">
-              预计时长：{src?.duration || (prep?.aiStrategy?.roundTypeDesc?.includes('时长') ? '见下方说明' : '10-15 分钟')}
-            </span>
+            {src?.duration && (
+              <span className="text-xs font-bold text-[#1F4D3D] bg-white px-3 py-1 rounded-full border border-[#B6DBCB] shadow-2xs">
+                预计时长：{src.duration}
+              </span>
+            )}
           </div>
           <div className="text-lg sm:text-[19px] font-black text-[#0F3528] tracking-tight mb-2">
             {src?.round_type || iv.round}
@@ -380,15 +382,24 @@ export const InterviewPrepWorkspaceView: React.FC<InterviewPrepWorkspaceViewProp
             <p className="text-xs text-[#8D9A92]">暂无可展示的考察方向。</p>
           )}
         </div>
-      </div>
+      </>
     );
   };
+
+  /** 总览 tab：公司调研 + 本场判断合并渲染（T-M7-2）。 */
+  const renderOverview = () => (
+    <div className="space-y-6 animate-in fade-in duration-200">
+      <SectionHeader num={1} title="公司调研与本场研判" done={sectionStatus['总览']} />
+      {renderCompanyResearch()}
+      {renderRoundStrategy()}
+    </div>
+  );
 
   const renderQuestionPrep = () => {
     if (!questions.length) {
       return (
         <div className="space-y-6 animate-in fade-in duration-200">
-          <SectionHeader num={3} title="维度题准备" />
+          <SectionHeader num={2} title="维度题准备" />
           <p className="text-xs sm:text-[13px] text-[#4E5B53] font-medium">
             该场面试尚未生成维度题，请先在「面试准备」页生成逐字稿。
           </p>
@@ -398,7 +409,7 @@ export const InterviewPrepWorkspaceView: React.FC<InterviewPrepWorkspaceViewProp
 
     return (
       <div className="space-y-6 animate-in fade-in duration-200">
-        <SectionHeader num={3} title="维度题准备与 STAR 应答" />
+        <SectionHeader num={2} title="维度题准备与 STAR 应答" done={sectionStatus['演练']} />
         <p className="text-xs sm:text-[13px] text-[#4E5B53] font-medium mb-4">
           共 {questions.length} 道维度题，右侧撰写你的作答思路：
         </p>
@@ -503,7 +514,7 @@ export const InterviewPrepWorkspaceView: React.FC<InterviewPrepWorkspaceViewProp
     const pitch = src?.elevator_pitch ? String(src.elevator_pitch) : '';
     return (
       <div className="space-y-6 animate-in fade-in duration-200">
-        <SectionHeader num={4} title="面试逐字稿 · 完整版报告" done />
+        <SectionHeader num={3} title="面试逐字稿 · 完整版报告" done={sectionStatus['模拟']} />
         <p className="text-xs sm:text-[13px] text-[#4E5B53] font-medium mb-4">
           以下为 AI 为本场面试生成的完整逐字稿，可直接通读熟悉，也可结合自己的经历做调整。
         </p>
@@ -541,48 +552,20 @@ export const InterviewPrepWorkspaceView: React.FC<InterviewPrepWorkspaceViewProp
 
         <div className="flex items-start gap-2 text-[11px] text-[#8D9A92] bg-[#F8FAF9] border border-[#E0E7E3] rounded-xl p-3">
           <Sparkles className="w-3.5 h-3.5 text-[#204E3F] shrink-0 mt-0.5" />
-          使用建议：回答时避免照读，用「关键词 + 结构」方式记忆 —— 开场熟练、每题讲清背景→任务→行动→结果，反问环节结合上方公司调研提出 2-3 个有深度的问题。
+          使用建议：回答时避免照读，用「关键词 + 结构」方式记忆 —— 开场熟练、每题讲清背景→任务→行动→结果，反问环节结合「总览」中的公司调研提出 2-3 个有深度的问题。
         </div>
       </div>
     );
   };
 
-  const renderMock = () => (
-    <div className="space-y-6 animate-in fade-in duration-200">
-      <SectionHeader num={5} title="AI 实时对练与模拟实战" />
-      <div className="bg-[#F2F8F5] border-2 border-[#A2CAB8] rounded-3xl p-10 md:p-14 text-center shadow-xs">
-        <div className="w-16 h-16 rounded-2xl bg-[#DCEDE4] border border-[#B6DBCB] flex items-center justify-center mx-auto mb-4 text-3xl shadow-2xs">
-          🎤
-        </div>
-        <div className="text-xl font-black text-[#0F3528] mb-2 tracking-tight">
-          AI 模拟面试官即刻开练
-        </div>
-        <p className="text-xs sm:text-sm text-[#254135] leading-relaxed max-w-lg mx-auto mb-8 font-medium">
-          模拟真实面试场景，AI 面试官将基于本岗位 JD 与维度题展开追问，并在每轮问答后给出即时反馈与打分建议。
-        </p>
-        <button
-          type="button"
-          onClick={() => currentInterview && onOpenMockInterview(currentInterview.id)}
-          className="px-8 py-3.5 bg-[#204E3F] hover:bg-[#16382D] text-white rounded-2xl text-sm font-extrabold shadow-md transition cursor-pointer"
-        >
-          开始全流程模拟面试 →
-        </button>
-      </div>
-    </div>
-  );
-
   const renderContent = () => {
     switch (activeSection) {
-      case '公司调研':
-        return renderCompanyResearch();
-      case '本场判断':
-        return renderRoundStrategy();
-      case '维度题准备':
+      case '总览':
+        return renderOverview();
+      case '演练':
         return renderQuestionPrep();
-      case '面试逐字稿':
+      case '模拟':
         return renderFullScript();
-      case '模拟面试':
-        return renderMock();
       default:
         return null;
     }
@@ -618,13 +601,13 @@ export const InterviewPrepWorkspaceView: React.FC<InterviewPrepWorkspaceViewProp
 
             <div className="flex items-center gap-3 bg-[#F4F8F6] px-4 py-2 rounded-xl border border-[#CCD8D1]">
               <div className="text-right">
-                <div className="text-xl font-black leading-none text-[#0F3528]">{iv.readiness}%</div>
+                <div className="text-xl font-black leading-none text-[#0F3528]">{readiness}%</div>
                 <div className="text-[11px] text-[#526058] font-bold mt-0.5">综合备战度</div>
               </div>
               <div className="w-20 h-2 bg-[#DDE5E1] rounded-full overflow-hidden">
                 <div
                   className="h-full rounded-full transition-all duration-500 bg-[#204E3F]"
-                  style={{ width: `${iv.readiness}%` }}
+                  style={{ width: `${readiness}%` }}
                 />
               </div>
             </div>

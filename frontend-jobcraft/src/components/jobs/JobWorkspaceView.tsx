@@ -304,10 +304,14 @@ export const JobWorkspaceView: React.FC<JobWorkspaceViewProps> = ({
                               <span>面试官：{interview.interviewer}</span>
                             </>
                           )}
-                          <span>·</span>
-                          <span className="font-semibold text-sage">
-                            准备度 {interview.readinessPercent}%
-                          </span>
+                          {typeof interview.readinessPercent === 'number' && (
+                            <>
+                              <span>·</span>
+                              <span className="font-semibold text-sage">
+                                准备度 {interview.readinessPercent}%
+                              </span>
+                            </>
+                          )}
                         </div>
 
                         {interview.supplementNotes && (

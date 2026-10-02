@@ -57,7 +57,8 @@ export function prepRecordToInterview(rec: InterviewPrepRecord): Interview {
 
 /**
  * 由后端面试准备结果（维度题 + 公司调研摘要）构建前端 Interview 全量模型。
- * 自 JobCraftContext 移出；语义原样搬移（readiness 初始 40、status 'preparing'、逐题构建 preparedAnswer）。
+ * 自 JobCraftContext 移出；语义原样搬移（status 'preparing'、逐题构建 preparedAnswer）。
+ * 不再伪造 readinessPercent/星级/推荐分等假指标（FE-FAKE-01），缺值由消费方按真实数据显示。
  */
 export function buildInterviewFromPrep(
   prep: {
@@ -80,7 +81,6 @@ export function buildInterviewFromPrep(
   ).map((dq, idx) => ({
     id: `${meta.id}-q-${idx}`,
     question: dq.question,
-    probabilityStars: 4,
     evaluationFocus: dq.dimension || '',
     recommendedExperienceId: (dq.card_ids && dq.card_ids[0]) ? String(dq.card_ids[0]) : '',
     isPrepared: false,
@@ -102,12 +102,10 @@ export function buildInterviewFromPrep(
     roundType: mapRoundType(prep.round_type),
     time: prep.created_at ? prep.created_at.split('T')[0] + ' ' + (prep.created_at.split('T')[1]?.slice(0, 5) || '') : '',
     format: 'video',
-    readinessPercent: 40,
     status: 'preparing',
     preparation: {
-      readinessPercent: 40,
       companyResearch: {
-        background: cr?.basic?.description || `${meta.company}核心业务线`,
+        background: cr?.basic?.description || '',
         coreBusiness: cr?.business?.main_business || '',
         keyProducts: cr?.business?.product_names || [],
         relevantBusiness: cr?.basic?.industry || '',
@@ -118,7 +116,6 @@ export function buildInterviewFromPrep(
         roundTypeDesc: prep.round_type ? `${prep.round_type}面试准备` : '面试准备',
         keyFocusAreas: (prep.dimension_questions || []).map((dq) => ({
           name: dq.dimension,
-          importance: '★★★★★',
           desc: dq.question
         }))
       },
@@ -126,7 +123,6 @@ export function buildInterviewFromPrep(
         .filter((dq) => dq.card_ids && dq.card_ids.length > 0)
         .map((dq) => ({
           experienceId: String(dq.card_ids[0]),
-          recommendScore: 90,
           proves: dq.answer_points ? dq.answer_points.slice(0, 2) : []
         })),
       highFreqQuestions

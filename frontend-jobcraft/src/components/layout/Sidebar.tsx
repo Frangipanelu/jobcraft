@@ -31,7 +31,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const { data: interviews = [] } = useInterviewsQuery();
 
   const interviewingJobsCount = jobs.filter((j) => j.status === 'interviewing').length;
-  const pendingReviewCount = interviews.filter((i) => i.status === 'completed' && !i.review).length || 1;
+  const pendingReviewCount = interviews.filter((i) => i.status === 'completed' && !i.review).length;
 
   const navItems: {
     section?: string;
