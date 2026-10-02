@@ -451,6 +451,61 @@ class TestExperienceStructure:
         )
         assert resp.status_code == 500
 
+    @staticmethod
+    def _structure_setup(monkeypatch, card, cache, pool_tags):
+        """装配 structure 成功路径的 mock，返回 update_card 捕获的 updates。"""
+        captured: dict = {}
+        monkeypatch.setattr("app.api.experience.db_tools.get_card", lambda *a: card)
+        monkeypatch.setattr(
+            "app.api.experience.db_tools.update_card",
+            lambda *a: (captured.update(a[1]), True)[1],
+        )
+        monkeypatch.setattr(
+            "app.workflows.extract_flow.run_extract_structured_workflow",
+            lambda *a: {"cache": cache, "tags": ["LLM 评测"]},
+        )
+        monkeypatch.setattr(
+            "app.tools.tag_pool.recommend_tags_from_pool", lambda *a: pool_tags
+        )
+        return captured
+
+    def test_structure_backfills_tags_from_pool_when_empty(self, monkeypatch):
+        """T-M1-1：tags 为空时补写（规则池优先），并写 ai_structured"""
+        card = {"id": 1, "raw_text": LONG_RAW_TEXT, "tags": []}
+        captured = self._structure_setup(
+            monkeypatch, card, {"achievements": ["落地"]}, ["规则池标签"]
+        )
+        resp = client.post(
+            "/api/jobcraft/experience/cards/1/structure", json={"user_id": 1}
+        )
+        assert resp.status_code == 200
+        assert captured["ai_structured"] == {"achievements": ["落地"]}
+        assert captured["tags"] == ["规则池标签"]
+
+    def test_structure_keeps_user_edited_tags(self, monkeypatch):
+        """已有 tags 视为用户编辑，不覆盖（仅写 ai_structured）"""
+        card = {"id": 1, "raw_text": LONG_RAW_TEXT, "tags": ["我自己的标签"]}
+        captured = self._structure_setup(
+            monkeypatch, card, {"achievements": ["落地"]}, ["规则池标签"]
+        )
+        resp = client.post(
+            "/api/jobcraft/experience/cards/1/structure", json={"user_id": 1}
+        )
+        assert resp.status_code == 200
+        assert "tags" not in captured
+        assert captured["ai_structured"] == {"achievements": ["落地"]}
+
+    def test_structure_falls_back_to_workflow_tags_when_pool_empty(self, monkeypatch):
+        card = {"id": 1, "raw_text": LONG_RAW_TEXT, "tags": []}
+        captured = self._structure_setup(
+            monkeypatch, card, {"achievements": ["落地"]}, []
+        )
+        resp = client.post(
+            "/api/jobcraft/experience/cards/1/structure", json={"user_id": 1}
+        )
+        assert resp.status_code == 200
+        assert captured["tags"] == ["LLM 评测"]
+
 
 class TestExperienceRecommendTags:
     """POST /api/jobcraft/experience/cards/{card_id}/recommend-tags"""

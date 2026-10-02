@@ -936,6 +936,12 @@ def jobcraft_expression_action(
 def jobcraft_experience_structure(
     card_id: int, current_user: int = Depends(get_current_user)
 ):
+    """失败重试入口（T-M1-1 / 矩阵 Q1）：对 STAR 为空的卡重新跑结构化抽取。
+
+    - 只写 ai_structured 之外，顺手补写 v3 同次返回的 tags（规则标签池优先，
+      仅当卡当前 tags 为空时写入，不覆盖用户已编辑标签）；
+    - 前端接线为卡片页「STAR 为空」时的重试按钮，零消费状态自此关闭。
+    """
     try:
         card = db_tools.get_card(card_id, current_user)
         if not card:
@@ -946,6 +952,7 @@ def jobcraft_experience_structure(
                 status_code=400,
                 detail="经历内容过短（至少 20 字符），请补充后再试",
             )
+        from app.tools.tag_pool import recommend_tags_from_pool
         from app.workflows.extract_flow import run_extract_structured_workflow
 
         out = run_extract_structured_workflow(raw_text)
@@ -954,7 +961,12 @@ def jobcraft_experience_structure(
                 status_code=500,
                 detail="AI 结构化抽取失败，请检查经历内容是否清晰完整",
             )
-        db_tools.update_card(card_id, {"ai_structured": out["cache"]}, current_user)
+        updates: Dict[str, Any] = {"ai_structured": out["cache"]}
+        if not card.get("tags"):
+            tags = recommend_tags_from_pool(raw_text.strip()) or out.get("tags") or []
+            if tags:
+                updates["tags"] = tags
+        db_tools.update_card(card_id, updates, current_user)
         return db_tools.get_card(card_id, current_user)
     except HTTPException:
         raise
