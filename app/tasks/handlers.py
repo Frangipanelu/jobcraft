@@ -142,19 +142,21 @@ def execute_interview_prep(params: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def execute_jd_analyze_structured(params: Dict[str, Any]) -> Dict[str, Any]:
-    """执行结构化 JD 分析任务（前端已分好 duties/requirements）。
+    """执行结构化 JD 分析任务（T-M4-1：注入 4 节点完整工作流）。
 
-    :param params: 任务参数（company/position/duties/requirements）
-    :return: {ats_profile, raw, company, position}
+    :param params: 任务参数（user_id/company/position/duties/requirements/card_ids）
+    :return: JobAnalysisResult dict（真实 job_analysis_id 与 match 字段）
+    :raises ValueError: 入参缺失、非法 tag 或职责/要求同时为空
     """
     from app.workflows.job_analysis_flow import (
         prepare_structured_jd,
-        run_structured_ats_workflow,
+        run_structured_job_analysis_workflow,
     )
 
     task_id = params.get("task_id")
     company = params.get("company", "")
     position = params.get("position", "")
+    card_ids = [int(c) for c in (params.get("card_ids") or [])]
 
     # 清洗与校验下沉共享入口（BE-TASKDIV-01）：非法 tag 不再静默丢弃，
     # 与 API 路径同语义（ValueError → 任务 FAILED，而非悄悄少一条需求）
@@ -162,6 +164,11 @@ def execute_jd_analyze_structured(params: Dict[str, Any]) -> Dict[str, Any]:
         params.get("duties", []),
         params.get("requirements", []),
     )
+    user_id = int(params.get("user_id") or 0)
+    if user_id <= 0:
+        raise ValueError("user_id 缺失，无法执行结构化分析")
+    if not card_ids:
+        raise ValueError("请至少选择 1 张经历卡")
 
     logger.info(f"开始执行结构化 JD 分析任务: {task_id}")
 
@@ -169,11 +176,13 @@ def execute_jd_analyze_structured(params: Dict[str, Any]) -> Dict[str, Any]:
         manager = get_task_manager()
         manager.update_task_status(task_id, TaskStatus.RUNNING)
 
-        result = run_structured_ats_workflow(
+        result = run_structured_job_analysis_workflow(
+            user_id=user_id,
             company=company,
             position=position,
             duties=duties,
             requirements=requirements,
+            card_ids=card_ids,
         )
 
         manager.update_task_status(task_id, TaskStatus.COMPLETED, result=result)

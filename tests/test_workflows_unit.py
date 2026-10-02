@@ -413,6 +413,118 @@ class TestJobAnalysisFlow:
         assert result["job_analysis_id"] == 42
         assert result["match_score"] == 72
 
+    def test_structured_full_workflow_normal(self, monkeypatch):
+        """T-M4-1 / Q2 裁决 C：结构化注入跑完整 4 节点，产出真实 id 与 match 字段。"""
+        from app.schemas.jobcraft import PerCardScore, StructuredRequirementItem
+        from app.workflows.job_analysis_flow import (
+            run_structured_job_analysis_workflow,
+        )
+
+        monkeypatch.setattr(
+            "app.workflows.job_analysis_flow.db_tools.get_card",
+            lambda cid, user_id=None: {
+                "id": cid,
+                "title": f"卡{cid}",
+                "raw_text": "文本",
+                "is_active": True,
+            },
+        )
+
+        structured_calls = {}
+
+        def fake_structured_analyze(duties, requirements):
+            structured_calls["duties"] = list(duties)
+            structured_calls["requirements"] = list(requirements)
+            return {
+                "ats": {
+                    **_fake_ats_profile(),
+                    "required_skills": ["Python"],
+                    "job_title": "AI 产品经理",
+                },
+                "raw": {"job_title": "AI 产品经理"},
+            }
+
+        monkeypatch.setattr(
+            "app.workflows.job_analysis_flow.analyze_structured_jd",
+            fake_structured_analyze,
+        )
+
+        def fake_sm_run(self, data):
+            return {"llm_match_items": {"1": {"match": 80.0}}}
+
+        monkeypatch.setattr(
+            "app.workflows.job_analysis_flow.ScoreMatchAgent.run", fake_sm_run
+        )
+
+        def fake_compute_match(cards, jd_req, llm_scores=None):
+            return {
+                "overall": 72,
+                "per_card": [
+                    PerCardScore(
+                        card_id=1,
+                        score=80,
+                        local_score=70,
+                        llm_score=85,
+                        matched=[],
+                        missing=[],
+                    )
+                ],
+                "gap": {"missing": ["Kafka"]},
+            }
+
+        monkeypatch.setattr(
+            "app.workflows.job_analysis_flow.jobcraft_analyze.compute_match",
+            fake_compute_match,
+        )
+
+        def fake_sug_run(self, data):
+            return {
+                "suggestions": {
+                    "gap_analysis": "缺少分布式经验",
+                    "gap_items": ["Kafka"],
+                    "suggestions": [],
+                }
+            }
+
+        monkeypatch.setattr(
+            "app.workflows.job_analysis_flow.SugAgent.run", fake_sug_run
+        )
+
+        inserted = {}
+        monkeypatch.setattr(
+            "app.workflows.job_analysis_flow.db_tools.insert_job_analysis",
+            lambda data: inserted.update(data) or 42,
+        )
+        monkeypatch.setattr(
+            "app.workflows.job_analysis_flow.db_tools.upsert_job_mapping",
+            lambda jid, cid: None,
+        )
+
+        result = run_structured_job_analysis_workflow(
+            user_id=1,
+            company="字节",
+            position="AI 产品经理",
+            duties=["主导端侧大模型交互设计"],
+            requirements=[
+                StructuredRequirementItem(text="3年以上经验", tag="hard"),
+                StructuredRequirementItem(text="高并发经验者优先", tag="preferred"),
+            ],
+            card_ids=[1],
+        )
+        # 结构化字段已注入 ats 节点（跳过 structurer，标签即事实）
+        assert structured_calls["duties"] == ["主导端侧大模型交互设计"]
+        assert structured_calls["requirements"][0].tag == "hard"
+        assert structured_calls["requirements"][1].tag == "preferred"
+        # 4 节点照跑：落库产出真实 id 与 match 字段
+        assert result["job_analysis_id"] == 42
+        assert result["match_score"] == 72
+        assert result["position"] == "AI 产品经理"
+        # jd_text 由结构化块重建（供 raw_jd 快照与展示副本）
+        assert "【岗位职责】" in inserted["jd_text"]
+        # 3 档标签作 priority 初值：hard/required → hard_skills，preferred → soft_skills
+        assert inserted["jd_requirements"]["hard_skills"] == ["Python"]
+        assert inserted["jd_requirements"]["soft_skills"] == ["Kafka"]
+
     def test_legacy_workflow_persists_analysis_artifacts(self, monkeypatch):
         """P4-1：collate 节点落库时写入分析物五列（ats_profile / suggestions /
         per_card_scores / match_level / analysis_version），历史读取不再退化为空壳。"""

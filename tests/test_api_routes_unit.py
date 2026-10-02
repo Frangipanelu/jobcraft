@@ -1670,15 +1670,34 @@ class TestStructuredAnalyzeAts:
         )
         assert resp.status_code == 400
 
-    def test_structured_normal(self, monkeypatch):
-        monkeypatch.setattr(
-            "app.workflows.job_analysis_flow.run_structured_ats_workflow",
-            lambda **kw: {
-                "ats_profile": {"job_title": "后端", "required_skills": ["Python"]},
-                "raw": {},
-                "company": "C",
-                "position": "后端",
+    def test_structured_missing_cards_returns_400(self):
+        resp = client.post(
+            "/api/jobcraft/job/analyze-ats-structured",
+            json={
+                "company": "字节跳动",
+                "position": "后端工程师",
+                "duties": ["负责交易系统"],
+                "requirements": [],
             },
+        )
+        assert resp.status_code == 400
+        assert "经历卡" in resp.json()["error"]["message"]
+
+    def test_structured_normal(self, monkeypatch):
+        """T-M4-1：结构化分析跑 4 节点工作流，返回真实 job_analysis_id 全量结果。"""
+        captured = {}
+
+        def fake_workflow(**kw):
+            captured.update(kw)
+            return {
+                "job_analysis_id": 77,
+                "match_score": 72.0,
+                "ats_profile": {"job_title": "后端", "required_skills": ["Python"]},
+            }
+
+        monkeypatch.setattr(
+            "app.workflows.job_analysis_flow.run_structured_job_analysis_workflow",
+            fake_workflow,
         )
         resp = client.post(
             "/api/jobcraft/job/analyze-ats-structured",
@@ -1691,10 +1710,16 @@ class TestStructuredAnalyzeAts:
                     {"text": "熟悉 Python", "tag": "required"},
                     {"text": "高并发经验者优先", "tag": "preferred"},
                 ],
+                "card_ids": [1, 2],
             },
         )
         assert resp.status_code == 200
+        assert resp.json()["job_analysis_id"] == 77
+        assert resp.json()["match_score"] == 72.0
         assert resp.json()["ats_profile"]["required_skills"] == ["Python"]
+        assert captured["card_ids"] == [1, 2]
+        assert captured["duties"] == ["负责交易系统"]
+        assert captured["requirements"][0].tag == "hard"
 
 
 class TestSaveResume:

@@ -30,6 +30,7 @@ class StructuredJDRequest(BaseModel):
     position: str = ""
     duties: List[str]
     requirements: List[Dict[str, Any]]
+    card_ids: List[int] = Field(default_factory=list)
 
 
 class JdClassificationPayload(BaseModel):
@@ -186,32 +187,42 @@ def jobcraft_job_analyze_ats_structured(
     payload: StructuredJDRequest,
     current_user: int = Depends(get_current_user),
 ):
-    """结构化 JD 分析：前端已把文本分好类，只对两块内容做细节分析。
+    """结构化 JD 完整分析（T-M4-1 / Q2 裁决 C）。
 
-    duties / requirements 均按条传入；requirements 的每条带 tag
-    （hard 硬性门槛 / required 必选 / preferred 加分）。
+    结构化字段注入 4 节点工作流：跳过 structurer（用户已拆分），
+    3 档标签作 priority 初值，score/suggestions/collate 照跑，
+    返回与 /analyze 同构的 JobAnalysisResult（真实 job_analysis_id
+    与 match 字段；FE-JD-REPORT-01 前端降级自此仅作兜底）。
     清洗与校验下沉共享入口（BE-TASKDIV-01），与异步任务路径行为一致。
     """
     try:
-        from app.workflows.job_analysis_flow import (
-            prepare_structured_jd,
-            run_structured_ats_workflow,
-        )
+        from app.workflows.job_analysis_flow import prepare_structured_jd
 
         duties, requirements = prepare_structured_jd(
             payload.duties, payload.requirements
         )
-        return run_structured_ats_workflow(
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    if not payload.card_ids:
+        raise HTTPException(status_code=400, detail="请至少选择 1 张经历卡")
+    try:
+        from app.workflows.job_analysis_flow import (
+            run_structured_job_analysis_workflow,
+        )
+
+        return run_structured_job_analysis_workflow(
+            user_id=current_user,
             company=payload.company,
             position=payload.position,
             duties=duties,
             requirements=requirements,
+            card_ids=payload.card_ids,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        logger.exception("结构化 ATS 解析失败")
-        raise HTTPException(status_code=500, detail=f"结构化 ATS 解析失败: {e}")
+        logger.exception("结构化岗位分析失败")
+        raise HTTPException(status_code=500, detail=f"结构化岗位分析失败: {e}")
 
 
 @router.get("/resume/download")

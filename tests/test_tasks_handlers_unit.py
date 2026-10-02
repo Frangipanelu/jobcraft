@@ -96,7 +96,7 @@ def test_interview_prep_calls_real_workflow_with_params(monkeypatch):
 
 
 def test_jd_analyze_structured_calls_real_workflow_with_params(monkeypatch):
-    """execute_jd_analyze_structured 应把 duties/requirements 对齐传给 workflow。"""
+    """execute_jd_analyze_structured 应把 user_id/duties/requirements/card_ids 对齐传给 workflow。"""
     from app.schemas.jobcraft import StructuredRequirementItem
     from app.tasks.handlers import execute_jd_analyze_structured
 
@@ -108,21 +108,23 @@ def test_jd_analyze_structured_calls_real_workflow_with_params(monkeypatch):
     def fake_workflow(**kwargs):
         captured.update(kwargs)
         return {
+            "job_analysis_id": 91,
+            "match_score": 66.0,
             "ats_profile": {"salary": "面议"},
-            "raw": {},
-            "company": "A",
-            "position": "P",
         }
 
     monkeypatch.setattr(
-        "app.workflows.job_analysis_flow.run_structured_ats_workflow", fake_workflow
+        "app.workflows.job_analysis_flow.run_structured_job_analysis_workflow",
+        fake_workflow,
     )
 
     result = execute_jd_analyze_structured(
         {
             "task_id": "t-s",
+            "user_id": 5,
             "company": "A",
             "position": "P",
+            "card_ids": [1, 2],
             "duties": ["职责1"],
             "requirements": [
                 {"text": "熟悉 Python", "tag": "required"},
@@ -131,7 +133,10 @@ def test_jd_analyze_structured_calls_real_workflow_with_params(monkeypatch):
         }
     )
 
+    assert result["job_analysis_id"] == 91
     assert result["ats_profile"]["salary"] == "面议"
+    assert captured["user_id"] == 5
+    assert captured["card_ids"] == [1, 2]
     assert captured["company"] == "A"
     assert captured["duties"] == ["职责1"]
     assert captured["requirements"][0] == StructuredRequirementItem(
@@ -139,6 +144,40 @@ def test_jd_analyze_structured_calls_real_workflow_with_params(monkeypatch):
     )
     assert captured["requirements"][1].tag == "preferred"
     assert any(u["task_id"] == "t-s" for u in fake_mgr.status_updates)
+
+
+def test_jd_analyze_structured_rejects_missing_user_id(monkeypatch):
+    """T-M4-1：落库路径必须携带 user_id，缺失即报错。"""
+    from app.tasks.handlers import execute_jd_analyze_structured
+
+    with pytest.raises(ValueError, match="user_id"):
+        execute_jd_analyze_structured(
+            {
+                "task_id": "t-s",
+                "company": "A",
+                "position": "P",
+                "card_ids": [1],
+                "duties": ["职责"],
+                "requirements": [{"text": "熟悉 Python", "tag": "required"}],
+            }
+        )
+
+
+def test_jd_analyze_structured_rejects_missing_cards(monkeypatch):
+    """T-M4-1：4 节点需经历卡参与评分，缺 card_ids 即报错（与 API 400 同语义）。"""
+    from app.tasks.handlers import execute_jd_analyze_structured
+
+    with pytest.raises(ValueError, match="经历卡"):
+        execute_jd_analyze_structured(
+            {
+                "task_id": "t-s",
+                "user_id": 5,
+                "company": "A",
+                "position": "P",
+                "duties": ["职责"],
+                "requirements": [{"text": "熟悉 Python", "tag": "required"}],
+            }
+        )
 
 
 def test_jd_analyze_structured_rejects_empty_input(monkeypatch):
@@ -439,7 +478,7 @@ def test_jd_analyze_structured_rejects_illegal_tag(monkeypatch):
         raise AssertionError("非法 tag 不得进入 workflow")
 
     monkeypatch.setattr(
-        "app.workflows.job_analysis_flow.run_structured_ats_workflow",
+        "app.workflows.job_analysis_flow.run_structured_job_analysis_workflow",
         must_not_run,
     )
 

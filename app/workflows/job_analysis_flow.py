@@ -1,8 +1,11 @@
 """
 岗位分析 Workflow
 
-- run_job_analysis_workflow: 旧版完整分析（4 节点：ATS → 语义评分 → 建议 → 落库，每节点 1 次 LLM）
-- run_structured_ats_workflow: 结构化前端分析（用户已分好 duties/requirements，单节点 StateGraph）
+- run_job_analysis_workflow: 完整分析（4 节点：ATS → 语义评分 → 建议 → 落库，每节点 1 次 LLM）；
+  可选 duties/requirements 结构化注入（T-M4-1 / Q2 裁决 C）
+- run_structured_job_analysis_workflow: 结构化前端分析（跳过 structurer，
+  注入 §14.2 结构化状态跑完整 4 节点，产出真实 job_analysis_id 与 match 字段）
+- run_structured_ats_workflow: 结构化 ATS 单节点入口（保留供仅需 ATS 画像的调用方）
 - run_structured_ats_split: 把粘贴的原始 JD 拆成结构化块（职责/要求，含 preferred 分流）
 """
 
@@ -11,7 +14,11 @@ from typing import Any, Dict, List, Optional, Tuple, TypedDict
 
 from langgraph.graph import END, START, StateGraph
 
-from app.agents.jd_ats_agent import JdAtsAgent, analyze_structured_jd
+from app.agents.jd_ats_agent import (
+    JdAtsAgent,
+    _structured_to_text,
+    analyze_structured_jd,
+)
 from app.agents.score_match_agent import ScoreMatchAgent
 from app.agents.sug_agent import SugAgent
 from app.schemas.jobcraft import (
@@ -34,6 +41,9 @@ class JobAnalysisState(TypedDict):
     company: str
     position: str
     jd_text: str
+    # 结构化注入（T-M4-1）：两者为 None 时走原文 ats 节点，否则走结构化注入节点
+    duties: Optional[List[str]]
+    requirements: Optional[List[StructuredRequirementItem]]
     card_ids: List[int]
     cards: List[Dict[str, Any]]
     ats: Optional[Any]
@@ -56,11 +66,16 @@ class StructuredATSState(TypedDict):
 # ============================================================
 
 
-def _run_legacy_ats(state: Dict[str, Any]) -> Dict[str, Any]:
-    """节点 1：加载卡片 + ATS 解析（1 次 LLM）。"""
-    user_id = state["user_id"]
-    cards = []
-    for cid in state["card_ids"]:
+def _load_cards(user_id: int, card_ids: List[int]) -> List[Dict[str, Any]]:
+    """加载所选经历卡并挂载当前激活表达（ats 节点共用，原文/结构化两路同语义）。
+
+    :param user_id: 当前用户 id。
+    :param card_ids: 所选经历卡 id 列表。
+    :return: 可用卡片列表（is_active）。
+    :raises ValueError: 所选卡片均不可用。
+    """
+    cards: List[Dict[str, Any]] = []
+    for cid in card_ids:
         c = db_tools.get_card(cid, user_id)
         if c and c.get("is_active"):
             try:
@@ -77,9 +92,30 @@ def _run_legacy_ats(state: Dict[str, Any]) -> Dict[str, Any]:
             cards.append(c)
     if not cards:
         raise ValueError("所选卡片均不可用")
+    return cards
 
+
+def _run_legacy_ats(state: Dict[str, Any]) -> Dict[str, Any]:
+    """节点 1：加载卡片 + ATS 解析（1 次 LLM，原文 jd_text 路径）。"""
+    cards = _load_cards(state["user_id"], state["card_ids"])
     ats_out = JdAtsAgent().run({"jd_text": state["jd_text"]})
     ats = ATSProfile(**ats_out["ats"])
+    return {"cards": cards, "ats": ats, "jd_req": jobcraft_analyze._ats_to_jdreq(ats)}
+
+
+def _run_structured_full_ats(state: Dict[str, Any]) -> Dict[str, Any]:
+    """节点 1（结构化注入，T-M4-1 / Q2 裁决 C）：加载卡片 + 结构化 ATS 解析。
+
+    跳过 structurer（用户已在表单拆分，_build_structured_from_input 按
+    hard/required/preferred 标签确定性入桶，classifier 不覆盖用户标签）；
+    3 档标签经 required/preferred 桶作评分与建议的 priority 初值。
+    """
+    cards = _load_cards(state["user_id"], state["card_ids"])
+    out = analyze_structured_jd(
+        duties=state.get("duties") or [],
+        requirements=state.get("requirements") or [],
+    )
+    ats = ATSProfile(**out["ats"])
     return {"cards": cards, "ats": ats, "jd_req": jobcraft_analyze._ats_to_jdreq(ats)}
 
 
@@ -202,19 +238,30 @@ def run_job_analysis_workflow(
     position: str,
     jd_text: str,
     card_ids: List[int],
+    duties: Optional[List[str]] = None,
+    requirements: Optional[List[StructuredRequirementItem]] = None,
 ) -> Dict[str, Any]:
-    """执行旧版完整岗位分析 Workflow，返回 JobAnalysisResult dict。
+    """执行完整岗位分析 Workflow，返回 JobAnalysisResult dict。
 
     拆为 ats → score → suggestions → collate 四节点，每节点最多 1 次 LLM 调用
     （AGENTS.md §1.2.5：单节点内不循环、不递归）。
+
+    :param duties: 结构化注入（T-M4-1）：岗位职责列表；与 requirements 同时
+        提供时 ats 节点走结构化分支（跳过 structurer），否则走原文分支。
+    :param requirements: 结构化注入：任职要求列表（含 hard/required/preferred 标签）。
     """
     workflow = StateGraph(JobAnalysisState)
-    workflow.add_node("_run_legacy_ats", _run_legacy_ats)
+    structured = duties is not None or requirements is not None
+    ats_node = "_run_structured_full_ats" if structured else "_run_legacy_ats"
+    workflow.add_node(
+        ats_node,
+        _run_structured_full_ats if structured else _run_legacy_ats,
+    )
     workflow.add_node("_run_legacy_score", _run_legacy_score)
     workflow.add_node("_run_legacy_suggestions", _run_legacy_suggestions)
     workflow.add_node("_run_legacy_collate", _run_legacy_collate)
-    workflow.add_edge(START, "_run_legacy_ats")
-    workflow.add_edge("_run_legacy_ats", "_run_legacy_score")
+    workflow.add_edge(START, ats_node)
+    workflow.add_edge(ats_node, "_run_legacy_score")
     workflow.add_edge("_run_legacy_score", "_run_legacy_suggestions")
     workflow.add_edge("_run_legacy_suggestions", "_run_legacy_collate")
     workflow.add_edge("_run_legacy_collate", END)
@@ -225,6 +272,8 @@ def run_job_analysis_workflow(
         "company": company,
         "position": position,
         "jd_text": jd_text,
+        "duties": duties,
+        "requirements": requirements,
         "card_ids": card_ids,
         "cards": [],
         "ats": None,
@@ -240,6 +289,45 @@ def run_job_analysis_workflow(
 # ============================================================
 #  结构化 JD 分析（前端已分好 duties/requirements + 标签）
 # ============================================================
+
+
+def run_structured_job_analysis_workflow(
+    user_id: int,
+    company: str,
+    position: str,
+    duties: List[str],
+    requirements: List[StructuredRequirementItem],
+    card_ids: List[int],
+) -> Dict[str, Any]:
+    """结构化 JD 完整分析 Workflow（T-M4-1 / Q2 裁决 C）。
+
+    结构化字段注入 job_analysis_flow §14.2 结构化状态后 4 节点照跑：
+
+    - 跳过 structurer（用户已在表单拆分，标签即事实，classifier 不覆盖）；
+    - 3 档标签经 required/preferred 桶作评分与建议的 priority 初值；
+    - score/suggestions/collate 与原文路径共用，落库产出真实
+      job_analysis_id 与 match 字段（FE-JD-REPORT-01 根因修复，
+      前端降级展示自此仅作兜底）。
+
+    :param user_id: 当前用户 id。
+    :param company: 公司名称。
+    :param position: 岗位名称（空则回落 ATS 岗位名）。
+    :param duties: 岗位职责逐条。
+    :param requirements: 任职要求逐条（含 hard/required/preferred 标签）。
+    :param card_ids: 所选经历卡 id 列表（至少 1 张）。
+    :return: JobAnalysisResult dict（与 /job/analyze 同构）。
+    :raises ValueError: 卡片不可用等入参问题。
+    """
+    jd_text = _structured_to_text(duties, requirements)
+    return run_job_analysis_workflow(
+        user_id=user_id,
+        company=company,
+        position=position,
+        jd_text=jd_text,
+        card_ids=card_ids,
+        duties=duties,
+        requirements=requirements,
+    )
 
 
 def _run_structured_ats(state: Dict[str, Any]) -> Dict[str, Any]:
