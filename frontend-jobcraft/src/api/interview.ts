@@ -7,6 +7,8 @@ import type {
   InterviewPrepResult,
   InterviewPrepRecord,
   InterviewReviewCreateResult,
+  InterviewReviewDetailResponse,
+  InterviewReviewRecord,
   InterviewReviewResult,
 } from './types'
 
@@ -114,6 +116,22 @@ export async function analyzeInterviewReview(
       method: 'POST',
       body: JSON.stringify({ user_id: userId, selected_sequences: selectedSequences }),
     }
+  )
+}
+
+/** T-M8-2：复盘记录列表（含 job_analysis_id，用于详情页定位 record） */
+export async function listInterviewReviewRecords(): Promise<{
+  records: InterviewReviewRecord[]
+}> {
+  return request<{ records: InterviewReviewRecord[] }>('/api/jobcraft/interview-review')
+}
+
+/** T-M8-2：详情页直读——record（含 analysis）+ interview_qa_pairs 题库行 */
+export async function getInterviewReviewDetail(
+  recordId: number
+): Promise<InterviewReviewDetailResponse> {
+  return request<InterviewReviewDetailResponse>(
+    `/api/jobcraft/interview-review/${recordId}`
   )
 }
 

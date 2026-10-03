@@ -1,7 +1,11 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useToastActions } from '../../context/JobCraftContext';
 import { useInterviewsQuery } from '../../features/interview/hooks';
-import { useApplyReviewFeedbackMutation } from '../../features/review/hooks';
+import {
+  useApplyReviewFeedbackMutation,
+  useInterviewReviewDetailQuery,
+} from '../../features/review/hooks';
+import { buildReviewFromRecord } from '../../features/review/mappers';
 import { useTabNavigate } from '../../router/tabPaths';
 import {
   Star,
@@ -27,7 +31,13 @@ export const InterviewReviewDetailView: React.FC<InterviewReviewDetailViewProps>
   const go = useTabNavigate();
 
   const currentInterview = interviews.find((i) => i.id === interviewId);
-  const review = currentInterview?.review;
+  // T-M8-2：详情页直读 interview_qa_pairs —— 服务端 record+题库优先，内存 review 回退
+  const detailQuery = useInterviewReviewDetailQuery(currentInterview);
+  const review = useMemo(() => {
+    if (!currentInterview) return undefined;
+    if (detailQuery.data) return buildReviewFromRecord(currentInterview, detailQuery.data);
+    return currentInterview.review;
+  }, [currentInterview, detailQuery.data]);
 
   const [selectedQAIndex, setSelectedQAIndex] = useState<number>(0);
   // P10-b-lite 轻闸门：写回经历资产前需用户二次确认（§19.4/§19.6）
@@ -36,7 +46,9 @@ export const InterviewReviewDetailView: React.FC<InterviewReviewDetailViewProps>
   if (!currentInterview || !review) {
     return (
       <div className="max-w-4xl mx-auto p-12 text-center space-y-4">
-        <div className="text-base text-muted">暂无本场面试的复盘报告</div>
+        <div className="text-base text-muted">
+          {detailQuery.isLoading ? '正在加载复盘报告…' : '暂无本场面试的复盘报告'}
+        </div>
         <button
           onClick={() => go('interview_review_center')}
           className="px-4 py-2 rounded-lg bg-sage text-white text-xs font-semibold cursor-pointer"

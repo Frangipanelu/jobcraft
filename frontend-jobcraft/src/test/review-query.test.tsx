@@ -46,6 +46,8 @@ const interview = vi.hoisted(() => ({
   createInterviewReview: vi.fn(),
   uploadInterviewReview: vi.fn(),
   analyzeInterviewReview: vi.fn(),
+  listInterviewReviewRecords: vi.fn(),
+  getInterviewReviewDetail: vi.fn(),
 }));
 
 const tasks = vi.hoisted(() => ({
@@ -438,6 +440,50 @@ beforeEach(() => {
     ],
   }));
   interview.listInterviewPreps.mockResolvedValue({ records: [] });
+  // T-M8-2 详情直读默认：服务端无 record（组件回退内存 review / 空态）
+  interview.listInterviewReviewRecords.mockResolvedValue({ records: [] });
+  interview.getInterviewReviewDetail.mockResolvedValue({
+    record: {
+      id: 55,
+      user_id: 1,
+      title: '腾讯 AI 产品经理产品面复盘',
+      company: '腾讯',
+      position: 'AI 产品经理',
+      round_type: 'product',
+      job_analysis_id: 13,
+      status: 'done',
+      created_at: '2026-09-21T10:00:00',
+      analysis: {
+        ...ANALYSIS,
+        overall_score: 76,
+        summary: '服务端直读总评',
+        strengths: ['直读优势'],
+        weaknesses: ['直读短板'],
+      },
+    },
+    qa_pairs: [
+      {
+        id: 31,
+        record_id: 55,
+        sequence: 1,
+        speaker: '面试官',
+        start_time: '0.1',
+        content: '服务端直读题目',
+        is_question: true,
+        question_text: '服务端直读题目',
+        dimension: '技术深度',
+        level: '深挖',
+        intent: '考察直读链路',
+        expected_answer: '期望回答',
+        my_answer: '我的直读回答',
+        feedback: ['直读反馈'],
+        suggestions: ['直读建议'],
+        score: 76,
+        related_card_id: 7,
+        related_card_title: '端侧大模型量化评测',
+      },
+    ],
+  });
   const createResult = {
     record_id: 101,
     status: 'pending',
@@ -801,6 +847,111 @@ describe('P10-b-lite 轻闸门：复盘反哺写回前需二次确认', () => {
 
     await waitFor(() => expect(screen.getByText('沉淀至经历库')).toBeInTheDocument());
     expect(experience.updateCard).not.toHaveBeenCalled();
+  });
+});
+
+describe('T-M8-2 详情页直读 interview_qa_pairs', () => {
+  const RECORD_TX_ROW = {
+    id: 55,
+    user_id: 1,
+    title: '腾讯 AI 产品经理产品面复盘',
+    company: '腾讯',
+    position: 'AI 产品经理',
+    round_type: 'product',
+    job_analysis_id: 13,
+    status: 'done',
+    created_at: '2026-09-21T10:00:00',
+  };
+
+  it('刷新场景（内存无 review）：按 company/position/round 定位 record 后直读渲染题库', async () => {
+    interview.listInterviewReviewRecords.mockResolvedValue({ records: [RECORD_TX_ROW] });
+
+    renderWithProviders(
+      <>
+        <Seeder interviews={[INT_TX_PREP]} experiences={[EXP_V1]} jobs={[]} />
+        <InterviewReviewDetailView interviewId="prep-8" />
+      </>,
+    );
+
+    // 直读数据渲染（record.analysis 总评 + qa_pairs 题目），而非「暂无复盘报告」空态
+    expect(await screen.findByText('腾讯 · AI 产品经理')).toBeInTheDocument();
+    expect(
+      (await screen.findAllByText('服务端直读题目')).length,
+    ).toBeGreaterThan(0);
+    expect(screen.getByText(/识别 1 组 QA/)).toBeInTheDocument();
+    expect(interview.listInterviewReviewRecords).toHaveBeenCalled();
+    expect(interview.getInterviewReviewDetail).toHaveBeenCalledWith(55);
+  });
+
+  it('直读为 SoT：服务端 record+题库优先于内存 review 展示', async () => {
+    interview.listInterviewReviewRecords.mockResolvedValue({
+      records: [{ ...RECORD_TX_ROW, id: 99, company: '字节跳动', round_type: 'tech', job_analysis_id: 12 }],
+    });
+    interview.getInterviewReviewDetail.mockResolvedValue({
+      record: {
+        id: 99,
+        user_id: 1,
+        title: '字节跳动 AI 产品经理技术面复盘',
+        company: '字节跳动',
+        position: 'AI 产品经理',
+        round_type: 'tech',
+        job_analysis_id: 12,
+        status: 'done',
+        created_at: '2026-09-22T09:00:00',
+        analysis: { ...ANALYSIS, overall_score: 62, summary: '直读总评覆盖内存' },
+      },
+      qa_pairs: [
+        {
+          id: 41,
+          record_id: 99,
+          sequence: 1,
+          speaker: '面试官',
+          start_time: '0.1',
+          content: '服务端直读题目覆盖内存',
+          is_question: true,
+          question_text: '服务端直读题目覆盖内存',
+          dimension: '技术深度',
+          level: '深挖',
+          intent: '考察直读链路',
+          expected_answer: '期望回答',
+          my_answer: '我的直读回答',
+          feedback: ['直读反馈'],
+          suggestions: ['直读建议'],
+          score: 62,
+          related_card_id: null,
+          related_card_title: null,
+        },
+      ],
+    });
+
+    renderWithProviders(
+      <>
+        <Seeder interviews={[INT_YUAN]} experiences={[EXP_V1]} jobs={[JOB_12]} />
+        <InterviewReviewDetailView interviewId="prep-7" />
+      </>,
+    );
+
+    // 内存 REVIEW.overallScore=85/qaList=[]；直读 analysis=62 + 1 条题目
+    expect(await screen.findByText('字节跳动 · AI 产品经理')).toBeInTheDocument();
+    expect(
+      (await screen.findAllByText('服务端直读题目覆盖内存')).length,
+    ).toBeGreaterThan(0);
+    expect(screen.getByText(/识别 1 组 QA/)).toBeInTheDocument();
+    expect(screen.getAllByText('62').length).toBeGreaterThan(0);
+    expect(screen.queryByText(/识别 0 组 QA/)).not.toBeInTheDocument();
+  });
+
+  it('服务端无匹配 record：回退内存 review（不回归现状）', async () => {
+    renderWithProviders(
+      <>
+        <Seeder interviews={[INT_YUAN]} experiences={[EXP_V1]} jobs={[JOB_12]} />
+        <InterviewReviewDetailView interviewId="prep-7" />
+      </>,
+    );
+
+    expect(await screen.findByText('字节跳动 · AI 产品经理')).toBeInTheDocument();
+    expect(screen.getAllByText('85').length).toBeGreaterThan(0);
+    expect(interview.getInterviewReviewDetail).not.toHaveBeenCalled();
   });
 });
 

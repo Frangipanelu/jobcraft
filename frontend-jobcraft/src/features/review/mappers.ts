@@ -1,4 +1,8 @@
-import type { InterviewReviewResult } from '../../api/types';
+import type {
+  InterviewReviewDetailResponse,
+  InterviewReviewQaPair,
+  InterviewReviewResult,
+} from '../../api/types';
 import {
   Experience,
   ExperienceProposedChange,
@@ -83,6 +87,93 @@ export function buildReviewPatchFromAnalysis(
     coreProblems: analysis.weaknesses || [],
     aiDiagnosis: analysis.summary || '',
     qaList
+  };
+}
+
+/**
+ * T-M8-2：把 interview_qa_pairs 直读行映射为详情页消费的 `InterviewQA[]`。
+ * 四维诊断沿用行内真实 score 派生（与 buildReviewPatchFromAnalysis 同法，不伪造）；
+ * related_card_id → relatedExperienceId，打通改进回答与经历卡的关联。
+ */
+export function qaPairsToQaList(pairs: InterviewReviewQaPair[]): InterviewQA[] {
+  return pairs.map((p, idx) => {
+    const score = p.score || 0;
+    const stars = Math.max(3, Math.min(5, Math.round(score / 20)));
+    return {
+      id: `qa-${p.sequence || idx + 1}`,
+      qIndex: idx + 1,
+      question: p.question_text || '未记录题目',
+      score,
+      candidateAnswer: p.my_answer || '',
+      transcript: p.my_answer || undefined,
+      metricCards: {
+        clarityScore: score,
+        clarityDesc: 'AI 综合评估',
+        impactScore: score,
+        impactDesc: 'AI 综合评估',
+        decisionScore: score,
+        decisionDesc: 'AI 综合评估',
+        fluencyScore: score,
+        fluencyDesc: 'AI 综合评估'
+      },
+      interviewerIntent: {
+        mainPoints: [p.intent || p.dimension || ''],
+        importanceStars: stars,
+        productAbilityStars: stars,
+        techDepthStars: stars
+      },
+      answerAnalysis: {
+        completeness: score,
+        structure: score,
+        persuasiveness: score,
+        jobRelevance: score,
+        clarity: score,
+        impact: score,
+        decision: score,
+        fluency: score
+      },
+      identifiedIssues: p.feedback || [],
+      suggestionAdvice: (p.suggestions || []).join(' ') || '',
+      relatedExperienceId: p.related_card_id != null ? String(p.related_card_id) : undefined
+    };
+  });
+}
+
+/**
+ * T-M8-2：详情页直读——用服务端 record（analysis_json）+ interview_qa_pairs 重建
+ * `InterviewReview`，使复盘详情刷新后仍可展示（不再依赖创建会话的内存 patch）。
+ * - 聚合字段（总评/优劣势/诊断）优先取 record.analysis；未跑深度分析时整体分取
+ *   qa_pairs 真实 score 均值（无分数则 0），不使用假分公式；
+ * - qaList 一律来自直读 qa_pairs（含 related_card_id 关联），analysis 缺失时兜底空。
+ */
+export function buildReviewFromRecord(
+  interview: Interview,
+  detail: InterviewReviewDetailResponse
+): InterviewReview {
+  const { record, qa_pairs } = detail;
+  const analysis: InterviewReviewResult | undefined =
+    record.analysis && Array.isArray(record.analysis.questions) ? record.analysis : undefined;
+  const scored = qa_pairs.filter((p) => (p.score || 0) > 0);
+  const fallbackScore = scored.length
+    ? Math.round(scored.reduce((sum, p) => sum + p.score, 0) / scored.length)
+    : 0;
+  const patch: Partial<InterviewReview> = analysis
+    ? buildReviewPatchFromAnalysis(
+        analysis,
+        qa_pairs.length || (analysis.questions || []).length
+      )
+    : { totalQACount: qa_pairs.length };
+  const qaList = qaPairsToQaList(qa_pairs);
+  const review = buildReviewFromPatch(interview, {
+    ...patch,
+    overallScore: patch.overallScore ?? fallbackScore,
+    totalQACount: qa_pairs.length || patch.totalQACount || 0,
+    qaList: qaList.length ? qaList : patch.qaList
+  });
+  return {
+    ...review,
+    recordId: record.id,
+    reviewDate: (record.created_at || '').slice(0, 10) || review.reviewDate
   };
 }
 

@@ -1,9 +1,14 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as authApi from '../../api/auth';
 import * as experienceApi from '../../api/experience';
 import * as interviewApi from '../../api/interview';
 import * as tasksApi from '../../api/tasks';
-import type { InterviewReviewCreateResult, InterviewReviewResult } from '../../api/types';
+import type {
+  InterviewReviewCreateResult,
+  InterviewReviewDetailResponse,
+  InterviewReviewRecord,
+  InterviewReviewResult,
+} from '../../api/types';
 import { Experience, Interview, InterviewReview, Job } from '../../types/jobcraft';
 import { EXPERIENCES_QUERY_KEY, versionsToHistory } from '../experiences/mappers';
 import { JOBS_QUERY_KEY } from '../jobs/mappers';
@@ -106,7 +111,10 @@ export function useCreateInterviewReviewMutation() {
             totalQACount: result.qa_pair_count || 0,
           };
 
-      const review = buildReviewFromPatch(targetInterview, patch);
+      const review: InterviewReview = {
+        ...buildReviewFromPatch(targetInterview, patch),
+        recordId: result.record_id,
+      };
       return { interviewId, review };
     },
     onSuccess: ({ interviewId, review }) => {
@@ -119,6 +127,8 @@ export function useCreateInterviewReviewMutation() {
 
 
       const target = prev.find((i) => i.id === interviewId);
+      // T-M8-2：新 record 落库后重解析详情直读（recordId 已入 cache，下一次 fetch 走快路径）
+      queryClient.invalidateQueries({ queryKey: [INTERVIEW_REVIEW_DETAIL_QUERY_KEY] });
       if (target?.jobId) {
         const jobs =
           queryClient.getQueryData<Job[]>([...JOBS_QUERY_KEY]) || [];
@@ -134,6 +144,67 @@ const nextJobs: Job[] = jobs.map((j) =>
         // FE-CACHE-01：复盘落库改变 dashboard review_count，定向重验 jobs 镜像
         queryClient.invalidateQueries({ queryKey: [...JOBS_QUERY_KEY] });
       }
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// useInterviewReviewDetailQuery（T-M8-2 详情页直读）
+// ---------------------------------------------------------------------------
+
+export const INTERVIEW_REVIEW_DETAIL_QUERY_KEY = 'interview-review-detail';
+
+/**
+ * 定位 interview 对应的 interview_records 行：
+ * 1) job_analysis_id 精确匹配（T-M8-7 FE 透传后的稳态路径）；
+ * 2) 回退 company + position + round_type（与 create payload 同源字段）；
+ * 3) 仍无则回退 company + position（列表按创建时间倒序，取最新一场）。
+ * 均未命中返回 null（详情页回退内存 review / 空态）。
+ */
+function pickReviewRecordId(
+  records: InterviewReviewRecord[],
+  interview: Interview,
+): number | null {
+  let candidates = records;
+  const linked = interview.prepSource?.job_analysis_id;
+  if (linked != null && linked !== 0) {
+    const byJob = records.filter((r) => r.job_analysis_id === linked);
+    if (byJob.length > 0) candidates = byJob;
+  }
+  const exact = candidates.find(
+    (r) =>
+      r.company === interview.company &&
+      r.position === interview.role &&
+      r.round_type === interview.roundType,
+  );
+  if (exact) return exact.id;
+  const loose = candidates.find(
+    (r) => r.company === interview.company && r.position === interview.role,
+  );
+  return loose?.id ?? null;
+}
+
+/**
+ * T-M8-2：详情页直读 query —— 拉取 record + interview_qa_pairs。
+ * record 定位：内存 review.recordId 快路径（创建当次会话）→ records 列表匹配（跨会话刷新）。
+ * 返回 null 表示服务端无对应 record（组件回退内存 review / 空态）。
+ */
+export function useInterviewReviewDetailQuery(interview?: Interview) {
+  return useQuery<InterviewReviewDetailResponse | null>({
+    queryKey: [INTERVIEW_REVIEW_DETAIL_QUERY_KEY, interview?.id],
+    enabled: !!interview,
+    staleTime: 60_000,
+    queryFn: async () => {
+      if (!interview) return null;
+      const cachedRecordId = interview.review?.recordId;
+      if (cachedRecordId) {
+        return interviewApi.getInterviewReviewDetail(cachedRecordId);
+      }
+      const { records } = await interviewApi.listInterviewReviewRecords();
+      const recordId = pickReviewRecordId(records, interview);
+      return recordId != null
+        ? interviewApi.getInterviewReviewDetail(recordId)
+        : null;
     },
   });
 }

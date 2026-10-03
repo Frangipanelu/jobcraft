@@ -311,6 +311,8 @@ export interface ReviewExperienceFeedback {
 export interface InterviewReview {
   id: string;
   interviewId: string;
+  /** T-M8-2：interview_records 主键（创建复盘后写入，详情页直读题库的定位键） */
+  recordId?: number;
   company: string;
   role: string;
   roundName: string;

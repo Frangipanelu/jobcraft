@@ -1,9 +1,15 @@
 import { describe, it, expect } from 'vitest';
-import type { InterviewReviewResult } from '../../api/types';
+import type {
+  InterviewReviewDetailResponse,
+  InterviewReviewQaPair,
+  InterviewReviewResult,
+} from '../../api/types';
 import type { Experience } from '../../types/jobcraft';
 import {
   buildReviewPatchFromAnalysis,
   buildReviewFromPatch,
+  buildReviewFromRecord,
+  qaPairsToQaList,
   nextExperienceVersion,
   applyProposedChanges,
   applyFeedbackSuggestions,
@@ -55,6 +61,43 @@ const INTERVIEW = {
   readinessPercent: 80,
   status: 'preparing',
 } as const;
+
+const QA_PAIR: InterviewReviewQaPair = {
+  id: 11,
+  record_id: 101,
+  sequence: 1,
+  speaker: '面试官',
+  start_time: '0.1',
+  content: '如何设计 RAG 评测体系？',
+  is_question: true,
+  question_text: '如何设计 RAG 评测体系？',
+  dimension: '技术深度',
+  level: '深挖',
+  intent: '考察评测体系设计',
+  expected_answer: '拆分维度与指标',
+  my_answer: '拆分评测维度，离线指标 + 线上 A/B',
+  feedback: ['缺商业闭环量化'],
+  suggestions: ['补充选型对比'],
+  score: 85,
+  related_card_id: 7,
+  related_card_title: '端侧大模型量化评测',
+};
+
+const DETAIL: InterviewReviewDetailResponse = {
+  record: {
+    id: 101,
+    user_id: 1,
+    title: '字节跳动 AI 产品经理技术面复盘',
+    company: '字节跳动',
+    position: 'AI 产品经理',
+    round_type: 'tech',
+    job_analysis_id: 12,
+    status: 'done',
+    created_at: '2026-09-19T10:00:00',
+    analysis: ANALYSIS,
+  },
+  qa_pairs: [QA_PAIR],
+};
 
 describe('buildReviewPatchFromAnalysis', () => {
   it('score 一律来自真实数据：competencies / metricCards / 星级由 overall / per-question score 派生', () => {
@@ -136,6 +179,76 @@ describe('buildReviewFromPatch', () => {
       { overallScore: 85, qaBreakdown: [{ id: 'a', question: 'q' } as never] } as never,
     );
     expect(review.overallScore).toBe(85);
+    expect(review.totalQACount).toBe(1);
+  });
+});
+
+describe('qaPairsToQaList（T-M8-2 直读行映射）', () => {
+  it('score 派生四维与星级、feedback→identifiedIssues、suggestions→suggestionAdvice', () => {
+    const list = qaPairsToQaList([QA_PAIR]);
+    expect(list).toHaveLength(1);
+    const qa = list[0];
+    expect(qa.question).toBe('如何设计 RAG 评测体系？');
+    expect(qa.score).toBe(85);
+    expect(qa.candidateAnswer).toBe('拆分评测维度，离线指标 + 线上 A/B');
+    expect(qa.metricCards!.clarityScore).toBe(85);
+    expect(qa.answerAnalysis.structure).toBe(85);
+    expect(qa.interviewerIntent.importanceStars).toBe(4);
+    expect(qa.identifiedIssues).toEqual(['缺商业闭环量化']);
+    expect(qa.suggestionAdvice).toBe('补充选型对比');
+  });
+
+  it('related_card_id → relatedExperienceId 打通反哺关联；null 时不产生；题目缺失兜底', () => {
+    const [mapped] = qaPairsToQaList([QA_PAIR]);
+    expect(mapped.relatedExperienceId).toBe('7');
+
+    const [bare] = qaPairsToQaList([
+      { ...QA_PAIR, related_card_id: null, question_text: '', score: 0 },
+    ]);
+    expect(bare.relatedExperienceId).toBeUndefined();
+    expect(bare.question).toBe('未记录题目');
+    expect(bare.score).toBe(0);
+  });
+});
+
+describe('buildReviewFromRecord（T-M8-2 详情直读重建）', () => {
+  it('聚合取 record.analysis、qaList 取直读 qa_pairs、recordId/reviewDate 落位', () => {
+    const review = buildReviewFromRecord({ ...INTERVIEW } as never, DETAIL);
+
+    expect(review.recordId).toBe(101);
+    expect(review.reviewDate).toBe('2026-09-19');
+    expect(review.overallScore).toBe(85);
+    expect(review.highlights).toEqual(['指标拆解清晰']);
+    expect(review.drawbacks).toEqual(['商业闭环考虑不足']);
+    expect(review.aiDiagnosis).toBe('整体表现良好，指标拆解清晰');
+    expect(review.qaList).toHaveLength(1);
+    expect(review.qaList![0].relatedExperienceId).toBe('7');
+    expect(review.totalQACount).toBe(1);
+  });
+
+  it('未跑深度分析（analysis 为空对象）：总分取 qa_pairs score 真实均值，不派生假分', () => {
+    const detail: InterviewReviewDetailResponse = {
+      record: { ...DETAIL.record, analysis: {} as unknown as InterviewReviewResult },
+      qa_pairs: [
+        { ...QA_PAIR, id: 11, sequence: 1, score: 70 },
+        { ...QA_PAIR, id: 12, sequence: 2, score: 80 },
+      ],
+    };
+    const review = buildReviewFromRecord({ ...INTERVIEW } as never, detail);
+
+    expect(review.overallScore).toBe(75);
+    // 无 analysis 不派生四维（buildReviewFromPatch 归一为 []，详情页渲染 0 条）
+    expect(review.competencies).toEqual([]);
+    expect(review.qaList).toHaveLength(2);
+  });
+
+  it('既无 analysis 又无分数：overallScore 为 0（不伪造）', () => {
+    const detail: InterviewReviewDetailResponse = {
+      record: { ...DETAIL.record, analysis: {} as unknown as InterviewReviewResult },
+      qa_pairs: [{ ...QA_PAIR, score: 0 }],
+    };
+    const review = buildReviewFromRecord({ ...INTERVIEW } as never, detail);
+    expect(review.overallScore).toBe(0);
     expect(review.totalQACount).toBe(1);
   });
 });
