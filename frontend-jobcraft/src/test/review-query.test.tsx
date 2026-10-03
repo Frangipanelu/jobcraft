@@ -1011,6 +1011,8 @@ describe('FE-UPLOAD-01 CreateReview 上传路径（非法文件/缺文件不得�
 
     expect(await screen.findByText('已选择：速记.txt')).toBeInTheDocument();
     expect(screen.queryByText('文件无法导入')).not.toBeInTheDocument();
+    // T-M8-5：去音频后标注「待接入转写」（spec §3 转写=上游）
+    expect(screen.getByText(/音频\/录音上传待接入转写/)).toBeInTheDocument();
     expect(interview.uploadInterviewReview).not.toHaveBeenCalled();
   });
 

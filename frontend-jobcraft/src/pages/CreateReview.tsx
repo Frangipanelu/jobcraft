@@ -518,7 +518,8 @@ export const CreateReview: React.FC<{ initialJobId?: string }> = ({ initialJobId
                     {selectedJob?.company} · {selectedJob?.role}
                   </div>
                   <div className="text-[11px] text-muted mt-0.5">
-                    {selectedJob?.department || '核心业务线'} · {selectedJob?.salaryRange || '40K–60K · 16薪'}
+                  {/* T-M5-7 / Q4：兜底假文案中性化（空部门/薪资显示 '—'） */}
+                  {selectedJob?.department || '—'} · {selectedJob?.salaryRange || '—'}
                   </div>
                 </div>
                 <button
@@ -777,6 +778,9 @@ export const CreateReview: React.FC<{ initialJobId?: string }> = ({ initialJobId
                       </div>
                       <div className="text-[11px] text-muted mt-1">
                         支持 TXT、MD、PDF、DOCX 格式，单文件最大 10MB
+                      </div>
+                      <div className="text-[11px] text-faint mt-0.5">
+                        音频/录音上传待接入转写（spec §3：转写为上游能力）
                       </div>
                     </div>
                     <span className="text-xs font-semibold px-4 py-2 rounded-xl bg-white border border-edge text-ink group-hover:border-sage shadow-2xs">
