@@ -6,6 +6,7 @@ import type { CapabilityGap, JDAnalysis } from '../../types/jobcraft';
 type JDDetailInput = Pick<
   JobAnalysisDetail,
   | 'job_analysis_id'
+  | 'job_id'
   | 'company'
   | 'position'
   | 'jd_text'
@@ -47,7 +48,8 @@ export function analysisToJD(result: JobAnalysisResult, jobId?: string): JDAnaly
 
   return {
     id: String(result.job_analysis_id),
-    jobId: jobId,
+    // T-M5-5：后端 job 实体 id 优先（权威），缺省回退调用方传入的本地目标岗 id
+    jobId: result.job_id != null ? `job-${result.job_id}` : jobId,
     company: result.company,
     role: result.position,
     salaryRange: ats?.salary || '面议',
@@ -177,6 +179,7 @@ export function analysisDetailToJD(detail: JDDetailInput): JDAnalysis {
     goal: goalText,
     recommendedExperiences: [],
     createdAt: detail.created_at || '',
-    jobId: undefined
+    // T-M5-5：列表路径按 job_analysis.job_id 关联岗位（P4-4a），缺省 undefined 由报告页走空态
+    jobId: detail.job_id != null ? `job-${detail.job_id}` : undefined
   };
 }

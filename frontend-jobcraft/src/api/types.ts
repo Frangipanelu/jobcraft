@@ -242,6 +242,8 @@ export interface CapabilityGapWire {
 
 export interface JobAnalysisResult {
   job_analysis_id: number
+  /** 归属岗位实体 id（job 表，T-M5-5 jd-byte-1：FE 据此对齐 jobId，缺省=旧分析无归属） */
+  job_id?: number | null
   user_id: number
   company: string
   position: string
@@ -307,8 +309,10 @@ export interface InterviewReviewRecord {
   company: string
   position: string
   round_type: string
+  /** T-M8-7 起 FE 透传后非空；存量行可能为 null（匹配 interview 时兜底 company/position/round） */
+  job_analysis_id?: number | null
   status: string
-  created_at: string
+  created_at: string | null
 }
 
 export interface InterviewReviewDetailRecord extends InterviewReviewRecord {
@@ -366,6 +370,34 @@ export interface InterviewReviewQuestionTableResult {
   record_id: number
   status: string
   questions: InterviewReviewParsePreviewQAPair[]
+}
+
+/** T-M8-2：interview_qa_pairs 表直读行（含深度研判字段，详情页直读数据源） */
+export interface InterviewReviewQaPair {
+  id: number
+  record_id: number
+  sequence: number
+  speaker: string
+  start_time: string
+  content: string
+  is_question: boolean
+  question_text: string
+  dimension: string
+  level: string
+  intent: string
+  expected_answer: string
+  my_answer: string
+  feedback: string[]
+  suggestions: string[]
+  score: number
+  related_card_id: number | null
+  related_card_title: string | null
+}
+
+/** T-M8-2：GET /api/jobcraft/interview-review/{record_id} 响应（record + 直读题库） */
+export interface InterviewReviewDetailResponse {
+  record: InterviewReviewDetailRecord
+  qa_pairs: InterviewReviewQaPair[]
 }
 
 // ============================================================

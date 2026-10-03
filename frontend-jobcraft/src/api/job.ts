@@ -67,6 +67,8 @@ export async function analyzeJob(payload: {
 export interface JobAnalysisDetail {
   id: number;
   job_analysis_id: number;
+  /** 归属岗位实体 id（job 表，T-M5-5：列表路径按此关联岗位，消灭错误回落） */
+  job_id?: number | null;
   company: string;
   position: string;
   jd_text: string;

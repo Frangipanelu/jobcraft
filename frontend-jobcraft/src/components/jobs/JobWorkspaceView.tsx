@@ -219,7 +219,7 @@ export const JobWorkspaceView: React.FC<JobWorkspaceViewProps> = ({
         {activeTab === 'jd' && (
           <div className="animate-in fade-in duration-200">
             <JDReportDetailView
-              analysisId={currentJob.jdAnalysisId || 'jd-byte-1'}
+              analysisId={currentJob.jdAnalysisId}
               onNavigateToResume={() => setActiveTab('resume')}
               onNavigateToInterview={() => setActiveTab('interview')}
               embedded={true}

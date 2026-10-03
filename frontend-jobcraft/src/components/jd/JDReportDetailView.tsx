@@ -71,8 +71,8 @@ export const JDReportDetailView: React.FC<JDReportDetailViewProps> = ({
 
   const [isReanalyzing, setIsReanalyzing] = useState(false);
 
-  const currentAnalysis =
-    jdAnalyses.find((a) => a.id === analysisId) || jdAnalyses[0];
+  // T-M5-5（jd-byte-1）：仅按 analysisId 精确命中；找不到走下方「生成中」/空态，禁止回落第一条分析（会显示别的岗位报告）
+  const currentAnalysis = jdAnalyses.find((a) => a.id === analysisId);
 
   // 加载中或分析尚未完成时显示 loading 状态
   if (isLoading || (!currentAnalysis && jdAnalyses.length === 0)) {
@@ -221,12 +221,13 @@ export const JDReportDetailView: React.FC<JDReportDetailViewProps> = ({
     );
   }
 
+  // T-M5-5：仅按分析归属（jobId / 公司+岗位）匹配，禁止回落 jobs[0]（错误关联岗位）
   const matchedJob = currentAnalysis
     ? jobs.find(
         (j) =>
           j.id === currentAnalysis.jobId ||
           (j.company === currentAnalysis.company && j.role === currentAnalysis.role)
-      ) || jobs[0]
+      )
     : undefined;
 
   const handleReturnToWizard = () => {

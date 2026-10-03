@@ -133,7 +133,7 @@ const STRUCTURED_ATS: ATSProfile = {
   raw_summary: '',
 };
 
-function buildStructuredResult(): JobAnalysisResult {
+function buildStructuredResult(overrides: Partial<JobAnalysisResult> = {}): JobAnalysisResult {
   return buildResult({
     job_analysis_id: 88,
     jd_text: '1. 负责策略制定\n1. （硬性门槛）3年经验',
@@ -156,6 +156,7 @@ function buildStructuredResult(): JobAnalysisResult {
     match_score: 71,
     match_level: '基本匹配',
     gap_analysis: '结构化分析完成',
+    ...overrides,
   });
 }
 
@@ -170,6 +171,12 @@ const JobsCacheState = () => {
     ? `${jobs.length}|${jobs[0].jdAnalysisId}|${jobs[0].matchScore}`
     : '0|';
   return <span data-testid="jobs-cache-state">{detail}</span>;
+};
+
+/** T-M5-5：jobs 行 id spy（验证合成岗对齐实体行 id=job-N）。 */
+const JobsIdSpy = () => {
+  const { data: jobs = [] } = useJobsQuery();
+  return <span data-testid="jobs-ids">{jobs.map((j) => j.id).join(',')}</span>;
 };
 
 const DeleteHarness = () => {
@@ -329,6 +336,15 @@ describe('JDReportDetailView 迁移读路径', () => {
     expect(await screen.findByText('策略产品经理')).toBeInTheDocument();
     expect(screen.getByText('腾讯')).toBeInTheDocument();
     expect(screen.queryByText('字节跳动')).not.toBeInTheDocument();
+  });
+
+  it('T-M5-5：analysisId 未命中禁止回落第一条分析（不显示别的岗位的报告）', async () => {
+    renderWithProviders(<JDReportDetailView analysisId="999" />);
+
+    // 列表非空但 id 未命中 → 走「生成中」降级，而非回落 jdAnalyses[0]（腾讯报告）
+    expect(await screen.findByText('分析报告生成中...')).toBeInTheDocument();
+    expect(screen.queryByText('策略产品经理')).not.toBeInTheDocument();
+    expect(screen.queryByText('腾讯')).not.toBeInTheDocument();
   });
 });
 
@@ -554,5 +570,25 @@ describe('JD create 迁移（features/jd/hooks）', () => {
     fireEvent.click(await screen.findByText('发起结构化分析'));
 
     await waitFor(() => expect(screen.getByTestId('structured-error').textContent).toBe('任务超时'));
+  });
+
+  it('T-M5-5：分析响应带 job_id → 本地合成岗对齐实体行 id（job-N），分析挂后端 jobId', async () => {
+    job.analyzeStructuredJd.mockResolvedValue(buildStructuredResult({ job_id: 42 }));
+
+    renderWithProviders(
+      <>
+        <StructuredCreateHarness />
+        <JobsCacheState />
+        <JobsIdSpy />
+      </>,
+    );
+
+    fireEvent.click(await screen.findByText('发起结构化分析'));
+    await waitFor(() =>
+      expect(screen.getByTestId('structured-result').textContent).toMatch(/^88\|71\|结构化分析完成/),
+    );
+
+    expect(screen.getByTestId('jobs-cache-state').textContent).toBe('1|88|71');
+    expect(screen.getByTestId('jobs-ids').textContent).toBe('job-42');
   });
 });

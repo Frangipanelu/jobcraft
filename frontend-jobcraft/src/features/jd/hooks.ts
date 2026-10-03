@@ -127,6 +127,10 @@ export function useCreateJdAnalysisMutation() {
         j.id === targetJobId
           ? {
               ...j,
+              // T-M5-5（jd-byte-1）：后端 job 实体 id 回填，本地合成岗对齐实体行 id
+              ...(result.job_id != null
+                ? { id: `job-${result.job_id}`, jobId: result.job_id }
+                : {}),
               jdAnalysisId: String(result.job_analysis_id),
               matchScore: result.match_score || 0,
               steps: { ...j.steps, jdAnalysis: true, expMatched: true }
@@ -210,6 +214,10 @@ export function useCreateStructuredJdAnalysisMutation() {
         j.id === targetJobId
           ? {
               ...j,
+              // T-M5-5（jd-byte-1）：后端 job 实体 id 回填，本地合成岗对齐实体行 id
+              ...(result.job_id != null
+                ? { id: `job-${result.job_id}`, jobId: result.job_id }
+                : {}),
               jdAnalysisId: String(result.job_analysis_id),
               matchScore: result.match_score || 0,
               steps: { ...j.steps, jdAnalysis: true, expMatched: true }
