@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { renderWithProviders } from './test-utils';
+import { ToastContainer } from '../components/common/Toast';
 import { useJobsQuery } from '../features/jobs/hooks';
 import { JobsListView } from '../components/jobs/JobsListView';
 import { NewJobModal } from '../components/jobs/NewJobModal';
@@ -350,6 +351,28 @@ describe('useJobsQuery 迁移视图', () => {
     await waitFor(() =>
       expect(job.updateSubmission).toHaveBeenCalledWith(1, { status: 'PREPARED' }),
     );
+  });
+
+  it('T-M5-6：终止后端失败 → 乐观回滚 + 错误 toast（不再静默吞错）', async () => {
+    job.updateSubmission.mockRejectedValueOnce(new Error('非法状态流转'));
+
+    renderWithProviders(
+      <>
+        <JobsListView onOpenNewJob={() => {}} />
+        <CacheSpy />
+        <ToastContainer />
+      </>,
+    );
+
+    await screen.findByText('字节跳动');
+    fireEvent.click(screen.getAllByText('标记已结束')[0]);
+
+    // 失败提示（T-M5-6：错误上抛 → onError toast）
+    expect(await screen.findByText('标记结束失败')).toBeInTheDocument();
+    // 乐观更新回滚：字节行回到 pending，已结束计数归零
+    await waitFor(() => expect(screen.getByText('已结束 (0)')).toBeInTheDocument());
+    expect(screen.getByText('待处理 (1)')).toBeInTheDocument();
+    expect(screen.getAllByText('标记已结束').length).toBeGreaterThan(0);
   });
 
   it('T-M5-2：job 实体为主源 join submission 事实，无在用岗位的 submission 兜底补行', async () => {

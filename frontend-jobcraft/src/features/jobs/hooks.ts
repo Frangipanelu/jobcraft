@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as authApi from '../../api/auth';
 import * as jobApi from '../../api/job';
 import { updateJobEntity } from '../../api/jobEntity';
+import { useToastActions } from '../../context/JobCraftContext';
 import { Job } from '../../types/jobcraft';
 import { JOBS_QUERY_KEY, deriveJobStatus, jobRowToJob, submissionToJob } from './mappers';
 
@@ -146,26 +147,21 @@ export function useCreateJobMutation() {
  * 注意：P0-1 之后 applied（已投递）只能由用户确认，终止流程不再顺带标记投递。
  * T-M5-2：job-only 行（尚无 submission）落 `PATCH /job/{id}` status=CLOSED，
  * 不再仅本地态（Q2：job 增删查改不碰 submission）。
+ * T-M5-6：后端失败不再静默——乐观更新回滚 + 错误 toast（onError）。
  */
 export function useTerminateJobMutation() {
   const queryClient = useQueryClient();
+  const { showToast } = useToastActions();
 
-  return useMutation<string, unknown, string>({
+  return useMutation<string, unknown, string, { prev: Job[] }>({
     mutationFn: async (jobId) => {
       const prev = queryClient.getQueryData<Job[]>([...JOBS_QUERY_KEY]) || [];
       const job = prev.find((j) => j.id === jobId);
       if (job?.backendId != null) {
-        try {
-          await jobApi.updateSubmission(job.backendId, { status: 'CLOSED' });
-        } catch {
-          // 后端不可用时仅保留本地乐观状态
-        }
+        // 失败上抛 → onError 回滚 + toast（T-M5-6，不再吞错）
+        await jobApi.updateSubmission(job.backendId, { status: 'CLOSED' });
       } else if (job?.jobId != null) {
-        try {
-          await updateJobEntity(job.jobId, { status: 'CLOSED' });
-        } catch {
-          // 后端不可用时仅保留本地乐观状态
-        }
+        await updateJobEntity(job.jobId, { status: 'CLOSED' });
       }
       return jobId;
     },
@@ -177,6 +173,16 @@ export function useTerminateJobMutation() {
         return { ...j, lastUpdated: '刚刚', steps, status: deriveJobStatus(steps) } as Job;
       });
       queryClient.setQueryData([...JOBS_QUERY_KEY], next);
+      return { prev };
+    },
+    onError: (_err, _jobId, ctx) => {
+      // T-M5-6：回滚乐观状态，展示明确失败提示
+      if (ctx) queryClient.setQueryData([...JOBS_QUERY_KEY], ctx.prev);
+      showToast({
+        type: 'error',
+        title: '标记结束失败',
+        message: '未能同步到服务器，已恢复原状态，请稍后重试',
+      });
     },
     // FE-CACHE-01：乐观补丁后重验——服务端 effective_status / updated_at 为准
     onSettled: () => queryClient.invalidateQueries({ queryKey: [...JOBS_QUERY_KEY] }),
@@ -186,29 +192,24 @@ export function useTerminateJobMutation() {
 /**
  * 恢复已结束岗位的处理流程（P11-b：后端 reopen 回投递主线，按 delivered 事实
  * 落 `APPLIED`（已投递）或 `PREPARED`（待投递））。
+ * T-M5-6：后端失败不再静默——乐观更新回滚 + 错误 toast（onError）。
  */
 export function useResumeJobMutation() {
   const queryClient = useQueryClient();
+  const { showToast } = useToastActions();
 
-  return useMutation<string, unknown, string>({
+  return useMutation<string, unknown, string, { prev: Job[] }>({
     mutationFn: async (jobId) => {
       const prev = queryClient.getQueryData<Job[]>([...JOBS_QUERY_KEY]) || [];
       const job = prev.find((j) => j.id === jobId);
       if (job?.backendId != null) {
-        try {
-          await jobApi.updateSubmission(job.backendId, {
-            status: job.steps.applied ? 'APPLIED' : 'PREPARED',
-          });
-        } catch {
-          // 后端不可用时仅保留本地乐观状态
-        }
+        // 失败上抛 → onError 回滚 + toast（T-M5-6，不再吞错）
+        await jobApi.updateSubmission(job.backendId, {
+          status: job.steps.applied ? 'APPLIED' : 'PREPARED',
+        });
       } else if (job?.jobId != null) {
         // T-M5-2：job-only 行恢复落 job 表（无投递事实，回待投递主线）
-        try {
-          await updateJobEntity(job.jobId, { status: 'PREPARED' });
-        } catch {
-          // 后端不可用时仅保留本地乐观状态
-        }
+        await updateJobEntity(job.jobId, { status: 'PREPARED' });
       }
       return jobId;
     },
@@ -220,6 +221,15 @@ export function useResumeJobMutation() {
         return { ...j, lastUpdated: '刚刚', steps, status: deriveJobStatus(steps) } as Job;
       });
       queryClient.setQueryData([...JOBS_QUERY_KEY], next);
+      return { prev };
+    },
+    onError: (_err, _jobId, ctx) => {
+      if (ctx) queryClient.setQueryData([...JOBS_QUERY_KEY], ctx.prev);
+      showToast({
+        type: 'error',
+        title: '恢复处理失败',
+        message: '未能同步到服务器，已恢复原状态，请稍后重试',
+      });
     },
     // FE-CACHE-01：乐观补丁后重验——服务端 status（reopen 语义）为准
     onSettled: () => queryClient.invalidateQueries({ queryKey: [...JOBS_QUERY_KEY] }),
