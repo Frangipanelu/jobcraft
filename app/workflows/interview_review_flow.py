@@ -292,9 +292,7 @@ def run_interview_review_workflow(
     if not selected_sequences:
         raise ValueError("请至少选择 1 个问题进行详细解析")
     if len(selected_sequences) > MAX_ANALYSIS_QA_PAIRS:
-        raise ValueError(
-            f"因模型输出长度限制，每次最多选择 {MAX_ANALYSIS_QA_PAIRS} 个问题"
-        )
+        raise ValueError(f"单次分析最多选择 {MAX_ANALYSIS_QA_PAIRS} 个问题，请分批重试")
 
     workflow = StateGraph(InterviewReviewState)
 

@@ -2684,10 +2684,23 @@ class TestInterviewReviewAnalyze:
     def test_analyze_too_many_sequences_returns_400(self):
         resp = client.post(
             "/api/jobcraft/interview-review/1/analyze",
-            json={"selected_sequences": list(range(1, 10))},
+            json={"selected_sequences": list(range(1, 52))},
         )
         assert resp.status_code == 400
         assert "最多" in resp.json()["error"]["message"]
+
+    def test_analyze_nine_sequences_allowed(self, monkeypatch):
+        """T-M8-6：8 题限制废弃——9 题可进入分析（workflow 以 mock 替身）。"""
+        monkeypatch.setattr(
+            "app.workflows.interview_review_flow.run_interview_review_workflow",
+            lambda **kw: {"overall_score": 75, "summary": "good"},
+        )
+        resp = client.post(
+            "/api/jobcraft/interview-review/1/analyze",
+            json={"selected_sequences": list(range(1, 10))},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["overall_score"] == 75
 
     def test_analyze_normal(self, monkeypatch):
         monkeypatch.setattr(

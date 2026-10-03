@@ -1777,12 +1777,32 @@ class TestTaskDivSharedValidation:
         with pytest.raises(ValueError, match="请至少选择 1 个问题"):
             run_interview_review_workflow(record_id=1, selected_sequences=[])
 
-    def test_review_rejects_more_than_eight_sequences(self):
+    def test_review_rejects_over_fifty_sequences(self):
         from app.workflows.interview_review_flow import run_interview_review_workflow
 
-        with pytest.raises(ValueError, match="最多选择 8 个问题"):
+        # T-M8-6：8 题限制已废弃，仅保留 50 题硬兜底
+        with pytest.raises(ValueError, match="最多选择 50 个问题"):
             run_interview_review_workflow(
-                record_id=1, selected_sequences=list(range(1, 10))
+                record_id=1, selected_sequences=list(range(1, 52))
+            )
+
+    def test_review_accepts_nine_sequences(self, monkeypatch):
+        """T-M8-6：原 >8 即拒；现 9 题通过数量校验（报错来自 load_data 阶段为证）。"""
+        from app.workflows.interview_review_flow import run_interview_review_workflow
+
+        monkeypatch.setattr(
+            "app.workflows.interview_review_flow.db_tools.get_interview_record",
+            lambda rid, user_id=None: _fake_record(rid),
+        )
+        monkeypatch.setattr(
+            "app.workflows.interview_review_flow._get_job_context",
+            lambda record, user_id=1: _fake_job_context(),
+        )
+        # fake record 只识别序号 1/2；选 3-11（9 个）均不匹配 → 报错发生在 load_data，
+        # 说明数量校验（旧 8 题限制）已放行。
+        with pytest.raises(ValueError, match="未选中任何有效问题"):
+            run_interview_review_workflow(
+                record_id=1, selected_sequences=list(range(3, 12))
             )
 
     def test_prepare_structured_jd_cleans_and_validates(self):

@@ -32,8 +32,10 @@ from app.tools.question_table import (
 # 8 维能力矩阵与问题表意图识别所需的 schema / prompt 构建 / 常量已下沉至
 # app.tools.question_table（叶子模块），此处仅 re-export 保持向后兼容。
 
-# 分析时最多处理的 QA 对数（受 Groq TPM 限制）
-MAX_ANALYSIS_QA_PAIRS = 8
+# 分析时单次最多处理的 QA 对数。
+# T-M8-6（Q6）：原 8 题产品限制已废弃——一次 analyze 全量覆盖全部选中题
+# （单节点 1 次 LLM，不拆批）；此处仅保留 50 作为防超长请求的硬兜底。
+MAX_ANALYSIS_QA_PAIRS = 50
 
 
 def _find_my_answer(dialogue: List[Dict[str, Any]], question_seq: int) -> str:
