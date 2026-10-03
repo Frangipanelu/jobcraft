@@ -2,6 +2,18 @@
 
 > 本文件用于追踪项目整体进度。AI 在每次会话结束或完成子任务时，必须更新本文件的对应板块。
 
+## T-M7-1 页面收敛：删 /interview/new 整页向导 + JD 回流改开模态（2026-10-02，B 窗口）
+
+> 原 B 认领第二半（延后条件「A 批完成」已满足后启动）。新建面试自此**单入口 = `NewInterviewModal`**（AppShell 全局挂载）。
+
+- [x] **路由与页面删除**（`ed7700f`，13 文件 +261/-885）：`AppRouter` 删 `/interview/new`（+`:jobId`）两条路由（落入通配 → `/workbench`）；`git rm` `pages/CreateInterview.tsx`（826 行整页向导）+ `features/interview/pages/CreateInterviewPage.tsx`；`NavigationTab` 去 `create_interview` 成员 + `tabPaths` 对应 case（tsc 0 兜底无残留引用）。
+- [x] **回流改开 Modal**：`JDReportDetailView.handleReturnToWizard` 的 `create_interview` 分支 `go(...)` → `shell?.onOpenNewInterview(matchedJob ? 'from-job' : 'standalone', matchedJob?.id)`；outlet 经 `useOutletContext<AppShellOutletContext | null>` 取用（组件直渲测试无 Provider 时安全降级）；「已带入岗位并返回」toast 沿用。
+- [x] **FE-STATE-01 持位迁移**：Modal 开启即 `setJdAnalysisReturnTarget(null)`（原整页 mount-clear 行为迁移）；`handleOpenJDAnalysis` 补「存草稿 + 置位 `create_interview` + info toast + 关闭向导」——**保留** localStorage 草稿供回流（不用 `handleClose`，其会 `clearInterviewModalDraft` 清掉刚存的草稿）。回流环自此闭合：Modal → JD 分析 → 报告页横幅 → 返回继续 → Modal。
+- [x] **附带 P0 修复（TDD 红→绿坐实）**：`NewInterviewModal` 原 `if (!isOpen) return null` 位于全部 hooks **之前** → isOpen false→true 触发 `Rendered more hooks than during the previous render`（打开向导即崩；此前该组件 0 测试覆盖）。早退移至全部 hooks 之后；新增 `create-interview-entry.test.tsx` 4 条（开关钩子序 / FE-STATE-01 置位与作废 / 向导内 JD 跳转三联断言 / 回流开 Modal 且 URL 不再跳 `/interview/new`）。
+- [x] **清账**：`JobCraftContext` 孤儿 `interviewDraft`/`saveInterviewDraft`/`clearInterviewDraft`（唯一消费方即被删页面）连同 `InterviewDraft` import 移除；`types/jobcraft.ts`、`tabPaths.ts`、`router/README.md`（路由表+T-M7-1 注记）、`historical-resumes/README.md` 消费方清单同步。
+- **门禁**：tsc 0、vitest **232/232**（32 文件）、`npm run build` 0、encoding **396/0**。
+- **边界**：`create_review` 回流（`/review/new` 整页）**未动**——归 M8-4「向导收敛 review 段」；`jdAnalysisReturnTarget` 字面量联合保留 `'create_interview'`（语义=回流意图，非路由）；`setSelectedJobId/setSelectedJDId` context 回填保留（他消费点在用）；推送竞态说明——`ed7700f` 经 C 窗口链式推送入远端，本段落于 `5b18405` 错峰后写入。
+
 ## T-M3-6 workbench 方向沉淀（方向列表+计数+高频缺口，2026-10-03，C 窗口第三轮）
 
 > 矩阵 Q1 裁决落地：方向知识沉淀 → `/workbench`（替代 P3-2 独立页）。三方案对比后选 A（维度聚合+缺表降级）：capability_gap 表不挂 direction_id，按 dimension GROUP BY 即可满足极简版，零迁移；「方向级缺口关联」（V0020 加列+collate 写入侧改+回填）超 scope 且撞 A/B 分析链，后置为 P2 扩容候选，等真实使用反馈再裁决。
