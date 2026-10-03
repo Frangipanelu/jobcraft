@@ -15,12 +15,13 @@
 | `/resume`、`/resume/:jobId` | `ResumeEditorPage` | `resume_editor` |
 | `/prep` | `InterviewPrepCenterPage` | `interview_prep_center` |
 | `/prep/:interviewId` | `InterviewPrepPage` | `interview_prep_workspace` |
-| `/interview/new`、`/interview/new/:jobId` | `CreateInterviewPage` | `create_interview` |
 | `/review` | `InterviewReviewCenterPage` | `interview_review_center` |
 | `/review/:interviewId` | `InterviewReviewPage` | `interview_review_detail` |
 | `/review/new`、`/review/new/:jobId` | `CreateReviewPage` | `create_review` |
 | `/profile` | `ProfilePage` | `user_profile` |
 | `*` | — | 重定向 `/workbench` |
+
+> **T-M7-1 页面收敛（2026-10-02）**：`/interview/new`（+`:jobId`）已删除——新建面试只走 `NewInterviewModal`（AppShell 全局挂载）；`NavigationTab` 不再有 `create_interview`。JD 报告页「返回继续」回流经 AppShell outlet 开 Modal；返回意图 `jdAnalysisReturnTarget` 的持位/作废迁至 Modal（FE-STATE-01）。
 
 ## tab → URL 单一映射
 

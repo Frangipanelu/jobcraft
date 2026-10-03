@@ -22,7 +22,6 @@ describe('FE-TAB-01 路由 → currentTab 回填（14 条路由侧栏/面包屑�
     ['/resume/job-1', 'resume_editor'],
     ['/prep', 'interview_prep_center'],
     ['/prep/iv-1', 'interview_prep_workspace'],
-    ['/interview/new', 'create_interview'],
     ['/review', 'interview_review_center'],
     ['/review/iv-1', 'interview_review_detail'],
     ['/review/new', 'create_review'],

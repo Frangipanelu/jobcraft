@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useToastActions } from '../../context/JobCraftContext';
+import { useJobCraft, useToastActions } from '../../context/JobCraftContext';
 import { useTabNavigate } from '../../router/tabPaths';
 import { useCreateInterviewMutation } from '../../features/interview/hooks';
 import { useJobsQuery } from '../../features/jobs/hooks';
@@ -43,19 +43,31 @@ const fromJobSteps = [
 
 export const NewInterviewModal: React.FC<Props> = ({ isOpen, jobId, mode, onClose }) => {
   const { showToast } = useToastActions();
+  const { setJdAnalysisReturnTarget } = useJobCraft();
   const { data: jobs = [] } = useJobsQuery();
   const createInterview = useCreateInterviewMutation();
   const go = useTabNavigate();
 
-  if (!isOpen) return null;
+  // FE-STATE-01（T-M7-1 迁移）：打开向导即作废上一次未消费的「JD 报告返回」意图，
+  // 残留 flag 不会让 JD 报告页底部横幅在后续无关访问时错乱出现。
+  useEffect(() => {
+    if (isOpen) setJdAnalysisReturnTarget(null);
+  }, [isOpen, setJdAnalysisReturnTarget]);
 
   const steps = mode === 'standalone' ? standaloneSteps : fromJobSteps;
   const maxStep = steps.length - 1;
 
-  // Handle open JD analysis page
+  // Handle open JD analysis page（保留草稿 + 置位返回意图 + 关闭向导，供 JD 报告回流）
   const handleOpenJDAnalysis = () => {
     saveDraft();
+    setJdAnalysisReturnTarget('create_interview');
+    showToast({
+      type: 'info',
+      title: '前往 JD 分析',
+      message: '创建并研判完成后，可直接带入新建岗位返回此处。'
+    });
     go('jd_analysis');
+    onClose();
   };
 
   // Restore from localStorage draft
@@ -227,6 +239,9 @@ export const NewInterviewModal: React.FC<Props> = ({ isOpen, jobId, mode, onClos
       return () => clearTimeout(timer);
     }
   }, [isGenerating, currentAiStep]);
+
+  // 早退必须在全部 hooks 之后：isOpen false→true 不得改变 hooks 数量（Rules of Hooks）
+  if (!isOpen) return null;
 
   // Render step content
   const renderStepContent = () => {

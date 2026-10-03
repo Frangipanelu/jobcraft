@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
+import { useOutletContext } from 'react-router-dom';
 import { useJobCraft, useToastActions } from '../../context/JobCraftContext';
 import { useTabNavigate } from '../../router/tabPaths';
+import type { AppShellOutletContext } from '../../app/AppShell';
 import type { Experience } from '../../types/jobcraft';
 import { useJdAnalysesQuery } from '../../features/jd/hooks';
 import { dimensionLabel } from '../../utils/dimensions';
@@ -58,6 +60,7 @@ export const JDReportDetailView: React.FC<JDReportDetailViewProps> = ({
   } = useJobCraft();
   const { showToast } = useToastActions();
   const go = useTabNavigate();
+  const shell = useOutletContext<AppShellOutletContext | null>();
 
   const upsertResume = useUpsertResumeMutation();
   const generateSuggestions = useGenerateResumeSuggestionsMutation();
@@ -244,7 +247,8 @@ export const JDReportDetailView: React.FC<JDReportDetailViewProps> = ({
         title: '已带入岗位并返回',
         message: `已自动关联「${data.company} · ${data.position}」进入新建面试。`
       });
-      go('create_interview');
+      // T-M7-1：/interview/new 页面已删，回流改开模态向导（有匹配岗位则带岗 from-job）
+      shell?.onOpenNewInterview(matchedJob ? 'from-job' : 'standalone', matchedJob?.id);
     } else if (target === 'create_review') {
       showToast({
         type: 'success',

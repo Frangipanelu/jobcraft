@@ -1,8 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  NavigationTab,
-  InterviewDraft
+  NavigationTab
 } from '../types/jobcraft';
 import { tabToPath, TabNavParams } from '../router/tabPaths';
 import * as authApi from '../api/auth'
@@ -28,7 +27,6 @@ interface JobCraftContextType {
   syncTabState: (tab: NavigationTab, params?: TabNavParams) => void;
 
   // Transient UI state
-  interviewDraft: InterviewDraft | null;
   jdAnalysisReturnTarget: 'create_interview' | 'create_review' | null;
   setJdAnalysisReturnTarget: (target: 'create_interview' | 'create_review' | null) => void;
 
@@ -42,10 +40,6 @@ interface JobCraftContextType {
   register: (username: string, password: string, email?: string) => Promise<void>;
   logout: () => void;
   currentUserId: number;
-
-  // Interview Draft actions
-  saveInterviewDraft: (draft: InterviewDraft) => void;
-  clearInterviewDraft: () => void;
 }
 
 const JobCraftContext = createContext<JobCraftContextType | undefined>(undefined);
@@ -94,7 +88,7 @@ export const useToastActions = () => {
 /**
  * JobCraft 全局上下文（FE-CONTEXT-REMOVE 清账后瘦身 + FE-CONTEXT-MEMO-01 拆 Toast/加 memo）：
  * 仅保留——认证与权限（isAuthenticated/currentUserId/login/register/logout）、
- * 导航过渡态（currentTab / selected 系列选中状态 / navigateTo）、瞬态 UI（interviewDraft、
+ * 导航过渡态（currentTab / selected 系列选中状态 / navigateTo）、瞬态 UI（
  * jdAnalysisReturnTarget、isLoading）。toasts/showToast/dismissToast 已拆至 ToastProvider（高变隔离）。
  * 域状态（jobs/experiences/jdAnalyses/interviews）已全部迁移至 react-query 缓存，
  * 由 features 目录下 hooks.ts 的 useXxxQuery 与 useXxxMutation 单一持有，context 不再镜像。
@@ -110,9 +104,7 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
   const [selectedJDId, setSelectedJDId] = useState<string | null>(null);
   const [jobWorkspaceSubTab, setJobWorkspaceSubTab] = useState<'jd' | 'resume' | 'interview'>('jd');
 
-  const [interviewDraft, setInterviewDraft] = useState<InterviewDraft | null>(null);
   const [jdAnalysisReturnTarget, setJdAnalysisReturnTarget] = useState<'create_interview' | 'create_review' | null>(null);
-
   const [isLoading, setIsLoading] = useState(true);
   const [isInitialLoaded, setIsInitialLoaded] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -189,14 +181,6 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
     setCurrentUserId(1)
   }, [])
 
-  const saveInterviewDraft = useCallback((draft: InterviewDraft) => {
-    setInterviewDraft(draft);
-  }, []);
-
-  const clearInterviewDraft = useCallback(() => {
-    setInterviewDraft(null);
-  }, []);
-
   /**
    * 仅同步选中态到 context（不改 URL）。
    * 供 `useSyncRouteTab` 做 URL → context 回填——回填若触发跳转会与当前路由打架
@@ -235,9 +219,6 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
       jobWorkspaceSubTab,
       navigateTo,
       syncTabState,
-      interviewDraft,
-      saveInterviewDraft,
-      clearInterviewDraft,
       jdAnalysisReturnTarget,
       setJdAnalysisReturnTarget,
       isLoading,
@@ -259,9 +240,6 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
       jobWorkspaceSubTab,
       navigateTo,
       syncTabState,
-      interviewDraft,
-      saveInterviewDraft,
-      clearInterviewDraft,
       jdAnalysisReturnTarget,
       setJdAnalysisReturnTarget,
       isLoading,

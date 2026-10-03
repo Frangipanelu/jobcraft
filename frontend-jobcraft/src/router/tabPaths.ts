@@ -37,8 +37,6 @@ export function tabToPath(tab: NavigationTab, params: TabNavParams = {}): string
       return '/prep';
     case 'interview_prep_workspace':
       return `/prep/${params.interviewId ?? ''}`;
-    case 'create_interview':
-      return '/interview/new';
     case 'interview_review_center':
       return '/review';
     case 'create_review':

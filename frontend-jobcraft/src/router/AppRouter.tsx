@@ -12,14 +12,13 @@ import { JdReportPage } from '../features/jd/pages/JdReportPage';
 import { JdAnalysisCenterPage } from '../features/jd/pages/JdAnalysisCenterPage';
 import { ResumeEditorPage } from '../features/resume/pages/ResumeEditorPage';
 import { InterviewPrepCenterPage } from '../features/interview/pages/InterviewPrepCenterPage';
-import { CreateInterviewPage } from '../features/interview/pages/CreateInterviewPage';
 import { InterviewReviewCenterPage } from '../features/review/pages/InterviewReviewCenterPage';
 import { CreateReviewPage } from '../features/review/pages/CreateReviewPage';
 
 /**
  * 路由表（FE-ROUTE-02 / 组1-壳收口后）：
  * 所有 tab 均有 URL，全部走 AppShell 真实路由页。
- * 中心 / 创建 / 简历编辑持有 URL（`/jd-analysis`、`/resume/:jobId`、`/interview/new/:jobId`、`/review/new/:jobId`），
+ * 中心 / 创建 / 简历编辑持有 URL（`/jd-analysis`、`/resume/:jobId`、`/review/new/:jobId`），
  * 选中项经 `useSyncRouteTab` 从 URL 回填 context（FE-TAB-01）。
  * BrowserRouter 位于 `App.tsx` Provider 之上（FE-NAV-01），此处不再嵌套。
  */
@@ -62,12 +61,6 @@ export const AppRoutes: React.FC = () => {
       </Route>
       <Route path="/prep/:interviewId" element={<AppShell />}>
         <Route index element={<InterviewPrepPage />} />
-      </Route>
-      <Route path="/interview/new" element={<AppShell />}>
-        <Route index element={<CreateInterviewPage />} />
-      </Route>
-      <Route path="/interview/new/:jobId" element={<AppShell />}>
-        <Route index element={<CreateInterviewPage />} />
       </Route>
       <Route path="/review" element={<AppShell />}>
         <Route index element={<InterviewReviewCenterPage />} />

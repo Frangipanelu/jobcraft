@@ -7,7 +7,6 @@
 ## 当前状态
 - 已迁移（FE-HISTORICAL-RESUMES-01）。消费方：
   - `src/components/user/UserProfileView.tsx`（列表渲染 + 上传 + 删除 + 设默认）
-  - `src/pages/CreateInterview.tsx`（简历上传 + 默认底座读取）
   - `src/components/interview/ResumeStep.tsx`（向导内上传，走 `useUploadResumeMutation`）
 - `JobCraftContext` 已移除 `historicalResumes` 域（state / `loadHistoricalResumes` / 三个 action / provider value）。
 - 测试：`src/test/historical-resumes-query.test.tsx`（列表、删除成功/失败、设默认迁移、

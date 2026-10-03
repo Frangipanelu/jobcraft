@@ -11,7 +11,6 @@ describe('FE-ROUTE-03 tabToPath 映射', () => {
     expect(tabToPath('jd_analysis')).toBe('/jd-analysis');
     expect(tabToPath('jd_analysis_center')).toBe('/jd-analysis');
     expect(tabToPath('interview_prep_center')).toBe('/prep');
-    expect(tabToPath('create_interview')).toBe('/interview/new');
     expect(tabToPath('interview_review_center')).toBe('/review');
     expect(tabToPath('create_review')).toBe('/review/new');
     expect(tabToPath('user_profile')).toBe('/profile');
@@ -74,13 +73,14 @@ describe('FE-ROUTE-03 路由补全', () => {
     expect(await ui.findByText('正在生成 JD 分析报告...')).toBeInTheDocument();
   });
 
-  it('/interview/new 渲染新建面试，/review/new 渲染新建复盘', async () => {
-    const createInterview = renderWithProviders(<AppRoutes />, { route: '/interview/new' });
-    expect(await createInterview.findByText('新建面试')).toBeInTheDocument();
-    createInterview.unmount();
-
+  it('/review/new 渲染新建复盘', async () => {
     const createReview = renderWithProviders(<AppRoutes />, { route: '/review/new' });
     expect(await createReview.findByText('新建复盘')).toBeInTheDocument();
+  });
+
+  it('/interview/new 已下线：落入通配重定向 /workbench（T-M7-1 页面收敛）', async () => {
+    const ui = renderWithProviders(<AppRoutes />, { route: '/interview/new' });
+    expect(await ui.findByText('正在推进')).toBeInTheDocument();
   });
 
   it('/resume 渲染简历编辑器空态', async () => {

@@ -11,7 +11,6 @@ export type NavigationTab =
   | 'resume_editor'
   | 'interview_prep_center'
   | 'interview_prep_workspace'
-  | 'create_interview'
   | 'interview_review_center'
   | 'create_review'
   | 'interview_review_detail'
