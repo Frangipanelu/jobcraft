@@ -203,6 +203,48 @@ def update_interview_prep_drafts(
     return True
 
 
+def get_interview_prep_ref(prep_id: int, user_id: int) -> Optional[Dict[str, Any]]:
+    """按 id+user_id 取准备稿归属引用（T-M7-6 重新调研前置校验）。
+
+    :param prep_id: interview_preps 主键
+    :param user_id: 当前用户 id（越权查询不命中）
+    :return: {"id", "job_analysis_id"} 或 None
+    """
+    _ensure_interview_preps_table()
+    row = query_one(
+        "SELECT id, job_analysis_id FROM interview_preps WHERE id=%s AND user_id=%s",
+        (prep_id, user_id),
+    )
+    if not row:
+        return None
+    return {"id": row["id"], "job_analysis_id": row["job_analysis_id"]}
+
+
+def update_interview_prep_company_research(
+    prep_id: int, user_id: int, info: Dict[str, Any]
+) -> bool:
+    """回写准备稿的公司调研快照与调研时间（T-M7-6 force 重新调研）。
+
+    :param prep_id: interview_preps 主键
+    :param user_id: 当前用户 id（越权写入直接不命中）
+    :param info: 重新调研后的 CompanyResearchInfo dict
+    :return: True 表示已更新；False 表示记录不存在或不属于该用户
+    """
+    _ensure_interview_preps_table()
+    row = query_one(
+        "SELECT id FROM interview_preps WHERE id=%s AND user_id=%s",
+        (prep_id, user_id),
+    )
+    if not row:
+        return False
+    execute(
+        "UPDATE interview_preps SET company_research_json=%s, company_research_at=NOW() "
+        "WHERE id=%s AND user_id=%s",
+        (json.dumps(info, ensure_ascii=False, default=str), prep_id, user_id),
+    )
+    return True
+
+
 # ---------------- 面试复盘 ----------------
 
 

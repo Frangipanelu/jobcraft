@@ -117,6 +117,38 @@ def jobcraft_interview_prep_list(
         raise HTTPException(status_code=500, detail=f"列出面试准备稿失败: {e}")
 
 
+@router.post("/api/jobcraft/interview-prep/{prep_id}/company-research")
+def jobcraft_refresh_company_research(
+    prep_id: int,
+    current_user: int = Depends(get_current_user),
+):
+    """强制重新调研公司（T-M7-6：force 绕 7 天缓存），回写准备稿快照。
+
+    不建独立公司调研 API/页（矩阵 Q5）：入口挂在既有 prep 子资源下，
+    总览区块「重新调研」按钮调用；全局 company_research 缓存由
+    ``get_or_search_company(force=True)`` 内部 upsert 同步刷新。
+    """
+    from app.agents.company_research_agent import get_or_search_company
+
+    ref = db_tools.get_interview_prep_ref(prep_id, current_user)
+    if not ref:
+        raise HTTPException(status_code=404, detail="面试准备稿不存在")
+    analysis = db_tools.get_job_analysis(ref["job_analysis_id"], current_user)
+    company = (analysis or {}).get("company", "")
+    if not company or not company.strip():
+        raise HTTPException(status_code=400, detail="该岗位缺少公司信息，无法重新调研")
+    try:
+        info = get_or_search_company(company, force=True)
+    except Exception as e:
+        logger.exception("重新调研公司失败: company=%s", company)
+        raise HTTPException(status_code=502, detail=f"重新调研失败: {e}")
+    if not info:
+        raise HTTPException(status_code=502, detail="重新调研失败，未返回结果")
+    if not db_tools.update_interview_prep_company_research(prep_id, current_user, info):
+        raise HTTPException(status_code=404, detail="面试准备稿不存在")
+    return {"id": prep_id, "company_research": info}
+
+
 @router.patch("/api/jobcraft/interview-prep/{prep_id}")
 def jobcraft_update_interview_prep_drafts(
     prep_id: int,

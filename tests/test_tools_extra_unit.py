@@ -1951,6 +1951,58 @@ class TestDbInterview:
             assert result["extended_version"] == {"full_version": "full ver"}
             assert len(result["ability_matrix"]) == 1
 
+    def test_get_interview_prep_ref_hit(self):
+        from app.tools.db_interview import get_interview_prep_ref
+
+        with (
+            patch("app.tools.db_interview.is_schema_ready", return_value=True),
+            patch(
+                "app.tools.db_interview.query_one",
+                return_value={"id": 7, "job_analysis_id": 12},
+            ) as mock_q,
+        ):
+            result = get_interview_prep_ref(7, 1)
+        assert result == {"id": 7, "job_analysis_id": 12}
+        assert "user_id=%s" in mock_q.call_args[0][0]
+
+    def test_get_interview_prep_ref_not_owned(self):
+        from app.tools.db_interview import get_interview_prep_ref
+
+        with (
+            patch("app.tools.db_interview.is_schema_ready", return_value=True),
+            patch("app.tools.db_interview.query_one", return_value=None),
+        ):
+            assert get_interview_prep_ref(999, 1) is None
+
+    def test_update_interview_prep_company_research_writes_json_and_at(self):
+        from app.tools.db_interview import update_interview_prep_company_research
+
+        with (
+            patch("app.tools.db_interview.is_schema_ready", return_value=True),
+            patch(
+                "app.tools.db_interview.query_one", return_value={"id": 7}
+            ),
+            patch("app.tools.db_interview.execute", return_value=1) as mock_exec,
+        ):
+            ok = update_interview_prep_company_research(7, 1, {"basic": {"name": "X"}})
+        assert ok is True
+        sql, params = mock_exec.call_args[0]
+        assert "company_research_json=%s" in sql
+        assert "company_research_at=NOW()" in sql
+        assert '"basic"' in params[0] or '"name"' in params[0]
+
+    def test_update_interview_prep_company_research_not_owned(self):
+        from app.tools.db_interview import update_interview_prep_company_research
+
+        with (
+            patch("app.tools.db_interview.is_schema_ready", return_value=True),
+            patch("app.tools.db_interview.query_one", return_value=None),
+            patch("app.tools.db_interview.execute", return_value=1) as mock_exec,
+        ):
+            ok = update_interview_prep_company_research(999, 1, {})
+        assert ok is False
+        mock_exec.assert_not_called()
+
     def test_get_interview_record_returns_none(self):
         from app.tools.db_interview import get_interview_record
 

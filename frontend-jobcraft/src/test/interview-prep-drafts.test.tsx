@@ -32,6 +32,7 @@ const interview = vi.hoisted(() => ({
   listInterviewPreps: vi.fn(),
   generateInterviewPrep: vi.fn(),
   saveInterviewPrepDrafts: vi.fn(),
+  refreshInterviewPrepResearch: vi.fn(),
 }));
 
 const tasks = vi.hoisted(() => ({
@@ -94,6 +95,10 @@ beforeEach(() => {
   experience.listCards.mockResolvedValue({ cards: [] });
   interview.listInterviewPreps.mockResolvedValue({ records: [PREP_RECORD] });
   interview.saveInterviewPrepDrafts.mockResolvedValue({ id: 7, drafts: {} });
+  interview.refreshInterviewPrepResearch.mockResolvedValue({
+    id: 7,
+    company_research: { basic: { name: '字节跳动' } },
+  });
   tasks.runTaskOrSync.mockImplementation(async (_t, _p, fallback) => fallback());
 });
 
@@ -238,6 +243,51 @@ describe('FE-LOGIC-01 前端逻辑 bug 修复', () => {
 
     fireEvent.change(screen.getByDisplayValue('第1面'), { target: { value: '5' } });
     expect(onRoundChange).toHaveBeenCalledWith(5, '第5面 · 终面');
+  });
+});
+
+describe('T-M7-6 公司调研重新调研按钮', () => {
+  /** 按钮在 interviews 加载完成前先渲染为 disabled，需等 prepSource 就绪。 */
+  async function clickRefresh() {
+    const btn = await screen.findByRole('button', { name: /重新调研/ });
+    await waitFor(() => expect(btn).toBeEnabled());
+    fireEvent.click(btn);
+  }
+
+  it('点击「重新调研」调用 force 端点并弹成功 toast', async () => {
+    renderWithProviders(
+      <>
+        <InterviewPrepWorkspaceView interviewId="prep-7" />
+        <ToastContainer />
+      </>
+    );
+
+    fireEvent.click(screen.getByText('01 总览'));
+    await clickRefresh();
+
+    await waitFor(() =>
+      expect(interview.refreshInterviewPrepResearch).toHaveBeenCalledWith(7)
+    );
+    await screen.findByText('公司调研已更新');
+    expect(screen.queryByText('重新调研失败')).not.toBeInTheDocument();
+  });
+
+  it('重新调研失败弹错误 toast（不上报假成功）', async () => {
+    interview.refreshInterviewPrepResearch.mockRejectedValue(new Error('network down'));
+
+    renderWithProviders(
+      <>
+        <InterviewPrepWorkspaceView interviewId="prep-7" />
+        <ToastContainer />
+      </>
+    );
+
+    fireEvent.click(screen.getByText('01 总览'));
+    await clickRefresh();
+
+    await screen.findByText('重新调研失败');
+    expect(interview.refreshInterviewPrepResearch).toHaveBeenCalledWith(7);
+    expect(screen.queryByText('公司调研已更新')).not.toBeInTheDocument();
   });
 });
 

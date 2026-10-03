@@ -102,6 +102,7 @@ _BUSINESS_ENDPOINTS = [
         {"card_ids": [1], "round_type": "技术面"},
     ),
     ("GET", "/api/jobcraft/job/1/interview-prep", None),
+    ("POST", "/api/jobcraft/interview-prep/1/company-research", None),
     # interview_review
     (
         "POST",

@@ -49,6 +49,15 @@ export async function saveInterviewPrepDrafts(
   )
 }
 
+export async function refreshInterviewPrepResearch(
+  prepId: number
+): Promise<{ id: number; company_research: unknown }> {
+  return request<{ id: number; company_research: unknown }>(
+    `/api/jobcraft/interview-prep/${prepId}/company-research`,
+    { method: 'POST' }
+  )
+}
+
 // ============================================================
 // 面试复盘
 // ============================================================

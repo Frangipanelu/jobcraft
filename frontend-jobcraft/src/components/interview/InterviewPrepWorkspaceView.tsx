@@ -1,7 +1,11 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useToastActions } from '../../context/JobCraftContext';
 import { useTabNavigate } from '../../router/tabPaths';
-import { useInterviewsQuery, useSavePrepDraftsMutation } from '../../features/interview/hooks';
+import {
+  useInterviewsQuery,
+  useRefreshCompanyResearchMutation,
+  useSavePrepDraftsMutation
+} from '../../features/interview/hooks';
 import { DIMENSION_LABELS } from '../../utils/dimensions';
 import { CompanyResearchShape } from '../../api/types';
 import {
@@ -9,7 +13,8 @@ import {
   Sparkles,
   Save,
   FileText,
-  Users
+  Users,
+  RefreshCw
 } from 'lucide-react';
 
 interface NewsItemShape {
@@ -181,6 +186,34 @@ export const InterviewPrepWorkspaceView: React.FC<InterviewPrepWorkspaceViewProp
 
   const currentQObj = questions.find((q) => q.id === selectedQIdForAnswer) || questions[0];
 
+  // T-M7-6：公司调研「重新调研」（force 绕 7 天缓存）
+  const refreshResearch = useRefreshCompanyResearchMutation();
+  const handleRefreshResearch = async () => {
+    const prepId = src?.id;
+    if (prepId === undefined || prepId <= 0) {
+      showToast({
+        type: 'error',
+        title: '无法重新调研',
+        message: '当前面试稿尚未落库，请稍后重试。'
+      });
+      return;
+    }
+    try {
+      await refreshResearch.mutateAsync(prepId);
+      showToast({
+        type: 'success',
+        title: '公司调研已更新',
+        message: '已绕过缓存重新检索最新资料并同步到本场准备稿。'
+      });
+    } catch {
+      showToast({
+        type: 'error',
+        title: '重新调研失败',
+        message: '网络或服务异常，请稍后重试。'
+      });
+    }
+  };
+
   const renderCompanyResearch = () => {
     const basic = cr?.basic || {};
     const business = cr?.business || {};
@@ -204,6 +237,20 @@ export const InterviewPrepWorkspaceView: React.FC<InterviewPrepWorkspaceViewProp
 
     return (
       <>
+        <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+          <div className="text-xs font-black text-[#1A5340] uppercase tracking-wider">
+            公司调研（AI 检索，7 天缓存）
+          </div>
+          <button
+            type="button"
+            onClick={handleRefreshResearch}
+            disabled={refreshResearch.isPending || !src?.id}
+            className="inline-flex items-center gap-1.5 text-xs font-bold text-[#134D3A] bg-[#F2F8F5] border border-[#A2CAB8] px-3 py-1.5 rounded-lg hover:bg-[#DCEDE4] disabled:opacity-60 disabled:cursor-not-allowed transition shadow-2xs"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${refreshResearch.isPending ? 'animate-spin' : ''}`} />
+            {refreshResearch.isPending ? '重新调研中…' : '重新调研'}
+          </button>
+        </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-5">
           <div className="bg-white border-2 border-[#CCD8D1] rounded-2xl p-5 sm:p-6 shadow-2xs">
             <div className="text-xs font-black text-[#1A5340] uppercase tracking-wider mb-3">

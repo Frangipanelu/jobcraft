@@ -2356,6 +2356,113 @@ class TestGetInterviewPrep:
         assert resp.json()["job_analysis_id"] == 1
 
 
+class TestRefreshCompanyResearch:
+    """POST /api/jobcraft/interview-prep/{prep_id}/company-research（T-M7-6 force）"""
+
+    @staticmethod
+    def _patch_ref(monkeypatch, ref):
+        monkeypatch.setattr(
+            "app.api.interview_prep.db_tools.get_interview_prep_ref", lambda *a: ref
+        )
+
+    def test_refresh_forces_research_and_writes_back(self, monkeypatch):
+        self._patch_ref(monkeypatch, {"id": 7, "job_analysis_id": 12})
+        monkeypatch.setattr(
+            "app.api.interview_prep.db_tools.get_job_analysis",
+            lambda *a: {"company": "字节跳动"},
+        )
+        called = {}
+
+        def fake_research(company, force=False):
+            called.update(company=company, force=force)
+            return {"basic": {"name": "字节跳动"}}
+
+        updated = {}
+
+        def fake_update(prep_id, user_id, info):
+            updated.update(prep_id=prep_id, user_id=user_id, info=info)
+            return True
+
+        monkeypatch.setattr(
+            "app.agents.company_research_agent.get_or_search_company", fake_research
+        )
+        monkeypatch.setattr(
+            "app.api.interview_prep.db_tools.update_interview_prep_company_research",
+            fake_update,
+        )
+        resp = client.post("/api/jobcraft/interview-prep/7/company-research")
+        assert resp.status_code == 200
+        assert resp.json() == {
+            "id": 7,
+            "company_research": {"basic": {"name": "字节跳动"}},
+        }
+        assert called == {"company": "字节跳动", "force": True}
+        assert updated["prep_id"] == 7
+        assert updated["user_id"] == 1
+
+    def test_refresh_prep_not_owned_returns_404(self, monkeypatch):
+        self._patch_ref(monkeypatch, None)
+        resp = client.post("/api/jobcraft/interview-prep/999/company-research")
+        assert resp.status_code == 404
+        assert "面试准备稿不存在" in resp.json()["error"]["message"]
+
+    def test_refresh_missing_company_returns_400(self, monkeypatch):
+        self._patch_ref(monkeypatch, {"id": 7, "job_analysis_id": 12})
+        monkeypatch.setattr(
+            "app.api.interview_prep.db_tools.get_job_analysis", lambda *a: None
+        )
+        resp = client.post("/api/jobcraft/interview-prep/7/company-research")
+        assert resp.status_code == 400
+        assert "缺少公司信息" in resp.json()["error"]["message"]
+
+    def test_refresh_research_failure_returns_502(self, monkeypatch):
+        self._patch_ref(monkeypatch, {"id": 7, "job_analysis_id": 12})
+        monkeypatch.setattr(
+            "app.api.interview_prep.db_tools.get_job_analysis",
+            lambda *a: {"company": "字节跳动"},
+        )
+
+        def raise_err(*a, **kw):
+            raise RuntimeError("tavily down")
+
+        monkeypatch.setattr(
+            "app.agents.company_research_agent.get_or_search_company", raise_err
+        )
+        resp = client.post("/api/jobcraft/interview-prep/7/company-research")
+        assert resp.status_code == 502
+        assert "重新调研失败" in resp.json()["error"]["message"]
+
+    def test_refresh_research_none_returns_502(self, monkeypatch):
+        self._patch_ref(monkeypatch, {"id": 7, "job_analysis_id": 12})
+        monkeypatch.setattr(
+            "app.api.interview_prep.db_tools.get_job_analysis",
+            lambda *a: {"company": "字节跳动"},
+        )
+        monkeypatch.setattr(
+            "app.agents.company_research_agent.get_or_search_company",
+            lambda *a, **kw: None,
+        )
+        resp = client.post("/api/jobcraft/interview-prep/7/company-research")
+        assert resp.status_code == 502
+
+    def test_refresh_write_back_conflict_returns_404(self, monkeypatch):
+        self._patch_ref(monkeypatch, {"id": 7, "job_analysis_id": 12})
+        monkeypatch.setattr(
+            "app.api.interview_prep.db_tools.get_job_analysis",
+            lambda *a: {"company": "字节跳动"},
+        )
+        monkeypatch.setattr(
+            "app.agents.company_research_agent.get_or_search_company",
+            lambda *a, **kw: {"basic": {}},
+        )
+        monkeypatch.setattr(
+            "app.api.interview_prep.db_tools.update_interview_prep_company_research",
+            lambda *a: False,
+        )
+        resp = client.post("/api/jobcraft/interview-prep/7/company-research")
+        assert resp.status_code == 404
+
+
 class TestInterviewPrepDrafts:
     """PATCH /api/jobcraft/interview-prep/{prep_id} + 列表回传 drafts（FE-PREP-01）"""
 
