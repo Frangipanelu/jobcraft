@@ -2,6 +2,17 @@
 
 > 本文件用于追踪项目整体进度。AI 在每次会话结束或完成子任务时，必须更新本文件的对应板块。
 
+## T-M3-6 workbench 方向沉淀（方向列表+计数+高频缺口，2026-10-03，C 窗口第三轮）
+
+> 矩阵 Q1 裁决落地：方向知识沉淀 → `/workbench`（替代 P3-2 独立页）。三方案对比后选 A（维度聚合+缺表降级）：capability_gap 表不挂 direction_id，按 dimension GROUP BY 即可满足极简版，零迁移；「方向级缺口关联」（V0020 加列+collate 写入侧改+回填）超 scope 且撞 A/B 分析链，后置为 P2 扩容候选，等真实使用反馈再裁决。
+
+- [x] **后端** `83c0199`（13 文件 +590/-1）：`db_direction.list_direction_summary`——三次独立小查询（方向行 / expression 计数 / jd_classification 计数）而非大 JOIN，任一下游表缺表 1146 该侧计数降级 0（direction 表由启动引导保障存在），连接类错误不吞上抛；`db_capability_gap.count_gaps_by_dimension`——`WHERE user_id GROUP BY dimension ORDER BY c DESC, dimension ASC`（复用 idx_(user_id,dimension)，NULL 维度兜底 EXT，缺表降级 `[]`，与既有「读降级写报错」惯例一致）；`GET /api/jobcraft/direction/summary` **注册在 `GET /{direction_id}` 之前**（FastAPI 按注册顺序匹配，晚注册会被路径参数吞成 422），响应走 `DirectionSummaryResponse/DirectionSummaryItem/DirectionGapCount` Pydantic 校验。
+- [x] **前端**（同 commit）：`api/direction.ts`（类型内联本文件，避开他窗在途 `types.ts`）+ `features/direction/hooks.ts`（query key `['direction','summary']`，端点服务端按登录用户过滤、queryFn 不先取 user id）+ `components/workbench/DirectionInsightPanel.tsx`（方向行 DIR-n 徽标/名称/表达计数/已归档灰显；缺口行复用 `utils/dimensions` 词表 D1-D8/EXT；**接口失败静默隐藏**、加载与双空态提示，增值区块不阻断工作台）；`WorkbenchView.tsx` 仅 +4 行（import + 第 4 区块挂载），开工前/提交前双查该文件（D 的 T-M5-2 同域相邻）。
+- [x] **测试**：后端 +14——`test_direction_db_unit` 汇总 5（合并计数保持创建序/缺 expression/缺 jd_classification 分侧降级/非 1146 上抛/三查询 user 归属）、`test_tools_extra_unit` 维度计数 3（映射+SQL 断言/缺表降级/错误上抛）、`test_api_routes_unit` 端点 3（不被 `{direction_id}` 吞/双空列表/DAO 错 500）、`test_auth_security` 401 参数化 +1 → pytest **1087 passed / 7 skipped**；前端 `direction-summary.test.tsx` 5（渲染+词表复用/双空态/加载骨架/失败隐藏/WorkbenchView 接线且 API 恰 1 调用）→ vitest **232 passed（32 文件）**。
+- **门禁**：encoding 394/0、ruff check/format 0、tsc 0、`npm run build` ✓；全程 mock（互斥 1/5）、零迁移、零 LLM 调用。
+- **边界/债**：缺口仅按维度聚合（capability_gap 无 direction_id，方向级关联待裁决后 P2）；archived 方向仍列出（灰显非隐藏）；`top_gaps` 不设 LIMIT（维度最多 9 类）。
+- **⚠️ 共享工作区**：全程显式路径 **pathspec 提交**（`git commit -- <13 paths>`），未卷入他窗暂存内容（A 窗 `CreateInterview` 删除、B 窗等索引项均原样保留）；本 PROGRESS 编辑与 A 窗未提交的 T-M6-2 段落同文件，随本次 docs 提交一并入库（其内容只引用已提交 hash `1a75e6d`/`34580be`，真实可溯）。
+
 ## T-M6-2 save-resume 写 resume_version + 存量快照迁 v1 + FE 简历域身份切换（2026-10-03，M6 批次第二任务）
 
 > 两问裁决（用户确认后按推荐执行）：① 存量迁移 = 一次性 SQL（V0022），非读时兼容；② FE = 完整切换到 resume_version 单轨，AI 建议链挂空为**显式债 → M6-3**（矩阵本就排了「下线 aiSuggestions 6 mutation」）。AC-02「重新生成不覆盖历史版本」→ 每次 save-resume = create 新版本（V0021 version_no=MAX+1 既有语义）。
