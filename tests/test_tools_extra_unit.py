@@ -1979,9 +1979,7 @@ class TestDbInterview:
 
         with (
             patch("app.tools.db_interview.is_schema_ready", return_value=True),
-            patch(
-                "app.tools.db_interview.query_one", return_value={"id": 7}
-            ),
+            patch("app.tools.db_interview.query_one", return_value={"id": 7}),
             patch("app.tools.db_interview.execute", return_value=1) as mock_exec,
         ):
             ok = update_interview_prep_company_research(7, 1, {"basic": {"name": "X"}})
