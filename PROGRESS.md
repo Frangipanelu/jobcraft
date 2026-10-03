@@ -2,6 +2,20 @@
 
 > 本文件用于追踪项目整体进度。AI 在每次会话结束或完成子任务时，必须更新本文件的对应板块。
 
+## T-M5-2~7 岗位投递域批全量完成（2026-10-03，B 窗口第四轮）
+
+> M5 批次 6 任务连做（零迁移、全程 mock）：数据源切 job 表 → 词表/去轮次 → jd-byte-1 → 静默 catch → Q4 硬编码。BE-DRIFT-01 应用层默认值经核对已全 PREPARED（`test_tools_extra_unit` 既有锁定测试 1733/1752），DDL 三处默认不一致归 T-M5-8 迁移统一。
+
+- [x] **T-M5-2 数据源切 job 表** `7cfe88c`（6 文件 +299/-71）：`mappers.ts` 新 `jobRowToJob(entity, dash?, resumeVersionId?)`——行身份 = job 实体（`id=job-${id}`、`jobId=entity.id`、`backendId=submission_id ?? dash.id ?? undefined`），steps/阶段事实按 `job_id` join dashboard，job-only 行降级（分析事实取 entity、其余 pending）；`useJobsQuery` 主源反转（实体列表为主 + dashByJobId join + 孤儿 submission `submissionToJob` 兜底 + 实体失败降级纯 dashboard）；terminate/resume job-only 分支落 `PATCH /job/{id}`（CLOSED/PREPARED，行不消失）；新建 `api/jobEntity.ts` 隔离他窗在途的 `api/job.ts`。
+- [x] **T-M5-3 词表统一** `22de990`：Q1 定稿标签「面试中」替换「待面试」×5 处（JobsListView 徽标+筛选 pill、WorkbenchView STATUS_BADGE+统计卡、JobWorkspaceView 徽标）+ 测试断言同步。
+- [x] **T-M5-4 去轮次化** `7a03b99`：`stageLabel(status)` 读时归一——INVITED/ROUND_1/ROUND_2 →「面试中」（Q1 六态对外唯一词表、Q3 状态与轮次零关联），两处 currentStage 走该函数；后端 `status_to_cn` 仅用于错误消息不动；轮次数据仍在 interview_records。
+- [x] **T-M5-5 jd-byte-1 消灭** `2cdfeeb`(BE)+`d55ae76`(FE)：`JobAnalysisResult` 加 `job_id`（P4-4a `_attach_job_entity` 已落 `job_analysis.job_id`，flow 反查回传、失败降级 None）；FE `analysisToJD`/`analysisDetailToJD` 按后端 `job_id` 对齐 jobId（列表路径原先恒 `jobId: undefined` 是查询侧断链）；jd hooks 分析完成回填本地行 `id=job-${job_id}`；**报告页删两处错误回落**（`|| jdAnalyses[0]` 会显示别的岗位的报告、matchedJob `|| jobs[0]`）；`JobWorkspaceView` 去 `|| 'jd-byte-1'` 合成 id（无分析走空态）。
+- [x] **T-M5-6 静默 catch 收口** `ba4cc87`：terminate/resume 错误上抛 → `onError` 乐观回滚（onMutate 返回 prev snapshot）+ 中文错误 toast；FE-CACHE-01 定向 invalidate 经核对已随 T-M5-2 覆盖（四 mutation onSettled + create 条件 onSuccess + deleteSubmission），本任务核验收口。
+- [x] **T-M5-7 Q4 硬编码清理** `6add384`（+ CreateReview 中性化被他窗 `ade0392` 顺带带入）：NewJobModal 薪资默认清空（placeholder 承担示例）、去 `AI 创新业务部` fallback；create/resolveTargetJob 去 `核心业务线` 造数；JobsListView/JobWorkspaceView/JDAnalysisCenterView matchScore 0→`'—'`、department 兜底 `'—'`、星级去 `|| 5` 假满星；快速填充已有「范例」标注（Q4 保留项）。
+- [x] **门禁**：encoding 397/0、ruff check/format 0、**pytest 1088 passed / 7 skipped**；FE tsc 0、**vitest 251/251（32 文件）**、`npm run build` ✓；新增测试 = mappers jobRowToJob 4 + stageLabel 2、jobs-query 主源 join/job-only 持久化/失败回滚 3、jd-query 不回落/job_id 对齐 2、workflow job_id 回传断言 1。
+- **边界/债**：matchScore 事实仍不在 job 表（实体行恒 0，分析回填值在自然 refetch 后归 0 → 显示 '—'，match_score join 归后续）；`status_to_cn` 错误消息仍含轮次词（非对外词表）；setDelivered/create 失败仍 fire-and-forget（任务范围仅终止）。
+- **⚠️ 共享工作区**：他窗 T-M8 review 域在途期间 `api/types.ts` 混入他改动 → 用 `git apply --cached` 手工 patch 只暂存我的 hunk（`t_m5_5_types.patch`），他窗 review/* 文件全程未 add；CreateReview 的 Q4 edit 被他窗 T-M8-5 commit `ade0392` 整文件带走（内容正确、已入库，本批注记归属）。
+
 ## T-M6-3 编辑器缺口任务列 + 简历要点 AI 改写 + 建议链 FE/BE 全下线（2026-10-03，M6 批次第三任务）
 
 > 三问裁决（用户确认后执行）：① 改写目标选点 = 中栏点选 bullet（复用 `selectedBulletForSource`）+ 左栏缺口点「AI 改写」应用；② `kind=evidence` 只展示「需补强」+ 按 `card_id` 跳经历库（无 cardId 禁用），不走改写；③ 旧建议链 FE+BE 全下线，**DB 列 `resume_suggestions`（V0015）与 BE Schema/`ResumeSuggestionRecord` 保留**（前向兼容只加不删），FE/BE 分两笔 commit。
