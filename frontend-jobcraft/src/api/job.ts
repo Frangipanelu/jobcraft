@@ -11,6 +11,7 @@ import type {
   Submission,
   DashboardItem,
   SaveResumeResult,
+  ResumeVersionWire,
   ResumePersonalInfo,
   ResumeSuggestionWire,
   ExperienceCard,
@@ -234,6 +235,30 @@ export async function saveResume(payload: {
 }): Promise<SaveResumeResult & { resume_markdown?: string; resume_html?: string }> {
   return request('/api/jobcraft/job/save-resume', {
     method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+// ============================================================
+// 简历版本（T-M6-2：FE 简历域读写源，替代 submission 的简历正文）
+// ============================================================
+
+export async function listResumeVersions(jobId?: number): Promise<ResumeVersionWire[]> {
+  const qs = jobId != null ? `?job_id=${jobId}` : ''
+  return request<ResumeVersionWire[]>(`/api/jobcraft/resume-version${qs}`)
+}
+
+export async function updateResumeVersion(
+  id: number,
+  payload: {
+    version_name?: string
+    sections?: unknown
+    resume_markdown?: string
+    source_expression_refs?: unknown
+  },
+): Promise<ResumeVersionWire> {
+  return request<ResumeVersionWire>(`/api/jobcraft/resume-version/${id}`, {
+    method: 'PATCH',
     body: JSON.stringify(payload),
   })
 }

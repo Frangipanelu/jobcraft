@@ -167,7 +167,16 @@ export const ResumeEditorView: React.FC<ResumeEditorViewProps> = ({
   const handleRejectSuggestion = (suggestionId: string) => {
     rejectSuggestion
       .mutateAsync({ resumeId: rid, suggestionId })
-      .then((result) => persistToast(result.synced, '已忽略该建议', '状态已同步保存。'))
+      .then((result) => {
+        // T-M6-2：建议状态列已从 submission 剥离，仅本地标记（M6-3 接回前不落库）
+        showToast({
+          type: 'success',
+          title: '已忽略该建议',
+          message: result.synced
+            ? '状态已同步保存。'
+            : '已在本地标记忽略，建议域改版完成后将支持同步。',
+        });
+      })
       .catch((error: unknown) => {
         showToast({
           type: 'error',
@@ -212,6 +221,14 @@ export const ResumeEditorView: React.FC<ResumeEditorViewProps> = ({
       {
         onSuccess: (result) => {
           if (!result.generated) {
+            if (result.reason === 'unavailable') {
+              showToast({
+                type: 'info',
+                title: 'AI 建议待接入',
+                message: '建议生成正在改版，当前可继续手动编辑与保存。',
+              });
+              return;
+            }
             showToast(
               result.reason === 'local'
                 ? {

@@ -64,14 +64,16 @@ export function deriveJobStatus(steps: Job['steps']): JobStatus {
  * job 表实体（无 submission 的 job-only 行）→ 前端 Job（T-M5-1 双源并存的最小合并）。
  *
  * 仅用于补「已建岗但尚未投递」的行：分析事实取自 job.job_analysis_id；
- * 简历/复盘/面试等 submission 派生态尚不可得，按 pending 展示，T-M5-2 单源切换后统一 join。
+ * T-M6-2 起 customResume/resumeId 由 resume_version 存在性判定（版本 id 入参，
+ * 缺省为 false/undefined，保持旧调用行为）。
  */
-export function jobEntityToJob(entity: JobEntity): Job {
+export function jobEntityToJob(entity: JobEntity, resumeVersionId?: number): Job {
   const hasAnalysis = entity.job_analysis_id != null;
+  const hasResumeVersion = resumeVersionId != null;
   const steps: Job['steps'] = {
     jdAnalysis: hasAnalysis,
     expMatched: false,
-    customResume: false,
+    customResume: hasResumeVersion,
     applied: false,
     prepStage: 'pending',
     reviewStage: 'pending',
@@ -91,6 +93,7 @@ export function jobEntityToJob(entity: JobEntity): Job {
     nextAction: hasAnalysis ? '基于 JD 生成定制简历' : '开始进行该岗位的 JD 深度解析',
     steps,
     jdAnalysisId: hasAnalysis ? String(entity.job_analysis_id) : undefined,
+    resumeId: hasResumeVersion ? String(resumeVersionId) : undefined,
     interviewIds: [],
   };
 }

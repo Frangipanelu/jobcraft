@@ -1,9 +1,20 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { useEffect, useRef } from 'react';
 import { fireEvent, screen } from '@testing-library/react';
+import { useQueryClient } from '@tanstack/react-query';
 import { renderWithProviders } from './test-utils';
 import { ResumeEditorView } from '../components/resume/ResumeEditorView';
 import { ToastContainer } from '../components/common/Toast';
-import type { DashboardItem, ResumeSuggestionWire, Submission } from '../api/types';
+import { useResumesQuery } from '../features/resume/hooks';
+import { RESUMES_QUERY_KEY } from '../features/resume/mappers';
+import { hydrateResumeSuggestions } from '../utils/resumeSuggestionMapper';
+import type {
+  DashboardItem,
+  ResumeSuggestionWire,
+  ResumeVersionWire,
+  Submission,
+} from '../api/types';
+import type { ResumeVersion } from '../types/jobcraft';
 
 const auth = vi.hoisted(() => ({
   autoLogin: vi.fn(),
@@ -23,6 +34,8 @@ const job = vi.hoisted(() => ({
   suggestResume: vi.fn(),
   listBaseResumes: vi.fn(),
   listJobAnalyses: vi.fn(),
+  listResumeVersions: vi.fn(),
+  updateResumeVersion: vi.fn(),
 }));
 
 const tasks = vi.hoisted(() => ({
@@ -109,6 +122,25 @@ const SUBMISSION_DETAIL: Submission = {
   updated_at: '2026-09-18T08:00:00',
 };
 
+/** T-M6-2：简历读写源 = resume_version（id 100 沿用原 submission id 便于断言） */
+const VERSION_WIRE: ResumeVersionWire = {
+  id: 100,
+  user_id: 1,
+  job_id: null,
+  job_analysis_id: 12,
+  direction_id: null,
+  version_no: 1,
+  version_name: null,
+  sections: null,
+  resume_markdown: SUBMISSION_DETAIL.resume_markdown,
+  selected_for_application: false,
+  source_expression_refs: null,
+  company: '字节跳动',
+  position: 'AI 产品经理',
+  created_at: '2026-09-18T08:00:00',
+  updated_at: '2026-09-18T08:00:00',
+};
+
 const PENDING_WIRE: ResumeSuggestionWire = {
   id: 'sg_test01',
   type: 'keyword',
@@ -142,6 +174,8 @@ beforeEach(() => {
   job.getSubmission.mockResolvedValue(SUBMISSION_DETAIL);
   job.updateSubmission.mockResolvedValue({ ok: true });
   job.suggestResume.mockResolvedValue({ suggestions: [PENDING_WIRE] });
+  job.listResumeVersions.mockResolvedValue([VERSION_WIRE]);
+  job.updateResumeVersion.mockResolvedValue(VERSION_WIRE);
   job.listBaseResumes.mockResolvedValue([]);
   job.listJobAnalyses.mockResolvedValue([]);
   experience.listCards.mockResolvedValue([]);
@@ -151,48 +185,106 @@ beforeEach(() => {
   );
 });
 
-describe('resume-suggest (FE-RESUME-02)', () => {
-  it('水合存量 pending 建议并应用 → PATCH resume_markdown + resume_suggestions(applied)', async () => {
-    job.getSubmission.mockResolvedValue({
-      ...SUBMISSION_DETAIL,
-      resume_suggestions: [PENDING_WIRE],
-    });
-    renderWithProviders(
-      <>
-        <ResumeEditorView resumeId="100" />
-        <ToastContainer />
-      </>,
-    );
+/**
+ * 水合完成后向 RESUMES cache 注入一条建议（wire → AISuggestion，与 hydrate 同契约）。
+ * T-M6-2 起 version 读源不再携带 resume_suggestions，注入用于验证 apply/reject 写路径。
+ */
+const SuggestionSeeder = ({ wire }: { wire: ResumeSuggestionWire }) => {
+  const queryClient = useQueryClient();
+  const { data } = useResumesQuery();
+  const onceRef = useRef(false);
+  const hydrated = data ? '100' in data : false;
+
+  useEffect(() => {
+    if (onceRef.current || !hydrated) return;
+    const t = setTimeout(() => {
+      onceRef.current = true;
+      const map =
+        queryClient.getQueryData<Record<string, ResumeVersion>>([...RESUMES_QUERY_KEY]) || {};
+      const built = map['100'];
+      if (!built) return;
+      queryClient.setQueryData([...RESUMES_QUERY_KEY], {
+        ...map,
+        '100': { ...built, aiSuggestions: hydrateResumeSuggestions(built, [wire]) },
+      });
+    }, 0);
+    return () => clearTimeout(t);
+  }, [hydrated, wire, queryClient]);
+
+  return null;
+};
+
+function renderEditor(wire?: ResumeSuggestionWire) {
+  return renderWithProviders(
+    <>
+      {wire ? <SuggestionSeeder wire={wire} /> : null}
+      <ResumeEditorView resumeId="100" />
+      <ToastContainer />
+    </>,
+  );
+}
+
+describe('resume-suggest (FE-RESUME-02 · T-M6-2)', () => {
+  it('存量建议不再水合：version 读源无建议列 → 面板空态且不走 submission 接口', async () => {
+    renderEditor();
+
+    expect(await screen.findByText('尚未生成优化建议')).toBeTruthy();
+    expect(screen.getByRole('button', { name: '生成 AI 优化建议' })).toBeTruthy();
+    expect(job.getSubmission).not.toHaveBeenCalled();
+    expect(job.listResumeVersions).toHaveBeenCalled();
+  });
+
+  it('生成建议：暂不可用 → info toast「AI 建议待接入」，不打任务/端点/PATCH', async () => {
+    renderEditor();
+
+    expect(await screen.findByText('尚未生成优化建议')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '生成 AI 优化建议' }));
+
+    expect(await screen.findByText('AI 建议待接入')).toBeTruthy();
+    expect(tasks.runTaskOrSync).not.toHaveBeenCalled();
+    expect(job.suggestResume).not.toHaveBeenCalled();
+    expect(job.updateSubmission).not.toHaveBeenCalled();
+    expect(job.updateResumeVersion).not.toHaveBeenCalled();
+  });
+
+  it('注入 pending 建议 → 应用：updateResumeVersion 仅 PATCH resume_markdown（建议列已剥离）', async () => {
+    renderEditor(PENDING_WIRE);
 
     expect(await screen.findByText(/补充 JD 关键词/)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: '应用优化' }));
 
     expect(await screen.findByText('已应用')).toBeTruthy();
     await vi.waitFor(() => {
-      expect(job.updateSubmission).toHaveBeenCalledWith(
+      expect(job.updateResumeVersion).toHaveBeenCalledWith(
         100,
         expect.objectContaining({
           resume_markdown: expect.stringContaining('覆盖 3 大维度'),
-          resume_suggestions: expect.arrayContaining([
-            expect.objectContaining({ id: 'sg_test01', status: 'applied' }),
-          ]),
         }),
       );
     });
+    const [, payload] = job.updateResumeVersion.mock.calls.at(-1) as [
+      number,
+      Record<string, unknown>,
+    ];
+    expect(payload.resume_suggestions).toBeUndefined();
+    expect(job.updateSubmission).not.toHaveBeenCalled();
     expect(screen.getAllByText(/覆盖 3 大维度/).length).toBeGreaterThan(0);
   });
 
-  it('定位失败的 pending 建议 → stale「已失效」徽标且应用按钮禁用', async () => {
-    job.getSubmission.mockResolvedValue({
-      ...SUBMISSION_DETAIL,
-      resume_suggestions: [STALE_WIRE],
-    });
-    renderWithProviders(
-      <>
-        <ResumeEditorView resumeId="100" />
-        <ToastContainer />
-      </>,
-    );
+  it('注入 pending 建议 → 忽略：本地标记，不打 PATCH（建议状态暂不持久化）', async () => {
+    renderEditor(PENDING_WIRE);
+
+    expect(await screen.findByText(/补充 JD 关键词/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '忽略' }));
+
+    expect(await screen.findByText('已忽略')).toBeTruthy();
+    expect(await screen.findByText('已在本地标记忽略，建议域改版完成后将支持同步。')).toBeTruthy();
+    expect(job.updateResumeVersion).not.toHaveBeenCalled();
+    expect(job.updateSubmission).not.toHaveBeenCalled();
+  });
+
+  it('注入定位失败的 pending 建议 → stale「已失效」徽标且应用按钮禁用', async () => {
+    renderEditor(STALE_WIRE);
 
     expect(await screen.findByText(/措辞润色/)).toBeTruthy();
     expect(await screen.findByText('已失效')).toBeTruthy();
@@ -200,77 +292,8 @@ describe('resume-suggest (FE-RESUME-02)', () => {
     expect(applyBtn.disabled).toBe(true);
   });
 
-  it('生成建议：runTaskOrSync(resume_suggest) → 降级端点 → PATCH resume_suggestions 落库', async () => {
-    renderWithProviders(
-      <>
-        <ResumeEditorView resumeId="100" />
-        <ToastContainer />
-      </>,
-    );
-
-    expect(await screen.findByText('尚未生成优化建议')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: '生成 AI 优化建议' }));
-
-    expect(await screen.findByText(/补充 JD 关键词/)).toBeTruthy();
-    await vi.waitFor(() => {
-      expect(tasks.runTaskOrSync).toHaveBeenCalledWith(
-        'resume_suggest',
-        expect.objectContaining({
-          submission_id: 100,
-          user_id: 1,
-          bullets: [{ item_index: 0, bullet_index: 0, text: BULLET_TEXT }],
-        }),
-        expect.any(Function),
-        { timeout: 120_000 },
-      );
-      expect(job.suggestResume).toHaveBeenCalledWith(100, [
-        { item_index: 0, bullet_index: 0, text: BULLET_TEXT },
-      ]);
-      expect(job.updateSubmission).toHaveBeenCalledWith(
-        100,
-        expect.objectContaining({
-          resume_suggestions: expect.arrayContaining([
-            expect.objectContaining({ id: 'sg_test01', status: 'pending' }),
-          ]),
-        }),
-      );
-    });
-    expect(await screen.findByText('优化建议已生成')).toBeTruthy();
-  });
-
-  it('忽略建议 → 仅 PATCH resume_suggestions(rejected)，不带正文', async () => {
-    job.getSubmission.mockResolvedValue({
-      ...SUBMISSION_DETAIL,
-      resume_suggestions: [PENDING_WIRE],
-    });
-    renderWithProviders(
-      <>
-        <ResumeEditorView resumeId="100" />
-        <ToastContainer />
-      </>,
-    );
-
-    expect(await screen.findByText(/补充 JD 关键词/)).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: '忽略' }));
-
-    expect(await screen.findByText('已忽略')).toBeTruthy();
-    await vi.waitFor(() => {
-      expect(job.updateSubmission).toHaveBeenCalledTimes(1);
-      const [, payload] = job.updateSubmission.mock.calls.at(-1) as [number, Record<string, unknown>];
-      expect(payload.resume_markdown).toBeUndefined();
-      expect(payload.resume_suggestions).toEqual([
-        expect.objectContaining({ id: 'sg_test01', status: 'rejected' }),
-      ]);
-    });
-  });
-
-  it('编辑要点保存 → PATCH resume_markdown 真实落库（修「假 toast」）', async () => {
-    renderWithProviders(
-      <>
-        <ResumeEditorView resumeId="100" />
-        <ToastContainer />
-      </>,
-    );
+  it('编辑要点保存 → updateResumeVersion PATCH resume_markdown 真实落库', async () => {
+    renderEditor();
 
     expect(await screen.findByText(BULLET_TEXT)).toBeTruthy();
     fireEvent.click(screen.getByTitle('直接编辑'));
@@ -280,7 +303,7 @@ describe('resume-suggest (FE-RESUME-02)', () => {
 
     expect(await screen.findByText('全新要点内容')).toBeTruthy();
     await vi.waitFor(() => {
-      expect(job.updateSubmission).toHaveBeenCalledWith(
+      expect(job.updateResumeVersion).toHaveBeenCalledWith(
         100,
         expect.objectContaining({
           resume_markdown: expect.stringContaining('全新要点内容'),
@@ -288,5 +311,6 @@ describe('resume-suggest (FE-RESUME-02)', () => {
       );
     });
     expect(await screen.findByText('要点已保存')).toBeTruthy();
+    expect(job.updateSubmission).not.toHaveBeenCalled();
   });
 });

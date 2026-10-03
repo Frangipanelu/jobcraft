@@ -540,11 +540,32 @@ export interface DashboardItem {
 // ============================================================
 
 export interface SaveResumeResult {
-  submission_id?: number
+  submission_id?: number | null
+  /** T-M6-2：save-resume 产物写入 resume_version 的版本 id（submission_id 已废为 null） */
+  resume_version_id?: number | null
   file_path: string
   file_name: string
   size_bytes: number
   selected_count: number
+}
+
+/** T-M6-2：简历版本（/api/jobcraft/resume-version），FE 简历域读写源 */
+export interface ResumeVersionWire {
+  id: number
+  user_id: number
+  job_id: number | null
+  job_analysis_id: number | null
+  direction_id: number | null
+  version_no: number
+  version_name: string | null
+  sections: unknown
+  resume_markdown: string | null
+  selected_for_application: boolean
+  source_expression_refs: unknown
+  company: string | null
+  position: string | null
+  created_at: string | null
+  updated_at: string | null
 }
 
 export interface ResumePersonalInfo {

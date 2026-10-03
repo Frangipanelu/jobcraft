@@ -25,14 +25,40 @@ export function useJobsQuery() {
         entities = [];
       }
 
+      // T-M6-2：按 analysis 归组取最新简历版本（列表已 version_no DESC，首见即最新）。
+      // customResume 步骤与 resumeId 以版本 id 为准；失败容忍（无版本按 has_resume 兜底）。
+      const versionByAnalysis = new Map<number, number>();
+      try {
+        const versions = await jobApi.listResumeVersions();
+        for (const v of versions) {
+          if (v.job_analysis_id != null && !versionByAnalysis.has(v.job_analysis_id)) {
+            versionByAnalysis.set(v.job_analysis_id, v.id);
+          }
+        }
+      } catch {
+        // 版本接口不可用：退回 dashboard has_resume 判定，不阻断岗位列表
+      }
+
+      const withResume = fromSubmissions.map((j) => {
+        const aid = j.jdAnalysisId ? Number(j.jdAnalysisId) : null;
+        const vid = aid != null ? versionByAnalysis.get(aid) : undefined;
+        if (vid == null) return j;
+        return { ...j, resumeId: String(vid), steps: { ...j.steps, customResume: true } };
+      });
+
       // 双源去重：有投递的岗位由 dashboard 派生（job_id 覆盖），只补纯岗位行
       const covered = new Set(
-        fromSubmissions.map((j) => j.jobId).filter((v): v is number => v != null),
+        withResume.map((j) => j.jobId).filter((v): v is number => v != null),
       );
       const jobOnly = entities
         .filter((e) => e.submission_id == null && !covered.has(e.id))
-        .map(jobEntityToJob);
-      return [...jobOnly, ...fromSubmissions];
+        .map((e) =>
+          jobEntityToJob(
+            e,
+            e.job_analysis_id != null ? versionByAnalysis.get(e.job_analysis_id) : undefined,
+          ),
+        );
+      return [...jobOnly, ...withResume];
     },
   });
 }

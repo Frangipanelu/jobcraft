@@ -1,21 +1,16 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import * as authApi from '../../api/auth';
 import * as jobApi from '../../api/job';
-import * as tasksApi from '../../api/tasks';
 import type { ResumePersonalInfo, ResumeSuggestionWire } from '../../api/types';
 import { ResumeVersion } from '../../types/jobcraft';
 import { markdownToResume, resumeToMarkdown } from '../../utils/resumeParser';
-import {
-  buildSuggestionBullets,
-  hydrateResumeSuggestions,
-  suggestionsToWire,
-} from '../../utils/resumeSuggestionMapper';
+import { suggestionsToWire } from '../../utils/resumeSuggestionMapper';
 import { RESUMES_QUERY_KEY } from './mappers';
 import { JOBS_QUERY_KEY } from '../jobs/mappers';
 
 /**
  * 读取当前 RESUMES cache。
- * 简历 map 为 `Record<submissionId, ResumeVersion>`（submissionId 为字符串），缺失时回退空对象。
+ * 简历 map 为 `Record<versionId, ResumeVersion>`（versionId 为字符串，T-M6-2 起
+ * 以 resume_version id 为身份；此前为 submission id），缺失时回退空对象。
  */
 function readResumesMap(
   queryClient: ReturnType<typeof useQueryClient>,
@@ -34,12 +29,11 @@ function writeResumesMap(
 }
 
 /**
- * FE-RESUME-02：统一落库出口（PATCH /submission/{id}）。
+ * FE-RESUME-02：统一落库出口（PATCH /resume-version/{id}，T-M6-2 起版本维度）。
  * - resume_markdown：正文变更（生成/编辑/增删/应用改写）
- * - resume_suggestions：建议状态变更（生成落库/应用/忽略）
- * 本地示例（resumeId 非数字）跳过 API，返回 synced=false（调用方 toast 提示）。
- * FE-CACHE-01：submission 写入后重验 jobs 镜像（两键同源于 getDashboard，
- * resume_markdown 会翻转 dashboard 的 has_resume，只补 RESUMES 会漂移）。
+ * - resume_suggestions：版本表无此列（V0021 Q1-B），切换后暂不持久化——建议域
+ *   仍挂 submission，M6-3（矩阵：下线/重构 aiSuggestions mutation）统一接回
+ * - 本地示例（resumeId 非数字）跳过 API，返回 false（调用方 toast 提示）
  * @returns 是否已同步后端；PATCH 失败上抛（调用方 error toast）
  */
 async function persistResumePatch(
@@ -50,9 +44,12 @@ async function persistResumePatch(
     resume_suggestions?: ResumeSuggestionWire[];
   },
 ): Promise<boolean> {
-  const submissionId = Number(resumeId);
-  if (Number.isNaN(submissionId)) return false;
-  await jobApi.updateSubmission(submissionId, patch);
+  const versionId = Number(resumeId);
+  if (Number.isNaN(versionId)) return false;
+  const versionPatch = { ...patch };
+  delete versionPatch.resume_suggestions;
+  if (!Object.keys(versionPatch).length) return false;
+  await jobApi.updateResumeVersion(versionId, versionPatch);
   queryClient.invalidateQueries({ queryKey: [...JOBS_QUERY_KEY] });
   return true;
 }
@@ -73,45 +70,33 @@ function findBulletById(
 }
 
 /**
- * 查询简历编辑 map。与 legacy `loadDashboard` 内联水合行为等价：
- * - getDashboard → 对 `has_resume` 的投递调 getSubmission → `markdownToResume`；
- * - 单条失败容忍（返回 null 跳过），不抛错、不留 console；空数据返回 {}。
- * @returns 以 submission id（字符串）为键的简历 map
+ * 查询简历编辑 map（T-M6-2：读源切换为 resume_version，不再经 dashboard/getSubmission）。
+ * - `GET /api/jobcraft/resume-version` 全量（后端已按 version_no DESC 排序）→
+ *   按岗位归组取最新一条；
+ * - 归组键：job_analysis_id（存量版本可能无 job 行，FE 地图以 jdAnalysisId 关联），
+ *   缺失回退 job_id，再回退版本 id（单行组）；
+ * - 键 = 版本 id（字符串），resumeId 语义随之从 submission id 切换；
+ * - resume_suggestions 挂 submission（V0021 无此列），存量 AI 建议暂不水合（M6-3 债）。
+ * @returns 以版本 id（字符串）为键的简历 map
  */
 export function useResumesQuery() {
   return useQuery({
     queryKey: [...RESUMES_QUERY_KEY],
     queryFn: async () => {
-      const user = await authApi.getCurrentUser();
-      const data = await jobApi.getDashboard(user.id);
-      const submissions = data.submissions || [];
-
-      const entries = await Promise.all(
-        submissions.map(async (item) => {
-          if (!item.has_resume) return null;
-          try {
-            const detail = await jobApi.getSubmission(item.id);
-            const resume = markdownToResume(detail.resume_markdown, {
-              position: detail.position,
-              company: detail.company,
-              id: String(item.id),
-            });
-            if (!resume) return null;
-            // FE-RESUME-02：挂载存量 AI 建议（定位失败的 pending → stale）
-            resume.aiSuggestions = hydrateResumeSuggestions(
-              resume,
-              detail.resume_suggestions,
-            );
-            return [String(item.id), resume] as const;
-          } catch {
-            return null;
-          }
-        }),
-      );
-
+      const versions = await jobApi.listResumeVersions();
+      const latestByJob = new Map<string, (typeof versions)[number]>();
+      for (const v of versions) {
+        const group = String(v.job_analysis_id ?? v.job_id ?? v.id);
+        if (!latestByJob.has(group)) latestByJob.set(group, v);
+      }
       const next: Record<string, ResumeVersion> = {};
-      for (const entry of entries) {
-        if (entry) next[entry[0]] = entry[1];
+      for (const v of latestByJob.values()) {
+        const resume = markdownToResume(v.resume_markdown, {
+          position: v.position ?? '',
+          company: v.company ?? '',
+          id: String(v.id),
+        });
+        if (resume) next[String(v.id)] = resume;
       }
       return next;
     },
@@ -502,10 +487,10 @@ export type SaveResumeMutationResult =
   | { saved: false; reason: 'local' };
 
 /**
- * 保存简历草稿。与 legacy `JobCraftContext.saveResume` 行为等价：
+ * 保存简历草稿（T-M6-2：落库 PATCH /resume-version/{id}，版本维度）。
  * - `resumeToMarkdown` 序列化 → `Number(resumeId)` 非数字视为本地示例（resolve `{saved:false, reason:'local'}`，
  *   视图 warning toast，等价 legacy 早退）；
- * - 合法 id `await jobApi.updateSubmission(submissionId, { resume_markdown })`，失败抛错（视图 error toast）；
+ * - 合法 id `await jobApi.updateResumeVersion(versionId, { resume_markdown })`，失败抛错（视图 error toast）；
  * - 成功后 cache 更新 `updatedAt='刚刚'`。业务代码不留 console（AGENTS 红线）。
  */
 export function useSaveResumeMutation() {
@@ -518,11 +503,11 @@ export function useSaveResumeMutation() {
       if (!resume) throw new Error('未找到对应的简历');
 
       const markdown = resumeToMarkdown(resume);
-      const submissionId = Number(resumeId);
-      if (Number.isNaN(submissionId)) {
+      const versionId = Number(resumeId);
+      if (Number.isNaN(versionId)) {
         return { saved: false, reason: 'local' as const };
       }
-      await jobApi.updateSubmission(submissionId, { resume_markdown: markdown });
+      await jobApi.updateResumeVersion(versionId, { resume_markdown: markdown });
       return { saved: true, markdown };
     },
     onSuccess: (result, { resumeId }) => {
@@ -534,8 +519,8 @@ export function useSaveResumeMutation() {
         ...prev,
         [resumeId]: { ...resume, updatedAt: '刚刚' },
       });
-      // FE-CACHE-01：submission.resume_markdown 落库翻转 dashboard has_resume，
-      // 定向重验 jobs 镜像，避免岗位卡片仍显示「无简历」
+      // FE-CACHE-01：岗位卡片 customResume 步骤按版本存在性判定（T-M6-2 起
+      // 不再依赖 dashboard has_resume），版本落库后重验 jobs 镜像
       queryClient.invalidateQueries({ queryKey: [...JOBS_QUERY_KEY] });
     },
   });
@@ -552,7 +537,7 @@ export interface GenerateResumeFromJdArgs {
 
 /**
  * JD 报告页「生成简历」（save-resume 端点）：生成简历并把 markdown 解析为 ResumeVersion。
- * 返回 { resumeId, resume }（resumeId = submission id 字符串），由调用方接
+ * 返回 { resumeId, resume }（T-M6-2：resumeId = resume_version id 字符串），由调用方接
  * useUpsertResumeMutation 并入 RESUMES cache；端点未回 markdown/id 或解析失败
  * 返回 null（不视为错误，调用方跳过缓存写入）；失败上抛（调用方 error toast）。
  */
@@ -568,14 +553,14 @@ export function useGenerateResumeFromJdMutation() {
         selected_card_ids: selectedCardIds,
         personal_info: personalInfo,
       });
-      if (!result.resume_markdown || !result.submission_id) return null;
+      if (!result.resume_markdown || !result.resume_version_id) return null;
       const resume = markdownToResume(result.resume_markdown, {
         position,
         company,
-        id: String(result.submission_id),
+        id: String(result.resume_version_id),
       });
       if (!resume) return null;
-      return { resumeId: String(result.submission_id), resume };
+      return { resumeId: String(result.resume_version_id), resume };
     },
   });
 }
@@ -602,68 +587,31 @@ export function useUpsertResumeMutation() {
 }
 
 export interface GenerateSuggestionsResult {
-  /** 是否完成生成（本地示例/无要点为 false） */
+  /** 是否完成生成（本地示例/无要点/暂不可用为 false） */
   generated: boolean;
   /** 本次生成的建议条数 */
   count: number;
-  reason?: 'local' | 'empty';
+  reason?: 'local' | 'empty' | 'unavailable';
   /** 新建议是否已落库（PATCH resume_suggestions） */
   synced: boolean;
 }
 
 /**
- * FE-RESUME-02：生成简历 AI 优化建议（方案 B 触发点：JD 生成简历后自动 fire + 编辑器按钮）。
+ * FE-RESUME-02：生成简历 AI 优化建议。
  *
- * - 输入：结构化 bullets（sections→items→bullets 展平，与水合共用索引契约）；
- *   岗位上下文由服务端自取（JD 分析产物），前端不传 JD 数据；
- * - 任务系统可用走 `resume_suggest` 任务，不可用降级同步端点 `suggestResume`；
- * - 生成结果替换 pending 建议、保留 applied/rejected 历史，并 PATCH 落库；
- * - 失败上抛（调用方 error toast）；本地示例返回 {generated:false, reason:'local'}。
+ * T-M6-2 暂停：服务端建议链（`suggestResume` 端点 / `resume_suggest` 任务）仍以
+ * submission id 取数，而 resumeId 已切换为 resume_version id——继续调用会以错误
+ * id 打到 submission。简历读写身份迁移期间固定返回 `{reason:'unavailable'}`，
+ * 待 M6-3（矩阵：下线/重构 aiSuggestions 空壳 mutation）以版本维度接回。
  * @param mutationFn 入参 { resumeId }
  */
 export function useGenerateResumeSuggestionsMutation() {
-  const queryClient = useQueryClient();
-
   return useMutation<GenerateSuggestionsResult, unknown, { resumeId: string }>({
-    mutationFn: async ({ resumeId }) => {
-      const prev = readResumesMap(queryClient);
-      const resume = prev[resumeId];
-      if (!resume) throw new Error('未找到对应的简历');
-
-      const submissionId = Number(resumeId);
-      if (Number.isNaN(submissionId)) {
-        return { generated: false, count: 0, reason: 'local', synced: false };
-      }
-      const bullets = buildSuggestionBullets(resume);
-      if (!bullets.length) {
-        return { generated: false, count: 0, reason: 'empty', synced: false };
-      }
-
-      const user = await authApi.getCurrentUser();
-      const result = await tasksApi.runTaskOrSync<{ suggestions?: ResumeSuggestionWire[] }>(
-        'resume_suggest',
-        { submission_id: submissionId, user_id: user.id, bullets },
-        () => jobApi.suggestResume(submissionId, bullets),
-        { timeout: 120_000 },
-      );
-      const wires = result?.suggestions || [];
-
-      const history = (resume.aiSuggestions || []).filter((s) => s.applied || s.rejected);
-      const updatedSuggestions = [
-        ...history,
-        ...hydrateResumeSuggestions(resume, wires),
-      ];
-      const nextResume = {
-        ...resume,
-        aiSuggestions: updatedSuggestions,
-        updatedAt: '刚刚',
-      };
-
-      const synced = await persistResumePatch(queryClient, resumeId, {
-        resume_suggestions: suggestionsToWire(updatedSuggestions, nextResume),
-      });
-      writeResumesMap(queryClient, { ...prev, [resumeId]: nextResume });
-      return { generated: true, count: wires.length, synced };
-    },
+    mutationFn: async () => ({
+      generated: false,
+      count: 0,
+      reason: 'unavailable' as const,
+      synced: false,
+    }),
   });
 }

@@ -8,7 +8,7 @@ import { ResumeEditorView } from '../components/resume/ResumeEditorView';
 import { useResumesQuery, useUpsertResumeMutation } from '../features/resume/hooks';
 import { RESUMES_QUERY_KEY } from '../features/resume/mappers';
 import { markdownToResume, resumeToMarkdown } from '../utils/resumeParser';
-import type { DashboardItem, Submission } from '../api/types';
+import type { DashboardItem, ResumeVersionWire, Submission } from '../api/types';
 import type { AISuggestion, ResumeVersion } from '../types/jobcraft';
 
 const auth = vi.hoisted(() => ({
@@ -28,6 +28,8 @@ const job = vi.hoisted(() => ({
   updateSubmission: vi.fn(),
   listBaseResumes: vi.fn(),
   listJobAnalyses: vi.fn(),
+  listResumeVersions: vi.fn(),
+  updateResumeVersion: vi.fn(),
 }));
 
 const experience = vi.hoisted(() => ({
@@ -109,6 +111,25 @@ const SUBMISSION_DETAIL: Submission = {
 
 const SUGGESTED_TEXT = '主导 RAG 评测体系搭建，覆盖 3 大维度 20+ 指标';
 
+/** T-M6-2：简历读写源 = resume_version（id 100 沿用原 submission id 便于断言） */
+const VERSION_WIRE: ResumeVersionWire = {
+  id: 100,
+  user_id: 1,
+  job_id: null,
+  job_analysis_id: 12,
+  direction_id: null,
+  version_no: 1,
+  version_name: null,
+  sections: null,
+  resume_markdown: SUBMISSION_DETAIL.resume_markdown,
+  selected_for_application: false,
+  source_expression_refs: null,
+  company: '字节跳动',
+  position: 'AI 产品经理',
+  created_at: '2026-09-18T08:00:00',
+  updated_at: '2026-09-18T08:00:00',
+};
+
 beforeEach(() => {
   auth.autoLogin.mockResolvedValue(1);
   auth.getCurrentUser.mockResolvedValue(AUTH_USER);
@@ -116,6 +137,8 @@ beforeEach(() => {
   job.getDashboard.mockResolvedValue({ submissions: [DASH] });
   job.getSubmission.mockResolvedValue(SUBMISSION_DETAIL);
   job.updateSubmission.mockResolvedValue({ ok: true });
+  job.listResumeVersions.mockResolvedValue([VERSION_WIRE]);
+  job.updateResumeVersion.mockResolvedValue(VERSION_WIRE);
   job.listBaseResumes.mockResolvedValue([]);
   job.listJobAnalyses.mockResolvedValue([]);
   experience.listCards.mockResolvedValue([]);
@@ -203,7 +226,7 @@ function renderEditor(injectSuggestion = false) {
 
 describe('resume-query', () => {
   it('空简历数据渲染空态 CTA', async () => {
-    job.getDashboard.mockResolvedValue({ submissions: [] });
+    job.listResumeVersions.mockResolvedValue([]);
     renderWithProviders(
       <>
         <ResumeSeeder />
@@ -274,20 +297,21 @@ describe('resume-query', () => {
     });
   });
 
-  it('保存草稿：updateSubmission 携带序列化 markdown', async () => {
+  it('保存草稿：updateResumeVersion 携带序列化 markdown', async () => {
     renderEditor();
     expect(await screen.findByText(/主导 RAG 评测体系搭建/)).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: '保存草稿' }));
 
     await vi.waitFor(() => {
-      expect(job.updateSubmission).toHaveBeenCalledWith(
+      expect(job.updateResumeVersion).toHaveBeenCalledWith(
         100,
         expect.objectContaining({
           resume_markdown: expect.stringContaining('主导 RAG 评测体系搭建'),
         }),
       );
     });
+    expect(job.updateSubmission).not.toHaveBeenCalled();
   });
 
   it('upsert：生成简历并入 RESUMES cache', async () => {
@@ -324,14 +348,14 @@ describe('FE-RESUME-03 个人信息同步 / 打印导出', () => {
 
     expect(await screen.findByText('已同步个人信息')).toBeTruthy();
     await vi.waitFor(() => {
-      expect(job.updateSubmission).toHaveBeenCalledWith(
+      expect(job.updateResumeVersion).toHaveBeenCalledWith(
         100,
         expect.objectContaining({
           resume_markdown: expect.stringContaining('# 李雷'),
         }),
       );
     });
-    expect(job.updateSubmission).toHaveBeenCalledWith(
+    expect(job.updateResumeVersion).toHaveBeenCalledWith(
       100,
       expect.objectContaining({
         resume_markdown: expect.stringContaining(
@@ -342,7 +366,7 @@ describe('FE-RESUME-03 个人信息同步 / 打印导出', () => {
   });
 
   it('profile 无可同步字段：提示且不落库', async () => {
-    job.updateSubmission.mockClear();
+    job.updateResumeVersion.mockClear();
     auth.getCurrentUser.mockResolvedValue({
       id: 1,
       username: '',
@@ -357,7 +381,7 @@ describe('FE-RESUME-03 个人信息同步 / 打印导出', () => {
     fireEvent.click(screen.getByRole('button', { name: '同步资料' }));
 
     expect(await screen.findByText('暂无可同步内容')).toBeTruthy();
-    expect(job.updateSubmission).not.toHaveBeenCalled();
+    expect(job.updateResumeVersion).not.toHaveBeenCalled();
   });
 
   it('导出 PDF 打开只读 A4 预览，打印按钮触发 window.print', async () => {
