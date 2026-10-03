@@ -29,7 +29,11 @@ logger = logging.getLogger("jobcraft.db.resume_version")
 
 
 def _ensure_resume_version_table() -> None:
-    """确保 resume_version 表存在（schema 已由启动引导/迁移保证时短路）。"""
+    """确保 resume_version 表存在（schema 已由启动引导/迁移保证时短路）。
+
+    T-M6-2：既有表补 job_analysis_id 列（V0022 建表/ALTER 的运行时兜底，
+    仿 db_job 字段增强模式——SHOW COLUMNS 命中即短路，重复执行安全）。
+    """
     if is_schema_ready():
         return
     with connection() as conn:
@@ -40,6 +44,7 @@ def _ensure_resume_version_table() -> None:
                     id                       INT AUTO_INCREMENT PRIMARY KEY,
                     user_id                  INT NOT NULL DEFAULT 1,
                     job_id                   INT,
+                    job_analysis_id          INT,
                     direction_id             INT,
                     version_no               INT NOT NULL DEFAULT 1,
                     version_name             VARCHAR(200),
@@ -51,10 +56,18 @@ def _ensure_resume_version_table() -> None:
                     updated_at               TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                     KEY idx_resume_version_owner (user_id, job_id),
                     KEY idx_resume_version_job (job_id),
+                    KEY idx_resume_version_analysis (job_analysis_id),
                     KEY idx_resume_version_direction (direction_id)
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
                 """
             )
+            cur.execute("SHOW COLUMNS FROM resume_version LIKE 'job_analysis_id'")
+            if not cur.fetchone():
+                cur.execute(
+                    "ALTER TABLE resume_version "
+                    "ADD COLUMN job_analysis_id INT NULL, "
+                    "ADD KEY idx_resume_version_analysis (job_analysis_id)"
+                )
 
 
 def _dump_json(value: Optional[Any]) -> Optional[str]:
@@ -80,11 +93,16 @@ def _parse_json(raw: Any) -> Optional[Any]:
 
 
 def _row_to_version(row: Any) -> Dict[str, Any]:
-    """DB 行 → API dict（时间戳 isoformat，JSON 列解析为结构）。"""
+    """DB 行 → API dict（时间戳 isoformat，JSON 列解析为结构）。
+
+    T-M6-2：JOIN job_analysis 带出 company/position（FE 简历地图显示归属，
+    存量版本可能无 job 行，岗位信息以 analysis 为准）。
+    """
     return {
         "id": row["id"],
         "user_id": row["user_id"],
         "job_id": row.get("job_id"),
+        "job_analysis_id": row.get("job_analysis_id"),
         "direction_id": row.get("direction_id"),
         "version_no": row.get("version_no") or 1,
         "version_name": row.get("version_name"),
@@ -92,9 +110,18 @@ def _row_to_version(row: Any) -> Dict[str, Any]:
         "resume_markdown": row.get("resume_markdown"),
         "selected_for_application": bool(row.get("selected_for_application", 0)),
         "source_expression_refs": _parse_json(row.get("source_expression_refs")),
+        "company": row.get("ana_company"),
+        "position": row.get("ana_position"),
         "created_at": row["created_at"].isoformat() if row.get("created_at") else None,
         "updated_at": row["updated_at"].isoformat() if row.get("updated_at") else None,
     }
+
+
+_LIST_JOIN = (
+    "SELECT v.*, a.company AS ana_company, a.position AS ana_position "
+    "FROM resume_version v "
+    "LEFT JOIN job_analysis a ON a.id = v.job_analysis_id AND a.user_id = v.user_id "
+)
 
 
 def list_resume_versions(
@@ -104,15 +131,15 @@ def list_resume_versions(
 
     :param user_id: 归属用户
     :param job_id: 可选岗位过滤（Q5 版本列表按岗取数）
-    :return: 版本列表（version_no DESC, id DESC）
+    :return: 版本列表（version_no DESC, id DESC），含 company/position
     """
     _ensure_resume_version_table()
-    sql = "SELECT * FROM resume_version WHERE user_id=%s"
+    sql = _LIST_JOIN + "WHERE v.user_id=%s"
     params: List[Any] = [user_id]
     if job_id is not None:
-        sql += " AND job_id=%s"
+        sql += " AND v.job_id=%s"
         params.append(job_id)
-    sql += " ORDER BY version_no DESC, id DESC"
+    sql += " ORDER BY v.version_no DESC, v.id DESC"
     return [_row_to_version(r) for r in query_all(sql, tuple(params))]
 
 
@@ -123,15 +150,35 @@ def get_resume_version(
 
     :param version_id: 版本 id
     :param user_id: 归属校验（None 不校验）
-    :return: 版本 dict；不存在/无归属返回 None
+    :return: 版本 dict（含 company/position）；不存在/无归属返回 None
     """
     _ensure_resume_version_table()
-    sql = "SELECT * FROM resume_version WHERE id=%s"
+    sql = _LIST_JOIN + "WHERE v.id=%s"
     params: List[Any] = [version_id]
     if user_id is not None:
-        sql += " AND user_id=%s"
+        sql += " AND v.user_id=%s"
         params.append(user_id)
     row = query_one(sql, tuple(params))
+    if not row:
+        return None
+    return _row_to_version(row)
+
+
+def get_latest_resume_version(
+    user_id: int, job_analysis_id: int
+) -> Optional[Dict[str, Any]]:
+    """按分析记录取最新版本（T-M6-2：面试准备等读简历正文的入口）。
+
+    :param user_id: 归属用户
+    :param job_analysis_id: 岗位分析 id
+    :return: 最新版本 dict；无则 None
+    """
+    _ensure_resume_version_table()
+    row = query_one(
+        _LIST_JOIN + "WHERE v.user_id=%s AND v.job_analysis_id=%s "
+        "ORDER BY v.version_no DESC, v.id DESC LIMIT 1",
+        (user_id, job_analysis_id),
+    )
     if not row:
         return None
     return _row_to_version(row)
@@ -145,6 +192,7 @@ def create_resume_version(
     sections: Optional[Any] = None,
     resume_markdown: Optional[str] = None,
     source_expression_refs: Optional[Any] = None,
+    job_analysis_id: Optional[int] = None,
 ) -> Dict[str, Any]:
     """保存一个新简历版本（version_no 每岗 MAX+1）。
 
@@ -155,6 +203,8 @@ def create_resume_version(
     :param sections: 结构化模块（JSON 结构）
     :param resume_markdown: 简历 Markdown 快照
     :param source_expression_refs: 来源表达引用（溯源）
+    :param job_analysis_id: 岗位分析归属（T-M6-2：FE 地图/面试准备按
+        analysis 归组读取，存量岗位可能无 job 行）
     :return: 新建版本 dict
     :raises ValueError: job_id 缺失
     """
@@ -170,13 +220,14 @@ def create_resume_version(
     new_id = execute_lastrowid(
         """
         INSERT INTO resume_version
-            (user_id, job_id, direction_id, version_no, version_name,
+            (user_id, job_id, job_analysis_id, direction_id, version_no, version_name,
              sections, resume_markdown, source_expression_refs)
-        VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
+        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
         """,
         (
             user_id,
             job_id,
+            job_analysis_id,
             direction_id,
             next_no,
             (version_name.strip() or None) if version_name else None,

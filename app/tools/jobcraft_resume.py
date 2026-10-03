@@ -115,51 +115,55 @@ def generate_resume(
     for c in cards:
         db_tools.upsert_job_mapping(job_analysis_id, c["id"])
 
-    # 保存到 resume_submission（确保 Dashboard 刷新后仍可见）
-    submission_id = None
+    # T-M6-2：产物写入 resume_version（M5-Q2 裁决——投递前不再 insert submission；
+    # 存量 submission 的简历正文由 V0022 一次性迁为 v1，这里只读其 id 做岗位链接）。
+    # 失败容忍（与原 submission 块同构）：简历文件已落盘，版本落库失败不阻断返回。
+    resume_version_id = None
     try:
-        from app.tools.db_submission import (
-            get_submission_by_analysis,
-            insert_submission,
-            update_submission,
-        )
+        from app.tools.db_job_entity import find_or_create_job, get_job_id_by_analysis
+        from app.tools.db_resume_version import create_resume_version
+        from app.tools.db_submission import get_submission_by_analysis
 
-        sub = get_submission_by_analysis(job_analysis_id, user_id)
-        if sub:
-            # P11-a：保存简历不改变投递状态（不传 status，避免把已确认
-            # 投递的记录退回「待投递」）
-            update_submission(
-                sub["id"],
-                {
-                    "resume_markdown": md,
-                    "resume_file_path": str(md_path),
-                    "card_version_ids": selected_card_ids,
-                },
+        uid = user_id or analysis.get("user_id") or 1
+        legacy_submission_id = None
+        try:
+            legacy = get_submission_by_analysis(job_analysis_id, uid)
+            legacy_submission_id = legacy["id"] if legacy else None
+        except Exception:
+            logger.debug("无存量 submission（job_analysis_id=%s）", job_analysis_id)
+
+        job_id = get_job_id_by_analysis(job_analysis_id, uid)
+        if job_id is None:
+            # 存量岗位可能尚无 job 行：按分析结果懒回填（find_or_create 按
+            # 公司+岗位名幂等匹配，并回链 analysis/submission 防 FE 地图双行）
+            job_id = find_or_create_job(
+                uid,
+                position=position,
+                company=company,
+                job_analysis_id=job_analysis_id,
+                submission_id=legacy_submission_id,
             )
-            submission_id = sub["id"]
-        else:
-            submission_id = insert_submission(
-                {
-                    "user_id": user_id,
-                    "job_analysis_id": job_analysis_id,
-                    "position": position,
-                    "company": company,
-                    "jd_text": analysis.get("jd_text", ""),
-                    "resume_markdown": md,
-                    "resume_file_path": str(md_path),
-                    "card_version_ids": selected_card_ids,
-                    # P11-a：创建 ≠ 投递，默认「待投递」
-                    "status": "PREPARED",
-                }
-            )
+        if job_id is None:
+            raise ValueError("岗位归属缺失（job_id=None）")
+        version = create_resume_version(
+            user_id=uid,
+            job_id=job_id,
+            job_analysis_id=job_analysis_id,
+            resume_markdown=md,
+        )
+        resume_version_id = version["id"]
     except Exception:
         logger.warning(
-            "保存 resume 到 submission 失败，job_analysis_id=%s", job_analysis_id
+            "保存简历到 resume_version 失败，job_analysis_id=%s",
+            job_analysis_id,
+            exc_info=True,
         )
 
     return {
         "job_analysis_id": job_analysis_id,
-        "submission_id": submission_id,
+        # submission_id 保留为 None（FE 切换到 resume_version_id 前的契约过渡）
+        "submission_id": None,
+        "resume_version_id": resume_version_id,
         "resume_path": str(md_path),
         "resume_markdown": md,
         "resume_html": html,

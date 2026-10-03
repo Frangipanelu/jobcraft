@@ -232,6 +232,14 @@ class TestJobcraftResume:
             ),
             patch("app.tools.db_submission.insert_submission", lambda *a, **k: 99),
             patch(
+                "app.tools.db_job_entity.get_job_id_by_analysis",
+                lambda *a, **k: 15,
+            ),
+            patch(
+                "app.tools.db_resume_version.create_resume_version",
+                lambda **k: {"id": 77},
+            ),
+            patch(
                 "app.tools.db_expression.get_active_expression_content",
                 lambda cid, user_id, expr_type="standardized": "激活表达",
             ),
@@ -257,7 +265,120 @@ class TestJobcraftResume:
         assert captured_md["cards"][0]["active_expression"] == "激活表达"
         assert captured_html["cards"][0]["active_expression"] == "激活表达"
         assert incremented == [3]
-        assert result["submission_id"] == 99
+        # T-M6-2：产物写 resume_version，不再 insert submission
+        assert result["submission_id"] is None
+        assert result["resume_version_id"] == 77
+
+    def test_generate_resume_writes_version_not_submission(self, tmp_path):
+        """T-M6-2：save-resume 产物写 resume_version，绝不 insert/update submission。"""
+        from app.tools.jobcraft_resume import generate_resume
+
+        created = {}
+
+        def fake_create(**kwargs):
+            created.update(kwargs)
+            return {"id": 42}
+
+        def forbid_submission(*args, **kwargs):
+            raise AssertionError("T-M6-2 后 save-resume 不得写 submission")
+
+        with (
+            patch("app.tools.jobcraft_resume.db_tools") as mock_db,
+            patch(
+                "app.tools.jobcraft_resume.generate_resume_markdown",
+                lambda **k: "MD",
+            ),
+            patch("app.tools.jobcraft_resume.generate_resume_html", lambda **k: "HTML"),
+            patch("app.tools.jobcraft_resume.OUTPUT_ROOT", tmp_path),
+            patch(
+                "app.tools.db_submission.get_submission_by_analysis",
+                lambda *a, **k: None,
+            ),
+            patch("app.tools.db_submission.insert_submission", forbid_submission),
+            patch("app.tools.db_submission.update_submission", forbid_submission),
+            patch(
+                "app.tools.db_job_entity.get_job_id_by_analysis",
+                lambda *a, **k: 15,
+            ),
+            patch("app.tools.db_resume_version.create_resume_version", fake_create),
+        ):
+            mock_db.get_job_analysis.return_value = {
+                "user_id": 7,
+                "company": "C",
+                "position": "P",
+                "jd_text": "JD",
+            }
+            mock_db.get_card.return_value = {
+                "id": 3,
+                "is_active": True,
+                "raw_text": "x",
+            }
+            result = generate_resume(1, [3], user_id=7)
+
+        assert created["job_id"] == 15
+        assert created["job_analysis_id"] == 1
+        assert created["resume_markdown"] == "MD"
+        assert created["user_id"] == 7
+        assert result["resume_version_id"] == 42
+        assert result["submission_id"] is None
+
+    def test_generate_resume_backfills_job_when_missing(self, tmp_path):
+        """T-M6-2：存量岗位无 job 行时按分析懒回填（find_or_create 回链
+        analysis+submission，防 FE 地图双行）。"""
+        from app.tools.jobcraft_resume import generate_resume
+
+        find_calls = {}
+        created = {}
+
+        def fake_find(user_id, position, company=None, **kwargs):
+            find_calls.update(kwargs)
+            find_calls["user_id"] = user_id
+            find_calls["position"] = position
+            find_calls["company"] = company
+            return 31
+
+        def fake_create(**kwargs):
+            created.update(kwargs)
+            return {"id": 9}
+
+        with (
+            patch("app.tools.jobcraft_resume.db_tools") as mock_db,
+            patch(
+                "app.tools.jobcraft_resume.generate_resume_markdown",
+                lambda **k: "MD",
+            ),
+            patch("app.tools.jobcraft_resume.generate_resume_html", lambda **k: "HTML"),
+            patch("app.tools.jobcraft_resume.OUTPUT_ROOT", tmp_path),
+            patch(
+                "app.tools.db_submission.get_submission_by_analysis",
+                lambda *a, **k: {"id": 8},
+            ),
+            patch(
+                "app.tools.db_job_entity.get_job_id_by_analysis",
+                lambda *a, **k: None,
+            ),
+            patch("app.tools.db_job_entity.find_or_create_job", fake_find),
+            patch("app.tools.db_resume_version.create_resume_version", fake_create),
+        ):
+            mock_db.get_job_analysis.return_value = {
+                "user_id": 7,
+                "company": "C",
+                "position": "P",
+                "jd_text": "JD",
+            }
+            mock_db.get_card.return_value = {
+                "id": 3,
+                "is_active": True,
+                "raw_text": "x",
+            }
+            result = generate_resume(1, [3], user_id=7)
+
+        assert find_calls["job_analysis_id"] == 1
+        assert find_calls["submission_id"] == 8
+        assert find_calls["position"] == "P"
+        assert find_calls["company"] == "C"
+        assert created["job_id"] == 31
+        assert result["resume_version_id"] == 9
 
     def test_generate_resume_passes_ats_profile_to_generators(self, tmp_path):
         """BE-ATS-01：ats_profile 应解析后传入 md/html 生成器（原硬编码 None）。"""
@@ -2401,16 +2522,21 @@ class TestDbResumeVersion:
             ),
         ):
             created = db_resume_version.create_resume_version(
-                1, 9, version_name="产品-字节-2026/10/02", resume_markdown="# 简历"
+                1,
+                9,
+                version_name="产品-字节-2026/10/02",
+                resume_markdown="# 简历",
+                job_analysis_id=55,
             )
         assert created["id"] == 41
         sql, params = mock_insert.call_args[0]
         assert "INSERT INTO resume_version" in sql
-        # (user_id, job_id, direction_id, version_no, version_name, ...)
+        # (user_id, job_id, job_analysis_id, direction_id, version_no, version_name, ...)
         assert params[0] == 1
         assert params[1] == 9
-        assert params[3] == 4
-        assert params[4] == "产品-字节-2026/10/02"
+        assert params[2] == 55
+        assert params[4] == 4
+        assert params[5] == "产品-字节-2026/10/02"
 
     def test_create_without_job_raises(self):
         from app.tools import db_resume_version
@@ -2437,7 +2563,40 @@ class TestDbResumeVersion:
                 1, 9, sections=[{"type": "summary", "content": "你好"}]
             )
         params = mock_insert.call_args[0][1]
-        assert json.loads(params[5]) == [{"type": "summary", "content": "你好"}]
+        assert json.loads(params[6]) == [{"type": "summary", "content": "你好"}]
+
+    def test_get_latest_resume_version_by_analysis(self):
+        """T-M6-2：按分析取最新版本（面试准备读简历正文入口），含岗位信息。"""
+        from app.tools import db_resume_version
+
+        row = {
+            "id": 6,
+            "user_id": 1,
+            "job_id": None,
+            "job_analysis_id": 10,
+            "version_no": 2,
+            "resume_markdown": "MD",
+            "ana_company": "C",
+            "ana_position": "P",
+        }
+        with (
+            patch("app.tools.db_resume_version._ensure_resume_version_table"),
+            patch("app.tools.db_resume_version.query_one", return_value=row) as mock_q,
+        ):
+            got = db_resume_version.get_latest_resume_version(1, 10)
+        sql, params = mock_q.call_args[0]
+        assert "job_analysis_id=%s" in sql
+        assert "LIMIT 1" in sql
+        assert params == (1, 10)
+        assert got["company"] == "C"
+        assert got["position"] == "P"
+        assert got["job_analysis_id"] == 10
+
+        with (
+            patch("app.tools.db_resume_version._ensure_resume_version_table"),
+            patch("app.tools.db_resume_version.query_one", return_value=None),
+        ):
+            assert db_resume_version.get_latest_resume_version(1, 10) is None
 
     def test_update_only_provided_fields(self):
         from app.tools import db_resume_version
@@ -2537,8 +2696,10 @@ class TestDbResumeVersion:
         ):
             assert db_resume_version.list_resume_versions(1, job_id=9) == []
         sql, params = mock_q.call_args[0]
-        assert "job_id=%s" in sql
-        assert "ORDER BY version_no DESC" in sql
+        assert "v.job_id=%s" in sql
+        assert "ORDER BY v.version_no DESC" in sql
+        # T-M6-2：JOIN job_analysis 带出 FE 地图显示的岗位信息
+        assert "LEFT JOIN job_analysis a" in sql
         assert params == (1, 9)
 
     def test_row_json_columns_parsed(self):

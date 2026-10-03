@@ -94,7 +94,15 @@ def load_interview_prep_enrichment(
                 if s.get("job_analysis_id") == job_analysis_id:
                     submission = db_tools.get_submission(s["id"], user_id)
                     break
-        if submission:
+
+        # T-M6-2：简历正文首选 resume_version（save-resume 不再写 submission，
+        # 存量正文已由 V0022 迁为 v1）；版本缺失时回退 submission 兜底
+        from app.tools.db_resume_version import get_latest_resume_version
+
+        version = get_latest_resume_version(user_id, job_analysis_id)
+        if version:
+            resume_markdown = version.get("resume_markdown")
+        if not resume_markdown and submission:
             resume_markdown = submission.get("resume_markdown")
 
         previous_review_summary = _get_previous_review_summary(

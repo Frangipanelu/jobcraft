@@ -1155,3 +1155,56 @@ def test_v0021_migrate_is_applied_via_runner(fake_conn):
         if e[0].strip().startswith("INSERT INTO schema_migrations")
     ]
     assert "0021" in inserted
+
+
+def test_v0022_resume_version_analysis_backfill_follows_convention():
+    """T-M6-2：V0022 加 job_analysis_id 列 + 存量快照一次性迁 v1（裁决
+    「一次性 SQL」），只加列/插行不动既有列，遵守 SPLIT 约定。"""
+    v0022 = os.path.join(
+        runner.MIGRATIONS_DIR, "V0022__resume_version_analysis_backfill.sql"
+    )
+    assert os.path.exists(v0022)
+    with open(v0022, encoding="utf-8") as fh:
+        sql = fh.read()
+    flat = " ".join(sql.split())
+    for frag in (
+        "ADD COLUMN job_analysis_id INT NULL",
+        "ADD KEY idx_resume_version_analysis (job_analysis_id)",
+        "INSERT INTO resume_version",
+        "JOIN job_analysis a",
+        "LEFT JOIN job j",
+        "NOT EXISTS",
+        "v1（存量快照）",
+        "s.resume_markdown <> ''",
+    ):
+        assert frag in flat, f"V0022 缺少定义: {frag}"
+    stmts = [s.strip() for s in sql.split(";--SPLIT--") if s.strip()]
+    assert len(stmts) == 2, f"V0022 应含 2 条语句块（ALTER+INSERT），实际 {len(stmts)}"
+
+    def _bare(stmt: str) -> str:
+        """去掉行首注释后的语句体（块头注释不算语句）。"""
+        return "\n".join(
+            line for line in stmt.splitlines() if not line.strip().startswith("--")
+        ).strip()
+
+    assert _bare(stmts[0]).upper().startswith("ALTER"), "V0022 第一块应为 ALTER 加列"
+    assert _bare(stmts[1]).upper().startswith("INSERT"), (
+        "V0022 第二块应为 INSERT 迁数据"
+    )
+    upper = sql.upper()
+    assert "DROP" not in upper, "V0022 不得删表"
+    assert "MODIFY COLUMN" not in upper, "V0022 不得改列"
+    for stmt in stmts:
+        body = _bare(stmt)
+        assert not body.endswith(";"), f"V0022 语句块含尾分号: {body[:60]}"
+
+
+def test_v0022_migrate_is_applied_via_runner(fake_conn):
+    """T-M6-2：V0022 与既有迁移共存，runner.migrate() 不抛错且入库。"""
+    runner.migrate()
+    inserted = [
+        e[1][0]
+        for e in fake_conn.cursor_obj.executed
+        if e[0].strip().startswith("INSERT INTO schema_migrations")
+    ]
+    assert "0022" in inserted

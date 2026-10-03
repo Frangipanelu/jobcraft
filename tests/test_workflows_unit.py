@@ -1887,12 +1887,54 @@ class TestTaskDivSharedValidation:
                 }
             ],
         )
+        # T-M6-2：版本读取封桩（返回 None → 走 submission 兜底路径）
+        monkeypatch.setattr(
+            "app.tools.db_resume_version.get_latest_resume_version",
+            lambda *a, **k: None,
+        )
 
         enrich = flow.load_interview_prep_enrichment(10, 1)
         assert enrich["company_research"] == {"info": {"name": "X公司"}}
         assert enrich["resume_markdown"] == "简历MD"
         assert "优势：清晰" in enrich["previous_review_summary"]
         assert "改进项：补数据" in enrich["previous_review_summary"]
+
+    def test_load_enrichment_prefers_resume_version(self, monkeypatch):
+        """T-M6-2：简历正文首选 resume_version（save-resume 不再写 submission），
+        版本缺失时才回退 submission。"""
+        from app.workflows import interview_prep_flow as flow
+
+        monkeypatch.setattr(
+            flow.db_tools,
+            "get_job_analysis",
+            lambda jid, uid=None: {"company": "X公司"},
+        )
+        monkeypatch.setattr(
+            "app.agents.company_research_agent.get_or_search_company",
+            lambda c: {"info": {"name": c}},
+        )
+        monkeypatch.setattr(
+            flow.db_tools,
+            "list_submissions",
+            lambda uid: [{"id": 5, "job_analysis_id": 10}],
+        )
+        monkeypatch.setattr(
+            flow.db_tools,
+            "get_submission",
+            lambda sid, uid=None: {"id": sid, "resume_markdown": "旧submissionMD"},
+        )
+        monkeypatch.setattr(
+            flow.db_tools,
+            "list_interview_records_by_submission",
+            lambda sid, user_id=None: [],
+        )
+        monkeypatch.setattr(
+            "app.tools.db_resume_version.get_latest_resume_version",
+            lambda uid, aid: {"resume_markdown": "版本MD"},
+        )
+
+        enrich = flow.load_interview_prep_enrichment(10, 1)
+        assert enrich["resume_markdown"] == "版本MD"
 
     def test_load_enrichment_tolerates_failures(self, monkeypatch):
         from app.workflows import interview_prep_flow as flow

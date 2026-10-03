@@ -149,6 +149,26 @@ def link_job(
     return execute(f"UPDATE job SET {', '.join(sets)} WHERE id=%s", tuple(values)) > 0
 
 
+def get_job_id_by_analysis(
+    job_analysis_id: int, user_id: Optional[int] = None
+) -> Optional[int]:
+    """按分析记录取在用岗位 id（T-M6-2：save-resume 归属反查）。
+
+    :param job_analysis_id: 岗位分析 id
+    :param user_id: 可选归属校验
+    :return: 岗位 id；无关联岗位返回 None
+    """
+    _ensure_job_table()
+    sql = (
+        "SELECT id FROM job WHERE job_analysis_id=%s AND is_active=1"
+        + (" AND user_id=%s" if user_id is not None else "")
+        + " LIMIT 1"
+    )
+    params = (job_analysis_id,) if user_id is None else (job_analysis_id, user_id)
+    row = query_one(sql, params)
+    return int(row["id"]) if row else None
+
+
 def link_raw_jd_by_analysis(job_analysis_id: int, raw_jd_id: int) -> bool:
     """把 RawJD 快照回链到岗位（按分析记录定位岗位，避免多一次查询）。
 
