@@ -1,6 +1,7 @@
 import logging
 import shutil
 import uuid
+from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
 
@@ -37,6 +38,40 @@ class MockChatPayload(BaseModel):
 
 class InterviewReviewAnalyzePayload(BaseModel):
     selected_sequences: List[int]
+
+
+class InterviewSessionCreatePayload(BaseModel):
+    """T-M7-4 预建面试场次（status=planned）请求体：向导字段全透传。"""
+
+    job_analysis_id: Optional[int] = None
+    submission_id: Optional[int] = None
+    company: str = ""
+    position: str = ""
+    round_type: str = ""
+    round_seq: Optional[int] = None
+    occurred_at: Optional[str] = None
+    interviewer: Optional[str] = None
+    format: Optional[str] = None
+    resume_version_id: Optional[int] = None
+
+
+def _parse_occurred_at(value: Optional[str]) -> Optional[datetime]:
+    """解析向导场次时间：空→None；非空但无法解析→ValueError（暴露问题不静默置空）。"""
+    text = (value or "").strip()
+    if not text:
+        return None
+    for fmt in (
+        "%Y-%m-%d %H:%M:%S",
+        "%Y-%m-%d %H:%M",
+        "%Y-%m-%dT%H:%M:%S",
+        "%Y-%m-%dT%H:%M",
+        "%Y-%m-%d",
+    ):
+        try:
+            return datetime.strptime(text, fmt)
+        except ValueError:
+            continue
+    raise ValueError(f"occurred_at 格式错误: {text}")
 
 
 def _get_updated_dir():
@@ -95,6 +130,63 @@ def jobcraft_interview_review_create(
     except Exception as e:
         logger.exception("面试复盘创建失败")
         raise HTTPException(status_code=500, detail=f"面试复盘创建失败: {e}")
+
+
+@router.post("/session")
+def jobcraft_create_interview_session(
+    payload: InterviewSessionCreatePayload,
+    current_user: int = Depends(get_current_user),
+):
+    """预建面试场次行（status=planned，T-M7-4 / M7-Q3-A）。
+
+    新建面试即 interview_records +1（record+1 前向骨架）；复盘时经
+    T-M8-7 的 record_id → update 分支填充内容。向导字段（round_seq /
+    occurred_at / interviewer / format / resume_version_id）全透传落列。
+    """
+    company = (payload.company or "").strip()
+    position = (payload.position or "").strip()
+    if not company or not position:
+        raise HTTPException(status_code=400, detail="公司与岗位不能为空")
+    if payload.round_seq is not None and payload.round_seq < 1:
+        raise HTTPException(status_code=400, detail="轮次序号必须 ≥ 1")
+    try:
+        occurred_at = _parse_occurred_at(payload.occurred_at)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    if (
+        payload.job_analysis_id is not None
+        and db_tools.get_job_analysis(payload.job_analysis_id, current_user) is None
+    ):
+        raise HTTPException(status_code=400, detail="岗位分析不存在或无权访问")
+
+    title = f"{company}-{position}"
+    if payload.round_type:
+        title = f"{title}-{payload.round_type}"
+    try:
+        record_id = db_tools.insert_interview_record(
+            {
+                "user_id": current_user,
+                "title": title,
+                "company": company,
+                "position": position,
+                "round_type": payload.round_type or "",
+                "job_analysis_id": payload.job_analysis_id,
+                "submission_id": payload.submission_id,
+                "raw_text": "",
+                "parsed_dialogue": [],
+                "analysis": {},
+                "status": "planned",
+                "round_seq": payload.round_seq,
+                "occurred_at": occurred_at,
+                "interviewer": (payload.interviewer or "").strip() or None,
+                "format": (payload.format or "").strip() or None,
+                "resume_version_id": payload.resume_version_id,
+            }
+        )
+    except Exception:
+        logger.exception("预建面试场次失败")
+        raise HTTPException(status_code=500, detail="预建面试场次失败")
+    return {"record_id": record_id, "status": "planned"}
 
 
 @router.post("/upload")

@@ -2592,6 +2592,106 @@ class TestInterviewReviewCreate:
         assert resp.status_code == 400
 
 
+class TestInterviewSessionCreate:
+    """POST /api/jobcraft/interview-review/session（T-M7-4 预建 planned 场次行）"""
+
+    def test_session_missing_company_returns_400(self):
+        resp = client.post(
+            "/api/jobcraft/interview-review/session",
+            json={"company": "", "position": "AI 产品经理"},
+        )
+        assert resp.status_code == 400
+        assert "不能为空" in resp.json()["error"]["message"]
+
+    def test_session_invalid_occurred_at_returns_400(self):
+        resp = client.post(
+            "/api/jobcraft/interview-review/session",
+            json={
+                "company": "字节跳动",
+                "position": "AI 产品经理",
+                "occurred_at": "昨天",
+            },
+        )
+        assert resp.status_code == 400
+        assert "occurred_at" in resp.json()["error"]["message"]
+
+    def test_session_round_seq_lt_1_returns_400(self):
+        resp = client.post(
+            "/api/jobcraft/interview-review/session",
+            json={"company": "字节跳动", "position": "AI 产品经理", "round_seq": 0},
+        )
+        assert resp.status_code == 400
+
+    def test_session_unknown_job_analysis_returns_400(self, monkeypatch):
+        monkeypatch.setattr(
+            "app.api.interview_review.db_tools.get_job_analysis", lambda *a: None
+        )
+        resp = client.post(
+            "/api/jobcraft/interview-review/session",
+            json={
+                "company": "字节跳动",
+                "position": "AI 产品经理",
+                "job_analysis_id": 404,
+            },
+        )
+        assert resp.status_code == 400
+        assert "岗位分析不存在" in resp.json()["error"]["message"]
+
+    def test_session_normal_planned_row(self, monkeypatch):
+        from datetime import datetime as _dt
+
+        captured = {}
+
+        def fake_insert(data):
+            captured.update(data)
+            return 901
+
+        monkeypatch.setattr(
+            "app.api.interview_review.db_tools.insert_interview_record", fake_insert
+        )
+        monkeypatch.setattr(
+            "app.api.interview_review.db_tools.get_job_analysis",
+            lambda *a: {"id": 12},
+        )
+        resp = client.post(
+            "/api/jobcraft/interview-review/session",
+            json={
+                "job_analysis_id": 12,
+                "company": "字节跳动",
+                "position": "AI 产品经理",
+                "round_type": "tech",
+                "round_seq": 1,
+                "occurred_at": "2026-09-20 10:00",
+                "interviewer": "张三",
+                "format": "video",
+            },
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["record_id"] == 901
+        assert data["status"] == "planned"
+        assert captured["status"] == "planned"
+        assert captured["round_seq"] == 1
+        assert captured["occurred_at"] == _dt(2026, 9, 20, 10, 0)
+        assert captured["interviewer"] == "张三"
+        assert captured["format"] == "video"
+        assert captured["job_analysis_id"] == 12
+        assert captured["title"] == "字节跳动-AI 产品经理-tech"
+
+    def test_session_insert_db_error_returns_500(self, monkeypatch):
+        def raise_err(*a, **kw):
+            raise Exception("db error")
+
+        monkeypatch.setattr(
+            "app.api.interview_review.db_tools.insert_interview_record", raise_err
+        )
+        resp = client.post(
+            "/api/jobcraft/interview-review/session",
+            json={"company": "字节跳动", "position": "AI 产品经理"},
+        )
+        assert resp.status_code == 500
+
+
 class TestInterviewReviewList:
     """GET /api/jobcraft/interview-review"""
 

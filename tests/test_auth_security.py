@@ -114,6 +114,11 @@ _BUSINESS_ENDPOINTS = [
     ("POST", "/api/jobcraft/interview-review/1/analyze", {"selected_sequences": [1]}),
     ("GET", "/api/jobcraft/interview-review/1", None),
     ("DELETE", "/api/jobcraft/interview-review/1", None),
+    (
+        "POST",
+        "/api/jobcraft/interview-review/session",
+        {"company": "字节跳动", "position": "AI 产品经理"},
+    ),
     # tasks
     (
         "POST",

@@ -375,6 +375,102 @@ def test_v0016_prep_drafts_matched_in_runtime_ddl_and_baseline():
         assert "drafts JSON" in fh.read(), "docker 基线缺 drafts 列"
 
 
+def test_v0023_interview_session_columns_matched_in_runtime_ddl_and_baseline():
+    """T-M7-4：V0023(场次列) 只加列，且迁移 / 运行时
+    _ensure_interview_records_table 建表+守卫补列 / docker 基线三处收敛一致。"""
+    v0023 = os.path.join(runner.MIGRATIONS_DIR, "V0023__interview_records_session.sql")
+    assert os.path.exists(v0023)
+    with open(v0023, encoding="utf-8") as fh:
+        sql = fh.read()
+
+    session_columns = (
+        "ALTER TABLE interview_records ADD COLUMN round_seq INT NULL",
+        "ALTER TABLE interview_records ADD COLUMN occurred_at DATETIME NULL",
+        "ALTER TABLE interview_records ADD COLUMN interviewer VARCHAR(100) NULL",
+        "ALTER TABLE interview_records ADD COLUMN format VARCHAR(20) NULL",
+        "ALTER TABLE interview_records ADD COLUMN resume_version_id INT NULL",
+    )
+    for col_ddl in session_columns:
+        assert col_ddl in sql, f"V0023 缺 {col_ddl}"
+    assert "DROP" not in sql.upper(), "前向兼容：只加列，不得出现 DROP"
+    assert "MODIFY" not in sql.upper(), "前向兼容：不得改列类型"
+
+    from app.tools.db_interview import _ensure_interview_records_table
+    import app.tools.db_interview as mod
+
+    executed: list[tuple[str, str]] = []
+
+    class _Cursor:
+        def execute(self, sql, params=None):
+            executed.append((sql.strip(), params))
+
+        def fetchall(self):
+            # 首次建表后列探测：返回空触发全部守卫 ALTER，证明未迁移环境也有补列路径
+            return []
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    class _Conn:
+        def cursor(self, *a, **k):
+            return _Cursor()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    original_ready = mod.is_schema_ready
+    original_conn = mod.connection
+    try:
+        mod.is_schema_ready = lambda: False
+        mod.connection = lambda: _Conn()
+        _ensure_interview_records_table()
+    finally:
+        mod.is_schema_ready = original_ready
+        mod.connection = original_conn
+
+    creates = [s for s, _ in executed if s.startswith("CREATE TABLE IF NOT EXISTS")]
+    assert creates, "未捕获到 CREATE TABLE 语句"
+    for fragment in (
+        "round_seq INT NULL",
+        "occurred_at DATETIME NULL",
+        "interviewer VARCHAR(100) NULL",
+        "format VARCHAR(20) NULL",
+        "resume_version_id INT NULL",
+    ):
+        assert fragment in _normalize_ddl(creates[0]), f"运行时建表缺 {fragment}"
+
+    alters = [s for s, _ in executed if s.startswith("ALTER TABLE interview_records")]
+    assert len(alters) == 5, f"运行时守卫补列应为 5 条，实际 {len(alters)}"
+    for fragment in (
+        "round_seq",
+        "occurred_at",
+        "interviewer",
+        "format",
+        "resume_version_id",
+    ):
+        assert any(f"ADD COLUMN {fragment}" in a for a in alters), f"守卫缺 {fragment}"
+
+    repo_root = os.path.dirname(os.path.dirname(runner.MIGRATIONS_DIR))
+    with open(
+        os.path.join(repo_root, "docker", "mysql", "jobcraft.sql"), encoding="utf-8"
+    ) as fh:
+        seed = fh.read()
+    for fragment in (
+        "round_seq INT NULL",
+        "occurred_at DATETIME NULL",
+        "interviewer VARCHAR(100) NULL",
+        "format VARCHAR(20) NULL",
+        "resume_version_id INT NULL",
+    ):
+        assert fragment in seed, f"docker 基线缺 {fragment}"
+
+
 def test_v0017_profile_github_matched_in_runtime_ddl():
     """FE-RESUME-03：V0017(github) 只加列，且迁移 / 运行时
     _ensure_user_profiles_table 建表+守卫补列两路径收敛一致。

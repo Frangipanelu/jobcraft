@@ -251,8 +251,10 @@ def update_interview_prep_company_research(
 def _ensure_interview_records_table() -> None:
     """确保 interview_records 表存在且含全部列（schema 已由启动引导保证时短路）。
 
-    列集合对齐 V0001 基线（submission_id / round_label）：单函数调用即得
-    完整表，不依赖 db_submission._ensure_interview_submission_columns 的补列守卫。
+    列集合对齐 V0001 基线（submission_id / round_label）+ V0023 场次骨架列
+    （round_seq / occurred_at / interviewer / format / resume_version_id）：
+    单函数调用即得完整表，不依赖 db_submission._ensure_interview_submission_columns
+    的补列守卫。
     """
     if is_schema_ready():
         return
@@ -270,6 +272,11 @@ def _ensure_interview_records_table() -> None:
                     job_analysis_id INT,
                     submission_id INT,
                     round_label VARCHAR(32) DEFAULT '',
+                    round_seq INT NULL,
+                    occurred_at DATETIME NULL,
+                    interviewer VARCHAR(100) NULL,
+                    format VARCHAR(20) NULL,
+                    resume_version_id INT NULL,
                     raw_text LONGTEXT,
                     parsed_dialogue_json JSON,
                     analysis_json JSON,
@@ -281,6 +288,18 @@ def _ensure_interview_records_table() -> None:
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
                 """
             )
+            # T-M7-4：V0001/V0023 之外的历史库缺场次列，运行时守卫补列兜底
+            cur.execute("SHOW COLUMNS FROM interview_records")
+            existing = {c[0] for c in cur.fetchall()}
+            for col_ddl in (
+                "round_seq INT NULL",
+                "occurred_at DATETIME NULL",
+                "interviewer VARCHAR(100) NULL",
+                "format VARCHAR(20) NULL",
+                "resume_version_id INT NULL",
+            ):
+                if col_ddl.split(" ")[0] not in existing:
+                    cur.execute(f"ALTER TABLE interview_records ADD COLUMN {col_ddl}")
 
 
 def _ensure_interview_qa_pairs_table() -> None:
@@ -321,7 +340,7 @@ def _ensure_interview_qa_pairs_table() -> None:
 
 
 def insert_interview_record(data: Dict[str, Any]) -> int:
-    """插入面试记录，返回主键"""
+    """插入面试记录，返回主键（含 T-M7-4 场次骨架列，可预建 planned 行）"""
     from app.tools.db_submission import _ensure_interview_submission_columns
 
     _ensure_interview_records_table()
@@ -331,8 +350,10 @@ def insert_interview_record(data: Dict[str, Any]) -> int:
         INSERT INTO interview_records
             (user_id, title, company, position, round_type, job_analysis_id,
              raw_text, parsed_dialogue_json, analysis_json, status,
-             submission_id, round_label)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+             submission_id, round_label,
+             round_seq, occurred_at, interviewer, format, resume_version_id)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                %s, %s, %s, %s, %s)
         """,
         (
             data.get("user_id", 1),
@@ -347,8 +368,55 @@ def insert_interview_record(data: Dict[str, Any]) -> int:
             data.get("status", "pending"),
             data.get("submission_id"),
             data.get("round_label", ""),
+            data.get("round_seq"),
+            data.get("occurred_at"),
+            data.get("interviewer"),
+            data.get("format"),
+            data.get("resume_version_id"),
         ),
     )
+
+
+def update_interview_record_session(
+    record_id: int, user_id: int, fields: Dict[str, Any]
+) -> bool:
+    """更新场次骨架列（T-M7-4），先查归属再 UPDATE，越权返回 False 不发 UPDATE。
+
+    仅允许白名单内的场次列（round_seq / occurred_at / interviewer / format /
+    resume_version_id 及关联字段）；白名单外字段抛 ValueError（对齐
+    update_interview_qa_pair_fields 的暴露原则）；空 fields 返回 True（幂等无操作）。
+    """
+    allowed = {
+        "round_seq",
+        "occurred_at",
+        "interviewer",
+        "format",
+        "resume_version_id",
+        "company",
+        "position",
+        "round_type",
+        "round_label",
+        "title",
+        "job_analysis_id",
+        "submission_id",
+    }
+    disallowed = set(fields) - allowed
+    if disallowed:
+        raise ValueError(f"不允许更新场次字段: {sorted(disallowed)}")
+    if not fields:
+        return True
+    _ensure_interview_records_table()
+    if not query_one(
+        "SELECT id FROM interview_records WHERE id=%s AND user_id=%s",
+        (record_id, user_id),
+    ):
+        return False
+    set_clause = ", ".join(f"{k}=%s" for k in fields)
+    execute(
+        f"UPDATE interview_records SET {set_clause} WHERE id=%s AND user_id=%s",
+        (*fields.values(), record_id, user_id),
+    )
+    return True
 
 
 def update_interview_record_analysis(record_id: int, analysis: Dict[str, Any]) -> None:
@@ -403,6 +471,14 @@ def get_interview_record(
         "analysis": _parse_json(row["analysis_json"]) or {},
         "status": row["status"] or "pending",
         "created_at": row["created_at"].isoformat() if row.get("created_at") else None,
+        # T-M7-4 场次骨架列（历史行/未迁移库可能缺列，get 不抛错）
+        "round_seq": row.get("round_seq"),
+        "occurred_at": (
+            row["occurred_at"].isoformat() if row.get("occurred_at") else None
+        ),
+        "interviewer": row.get("interviewer") or None,
+        "format": row.get("format") or None,
+        "resume_version_id": row.get("resume_version_id"),
     }
 
 
@@ -428,6 +504,13 @@ def list_interview_records(user_id: int = 1, limit: int = 100) -> List[Dict[str,
                 "created_at": row["created_at"].isoformat()
                 if row.get("created_at")
                 else None,
+                "round_seq": row.get("round_seq"),
+                "occurred_at": (
+                    row["occurred_at"].isoformat() if row.get("occurred_at") else None
+                ),
+                "interviewer": row.get("interviewer") or None,
+                "format": row.get("format") or None,
+                "resume_version_id": row.get("resume_version_id"),
             }
         )
     return result

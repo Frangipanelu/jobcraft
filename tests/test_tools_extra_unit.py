@@ -2597,6 +2597,131 @@ class TestUpdateInterviewQaPairFields:
         )
 
 
+class TestInterviewRecordSessionColumns:
+    """T-M7-4：interview_records 场次骨架列的 DAO 落库与更新约束"""
+
+    def test_insert_passes_session_columns(self, monkeypatch):
+        from datetime import datetime as _dt
+
+        from app.tools import db_interview
+
+        captured = {}
+        monkeypatch.setattr(
+            db_interview, "_ensure_interview_records_table", lambda: None
+        )
+        monkeypatch.setattr(
+            "app.tools.db_submission._ensure_interview_submission_columns",
+            lambda: None,
+        )
+
+        def fake_lastrowid(sql, params):
+            captured.update(sql=sql, params=params)
+            return 901
+
+        monkeypatch.setattr(db_interview, "execute_lastrowid", fake_lastrowid)
+        occurred = _dt(2026, 9, 20, 10, 0)
+        rid = db_interview.insert_interview_record(
+            {
+                "user_id": 1,
+                "company": "字节跳动",
+                "position": "AI 产品经理",
+                "round_type": "tech",
+                "status": "planned",
+                "round_seq": 1,
+                "occurred_at": occurred,
+                "interviewer": "张三",
+                "format": "video",
+                "resume_version_id": 3,
+            }
+        )
+        assert rid == 901
+        for col in (
+            "round_seq",
+            "occurred_at",
+            "interviewer",
+            "format",
+            "resume_version_id",
+        ):
+            assert col in captured["sql"], f"INSERT 缺列 {col}"
+        params = captured["params"]
+        # 列序：… status(idx9), submission_id(10), round_label(11),
+        # round_seq(12), occurred_at(13), interviewer(14), format(15), resume_version_id(16)
+        assert params[9] == "planned"
+        assert params[12:17] == (1, occurred, "张三", "video", 3)
+
+    def test_update_owned_builds_parameterized_sql(self, monkeypatch):
+        from app.tools import db_interview
+
+        calls = []
+        monkeypatch.setattr(
+            db_interview, "_ensure_interview_records_table", lambda: None
+        )
+        monkeypatch.setattr(db_interview, "query_one", lambda *a: {"id": 9})
+        monkeypatch.setattr(
+            db_interview,
+            "execute",
+            lambda sql, params: (calls.append((sql, params)), 1)[1],
+        )
+        ok = db_interview.update_interview_record_session(
+            9, 1, {"round_seq": 2, "interviewer": "李四"}
+        )
+        assert ok is True
+        sql, params = calls[0]
+        assert sql == (
+            "UPDATE interview_records SET round_seq=%s, interviewer=%s "
+            "WHERE id=%s AND user_id=%s"
+        )
+        assert params == (2, "李四", 9, 1)
+
+    def test_update_not_owned_skips_sql(self, monkeypatch):
+        from app.tools import db_interview
+
+        calls = []
+        monkeypatch.setattr(
+            db_interview, "_ensure_interview_records_table", lambda: None
+        )
+        monkeypatch.setattr(db_interview, "query_one", lambda *a: None)
+        monkeypatch.setattr(
+            db_interview,
+            "execute",
+            lambda sql, params: (calls.append((sql, params)), 1)[1],
+        )
+        assert (
+            db_interview.update_interview_record_session(999, 1, {"round_seq": 2})
+            is False
+        )
+        assert calls == [], "越权不得触达 UPDATE"
+
+    def test_update_rejects_non_whitelist_fields(self, monkeypatch):
+        from app.tools import db_interview
+
+        calls = []
+        monkeypatch.setattr(
+            db_interview, "_ensure_interview_records_table", lambda: None
+        )
+        monkeypatch.setattr(db_interview, "query_one", lambda *a: {"id": 9})
+        monkeypatch.setattr(
+            db_interview,
+            "execute",
+            lambda sql, params: (calls.append((sql, params)), 1)[1],
+        )
+        with pytest.raises(ValueError, match="不允许更新"):
+            db_interview.update_interview_record_session(9, 1, {"analysis": {}})
+        assert calls == [], "白名单外字段不得触达 SQL"
+
+    def test_update_empty_fields_is_noop(self, monkeypatch):
+        from app.tools import db_interview
+
+        queried = []
+        monkeypatch.setattr(
+            db_interview,
+            "query_one",
+            lambda *a: (queried.append(a), {"id": 9})[1],
+        )
+        assert db_interview.update_interview_record_session(9, 1, {}) is True
+        assert queried == [], "空 fields 直接幂等返回，不查归属"
+
+
 class TestDbResumeVersion:
     """T-M6-1 / M6-Q1-B：resume_version DAO（每岗自增版本、单选设当前、归属校验）"""
 
