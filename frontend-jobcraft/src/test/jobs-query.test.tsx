@@ -30,8 +30,13 @@ const job = vi.hoisted(() => ({
   listJobEntities: vi.fn(),
 }));
 
+const jobEntityApi = vi.hoisted(() => ({
+  updateJobEntity: vi.fn(),
+}));
+
 vi.mock('../api/auth', () => ({ ...auth }));
 vi.mock('../api/job', () => ({ ...job }));
+vi.mock('../api/jobEntity', () => ({ ...jobEntityApi }));
 
 const AUTH_USER = {
   id: 1,
@@ -209,6 +214,14 @@ beforeEach(() => {
   );
   job.listBaseResumes.mockResolvedValue([]);
   job.listJobAnalyses.mockResolvedValue([]);
+  // T-M5-2：job 表写路径有状态 mock（invalidate refetch 回放本次写入）
+  jobEntityApi.updateJobEntity.mockImplementation(
+    async (id: number, patch: Partial<JobEntity>) => {
+      const row = serverJobs.find((e) => e.id === id);
+      if (row) Object.assign(row, patch);
+      return row;
+    },
+  );
 });
 
 describe('useJobsQuery 迁移视图', () => {
@@ -336,6 +349,85 @@ describe('useJobsQuery 迁移视图', () => {
     // 恢复按 delivered 事实 reopen：未确认投递 → PREPARED
     await waitFor(() =>
       expect(job.updateSubmission).toHaveBeenCalledWith(1, { status: 'PREPARED' }),
+    );
+  });
+
+  it('T-M5-2：job 实体为主源 join submission 事实，无在用岗位的 submission 兜底补行', async () => {
+    serverJobs = [
+      {
+        id: 11,
+        user_id: 1,
+        company: '字节跳动',
+        position: 'AI 产品经理',
+        raw_jd_id: null,
+        job_analysis_id: null,
+        // 该岗位已有投递（SUBMISSIONS[0] id=1 job_id=11）
+        submission_id: 1,
+        status: 'PREPARED',
+        is_active: true,
+        created_at: '2026-09-01T00:00:00',
+        updated_at: null,
+      },
+    ];
+
+    renderWithProviders(
+      <>
+        <JobsListView onOpenNewJob={() => {}} />
+        <CacheSpy />
+      </>,
+    );
+
+    // 主源行 = job-11（join submission 1）+ 存量兜底 = 腾讯（无在用岗位）
+    expect(await screen.findByText('字节跳动')).toBeInTheDocument();
+    expect(screen.getByText('腾讯')).toBeInTheDocument();
+    expect(screen.getByTestId('cache-count').textContent).toBe('2');
+    expect(screen.getByTestId('cache-job-ids').textContent).toContain('11');
+    // join 后 backendId=submission id：终止打 submission 而非 job 表
+    fireEvent.click(screen.getAllByText('标记已结束')[0]);
+    await waitFor(() =>
+      expect(job.updateSubmission).toHaveBeenCalledWith(1, { status: 'CLOSED' }),
+    );
+    expect(jobEntityApi.updateJobEntity).not.toHaveBeenCalled();
+  });
+
+  it('T-M5-2：job-only 行终止/恢复持久化到 job 表（PATCH /job/{id}）', async () => {
+    serverJobs = [
+      {
+        id: 42,
+        user_id: 1,
+        company: '快手',
+        position: 'AI 策略产品',
+        raw_jd_id: null,
+        job_analysis_id: 5,
+        submission_id: null,
+        status: 'PREPARED',
+        is_active: true,
+        created_at: '2026-09-08T00:00:00',
+        updated_at: null,
+      },
+    ];
+    serverSubs = [];
+
+    renderWithProviders(
+      <>
+        <JobsListView onOpenNewJob={() => {}} />
+        <CacheSpy />
+      </>,
+    );
+
+    expect(await screen.findByText('快手')).toBeInTheDocument();
+    expect(screen.getByTestId('cache-count').textContent).toBe('1');
+
+    fireEvent.click(screen.getByText('标记已结束'));
+    await waitFor(() =>
+      expect(jobEntityApi.updateJobEntity).toHaveBeenCalledWith(42, { status: 'CLOSED' }),
+    );
+    // 无 submission 的行不打 submission PATCH
+    expect(job.updateSubmission).not.toHaveBeenCalled();
+
+    fireEvent.click(await screen.findByText('恢复处理'));
+    await waitFor(() =>
+      expect(jobEntityApi.updateJobEntity).toHaveBeenCalledWith(42, { status: 'PREPARED' }),
     );
   });
 });

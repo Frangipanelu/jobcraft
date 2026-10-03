@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { JobEntity } from '../../api/job';
 import { DashboardItem } from '../../api/types';
-import { deriveJobStatus, jobEntityToJob, submissionToJob } from './mappers';
+import { deriveJobStatus, jobEntityToJob, jobRowToJob, submissionToJob } from './mappers';
 
 function makeEntity(overrides: Partial<JobEntity> = {}): JobEntity {
   return {
@@ -146,5 +146,62 @@ describe('jobEntityToJob 映射（T-M5-1 job-only 行）', () => {
   it('created_at 为空回退今天（YYYY-MM-DD）', () => {
     const job = jobEntityToJob(makeEntity({ created_at: null }));
     expect(job.applyDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+});
+
+describe('jobRowToJob 映射（T-M5-2 数据源切 job 表）', () => {
+  it('job 实体 + submission 事实 join：行身份=job、steps 由 dash 派生', () => {
+    const job = jobRowToJob(
+      makeEntity({ submission_id: 5, job_analysis_id: 42 }),
+      makeItem({ id: 5, has_analysis: true, job_analysis_id: 42, delivered: true, status: 'APPLIED' }),
+      77,
+    );
+    // 行身份 = job 实体
+    expect(job.id).toBe('job-42');
+    expect(job.jobId).toBe(42);
+    expect(job.backendId).toBe(5);
+    // steps 事实来自 join 的 submission 行
+    expect(job.steps).toMatchObject({
+      jdAnalysis: true,
+      applied: true,
+      terminated: false,
+    });
+    expect(job.status).toBe('submitted');
+    expect(job.currentStage).toBe('已投递');
+    // T-M6-2：简历版本 id 优先
+    expect(job.resumeId).toBe('77');
+    expect(job.steps.customResume).toBe(true);
+  });
+
+  it('无 submission（job-only 降级）：分析事实取 entity，其余步骤 pending', () => {
+    const job = jobRowToJob(makeEntity({ job_analysis_id: 7 }));
+    expect(job.id).toBe('job-42');
+    expect(job.backendId).toBeUndefined();
+    expect(job.status).toBe('delivered');
+    expect(job.steps).toMatchObject({
+      jdAnalysis: true,
+      applied: false,
+      prepStage: 'pending',
+      reviewStage: 'pending',
+      terminated: false,
+    });
+    expect(job.jdAnalysisId).toBe('7');
+  });
+
+  it('dash 缺岗位匹配（悬空 submission 不误挂）：prep/review 计数按 dash 派生', () => {
+    const job = jobRowToJob(
+      makeEntity(),
+      makeItem({ prep_count: 2, review_count: 1, status: 'ROUND_1' }),
+    );
+    expect(job.steps.prepStage).toBe('in_progress');
+    expect(job.status).toBe('interviewing');
+    expect(job.currentStage).toBe('一面');
+  });
+
+  it('dash status=CLOSED/OFFER → finished（读时投影优先于 entity.status）', () => {
+    const job = jobRowToJob(makeEntity(), makeItem({ status: 'CLOSED' }));
+    expect(job.status).toBe('finished');
+    expect(job.steps.terminated).toBe(true);
+    expect(job.currentStage).toBe('已关闭');
   });
 });

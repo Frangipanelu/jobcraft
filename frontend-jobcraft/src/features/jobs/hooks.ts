@@ -1,14 +1,20 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as authApi from '../../api/auth';
 import * as jobApi from '../../api/job';
+import { updateJobEntity } from '../../api/jobEntity';
 import { Job } from '../../types/jobcraft';
-import { JOBS_QUERY_KEY, deriveJobStatus, jobEntityToJob, submissionToJob } from './mappers';
+import { JOBS_QUERY_KEY, deriveJobStatus, jobRowToJob, submissionToJob } from './mappers';
 
 
 /**
- * 查询当前用户的岗位列表（T-M5-1 双源并存：dashboard submission 主源
- * + job 表中尚无 submission 的 job-only 行合并）。
- * 实体列表失败（如后端未升级）不阻断 dashboard 主源。
+ * 查询当前用户的岗位列表（T-M5-2 数据源切 job 表）：
+ * - 主源 = `GET /job` job 实体（行身份 = 岗位，`jobRowToJob` 生成）；
+ * - join = dashboard submission 事实（delivered/has_analysis/has_resume/
+ *   prep/review 计数，按 job_id 关联），steps 派生同 submissionToJob 口径；
+ * - 存量兼容 = dashboard 中无对应在用 job 行的 submission（job_id 缺失或指向
+ *   非在用岗位）按 `submissionToJob` 兜底补行，不丢存量数据；
+ * - 实体列表失败（如后端未升级）降级为纯 dashboard 行（行为≈切换前）。
+ * T-M6-2：按 analysis 归组取最新简历版本，customResume/resumeId 以版本 id 为准。
  */
 export function useJobsQuery() {
   return useQuery({
@@ -16,7 +22,7 @@ export function useJobsQuery() {
     queryFn: async () => {
       const user = await authApi.getCurrentUser();
       const data = await jobApi.getDashboard(user.id);
-      const fromSubmissions = (data.submissions || []).map(submissionToJob);
+      const dashboards = data.submissions || [];
 
       let entities: jobApi.JobEntity[] = [];
       try {
@@ -25,8 +31,6 @@ export function useJobsQuery() {
         entities = [];
       }
 
-      // T-M6-2：按 analysis 归组取最新简历版本（列表已 version_no DESC，首见即最新）。
-      // customResume 步骤与 resumeId 以版本 id 为准；失败容忍（无版本按 has_resume 兜底）。
       const versionByAnalysis = new Map<number, number>();
       try {
         const versions = await jobApi.listResumeVersions();
@@ -39,26 +43,32 @@ export function useJobsQuery() {
         // 版本接口不可用：退回 dashboard has_resume 判定，不阻断岗位列表
       }
 
-      const withResume = fromSubmissions.map((j) => {
-        const aid = j.jdAnalysisId ? Number(j.jdAnalysisId) : null;
-        const vid = aid != null ? versionByAnalysis.get(aid) : undefined;
-        if (vid == null) return j;
-        return { ...j, resumeId: String(vid), steps: { ...j.steps, customResume: true } };
-      });
+      const dashByJobId = new Map<number, (typeof dashboards)[number]>();
+      for (const d of dashboards) {
+        if (d.job_id != null) dashByJobId.set(d.job_id, d);
+      }
 
-      // 双源去重：有投递的岗位由 dashboard 派生（job_id 覆盖），只补纯岗位行
-      const covered = new Set(
-        withResume.map((j) => j.jobId).filter((v): v is number => v != null),
+      const fromEntities = entities.map((e) =>
+        jobRowToJob(
+          e,
+          dashByJobId.get(e.id),
+          e.job_analysis_id != null ? versionByAnalysis.get(e.job_analysis_id) : undefined,
+        ),
       );
-      const jobOnly = entities
-        .filter((e) => e.submission_id == null && !covered.has(e.id))
-        .map((e) =>
-          jobEntityToJob(
-            e,
-            e.job_analysis_id != null ? versionByAnalysis.get(e.job_analysis_id) : undefined,
-          ),
-        );
-      return [...jobOnly, ...withResume];
+
+      // 存量兼容：未被在用 job 行覆盖的 submission（job_id 缺失/悬空）兜底补行
+      const covered = new Set(entities.map((e) => e.id));
+      const orphans = dashboards
+        .filter((d) => d.job_id == null || !covered.has(d.job_id))
+        .map(submissionToJob)
+        .map((j) => {
+          const aid = j.jdAnalysisId ? Number(j.jdAnalysisId) : null;
+          const vid = aid != null ? versionByAnalysis.get(aid) : undefined;
+          if (vid == null) return j;
+          return { ...j, resumeId: String(vid), steps: { ...j.steps, customResume: true } };
+        });
+
+      return [...fromEntities, ...orphans];
     },
   });
 }
@@ -134,6 +144,8 @@ export function useCreateJobMutation() {
 /**
  * 标记岗位流程已结束（P11-b：持久化到后端 `status=CLOSED`，刷新后不再丢失）。
  * 注意：P0-1 之后 applied（已投递）只能由用户确认，终止流程不再顺带标记投递。
+ * T-M5-2：job-only 行（尚无 submission）落 `PATCH /job/{id}` status=CLOSED，
+ * 不再仅本地态（Q2：job 增删查改不碰 submission）。
  */
 export function useTerminateJobMutation() {
   const queryClient = useQueryClient();
@@ -145,6 +157,12 @@ export function useTerminateJobMutation() {
       if (job?.backendId != null) {
         try {
           await jobApi.updateSubmission(job.backendId, { status: 'CLOSED' });
+        } catch {
+          // 后端不可用时仅保留本地乐观状态
+        }
+      } else if (job?.jobId != null) {
+        try {
+          await updateJobEntity(job.jobId, { status: 'CLOSED' });
         } catch {
           // 后端不可用时仅保留本地乐观状态
         }
@@ -181,6 +199,13 @@ export function useResumeJobMutation() {
           await jobApi.updateSubmission(job.backendId, {
             status: job.steps.applied ? 'APPLIED' : 'PREPARED',
           });
+        } catch {
+          // 后端不可用时仅保留本地乐观状态
+        }
+      } else if (job?.jobId != null) {
+        // T-M5-2：job-only 行恢复落 job 表（无投递事实，回待投递主线）
+        try {
+          await updateJobEntity(job.jobId, { status: 'PREPARED' });
         } catch {
           // 后端不可用时仅保留本地乐观状态
         }

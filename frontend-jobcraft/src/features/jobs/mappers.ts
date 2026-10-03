@@ -61,39 +61,75 @@ export function deriveJobStatus(steps: Job['steps']): JobStatus {
 }
 
 /**
- * job 表实体（无 submission 的 job-only 行）→ 前端 Job（T-M5-1 双源并存的最小合并）。
+ * job 表实体（主源）+ submission 事实（join）→ 前端 Job（T-M5-2 数据源切 job 表）。
  *
- * 仅用于补「已建岗但尚未投递」的行：分析事实取自 job.job_analysis_id；
- * T-M6-2 起 customResume/resumeId 由 resume_version 存在性判定（版本 id 入参，
- * 缺省为 false/undefined，保持旧调用行为）。
+ * 行身份 = job 实体（id=`job-${id}`、jobId=entity.id）；steps/阶段事实来自
+ * 该岗位关联的 dashboard submission 行（delivered/has_analysis/has_resume/
+ * prep/review 计数），无 submission 时按 job-only 行降级（jobId 即分析归属，
+ * 其余步骤 pending）。
+ *
+ * @param entity job 表行（GET /api/jobcraft/job）
+ * @param dash 该岗位关联的 dashboard submission 事实（无投递时缺省）
+ * @param resumeVersionId 简历版本 id（T-M6-2：customResume/resumeId 以版本为准）
  */
-export function jobEntityToJob(entity: JobEntity, resumeVersionId?: number): Job {
-  const hasAnalysis = entity.job_analysis_id != null;
-  const hasResumeVersion = resumeVersionId != null;
+export function jobRowToJob(
+  entity: JobEntity,
+  dash?: DashboardItem,
+  resumeVersionId?: number,
+): Job {
+  const terminated = dash
+    ? dash.status === 'OFFER' || dash.status === 'CLOSED'
+    : entity.status === 'OFFER' || entity.status === 'CLOSED';
+  const prepCount = dash?.prep_count ?? 0;
+  const reviewCount = dash?.review_count ?? 0;
+  const hasAnalysis = entity.job_analysis_id != null || dash?.has_analysis === true;
   const steps: Job['steps'] = {
     jdAnalysis: hasAnalysis,
-    expMatched: false,
-    customResume: hasResumeVersion,
-    applied: false,
-    prepStage: 'pending',
-    reviewStage: 'pending',
+    expMatched: (dash?.card_count ?? 0) > 0,
+    customResume: resumeVersionId != null || dash?.has_resume === true,
+    applied: dash?.delivered ?? false,
+    prepStage: prepCount > reviewCount ? 'in_progress' : prepCount > 0 ? 'done' : 'pending',
+    reviewStage: reviewCount > 0 ? 'done' : 'pending',
+    terminated,
   };
+
+  const applyDateSource = dash?.created_at || entity.created_at || new Date().toISOString();
 
   return {
     id: `job-${entity.id}`,
     jobId: entity.id,
-    company: entity.company,
-    role: entity.position,
+    // 有投递时 backendId=submission id（PATCH submission 用）；job-only 行为空
+    backendId: entity.submission_id ?? dash?.id ?? undefined,
+    company: dash?.company || entity.company,
+    role: dash?.position || entity.position,
     salaryRange: '面议',
     status: deriveJobStatus(steps),
     matchScore: 0,
-    applyDate: (entity.created_at || new Date().toISOString()).split('T')[0],
-    lastUpdated: '刚刚',
-    currentStage: '待投递',
+    applyDate: applyDateSource.split('T')[0],
+    lastUpdated: dash?.updated_at || entity.updated_at || '刚刚',
+    currentStage: dash
+      ? SUBMISSION_STATUS_CN[dash.status] || '待处理'
+      : SUBMISSION_STATUS_CN[entity.status as keyof typeof SUBMISSION_STATUS_CN] || '待投递',
     nextAction: hasAnalysis ? '基于 JD 生成定制简历' : '开始进行该岗位的 JD 深度解析',
     steps,
-    jdAnalysisId: hasAnalysis ? String(entity.job_analysis_id) : undefined,
-    resumeId: hasResumeVersion ? String(resumeVersionId) : undefined,
+    jdAnalysisId: (entity.job_analysis_id ?? dash?.job_analysis_id) != null
+      ? String(entity.job_analysis_id ?? dash?.job_analysis_id)
+      : undefined,
+    resumeId: resumeVersionId != null
+      ? String(resumeVersionId)
+      : dash
+        ? String(dash.id)
+        : undefined,
     interviewIds: [],
   };
+}
+
+/**
+ * job 表实体（无 submission 的 job-only 行）→ 前端 Job（T-M5-1 双源并存的最小合并）。
+ *
+ * T-M5-2 起列表主路径走 `jobRowToJob`（可带 submission 事实 join）；本函数保留为
+ * 纯 job 行的薄封装（dash 缺省），兼容既有调用与测试。
+ */
+export function jobEntityToJob(entity: JobEntity, resumeVersionId?: number): Job {
+  return jobRowToJob(entity, undefined, resumeVersionId);
 }
