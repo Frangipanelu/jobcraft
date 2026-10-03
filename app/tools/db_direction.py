@@ -44,6 +44,7 @@ _UPDATABLE_FIELDS = ("name", *SIX_DIM_FIELDS, "status")
 _CODE_RETRY_TIMES = 3
 _MISSING_COLUMN_ERRNO = 1054
 _DUP_KEY_ERRNO = 1062
+_TABLE_MISSING_ERRNO = 1146
 
 
 def _row_to_direction(row: Dict[str, Any]) -> Dict[str, Any]:
@@ -351,3 +352,53 @@ def count_direction_references(direction_id: int, user_id: int) -> Dict[str, int
         "expressions": int((expr_row or {}).get("c") or 0),
         "jd_classifications": int((cls_row or {}).get("c") or 0),
     }
+
+
+def _count_refs_by_direction(table: str, user_id: int) -> Dict[int, int]:
+    """按 direction_id 聚合下游表引用计数（表名来自模块内白名单常量）。
+
+    :param table: 下游表名（仅 ``expression`` / ``jd_classification`` 两个调用点，
+        非用户输入，无注入面）。
+    :param user_id: 归属用户。
+    :return: {direction_id: 计数}；缺表（errno 1146，未迁移环境）降级为空映射，
+        其他错误上抛（DB-02 读降级惯例）。
+    """
+    try:
+        rows = query_all(
+            f"SELECT direction_id AS did, COUNT(*) AS c FROM {table} "
+            "WHERE user_id=%s AND direction_id IS NOT NULL "
+            "GROUP BY direction_id",
+            (user_id,),
+        )
+    except MySQLError as exc:
+        if getattr(exc, "errno", None) == _TABLE_MISSING_ERRNO:
+            logger.warning("%s 表缺（未迁移），方向汇总该侧计数按 0 计: %s", table, exc)
+            return {}
+        raise
+    return {int(r["did"]): int(r["c"]) for r in rows}
+
+
+def list_direction_summary(user_id: int) -> List[Dict[str, Any]]:
+    """方向汇总列表（T-M3-6：workbench 方向沉淀——方向列表+计数）。
+
+    三次独立小查询（方向行 / expression 计数 / jd_classification 计数）而非
+    大 JOIN：任一下游表缺表时该侧计数降级为 0，方向列表本身仍可返回
+    （direction 表由启动引导 run_schema_bootstrap 保障存在）。
+
+    :param user_id: 归属用户。
+    :return: 按创建序（DIR-1 在前）的方向汇总行：
+        ``{id, code, name, status, expression_count, jd_classification_count}``。
+    """
+    expr_counts = _count_refs_by_direction("expression", user_id)
+    cls_counts = _count_refs_by_direction("jd_classification", user_id)
+    return [
+        {
+            "id": d["id"],
+            "code": d["code"],
+            "name": d["name"],
+            "status": d["status"],
+            "expression_count": expr_counts.get(d["id"], 0),
+            "jd_classification_count": cls_counts.get(d["id"], 0),
+        }
+        for d in list_directions(user_id)
+    ]

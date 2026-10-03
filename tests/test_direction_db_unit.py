@@ -522,3 +522,105 @@ class TestCountReferences:
             "expressions": 3,
             "jd_classifications": 0,
         }
+
+
+class TestDirectionSummary:
+    """T-M3-6：workbench 方向沉淀汇总（方向列表+下游计数，独立查询降级）。"""
+
+    @staticmethod
+    def _patch_query_all(monkeypatch, tables):
+        """按 SQL 片段分派返回值；值为 Exception 时抛出。
+
+        :param tables: {sql_marker: rows | Exception}——``FROM direction`` /
+            ``FROM expression`` / ``FROM jd_classification`` 三段。
+        """
+
+        def _fake_query_all(sql, params=None):
+            for marker, val in tables.items():
+                if marker in sql:
+                    if isinstance(val, Exception):
+                        raise val
+                    return val
+            raise AssertionError(f"未预期的 SQL: {sql}")
+
+        monkeypatch.setattr(mod, "query_all", _fake_query_all)
+
+    @staticmethod
+    def _missing_table(table: str) -> MySQLError:
+        return MySQLError(msg=f"Table 'jobcraft.{table}' doesn't exist", errno=1146)
+
+    def test_merges_counts_by_direction(self, monkeypatch):
+        self._patch_query_all(
+            monkeypatch,
+            {
+                "FROM expression": [{"did": 1, "c": 5}, {"did": 2, "c": 2}],
+                "FROM jd_classification": [{"did": 1, "c": 2}],
+                "FROM direction": [
+                    _fake_direction_row(id=1, code="DIR-1"),
+                    _fake_direction_row(id=2, code="DIR-2", name="第二方向"),
+                ],
+            },
+        )
+        out = mod.list_direction_summary(7)
+        assert [d["id"] for d in out] == [1, 2], "保持创建序"
+        assert out[0] == {
+            "id": 1,
+            "code": "DIR-1",
+            "name": "策略运营-跨境电商",
+            "status": "active",
+            "expression_count": 5,
+            "jd_classification_count": 2,
+        }
+        assert out[1]["expression_count"] == 2
+        assert out[1]["jd_classification_count"] == 0, "无引用的方向计 0"
+
+    def test_missing_expression_table_degrades_counts(self, monkeypatch):
+        """缺 expression 表（未迁移 V0009）→ 该侧计数 0，方向列表与 jc 计数保留。"""
+        self._patch_query_all(
+            monkeypatch,
+            {
+                "FROM expression": self._missing_table("expression"),
+                "FROM jd_classification": [{"did": 1, "c": 3}],
+                "FROM direction": [_fake_direction_row(id=1)],
+            },
+        )
+        out = mod.list_direction_summary(7)
+        assert len(out) == 1
+        assert out[0]["expression_count"] == 0
+        assert out[0]["jd_classification_count"] == 3
+
+    def test_missing_jd_classification_table_degrades_counts(self, monkeypatch):
+        self._patch_query_all(
+            monkeypatch,
+            {
+                "FROM expression": [{"did": 1, "c": 4}],
+                "FROM jd_classification": self._missing_table("jd_classification"),
+                "FROM direction": [_fake_direction_row(id=1)],
+            },
+        )
+        out = mod.list_direction_summary(7)
+        assert out[0]["expression_count"] == 4
+        assert out[0]["jd_classification_count"] == 0
+
+    def test_non_missing_table_error_reraises(self, monkeypatch):
+        """连接类错误（非 1146）不吞，向上抛。"""
+        self._patch_query_all(
+            monkeypatch,
+            {"FROM expression": MySQLError(msg="Lost connection", errno=2003)},
+        )
+        with pytest.raises(MySQLError):
+            mod.list_direction_summary(7)
+
+    def test_queries_scoped_to_user(self, monkeypatch):
+        seen: list = []
+
+        def _fake_query_all(sql, params=None):
+            seen.append((sql, params))
+            if "FROM direction" in sql:
+                return []
+            return []
+
+        monkeypatch.setattr(mod, "query_all", _fake_query_all)
+        assert mod.list_direction_summary(7) == []
+        assert len(seen) == 3, "方向行+两侧计数共三次查询"
+        assert all(params == (7,) for _, params in seen)

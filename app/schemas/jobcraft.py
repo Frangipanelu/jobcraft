@@ -415,6 +415,34 @@ class DirectionFindOrCreateResponse(BaseModel):
     created: bool
 
 
+class DirectionSummaryItem(BaseModel):
+    """方向汇总行（T-M3-6：workbench 方向沉淀面板——方向+下游引用计数）。"""
+
+    id: int
+    code: str = ""
+    name: str
+    status: str = "active"
+    expression_count: int = Field(0, description="该方向下表达条数")
+    jd_classification_count: int = Field(0, description="该方向下 JD 分类条数")
+
+
+class DirectionGapCount(BaseModel):
+    """高频缺口聚合行（T-M3-6：capability_gap 按维度计数）。"""
+
+    dimension: str = Field(..., description="维度编码 D1-D8 或 EXT（Q3-a）")
+    count: int = Field(0, ge=0, description="该维度缺口条数（降序展示）")
+
+
+class DirectionSummaryResponse(BaseModel):
+    """方向沉淀汇总响应（GET /api/jobcraft/direction/summary）。"""
+
+    directions: List[DirectionSummaryItem] = Field(default_factory=list)
+    top_gaps: List[DirectionGapCount] = Field(
+        default_factory=list,
+        description="高频缺口（按 count 降序；capability_gap 缺表时为空）",
+    )
+
+
 # ============================================================
 # JD / ATS 相关
 # ============================================================

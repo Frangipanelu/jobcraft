@@ -1503,6 +1503,52 @@ class TestDbCapabilityGap:
         assert len(gaps) == 1
         assert gaps[0]["dimension"] == "EXT"
 
+    def test_count_gaps_by_dimension_maps_and_sorts(self):
+        """T-M3-6：按维度计数——聚合行映射 + count 降序交由 SQL，此处透传。"""
+        from app.tools.db_capability_gap import count_gaps_by_dimension
+
+        rows = [
+            {"dimension": "D6", "c": 5},
+            {"dimension": "D3", "c": 3},
+            {"dimension": None, "c": 1},
+        ]
+        with patch(
+            "app.tools.db_capability_gap.query_all", return_value=rows
+        ) as mock_q:
+            out = count_gaps_by_dimension(7)
+        assert out == [
+            {"dimension": "D6", "count": 5},
+            {"dimension": "D3", "count": 3},
+            {"dimension": "EXT", "count": 1},
+        ], "NULL 维度兜底 EXT"
+        sql, params = mock_q.call_args[0]
+        assert "GROUP BY dimension" in sql
+        assert "user_id=%s" in sql
+        assert params == (7,)
+
+    def test_count_gaps_by_dimension_missing_table_degrades_empty(self):
+        from mysql.connector import Error as MySQLError
+
+        from app.tools.db_capability_gap import count_gaps_by_dimension
+
+        err = MySQLError("Table missing")
+        err.errno = 1146
+        with patch("app.tools.db_capability_gap.query_all", side_effect=err):
+            assert count_gaps_by_dimension(7) == []
+
+    def test_count_gaps_by_dimension_other_error_reraises(self):
+        from mysql.connector import Error as MySQLError
+
+        from app.tools.db_capability_gap import count_gaps_by_dimension
+
+        err = MySQLError("Lost connection")
+        err.errno = 2003
+        with (
+            patch("app.tools.db_capability_gap.query_all", side_effect=err),
+            pytest.raises(MySQLError),
+        ):
+            count_gaps_by_dimension(7)
+
 
 # ============================================================
 # 8. db_submission.py — mock DB

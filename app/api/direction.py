@@ -20,9 +20,10 @@ from app.schemas.jobcraft import (
     DirectionCreate,
     DirectionFindOrCreateResponse,
     DirectionRead,
+    DirectionSummaryResponse,
     DirectionUpdate,
 )
-from app.tools import db_direction
+from app.tools import db_capability_gap, db_direction
 
 router = APIRouter(prefix="/api/jobcraft/direction", tags=["direction"])
 
@@ -80,6 +81,23 @@ def find_or_create_direction(
     except Exception as e:
         logger.exception("方向 find-or-create 失败")
         raise HTTPException(status_code=500, detail=f"find-or-create 失败: {e}")
+
+
+@router.get("/summary", response_model=DirectionSummaryResponse)
+def direction_summary(current_user: int = Depends(get_current_user)):
+    """方向沉淀汇总（T-M3-6：/workbench 面板——方向列表+计数+高频缺口）。
+
+    注册必须早于 ``GET /{direction_id}``：FastAPI 按注册顺序匹配，
+    晚注册会被路径参数吞掉（"summary" → int 解析 422）。
+    """
+    try:
+        return DirectionSummaryResponse(
+            directions=db_direction.list_direction_summary(current_user),
+            top_gaps=db_capability_gap.count_gaps_by_dimension(current_user),
+        )
+    except Exception as e:
+        logger.exception("方向汇总查询失败")
+        raise HTTPException(status_code=500, detail=f"查询失败: {e}")
 
 
 @router.get("/{direction_id}", response_model=DirectionRead)

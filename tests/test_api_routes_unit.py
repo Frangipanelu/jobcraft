@@ -970,6 +970,66 @@ class TestDirections:
         assert "归档" in resp.json()["error"]["message"]
         assert len(store["rows"]) == 1
 
+    # ---- T-M3-6：方向沉淀汇总 /summary ----
+
+    @staticmethod
+    def _mock_summary(monkeypatch, directions=None, gaps=None, error=None):
+        """替换 summary 两个 DAO 为可控假实现。"""
+        from app.tools import db_capability_gap as gap_mod
+        from app.tools import db_direction as dir_mod
+
+        if error is not None:
+
+            def _boom(_user_id):
+                raise error
+
+            monkeypatch.setattr(dir_mod, "list_direction_summary", _boom)
+            return
+
+        monkeypatch.setattr(
+            dir_mod,
+            "list_direction_summary",
+            lambda _user_id: directions or [],
+        )
+        monkeypatch.setattr(
+            gap_mod, "count_gaps_by_dimension", lambda _user_id: gaps or []
+        )
+
+    def test_summary_returns_shape_and_not_swallowed(self, monkeypatch):
+        """/summary 不被 GET /{direction_id} 吞掉：200 + 双段结构。"""
+        self._mock_summary(
+            monkeypatch,
+            directions=[
+                {
+                    "id": 1,
+                    "code": "DIR-1",
+                    "name": "策略运营",
+                    "status": "active",
+                    "expression_count": 5,
+                    "jd_classification_count": 2,
+                }
+            ],
+            gaps=[{"dimension": "D6", "count": 5}],
+        )
+        resp = client.get("/api/jobcraft/direction/summary")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["directions"][0]["code"] == "DIR-1"
+        assert body["directions"][0]["expression_count"] == 5
+        assert body["top_gaps"] == [{"dimension": "D6", "count": 5}]
+
+    def test_summary_empty_lists(self, monkeypatch):
+        """无方向/无缺口（capability_gap 缺表降级）→ 双空列表而非 500。"""
+        self._mock_summary(monkeypatch)
+        resp = client.get("/api/jobcraft/direction/summary")
+        assert resp.status_code == 200
+        assert resp.json() == {"directions": [], "top_gaps": []}
+
+    def test_summary_dao_error_returns_500(self, monkeypatch):
+        self._mock_summary(monkeypatch, error=RuntimeError("db down"))
+        resp = client.get("/api/jobcraft/direction/summary")
+        assert resp.status_code == 500
+
 
 class TestExperienceExpressions:
     """GET /api/jobcraft/experience/cards/{card_id}/expressions（EXP-P2-02 §8.1）"""

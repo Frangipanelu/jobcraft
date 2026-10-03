@@ -129,3 +129,27 @@ def list_capability_gaps_grouped(
     for r in rows:
         grouped.setdefault(r["job_analysis_id"], []).append(_row_to_gap(r))
     return grouped
+
+
+def count_gaps_by_dimension(user_id: int) -> List[Dict[str, Any]]:
+    """按维度聚合用户全部能力缺口条数（T-M3-6：workbench 高频缺口）。
+
+    :param user_id: 归属用户（user_id 冗余列直查，无需父级归属校验）。
+    :return: ``[{"dimension": "D3", "count": 4}, ...]``——count 降序、同数按
+        dimension 升序；缺表（errno 1146）降级为空列表（DB-02 读降级惯例）。
+    """
+    try:
+        rows = query_all(
+            "SELECT dimension, COUNT(*) AS c FROM capability_gap "
+            "WHERE user_id=%s GROUP BY dimension "
+            "ORDER BY c DESC, dimension ASC",
+            (user_id,),
+        )
+    except MySQLError as exc:
+        if getattr(exc, "errno", None) == _TABLE_MISSING_ERRNO:
+            logger.debug("capability_gap 表不存在，高频缺口降级为空: %s", exc)
+            return []
+        raise
+    return [
+        {"dimension": r.get("dimension") or "EXT", "count": int(r["c"])} for r in rows
+    ]

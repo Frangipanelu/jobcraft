@@ -1,5 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
+import { DirectionInsightPanel } from './DirectionInsightPanel';
 import { useJobsQuery } from '../../features/jobs/hooks';
 import { useProfileQuery } from '../../features/profile/hooks';
 import { useTabNavigate } from '../../router/tabPaths';
@@ -500,6 +501,9 @@ export const WorkbenchView: React.FC<WorkbenchViewProps> = ({
           </div>
         </div>
       </div>
+
+      {/* 4. 方向沉淀（T-M3-6：方向列表+计数+高频缺口） */}
+      <DirectionInsightPanel />
     </div>
   );
 };
