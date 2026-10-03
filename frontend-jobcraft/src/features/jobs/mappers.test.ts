@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { JobEntity } from '../../api/job';
 import { DashboardItem } from '../../api/types';
-import { deriveJobStatus, jobEntityToJob, jobRowToJob, submissionToJob } from './mappers';
+import { deriveJobStatus, jobEntityToJob, jobRowToJob, stageLabel, submissionToJob } from './mappers';
 
 function makeEntity(overrides: Partial<JobEntity> = {}): JobEntity {
   return {
@@ -195,7 +195,8 @@ describe('jobRowToJob 映射（T-M5-2 数据源切 job 表）', () => {
     );
     expect(job.steps.prepStage).toBe('in_progress');
     expect(job.status).toBe('interviewing');
-    expect(job.currentStage).toBe('一面');
+    // T-M5-4：INVITED/ROUND_x 读时归一为六态词表「面试中」
+    expect(job.currentStage).toBe('面试中');
   });
 
   it('dash status=CLOSED/OFFER → finished（读时投影优先于 entity.status）', () => {
@@ -203,5 +204,21 @@ describe('jobRowToJob 映射（T-M5-2 数据源切 job 表）', () => {
     expect(job.status).toBe('finished');
     expect(job.steps.terminated).toBe(true);
     expect(job.currentStage).toBe('已关闭');
+  });
+});
+
+describe('stageLabel 读时归一（T-M5-4 去轮次化）', () => {
+  it('INVITED/ROUND_1/ROUND_2 归一为「面试中」（Q1 六态对外唯一词表）', () => {
+    expect(stageLabel('INVITED')).toBe('面试中');
+    expect(stageLabel('ROUND_1')).toBe('面试中');
+    expect(stageLabel('ROUND_2')).toBe('面试中');
+  });
+
+  it('非轮次状态保持既有中文词表；未知值回退「待处理」', () => {
+    expect(stageLabel('PREPARED')).toBe('待投递');
+    expect(stageLabel('APPLIED')).toBe('已投递');
+    expect(stageLabel('OFFER')).toBe('Offer');
+    expect(stageLabel('CLOSED')).toBe('已关闭');
+    expect(stageLabel('WHAT')).toBe('待处理');
   });
 });

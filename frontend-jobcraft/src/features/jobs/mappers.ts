@@ -6,6 +6,20 @@ import { Job, JobStatus } from '../../types/jobcraft';
 export const JOBS_QUERY_KEY = ['jobs'] as const;
 
 /**
+ * 阶段显示词表（T-M5-4 读时归一）：底层 7 枚举对外只暴露六态词表。
+ *
+ * Q1/Q3：INVITED/ROUND_1/ROUND_2 是外部招聘系统的底层事实，
+ * 对外统一归一为「面试中」——状态与轮次零关联，轮次信息仅存在于面试记录。
+ *
+ * @param status 后端状态码（枚举值或字符串）
+ * @return 六态对外词表文案
+ */
+export function stageLabel(status: string): string {
+  if (status === 'INVITED' || status === 'ROUND_1' || status === 'ROUND_2') return '面试中'
+  return SUBMISSION_STATUS_CN[status as keyof typeof SUBMISSION_STATUS_CN] || '待处理'
+}
+
+/**
  * 将后端 Submission/DashboardItem 转换为前端 Job。
  *
  * 自 JobCraftContext 移出，作为映射唯一实现（context 与 hooks 共享，杜绝双份漂移）。
@@ -33,7 +47,7 @@ export function submissionToJob(sub: DashboardItem): Job {
     matchScore: 0,
     applyDate: sub.created_at?.split('T')[0] || new Date().toISOString().split('T')[0],
     lastUpdated: sub.updated_at || '刚刚',
-    currentStage: SUBMISSION_STATUS_CN[sub.status] || '待处理',
+    currentStage: stageLabel(sub.status),
     nextAction: '',
     steps,
     // P4-4a：岗位实体 id（缓存到前端 Job，刷新后仍可定位岗位）
@@ -107,9 +121,7 @@ export function jobRowToJob(
     matchScore: 0,
     applyDate: applyDateSource.split('T')[0],
     lastUpdated: dash?.updated_at || entity.updated_at || '刚刚',
-    currentStage: dash
-      ? SUBMISSION_STATUS_CN[dash.status] || '待处理'
-      : SUBMISSION_STATUS_CN[entity.status as keyof typeof SUBMISSION_STATUS_CN] || '待投递',
+    currentStage: stageLabel(dash ? dash.status : entity.status),
     nextAction: hasAnalysis ? '基于 JD 生成定制简历' : '开始进行该岗位的 JD 深度解析',
     steps,
     jdAnalysisId: (entity.job_analysis_id ?? dash?.job_analysis_id) != null
