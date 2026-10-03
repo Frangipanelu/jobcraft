@@ -155,53 +155,6 @@ def jobcraft_submission_update(
         raise HTTPException(status_code=500, detail=f"更新失败: {e}")
 
 
-class ResumeSuggestBullet(BaseModel):
-    """简历要点定位 + 文本（前端结构化解析产物）"""
-
-    item_index: int = Field(..., ge=0)
-    bullet_index: int = Field(..., ge=0)
-    text: str = Field(..., max_length=4000)
-
-
-class ResumeSuggestPayload(BaseModel):
-    """resume_suggest 同步入参（JD 上下文由服务端自取，前端不传岗位数据）"""
-
-    bullets: List[ResumeSuggestBullet] = Field(default_factory=list, max_length=200)
-
-
-@router.post("/api/jobcraft/submission/{submission_id}/resume-suggest")
-def jobcraft_submission_resume_suggest(
-    submission_id: int,
-    payload: ResumeSuggestPayload,
-    current_user: int = Depends(get_current_user),
-):
-    """生成简历 AI 优化建议（1 次 LLM 调用；只算不写，落库走 PATCH）。
-
-    :return: {"suggestions": [ResumeSuggestionRecord, ...]}（含 id/status=pending）
-    """
-    from app.tools.resume_suggest import load_suggest_context, suggest_resume_edits
-
-    submission = db_tools.get_submission(submission_id, current_user)
-    if not submission:
-        raise HTTPException(status_code=404, detail="投递记录不存在")
-    if not payload.bullets:
-        raise HTTPException(status_code=400, detail="简历要点为空，无法生成建议")
-    context = load_suggest_context(submission, current_user)
-    try:
-        suggestions = suggest_resume_edits(
-            [b.model_dump() for b in payload.bullets],
-            jd_text=context["jd_text"],
-            ats=context["ats"],
-            gap_items=context["gap_items"],
-        )
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        logger.exception("简历建议生成失败 submission_id=%s", submission_id)
-        raise HTTPException(status_code=502, detail=f"建议生成失败: {e}")
-    return {"suggestions": suggestions}
-
-
 @router.delete("/api/jobcraft/submission/{submission_id}")
 def jobcraft_submission_delete(
     submission_id: int, current_user: int = Depends(get_current_user)

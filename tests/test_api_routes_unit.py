@@ -3220,3 +3220,92 @@ class TestResumeVersionPatchDeleteCurrent:
         )
         resp = client.post("/api/jobcraft/resume-version/404/current")
         assert resp.status_code == 404
+
+
+class TestResumeVersionRewrite:
+    """POST /resume-version/{id}/rewrite — T-M6-3（能力缺口改写，1 次 LLM）"""
+
+    def test_rewrite_not_owned_returns_404(self, monkeypatch):
+        rewrite = MagicMock()
+        monkeypatch.setattr(
+            "app.api.resume_version.db_resume_version.get_resume_version",
+            lambda *a, **k: None,
+        )
+        monkeypatch.setattr("app.api.resume_version.rewrite_resume_bullet", rewrite)
+        resp = client.post(
+            "/api/jobcraft/resume-version/404/rewrite",
+            json={"original_text": "负责系统开发"},
+        )
+        assert resp.status_code == 404
+        assert "简历版本不存在" in resp.json()["error"]["message"]
+        rewrite.assert_not_called()
+
+    def test_rewrite_passes_fields_and_returns_text(self, monkeypatch):
+        seen = {}
+
+        def fake_rewrite(original, **kw):
+            seen.update(original=original, **kw)
+            return "改写后的要点"
+
+        monkeypatch.setattr(
+            "app.api.resume_version.db_resume_version.get_resume_version",
+            lambda vid, uid=None: {"id": vid, "user_id": uid},
+        )
+        monkeypatch.setattr(
+            "app.api.resume_version.rewrite_resume_bullet", fake_rewrite
+        )
+        resp = client.post(
+            "/api/jobcraft/resume-version/5/rewrite",
+            json={
+                "original_text": "负责系统开发",
+                "dimension": "D1-编程语言",
+                "gap_current": "缺少 Go",
+                "jd_evidence": "要求熟练 Go",
+                "rewrite_hint": "补入 Go 关键词",
+            },
+        )
+        assert resp.status_code == 200
+        assert resp.json() == {"rewritten_text": "改写后的要点"}
+        assert seen == {
+            "original": "负责系统开发",
+            "dimension": "D1-编程语言",
+            "gap_current": "缺少 Go",
+            "jd_evidence": "要求熟练 Go",
+            "rewrite_hint": "补入 Go 关键词",
+        }
+
+    def test_rewrite_value_error_returns_400(self, monkeypatch):
+        def raise_value_error(*a, **k):
+            raise ValueError("要点原文为空，无法改写")
+
+        monkeypatch.setattr(
+            "app.api.resume_version.db_resume_version.get_resume_version",
+            lambda vid, uid=None: {"id": vid},
+        )
+        monkeypatch.setattr(
+            "app.api.resume_version.rewrite_resume_bullet", raise_value_error
+        )
+        resp = client.post(
+            "/api/jobcraft/resume-version/5/rewrite",
+            json={"original_text": " x "},
+        )
+        assert resp.status_code == 400
+        assert "要点原文为空" in resp.json()["error"]["message"]
+
+    def test_rewrite_failure_returns_502(self, monkeypatch):
+        def raise_runtime(*a, **k):
+            raise RuntimeError("AI 改写返回内容为空")
+
+        monkeypatch.setattr(
+            "app.api.resume_version.db_resume_version.get_resume_version",
+            lambda vid, uid=None: {"id": vid},
+        )
+        monkeypatch.setattr(
+            "app.api.resume_version.rewrite_resume_bullet", raise_runtime
+        )
+        resp = client.post(
+            "/api/jobcraft/resume-version/5/rewrite",
+            json={"original_text": "要点"},
+        )
+        assert resp.status_code == 502
+        assert "改写失败" in resp.json()["error"]["message"]

@@ -93,11 +93,6 @@ _BUSINESS_ENDPOINTS = [
     ("POST", "/api/jobcraft/submission", {"position": "P"}),
     ("GET", "/api/jobcraft/submission/1", None),
     ("PATCH", "/api/jobcraft/submission/1", {"status": "面试中"}),
-    (
-        "POST",
-        "/api/jobcraft/submission/1/resume-suggest",
-        {"bullets": [{"item_index": 0, "bullet_index": 0, "text": "样例要点"}]},
-    ),
     ("DELETE", "/api/jobcraft/submission/1", None),
     ("GET", "/api/jobcraft/dashboard", None),
     # interview_prep

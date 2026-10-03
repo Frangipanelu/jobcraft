@@ -75,7 +75,14 @@ _REQUIRED_FIELDS = {
         "candidate_background",
     },
     ("core", "json_fallback_suffix"): {"schema_hint"},
-    ("resume", "suggest"): {"job_context", "bullets_section"},
+    # T-M6-3：简历要点改写（能力缺口驱动，1 次 LLM）
+    ("resume", "rewrite"): {
+        "dimension",
+        "gap_current",
+        "jd_evidence",
+        "rewrite_hint",
+        "original_bullet",
+    },
 }
 
 
