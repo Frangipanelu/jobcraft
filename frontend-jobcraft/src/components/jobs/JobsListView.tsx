@@ -75,7 +75,7 @@ export const JobsListView: React.FC<JobsListViewProps> = ({ onOpenNewJob }) => {
   const getStatusBadge = (status: JobStatus) => {
     switch (status) {
       case 'interviewing':
-        return <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-sage-soft text-sage border border-sage/20">待面试</span>;
+        return <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-sage-soft text-sage border border-sage/20">面试中</span>;
       case 'reviewed':
         return <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-violet-soft text-violet border border-violet/20">已复盘</span>;
       case 'delivered':
@@ -171,7 +171,7 @@ export const JobsListView: React.FC<JobsListViewProps> = ({ onOpenNewJob }) => {
                 : 'text-muted hover:bg-page'
             }`}
           >
-            待面试 ({jobs.filter((j) => j.status === 'interviewing').length})
+            面试中 ({jobs.filter((j) => j.status === 'interviewing').length})
           </button>
           <button
             onClick={() => setActiveFilter('reviewed')}

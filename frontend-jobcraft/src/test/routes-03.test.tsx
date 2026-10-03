@@ -95,10 +95,10 @@ describe('FE-ROUTE-03 路由补全', () => {
 });
 
 describe('FE-ROUTE-03 AppShell 内导航生效（真实路由跳转）', () => {
-  it('工作台「待面试」卡片 → /prep 面试准备中心', async () => {
+  it('工作台「面试中」卡片 → /prep 面试准备中心', async () => {
     const ui = renderWithProviders(<AppRoutes />, { route: '/workbench' });
 
-    fireEvent.click(await ui.findByText('待面试'));
+    fireEvent.click(await ui.findByText('面试中'));
 
     expect(await ui.findByText('面试准备中心')).toBeInTheDocument();
   });

@@ -91,7 +91,7 @@ export const WorkbenchView: React.FC<WorkbenchViewProps> = ({
   };
 
   const STATUS_BADGE: Record<Job['status'], { text: string; className: string }> = {
-    interviewing: { text: '待面试', className: 'bg-sage-soft text-sage border border-sage/20' },
+    interviewing: { text: '面试中', className: 'bg-sage-soft text-sage border border-sage/20' },
     reviewed: { text: '已复盘', className: 'bg-violet-soft text-violet border border-violet/20' },
     delivered: { text: '待投递', className: 'bg-info-bg text-info border border-info/20' },
     submitted: { text: '已投递', className: 'bg-sage-soft text-sage border border-sage/20' },
@@ -231,7 +231,7 @@ export const WorkbenchView: React.FC<WorkbenchViewProps> = ({
             {interviewingCount}
           </div>
           <div className="text-xs sm:text-[13px] font-bold text-ink">
-            待面试
+            面试中
           </div>
           <div>
             <span className="inline-block text-[11px] font-semibold px-2.5 py-0.5 rounded-md bg-sage-soft text-sage border border-sage/20">

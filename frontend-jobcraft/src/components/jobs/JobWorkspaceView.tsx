@@ -101,7 +101,7 @@ export const JobWorkspaceView: React.FC<JobWorkspaceViewProps> = ({
                 }`}
               >
                 {currentJob.status === 'interviewing'
-                  ? '待面试'
+                  ? '面试中'
                   : currentJob.status === 'reviewed'
                   ? '已复盘'
                   : currentJob.status === 'delivered'

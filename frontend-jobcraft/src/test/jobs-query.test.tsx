@@ -232,7 +232,7 @@ describe('useJobsQuery 迁移视图', () => {
     expect(screen.getByText('腾讯')).toBeInTheDocument();
     expect(screen.getByText('全部 (2)')).toBeInTheDocument();
     expect(screen.getByText('待处理 (1)')).toBeInTheDocument();
-    expect(screen.getByText('待面试 (1)')).toBeInTheDocument();
+    expect(screen.getByText('面试中 (1)')).toBeInTheDocument();
     expect(job.getDashboard).toHaveBeenCalledWith(1);
   });
 
