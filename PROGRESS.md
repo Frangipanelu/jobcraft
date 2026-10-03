@@ -2,6 +2,16 @@
 
 > 本文件用于追踪项目整体进度。AI 在每次会话结束或完成子任务时，必须更新本文件的对应板块。
 
+## T-M6-3 编辑器缺口任务列 + 简历要点 AI 改写 + 建议链 FE/BE 全下线（2026-10-03，M6 批次第三任务）
+
+> 三问裁决（用户确认后执行）：① 改写目标选点 = 中栏点选 bullet（复用 `selectedBulletForSource`）+ 左栏缺口点「AI 改写」应用；② `kind=evidence` 只展示「需补强」+ 按 `card_id` 跳经历库（无 cardId 禁用），不走改写；③ 旧建议链 FE+BE 全下线，**DB 列 `resume_suggestions`（V0015）与 BE Schema/`ResumeSuggestionRecord` 保留**（前向兼容只加不删），FE/BE 分两笔 commit。
+
+- [x] **后端** `f1a0ca8`（13 文件 +307/-628）：新 `POST /api/jobcraft/resume-version/{id}/rewrite`（`RewriteBulletPayload{original_text,dimension,gap_current,jd_evidence,rewrite_hint}`；归属校验 404「简历版本不存在」、ValueError→400、其他→logger.exception+502「改写失败: …」、返回 `{"rewritten_text"}`）；工具 `app/tools/resume_rewrite.py::rewrite_resume_bullet`（`load_prompt("resume","rewrite",v1)` + `invoke_structured(..., debug_label="resume_rewrite", prompt_version="1")`，空原文 ValueError、空返回 RuntimeError）；prompt 占位符 5 个。**下线**：`submission.py` 的 `ResumeSuggestBullet/Payload`+`resume-suggest` 端点、`handlers.py` 的 `TASK_TYPE_RESUME_SUGGEST`+registry、`app/tools/resume_suggest.py`、`prompts/resume/suggest_v1.txt`、`tests/test_resume_suggest_unit.py`、auth/routes 测试对应条目；`test_prompts.py` `_REQUIRED_FIELDS` 换 `("resume","rewrite")`。
+- [x] **前端** `e8ee6bc`（12 文件 +524/-1056）：API 层删 `suggestResume`/`ResumeSuggestionWire`/`resume_suggestions` 字段，新增 `rewriteResumeBullet(id,payload)→{rewritten_text}`；类型删 `AISuggestion`/`ResumeVersion.aiSuggestions`、加 `ResumeVersion.jobAnalysisId`（水合/生成时挂 `job_analysis_id`）；hooks 删 4 建议 mutation 与建议定位器，新增 `useRewriteResumeBulletMutation`（NaN id 抛「本地示例不支持 AI 改写」→ 缓存定位原文 → rewrite 端点 → map 替换 bullet → `persistResumePatch` 落库，返回 `{synced, rewrittenText}`）；`ResumeEditorView` 左栏整块换「缺口任务列」（`useJdAnalysesQuery` 按 `jobAnalysisId` 找 `capabilityGaps`：rewrite 按钮带 pending disabled、evidence 按 `cardId` 跳经历库、双空态文案、severity 徽标）；`JDReportDetailView` 删建议自动 fire；删 `resumeSuggestionMapper.ts`+`resume-suggest.test.tsx`；`resume-query.test.tsx` 删 3 建议用例；新建 `resume-gap.test.tsx` 7 用例；`features/resume/README.md` 重写。
+- [x] **门禁**：BE encoding 395/0、ruff 0、**pytest 1077 passed / 7 skipped**（收尾复跑 1088/7，含他窗并行新增 +11）；FE tsc 0、**vitest 230/230（32 文件）**、`npm run build` ✓。
+- **边界/债**：DB `resume_suggestions` 列 + Schema 字段保留不删（前向兼容）；存量版本无 `job_analysis_id` → 左栏空态提示「该简历未关联 JD 分析」；rewrite 无并发防抖（pending 期间按钮 disabled）；`resume-gap` 首轮 1 失败系正则元字符 `20+`（改精确字符串后过）。
+- **⚠️ 共享工作区**：全程显式路径 **pathspec 提交**（`git commit -- <paths>`），未卷入他窗在途（B 的 jobs/interview、C 的 direction 等）；BE/FE 各一笔，符合「可独立回滚逻辑单元」。
+
 ## T-M7-1 页面收敛：删 /interview/new 整页向导 + JD 回流改开模态（2026-10-02，B 窗口）
 
 > 原 B 认领第二半（延后条件「A 批完成」已满足后启动）。新建面试自此**单入口 = `NewInterviewModal`**（AppShell 全局挂载）。
