@@ -227,8 +227,20 @@ def _run_legacy_collate(state: Dict[str, Any]) -> Dict[str, Any]:
     for c in cards:
         db_tools.upsert_job_mapping(job_id, c["id"])
 
+    # T-M5-5（jd-byte-1）：响应携带 job 实体 id，FE 据此回填 jobId 对齐实体列表。
+    # job_analysis.job_id 已由 insert → _attach_job_entity（P4-4a）写入；
+    # 反查失败仅降级为 None（additive 字段，不阻断分析主流程）。
+    job_entity_id: Optional[int] = None
+    try:
+        analysis_row = db_tools.get_job_analysis(job_id, state["user_id"])
+        raw_job_id = analysis_row.get("job_id") if analysis_row else None
+        job_entity_id = int(raw_job_id) if raw_job_id is not None else None
+    except Exception as e:
+        logger.warning("job 实体 id 反查失败（analysis_id=%s）: %s", job_id, e)
+
     result = JobAnalysisResult(
         job_analysis_id=job_id,
+        job_id=job_entity_id,
         user_id=state["user_id"],
         company=company,
         position=position or ats.job_title or "",

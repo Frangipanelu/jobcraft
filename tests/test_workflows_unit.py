@@ -401,6 +401,11 @@ class TestJobAnalysisFlow:
             "app.workflows.job_analysis_flow.db_tools.upsert_job_mapping",
             lambda jid, cid: None,
         )
+        # T-M5-5：响应回传 job 实体 id（_attach_job_entity 已写 job_analysis.job_id，反查回传）
+        monkeypatch.setattr(
+            "app.workflows.job_analysis_flow.db_tools.get_job_analysis",
+            lambda aid, uid=None: {"job_id": 7},
+        )
 
         result = run_job_analysis_workflow(
             user_id=1,
@@ -411,6 +416,7 @@ class TestJobAnalysisFlow:
         )
         assert result is not None
         assert result["job_analysis_id"] == 42
+        assert result["job_id"] == 7
         assert result["match_score"] == 72
 
     def test_structured_full_workflow_normal(self, monkeypatch):

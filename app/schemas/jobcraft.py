@@ -671,6 +671,10 @@ class JobAnalysisResult(BaseModel):
     """岗位分析落库及返回结果"""
 
     job_analysis_id: int
+    job_id: Optional[int] = Field(
+        None,
+        description="归属岗位实体 id（job 表，T-M5-5；P4-4a _attach_job_entity 落库后回传，FE 据此对齐 jobId）",
+    )
     user_id: int = 1
     company: str = ""
     position: str = ""
