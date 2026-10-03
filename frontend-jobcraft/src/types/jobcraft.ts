@@ -371,6 +371,8 @@ export interface Interview {
   preparation: InterviewPreparation;
   review?: InterviewReview;
   prepSource?: InterviewPrepRecord;
+  /** T-M7-4：预建场次行主键（interview_records.id，status=planned，复盘经 record_id 回写） */
+  sessionRecordId?: number;
 }
 
 // 面试准备记录（后端 wire 类型）唯一源在 api/types.ts，此处 re-export 供域模型复用

@@ -43,6 +43,7 @@ const job = vi.hoisted(() => ({
 const interview = vi.hoisted(() => ({
   listInterviewPreps: vi.fn(),
   generateInterviewPrep: vi.fn(),
+  createInterviewSession: vi.fn(),
   createInterviewReview: vi.fn(),
   uploadInterviewReview: vi.fn(),
   analyzeInterviewReview: vi.fn(),
@@ -1062,6 +1063,8 @@ describe('FE-REVIEW-01 手动录入新面试场次（表单字段必须进入 pa
 
   beforeEach(() => {
     interview.generateInterviewPrep.mockResolvedValue(PREP_RESULT);
+    // T-M7-4：手动录入路径先经 useCreateInterviewMutation 预建场次行
+    interview.createInterviewSession.mockResolvedValue({ record_id: 902, status: 'planned' });
   });
 
   /** 步骤1 → 步骤2（上传记录），返回容器用于查日期/时间输入。 */

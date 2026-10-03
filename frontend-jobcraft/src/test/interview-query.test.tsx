@@ -29,6 +29,7 @@ const job = vi.hoisted(() => ({
 const interview = vi.hoisted(() => ({
   listInterviewPreps: vi.fn(),
   generateInterviewPrep: vi.fn(),
+  createInterviewSession: vi.fn(),
 }));
 
 const tasks = vi.hoisted(() => ({
@@ -152,6 +153,7 @@ const CreateHarness = ({ jobId = '1' }: { jobId?: string }) => {
         创建面试
       </button>
       <span data-testid="created-id">{created?.id || ''}</span>
+      <span data-testid="created-record">{created?.sessionRecordId ?? ''}</span>
       <span data-testid="create-error">{error}</span>
     </div>
   );
@@ -170,6 +172,7 @@ beforeEach(() => {
   experience.listCards.mockResolvedValue({ cards: [] });
   interview.listInterviewPreps.mockResolvedValue({ records: [] });
   interview.generateInterviewPrep.mockResolvedValue(buildPrepResult());
+  interview.createInterviewSession.mockResolvedValue({ record_id: 901, status: 'planned' });
   tasks.runTaskOrSync.mockImplementation(async (_t, _p, fallback) => fallback());
 });
 
@@ -222,6 +225,8 @@ describe('useCreateInterviewMutation', () => {
     fireEvent.click(screen.getByText('创建面试'));
 
     await waitFor(() => expect(screen.getByTestId('created-id').textContent).toBe('prep-55'));
+    // T-M7-4：预建场次行落库，sessionRecordId 进入 Interview
+    await waitFor(() => expect(screen.getByTestId('created-record').textContent).toBe('901'));
 
     expect(tasks.runTaskOrSync).toHaveBeenCalledWith(
       'interview_prep',
@@ -230,9 +235,41 @@ describe('useCreateInterviewMutation', () => {
       expect.objectContaining({ timeout: 180_000 }),
     );
     expect(interview.generateInterviewPrep).toHaveBeenCalledWith(12, { round_type: '技术面', card_ids: [] });
+    expect(interview.createInterviewSession).toHaveBeenCalledWith({
+      job_analysis_id: 12,
+      company: '字节跳动',
+      position: 'AI 产品经理',
+      round_type: 'tech',
+      round_seq: 1,
+      occurred_at: '2026-09-20 10:00',
+      interviewer: undefined,
+      format: 'video',
+    });
 
     expect(screen.getByTestId('iv-cache-count').textContent).toBe('1');
     expect(screen.getByTestId('job-interview-ids').textContent).toBe('prep-55');
+  });
+
+  it('T-M7-4：场次预建失败时向上抛错，不写入 interviews cache', async () => {
+    job.getDashboard.mockResolvedValue({ submissions: [DASH_JOB] });
+    interview.createInterviewSession.mockRejectedValue(new Error('预建场次失败'));
+
+    renderWithProviders(
+      <>
+        <CreateHarness />
+        <IvCacheCount />
+        <JobCache />
+      </>,
+    );
+
+    await screen.findByText('创建面试');
+    fireEvent.click(screen.getByText('创建面试'));
+
+    await waitFor(() =>
+      expect(screen.getByTestId('create-error').textContent).toContain('预建场次失败'),
+    );
+    expect(screen.getByTestId('created-id').textContent).toBe('');
+    expect(screen.getByTestId('iv-cache-count').textContent).toBe('0');
   });
 
   it('JOBS cache 缺失 jdAnalysisId 时抛错且不触发任务服务', async () => {
@@ -251,6 +288,7 @@ describe('useCreateInterviewMutation', () => {
     );
     expect(tasks.runTaskOrSync).not.toHaveBeenCalled();
     expect(interview.generateInterviewPrep).not.toHaveBeenCalled();
+    expect(interview.createInterviewSession).not.toHaveBeenCalled();
     expect(screen.getByTestId('job-interview-ids').textContent).toBe('');
   });
 });

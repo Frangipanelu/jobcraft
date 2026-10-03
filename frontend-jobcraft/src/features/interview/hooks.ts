@@ -41,6 +41,8 @@ export function useInterviewsQuery() {
  * 创建面试准备。与 legacy `JobCraftContext.createInterview` 行为等价：
  * - 从 JOBS cache 解析 job.jdAnalysisId（无则抛错），首选异步任务提交+轮询，
  *   任务服务不可用时降级为同步 generateInterviewPrep；
+ * - T-M7-4：prep 成功后预建 interview_records 场次行（record+1，status=planned），
+ *   向导字段全透传，成功后落 Interview.sessionRecordId；失败向上抛不伪造；
  * - 成功后 cache 前置插入面试 + 跨域补写 JOBS cache（interviewIds / steps.prepStage）。
  * - 不内置 toast / nextActions（nextActions 无消费方，toast 归视图层）。
  * - mutateAsync 返回创建后的 Interview（含 id，供 navigateTo）。
@@ -83,6 +85,19 @@ export function useCreateInterviewMutation() {
         { timeout: 180_000 }
       );
 
+      // T-M7-4：预建面试场次行（record+1，status=planned），向导字段全透传。
+      // 放在 prep 成功之后：prep 失败不落 planned 孤儿行；本步失败向上抛，不伪造 sessionRecordId。
+      const session = await interviewApi.createInterviewSession({
+        job_analysis_id: jobAnalysisId,
+        company: data.company,
+        position: data.role,
+        round_type: data.roundType,
+        round_seq: data.roundNumber,
+        occurred_at: data.time || undefined,
+        interviewer: data.interviewer,
+        format: data.format,
+      });
+
       const newId = result.id ? `prep-${result.id}` : 'prep-' + Date.now();
       const baseInterview = buildInterviewFromPrep(
         {
@@ -121,7 +136,8 @@ export function useCreateInterviewMutation() {
         time: data.time || baseInterview.time,
         format: data.format,
         interviewer: data.interviewer || '面试官',
-        supplementNotes: data.supplementNotes
+        supplementNotes: data.supplementNotes,
+        sessionRecordId: session.record_id
       };
     },
     onSuccess: (newInterview, variables) => {

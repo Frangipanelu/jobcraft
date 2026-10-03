@@ -10,6 +10,7 @@ import type {
   InterviewReviewDetailResponse,
   InterviewReviewRecord,
   InterviewReviewResult,
+  InterviewSessionCreateResult,
 } from './types'
 
 // ============================================================
@@ -57,6 +58,31 @@ export async function refreshInterviewPrepResearch(
   return request<{ id: number; company_research: unknown }>(
     `/api/jobcraft/interview-prep/${prepId}/company-research`,
     { method: 'POST' }
+  )
+}
+
+/**
+ * T-M7-4：预建面试场次行（record+1，status=planned）——向导字段全透传落列。
+ * 复盘时经 T-M8-7 的 record_id → update 分支填充内容。
+ */
+export async function createInterviewSession(payload: {
+  job_analysis_id?: number | null
+  submission_id?: number | null
+  company: string
+  position: string
+  round_type?: string
+  round_seq?: number
+  occurred_at?: string
+  interviewer?: string
+  format?: string
+  resume_version_id?: number | null
+}): Promise<InterviewSessionCreateResult> {
+  return request<InterviewSessionCreateResult>(
+    '/api/jobcraft/interview-review/session',
+    {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }
   )
 }
 

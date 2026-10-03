@@ -372,6 +372,12 @@ export interface InterviewReviewQuestionTableResult {
   questions: InterviewReviewParsePreviewQAPair[]
 }
 
+/** T-M7-4：预建面试场次行（interview_records，status=planned）结果 */
+export interface InterviewSessionCreateResult {
+  record_id: number
+  status: string
+}
+
 /** T-M8-2：interview_qa_pairs 表直读行（含深度研判字段，详情页直读数据源） */
 export interface InterviewReviewQaPair {
   id: number
