@@ -16,7 +16,8 @@ export const NewJobModal: React.FC<NewJobModalProps> = ({ isOpen, onClose }) => 
   const [company, setCompany] = useState('');
   const [role, setRole] = useState('');
   const [department, setDepartment] = useState('');
-  const [salaryRange, setSalaryRange] = useState('40K–60K · 16薪');
+  // T-M5-7 / Q4：默认值清空（placeholder 承担示例提示，不预填假数据）
+  const [salaryRange, setSalaryRange] = useState('');
 
   if (!isOpen) return null;
 
@@ -27,7 +28,7 @@ export const NewJobModal: React.FC<NewJobModalProps> = ({ isOpen, onClose }) => 
     const newJob = await createJob.mutateAsync({
       company: company.trim(),
       role: role.trim(),
-      department: department.trim() || 'AI 创新业务部',
+      department: department.trim(),
       salaryRange
     });
 

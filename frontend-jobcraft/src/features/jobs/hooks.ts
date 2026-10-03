@@ -103,7 +103,8 @@ export function useCreateJobMutation() {
         id: 'job-' + Date.now(),
         company: jobData.company,
         role: jobData.role,
-        department: jobData.department || '核心业务线',
+        // T-M5-7 / Q4：兜底假文案中性化（空部门显示层走 '—'，不造假业务线）
+        department: jobData.department || '',
         salaryRange: jobData.salaryRange || '面议',
         status: deriveJobStatus(steps),
         matchScore: 0,

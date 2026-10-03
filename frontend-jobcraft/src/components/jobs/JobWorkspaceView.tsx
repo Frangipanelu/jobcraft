@@ -122,8 +122,9 @@ export const JobWorkspaceView: React.FC<JobWorkspaceViewProps> = ({
                 <h1 className="text-2xl font-bold text-ink tracking-tight">
                   {currentJob.company} · {currentJob.role}
                 </h1>
+                {/* T-M5-7 / Q4：matchScore 0/缺 → '—' */}
                 <span className="px-2.5 py-0.5 text-xs font-semibold rounded-md bg-sage-soft text-sage border border-sage-soft">
-                  综合匹配度 {currentJob.matchScore}%
+                  综合匹配度 {currentJob.matchScore > 0 ? `${currentJob.matchScore}%` : '—'}
                 </span>
               </div>
               <p className="text-xs text-muted mt-1 flex items-center gap-2">
@@ -179,7 +180,8 @@ export const JobWorkspaceView: React.FC<JobWorkspaceViewProps> = ({
               <span>JD 深度分析</span>
               {currentJD && (
                 <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-sage text-white">
-                  {currentJD.matchScore}% 匹配
+                  {/* T-M5-7 / Q4：matchScore 0/缺 → '—'（结构化降级分析不显示假 0%） */}
+                  {currentJD.matchScore > 0 ? `${currentJD.matchScore}% 匹配` : '—'}
                 </span>
               )}
             </button>

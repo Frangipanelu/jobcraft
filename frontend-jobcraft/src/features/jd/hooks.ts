@@ -57,7 +57,8 @@ function resolveTargetJob(client: QueryClient, params: ResolveTargetJobParams): 
     id: jobId,
     company: params.company,
     role: params.role,
-    department: '核心业务线',
+    // T-M5-7 / Q4：兜底假文案中性化（自动岗不造「核心业务线」假部门）
+    department: '',
     salaryRange: '面议',
     status: deriveJobStatus(steps),
     matchScore: 0,

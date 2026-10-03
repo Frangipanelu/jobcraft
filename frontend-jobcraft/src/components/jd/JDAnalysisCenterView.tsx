@@ -446,13 +446,14 @@ export const JDAnalysisCenterView: React.FC = () => {
                         )}
                       </td>
                       <td className="p-3.5 align-top">
+                        {/* T-M5-7 / Q4：matchScore 0/缺 → '—'，星级不假补满星 */}
                         <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-sage-soft text-sage border border-sage-soft inline-block">
-                          {analysis.matchScore}%
+                          {analysis.matchScore > 0 ? `${analysis.matchScore}%` : '—'}
                         </span>
                       </td>
                       <td className="p-3.5 align-top">
                         <span className="text-warning tracking-wider font-bold">
-                          {'★'.repeat(analysis.recommendationStars || 5)}
+                          {'★'.repeat(analysis.recommendationStars || 0)}
                         </span>
                       </td>
                       <td className="p-3.5 align-top text-ink leading-relaxed max-w-md">

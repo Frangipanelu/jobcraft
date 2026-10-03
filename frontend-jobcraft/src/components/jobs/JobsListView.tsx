@@ -222,13 +222,14 @@ export const JobsListView: React.FC<JobsListViewProps> = ({ onOpenNewJob }) => {
                 <span className="text-edge-deep">·</span>
                 <span className="text-base font-semibold text-ink">{job.role}</span>
                 {getStatusBadge(job.status)}
+                {/* T-M5-7 / Q4：matchScore 0/缺 → '—'（不显示假 0%） */}
                 <span className="text-xs px-2 py-0.5 rounded-md bg-sage-soft text-sage font-semibold border border-sage-soft">
-                  匹配度 {job.matchScore}%
+                  匹配度 {job.matchScore > 0 ? `${job.matchScore}%` : '—'}
                 </span>
               </div>
 
               <div className="flex items-center gap-4 text-xs text-muted flex-wrap">
-                <span>{job.department || '核心团队'}</span>
+                <span>{job.department || '—'}</span>
                 <span>·</span>
                 <span className="text-ink font-medium">{job.salaryRange}</span>
                 <span>·</span>
