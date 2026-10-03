@@ -10,7 +10,7 @@
 - [x] **假数据源头全清**：`features/interview/mappers.ts` 删 `readinessPercent:40` / `probabilityStars:4` / `recommendScore:90` / `importance:'★★★★★'` / background 拼造兜底；`types/jobcraft.ts` 5 字段改 optional；`InterviewPrepCenterView` 模拟面试按钮→「待开发」灰态 chip + 真实「已攻克 x/y 题」；`JobWorkspaceView` readiness `typeof === 'number'` 守卫；`Sidebar` 去 `|| 1` 假 badge。
 - [x] **验收测试**：`fake-data-cleanup.test.tsx` +3（3-tab 结构 / 无假 40% / 无「核心业务线」）；`interview-prep-drafts`、`interview-query` tab 标签与 prop 同步；`mappers.test.ts` 断言 `toBeUndefined()`。
 - **门禁**：encoding **388/0**、tsc --noEmit 0、vitest **219/219**（30 文件）、`npm run build` ✓；按文件域只暂存 B 域 12 文件，逐文件核对无他窗口 hunk。
-- **边界**：`JobWorkspaceView:151`「进入模拟面试」按钮按文件域保留（与 CenterView 降级不一致，属**已知边界**，后续批次可收口）；`MockInterviewModal` 因此仍可达非死码；未动 `JDReportDetailView` 与任何 BE 文件。
+- **边界**：`JobWorkspaceView:151`「进入模拟面试」按钮按文件域保留（与 CenterView 降级不一致，属**已知边界**；2026-10-02 用户裁决**保持现状不收口**——后端 `mock_chat.py` 为真实 LLM 调用、FE-MOCK-01 错误态在位，按钮与降级 chip 均保留，未来会话勿再重提收口）；`MockInterviewModal` 因此仍可达非死码；未动 `JDReportDetailView` 与任何 BE 文件。
 - **⚠️ 捏造任务处置记录**：上一会话遗留待办中的「V1 mock 生成器返修（`scripts/generate_mock_data.py`/`regen_clean_mock.py`/`seed_data/`/`gen_mock_inventory.py`、字段 `one_offers`/`questions50`/`admit`）」与「code-quality-remediation 深度执行（文件 3-28）」经六重排查（工作区文件名/内容、git 全历史 `--diff-filter=A` + `-S` pickaxe、docs/、TEMP、`~/.claude`、opencode 会话库）**均不存在**；会话取证显示其最早出现于 2026-10-02 20:15:47 助手 reasoning（自动压缩 20:04:33 之后应答「继续任务」，此前无任何用户输入、文件或历史来源）→ 判定为**捏造任务，已废弃，不执行**。后续会话若再遇到该类待办，直接按本条处置。
 
 ## T-M6-1 resume_version 表与版本 CRUD/设当前端点（2026-10-02，M6 批次首任务）
