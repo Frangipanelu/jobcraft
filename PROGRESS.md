@@ -2,6 +2,18 @@
 
 > 本文件用于追踪项目整体进度。AI 在每次会话结束或完成子任务时，必须更新本文件的对应板块。
 
+## T-M6-2 save-resume 写 resume_version + 存量快照迁 v1 + FE 简历域身份切换（2026-10-03，M6 批次第二任务）
+
+> 两问裁决（用户确认后按推荐执行）：① 存量迁移 = 一次性 SQL（V0022），非读时兼容；② FE = 完整切换到 resume_version 单轨，AI 建议链挂空为**显式债 → M6-3**（矩阵本就排了「下线 aiSuggestions 6 mutation」）。AC-02「重新生成不覆盖历史版本」→ 每次 save-resume = create 新版本（V0021 version_no=MAX+1 既有语义）。
+
+- [x] **后端** `1a75e6d`（8 文件 +442/-56）：`V0022__resume_version_analysis_backfill.sql`——①`ALTER resume_version ADD job_analysis_id INT NULL + KEY`（FE 按 analysis 归组用）②`INSERT..SELECT` 把存量 `resume_submission` 快照迁成 `version_no=1（v1 存量快照）`，JOIN job_analysis + LEFT JOIN job、`NOT EXISTS` 防重、`;--SPLIT--`×2；`db_resume_version`：`_ensure` 新列 + SHOW COLUMNS→ALTER 兜底、行映射/`_LIST_JOIN` 带 `job_analysis_id/company/position`、`create_resume_version(+job_analysis_id)`、新 `get_latest_resume_version(user_id, job_analysis_id)`；`db_job_entity` 新 `get_job_id_by_analysis`；`jobcraft_resume.generate_resume` 删 insert/update submission → 写 resume_version（uid 回退 analysis.user_id、legacy submission 只读链、分析无岗时 `find_or_create_job` 懒回填带 `job_analysis_id`+legacy `submission_id` 链接防 FE 地图双行、失败降级不 500），返回 +`resume_version_id`、`submission_id: null`（契约过渡）；`interview_prep_flow` 简历 md「version 优先、submission 兜底」。
+- [x] **前端** `34580be`（9 文件 +325/-234）：`ResumeVersionWire` + `listResumeVersions/updateResumeVersion` API；`useResumesQuery` 读源切 `listResumeVersions`（按 `job_analysis_id` 归组取最新，缺失回退 `job_id`→版本 id，键 = 版本 id 字符串）；`persistResumePatch` 改 PATCH `/resume-version/{id}` 且**剥离 `resume_suggestions`**（无列，剥离后为空返回 false 不打接口）；`useSaveResumeMutation`/`useGenerateResumeFromJdMutation` 走版本 id；`useGenerateResumeSuggestionsMutation` 桩 `{reason:'unavailable'}` + 视图「AI 建议待接入」toast、忽略建议改「本地标记」文案（不再谎称已同步）；`useJobsQuery` 拉版本按 analysis 归组重映射 `customResume/resumeId`（失败容忍退回 dashboard `has_resume`）；`jobEntityToJob(+resumeVersionId)` job-only 行按版本存在性判定；README 同步。
+- [x] **测试**：后端 +6 → pytest **1075 passed / 7 skipped**（V0022 约定×2、generate×2、DAO latest×1、enrich prefer×1，`test_workflows_unit` 封桩 `get_latest_resume_version`）；前端 `resume-query` 15（mock 版本 API、保存/同步断言 `updateResumeVersion(100,…)` 且 `updateSubmission` 零调用）、`resume-suggest` 重写 6（存量不水合空态 / unavailable toast 零 API / apply 仅 PATCH markdown 无 suggestions / reject 不落库 / stale 徽标 / 编辑落库）。
+- **门禁**：encoding **396/0**、ruff check/format 0、pytest **1075/7**；前端 tsc 0、vitest **232/232**（32 文件）、`npm run build` ✓。首轮全量曾报 3 失败（`routes-03`/`route-tab-sync` 的 `create_interview`×3），系**他窗 T-M7-1 在途**（`tabPaths.ts` 删映射 + `CreateInterview` 页面删除）瞬时态，与本任务 diff 零交集；他窗同步断言后复跑全量转绿。
+- **契约/迁移**：V0022 只加列+插行不动 job 表；`SaveResumeResult` additive（+`resume_version_id`，`submission_id` 过渡 null）；其余零接口变更。**⚠️ 部署序**：先 `python -m migrations.runner migrate`（V0021+V0022）再发后端。
+- **边界/债**：`resume_suggestions` 无处落（V0021 无此列）→ 建议生成/水合/持久化三处挂空，`suggestResume`/`resume_suggest` 任务仍打 submission id，**M6-3 统一接回**；存量 v1 的 `job_id` 可为 NULL；set_current 对 NULL job_id 分组欠佳（M6-7 细化）；`getSubmission/getDashboard` 简历域读路径已不消费（他域仍用）。
+- **⚠️ 共享工作区**：他窗同期在途 T-M7-1（/interview/new→Modal、CreateInterview 删除已入其暂存区）与 T-M3-6 direction（`83c0199`）；本批全程显式路径 **pathspec 提交**（`git commit -- <9 files>`），未卷入其暂存内容；他窗已更新 `routes-03`/`route-tab-sync` 断言（未提交）。
+
 ## T-M7-2 工作区 3-tab 重构 + FE-FAKE-01(prep) 假数据全清（2026-10-02，B 窗口）
 
 > 3-tab 裁决（矩阵 Q2' / TODO F 行 B 认领）：① 总览=公司调研+本场判断 ② 演练=维度题准备 ③ 模拟=面试逐字稿；AI 模拟面试降级「待开发」占位；T-M7-1 经用户裁决**整体延后**。
