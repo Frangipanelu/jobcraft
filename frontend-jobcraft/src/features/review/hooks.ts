@@ -97,7 +97,8 @@ export function useCreateInterviewReviewMutation() {
                 sequences,
                 user.id,
               ),
-            { timeout: 180_000 },
+            // T-M8-6：解除 8 题限制后按题量调大轮询上限（基线 180s，30s/题）
+            { timeout: Math.max(180_000, sequences.length * 30_000) },
           );
         }
       } catch {
