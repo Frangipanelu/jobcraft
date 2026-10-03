@@ -3,7 +3,7 @@ import { useJobCraft, useToastActions } from '../../context/JobCraftContext';
 import { useTabNavigate } from '../../router/tabPaths';
 import { useCreateInterviewMutation } from '../../features/interview/hooks';
 import { useJobsQuery } from '../../features/jobs/hooks';
-import { InterviewRoundType, InterviewFormat, InterviewDraft } from '../../types/jobcraft';
+import { InterviewRoundType, InterviewFormat, InterviewDraft, Interview } from '../../types/jobcraft';
 import { JobSelectionStep } from './JobSelectionStep';
 import { InterviewDetailsStep } from './InterviewDetailsStep';
 import { ResumeStep, ResumeMode } from './ResumeStep';
@@ -26,6 +26,11 @@ interface Props {
   jobId?: string;
   mode: 'standalone' | 'from-job';
   onClose: () => void;
+  /**
+   * T-M8-4：复盘向导复用本 Modal 时传入——创建成功后回调交由调用方处理
+   * （选中/停留当前页），不再跳转备战工作台；缺省保持原行为。
+   */
+  onCreated?: (interview: Interview) => void;
 }
 
 const standaloneSteps = [
@@ -41,7 +46,7 @@ const fromJobSteps = [
   { num: 2, label: '补充信息' }
 ];
 
-export const NewInterviewModal: React.FC<Props> = ({ isOpen, jobId, mode, onClose }) => {
+export const NewInterviewModal: React.FC<Props> = ({ isOpen, jobId, mode, onClose, onCreated }) => {
   const { showToast } = useToastActions();
   const { setJdAnalysisReturnTarget } = useJobCraft();
   const { data: jobs = [] } = useJobsQuery();
@@ -216,16 +221,23 @@ export const NewInterviewModal: React.FC<Props> = ({ isOpen, jobId, mode, onClos
             supplementNotes
           });
           clearInterviewModalDraft();
+          setIsGenerating(false);
+          setCurrentAiStep(-1);
           showToast({
             type: 'success',
             title: '面试准备已创建',
             message: 'AI 已生成个性化准备方案'
           });
           onClose();
-          go('interview_prep_workspace', {
-            jobId: selectedJobId || undefined,
-            interviewId: newInterview.id
-          });
+          if (onCreated) {
+            // T-M8-4：复用方（复盘向导）自行处理选中并停留当前页
+            onCreated(newInterview);
+          } else {
+            go('interview_prep_workspace', {
+              jobId: selectedJobId || undefined,
+              interviewId: newInterview.id
+            });
+          }
         } catch (err) {
           setIsGenerating(false);
           setCurrentAiStep(-1);
@@ -366,6 +378,7 @@ export const NewInterviewModal: React.FC<Props> = ({ isOpen, jobId, mode, onClos
           <div className="flex items-center gap-3">
             <button
               onClick={handleClose}
+              aria-label="关闭"
               className="w-4 h-4 flex items-center justify-center cursor-pointer transition-colors"
               style={{ color: '#A8ADA8' }}
               onMouseEnter={(e) => (e.currentTarget.style.color = '#202421')}

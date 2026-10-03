@@ -1035,20 +1035,8 @@ describe('FE-UPLOAD-01 CreateReview 上传路径（非法文件/缺文件不得�
   });
 });
 
-describe('FE-REVIEW-01 手动录入新面试场次（表单字段必须进入 payload）', () => {
-  const PREP_RESULT = {
-    id: 77,
-    round_type: '技术面',
-    duration: '45分钟',
-    elevator_pitch: '自我介绍',
-    dimension_questions: [],
-    full_version: '完整方案',
-    html_content: '<div>方案</div>',
-    created_at: '2026-10-01T10:00:00',
-    company_research: null,
-  };
-
-  /** 手动录入路径的种子 QC：岗位带 jdAnalysisId（创建面试的前提），面试列表由各用例指定。 */
+describe('T-M8-4 向导收敛（删手动录入表单，关联已有/新建面试）', () => {
+  /** 种子 QC：岗位带 jdAnalysisId（关联岗位的前提），面试列表由各用例指定。 */
   const createManualQc = (seedInterviews: Interview[]) => {
     const qc = new QueryClient({
       defaultOptions: {
@@ -1062,12 +1050,22 @@ describe('FE-REVIEW-01 手动录入新面试场次（表单字段必须进入 pa
   };
 
   beforeEach(() => {
-    interview.generateInterviewPrep.mockResolvedValue(PREP_RESULT);
-    // T-M7-4：手动录入路径先经 useCreateInterviewMutation 预建场次行
+    // T-M8-4：手动录入路径已删；场次预建 mock 供 Modal 创建链路触达
     interview.createInterviewSession.mockResolvedValue({ record_id: 902, status: 'planned' });
+    interview.generateInterviewPrep.mockResolvedValue({
+      id: 77,
+      round_type: '技术面',
+      duration: '45分钟',
+      elevator_pitch: '自我介绍',
+      dimension_questions: [],
+      full_version: '完整方案',
+      html_content: '<div>方案</div>',
+      created_at: '2026-10-01T10:00:00',
+      company_research: null,
+    });
   });
 
-  /** 步骤1 → 步骤2（上传记录），返回容器用于查日期/时间输入。 */
+  /** 步骤1 → 步骤2（关联面试）。 */
   const gotoUploadStep = async (qc: QueryClient) => {
     const view = renderWithProviders(
       <>
@@ -1090,107 +1088,61 @@ describe('FE-REVIEW-01 手动录入新面试场次（表单字段必须进入 pa
   };
 
   // it 级超时须大于内层 waitFor(8000)：默认 5000 会在慢负载下先于 waitFor 判死（基线亦复现）
-  it('岗位无面试记录：表单创建面试（轮次/日期时间/形式/面试官入 payload）再挂复盘', async () => {
+  it('岗位无面试记录：空态引导新建、无手动录入表单、下一步禁用，Modal 可开合', async () => {
     const qc = createManualQc([]);
     await gotoUploadStep(qc);
 
-    // 该岗位无面试 → 直接呈现手动录入表单
-    await screen.findByText('录入新面试场次信息');
-    fireEvent.change(screen.getByDisplayValue('第1面 · 业务初面'), { target: { value: '4' } });
-    fireEvent.change(document.querySelector('input[type="date"]') as HTMLInputElement, {
-      target: { value: '2026-10-02' },
-    });
-    fireEvent.change(document.querySelector('input[type="time"]') as HTMLInputElement, {
-      target: { value: '09:30' },
-    });
-    fireEvent.change(screen.getByPlaceholderText('如：业务主管、交叉技术官...'), {
-      target: { value: '李面试官' },
-    });
+    // T-M8-4：手动录入表单已删（Q3 删表单分支），空态引导经 NewInterviewModal 新建
+    await screen.findByText('步骤 2: 关联面试');
+    expect(screen.queryByText('录入新面试场次信息')).not.toBeInTheDocument();
+    expect(screen.queryByDisplayValue('第1面 · 业务初面')).not.toBeInTheDocument();
+    expect(screen.getByText('该岗位暂无面试场次')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByText('下一步'));
-    await pasteAndStart();
+    // 无场次可关联 → 下一步禁用
+    expect(screen.getByRole('button', { name: /下一步/ })).toBeDisabled();
 
-    // 手动录入 → 先创建面试（roundType 由轮次号派生：第4面 → hr → HR面）
-    await waitFor(
-      () =>
-        expect(interview.generateInterviewPrep).toHaveBeenCalledWith(12, {
-          round_type: 'HR面',
-          card_ids: [],
-        }),
-      { timeout: 8000 },
-    );
-    // 复盘挂到新建面试上（round_type 取新面试的 'hr'，而非残留旧选择）
-    await waitFor(
-      () =>
-        expect(interview.createInterviewReview).toHaveBeenCalledWith(
-          expect.objectContaining({ round_type: 'hr', raw_text: '面试内容：聊了 RAG 评测。' }),
-        ),
-      { timeout: 8000 },
-    );
-
-    // 表单字段全部落在新建 Interview 上
-    const ivs = qc.getQueryData([...INTERVIEWS_QUERY_KEY]) as Interview[];
-    expect(ivs).toHaveLength(1);
-    expect(ivs[0]).toMatchObject({
-      id: 'prep-77',
-      jobId: '12',
-      company: '字节跳动',
-      role: 'AI 产品经理',
-      roundNumber: 4,
-      roundName: '第4面 · HRBP综合面',
-      roundType: 'hr',
-      time: '2026-10-02 09:30',
-      format: 'video',
-      interviewer: '李面试官',
-    });
-
-    // 成功 toast 的场次名来自实际创建的面试（此前固定用 manualForm 默认值）
-    await screen.findByText(/第4面 · HRBP综合面/);
+    // 「新建面试」复用 Modal（from-job）；关掉后仍停在向导（不跳备战工作台）
+    fireEvent.click(screen.getByText('+ 新建面试'));
+    expect(await screen.findByText('新建面试准备')).toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText('关闭'));
+    expect(screen.queryByText('新建面试准备')).not.toBeInTheDocument();
+    expect(screen.getByText('步骤 2: 关联面试')).toBeInTheDocument();
   }, 15000);
 
-  it('已有面试但用户点「录入新面试场次」：创建新记录挂复盘，不挂残留的旧选择', async () => {
+  it('关联已有面试直接挂复盘：不中途创建面试，成功后落库跳详情', async () => {
     const qc = createManualQc([INT_YUAN]);
     await gotoUploadStep(qc);
 
-    // 已有面试列表可见，再切手动录入
+    // 已有面试列表（自动选中唯一场次）；入口按钮为「+ 新建面试」而非手动表单
     await screen.findByText(/选择面试场次/);
-    fireEvent.click(screen.getByText('+ 录入新面试场次'));
-    await screen.findByText('录入新面试场次信息');
+    expect(screen.getByText('+ 新建面试')).toBeInTheDocument();
 
     fireEvent.click(screen.getByText('下一步'));
     await pasteAndStart();
 
-    // 必须走创建路径（旧行为：直接拿 selectedInterviewId=INT_YUAN 提交，表单被无视）
-    await waitFor(
-      () =>
-        expect(interview.generateInterviewPrep).toHaveBeenCalledWith(12, {
-          round_type: '业务面',
-          card_ids: [],
-        }),
-      { timeout: 8000 },
-    );
-    // 复盘 round_type='business'（第1面派生）而非旧面试的 'tech'
+    // T-M8-4：手动录入路径已删 → 不再中途创建面试，直接挂既有场次
     await waitFor(
       () =>
         expect(interview.createInterviewReview).toHaveBeenCalledWith(
-          expect.objectContaining({ round_type: 'business' }),
+          expect.objectContaining({
+            company: '字节跳动',
+            position: 'AI 产品经理',
+            round_type: 'tech',
+            raw_text: '面试内容：聊了 RAG 评测。',
+          }),
         ),
       { timeout: 8000 },
     );
-    expect(interview.createInterviewReview).not.toHaveBeenCalledWith(
-      expect.objectContaining({ round_type: 'tech' }),
-    );
+    expect(interview.generateInterviewPrep).not.toHaveBeenCalled();
 
-    const ivs = qc.getQueryData([...INTERVIEWS_QUERY_KEY]) as Interview[];
-    expect(ivs).toHaveLength(2);
-    const created = ivs.find((i) => i.id === 'prep-77');
-    expect(created).toMatchObject({
-      roundNumber: 1,
-      roundName: '第1面 · 业务初面',
-      roundType: 'business',
-      time: `${new Date().toISOString().split('T')[0]} 14:00`,
-    });
-    // 旧面试仍在（未被覆盖/删除）
-    expect(ivs.find((i) => i.id === 'prep-7')).toBeTruthy();
+    // 成功 toast + 复盘落回 INT_YUAN（status preparing → completed）
+    await screen.findByText('面试复盘已生成');
+    await waitFor(
+      () => {
+        const ivs = qc.getQueryData([...INTERVIEWS_QUERY_KEY]) as Interview[];
+        expect(ivs.find((i) => i.id === INT_YUAN.id)?.status).toBe('completed');
+      },
+      { timeout: 8000 },
+    );
   }, 15000);
 });

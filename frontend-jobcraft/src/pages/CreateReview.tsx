@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useJobCraft, useToastActions } from '../context/JobCraftContext';
 import { useJobsQuery } from '../features/jobs/hooks';
-import { useInterviewsQuery, useCreateInterviewMutation } from '../features/interview/hooks';
+import { useInterviewsQuery } from '../features/interview/hooks';
 import { useCreateInterviewReviewMutation } from '../features/review/hooks';
-import { InterviewRoundType, InterviewFormat } from '../types/jobcraft';
+import { NewInterviewModal } from '../components/interview/NewInterviewModal';
 import {
   ArrowLeft,
   ArrowRight,
@@ -21,23 +21,6 @@ const steps = [
   { num: 1, label: '关联面试' },
   { num: 2, label: '上传记录' }
 ];
-
-const analysisSteps = [
-  '正在解析面试记录...',
-  '识别关键问答段落...',
-  '分析回答结构与逻辑...',
-  '生成能力维度评估...',
-  '整理优化建议...',
-  '复盘报告生成中...'
-];
-
-/** FE-REVIEW-01：轮次号 → 轮次类型（与 roundName 选项语义对齐，防止「第2面技术交叉面」落成业务面）。 */
-function roundTypeForNumber(num: number): InterviewRoundType {
-  if (num === 2) return 'tech';
-  if (num === 4) return 'hr';
-  if (num >= 5) return 'comprehensive';
-  return 'business';
-}
 
 // FE-UPLOAD-01：与后端 POST /interview-review/upload 同契约（TXT/MD/PDF/DOCX，≤10MB）
 const REVIEW_UPLOAD_EXTS = ['txt', 'md', 'pdf', 'docx'];
@@ -64,7 +47,6 @@ export const CreateReview: React.FC<{ initialJobId?: string }> = ({ initialJobId
   const { data: jobs = [] } = useJobsQuery();
   const { data: interviews = [] } = useInterviewsQuery();
   const createReviewMutation = useCreateInterviewReviewMutation();
-  const createInterviewMutation = useCreateInterviewMutation();
 
   // FE-STATE-01：重新进入向导即作废上一次未消费的「JD 报告返回」意图，
   // 避免残留 flag 让 JD 报告页底部横幅在后续无关访问时错乱出现。
@@ -92,20 +74,9 @@ export const CreateReview: React.FC<{ initialJobId?: string }> = ({ initialJobId
     '';
   const [selectedJobId, setSelectedJobId] = useState<string>(initialJobIdResolved);
 
-  // Step 1 - Interview selection
+  // Step 1 - Interview selection（T-M8-4：手动录入表单已删，新建面试复用 NewInterviewModal）
   const [selectedInterviewId, setSelectedInterviewId] = useState<string>('');
-  const [newInterviewMode, setNewInterviewMode] = useState(false);
-  const [manualForm, setManualForm] = useState({
-    company: '',
-    role: '',
-    roundNumber: 1,
-    roundName: '第1面 · 业务初面',
-    // FE-REVIEW-01：date/time 默认值不再造假数据（日期默认今天，由用户确认；轮次类型由轮次号派生）
-    date: new Date().toISOString().split('T')[0],
-    time: '14:00',
-    format: 'video' as InterviewFormat,
-    interviewer: ''
-  });
+  const [showNewInterviewModal, setShowNewInterviewModal] = useState(false);
 
   // Step 2 - Upload（FE-UPLOAD-01：持有真实 File，提交时走 multipart 上传）
   const [uploadMode, setUploadMode] = useState<'paste' | 'file'>('paste');
@@ -113,38 +84,26 @@ export const CreateReview: React.FC<{ initialJobId?: string }> = ({ initialJobId
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Standalone AI Analysis state (image 3)
+  // Standalone AI Analysis state（T-M8-4：真实请求即进度，删假步骤清单计时器）
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [analyzeStep, setAnalyzeStep] = useState(0);
 
   const selectedJob = jobs.find((j) => j.id === selectedJobId);
   const jobInterviews = selectedJobId
     ? interviews.filter((i) => i.jobId === selectedJobId)
     : [];
 
-  // FE-REVIEW-01：手动录入模式（点「+ 录入新面试场次」或该岗位尚无面试记录）——
-  // 此模式下 selectedInterviewId 不作数，提交时先用表单创建面试再挂复盘。
-  const isManualIntake = newInterviewMode || jobInterviews.length === 0;
-
   // Auto-select first interview if available
   useEffect(() => {
-    if (jobInterviews.length > 0 && !selectedInterviewId && !newInterviewMode) {
+    if (jobInterviews.length > 0 && !selectedInterviewId) {
       setSelectedInterviewId(jobInterviews[0].id);
     }
-  }, [selectedJobId, jobInterviews, selectedInterviewId, newInterviewMode]);
+  }, [selectedJobId, jobInterviews, selectedInterviewId]);
 
   const canNext = () => {
     if (step === 0) {
       return !!selectedJobId;
     }
     if (step === 1) {
-      if (isManualIntake) {
-        return (
-          !!(selectedJob?.company || manualForm.company.trim()) &&
-          !!manualForm.date &&
-          !!manualForm.time
-        );
-      }
       return !!selectedInterviewId;
     }
     return true;
@@ -198,8 +157,8 @@ export const CreateReview: React.FC<{ initialJobId?: string }> = ({ initialJobId
     if (file) applyUploadFile(file);
   };
 
-  // Trigger AI analysis
-  const handleStartAnalysis = () => {
+  // Trigger AI analysis（T-M8-4：真实请求即进度——删假步骤清单与 650ms 计时动画）
+  const handleStartAnalysis = async () => {
     if (uploadMode === 'paste' && !pasteText.trim()) {
       showToast({
         type: 'warning',
@@ -216,82 +175,42 @@ export const CreateReview: React.FC<{ initialJobId?: string }> = ({ initialJobId
       });
       return;
     }
-    if (!isManualIntake && !selectedInterviewId) {
+    if (!selectedInterviewId) {
       showToast({
         type: 'warning',
         title: '请先关联面试',
-        message: '复盘需要挂载到一场已存在的面试记录上，请返回上一步选择面试。'
+        message: '复盘需要挂载到一场已存在的面试记录上，请返回上一步选择或新建面试。'
       });
       setStep(1);
       return;
     }
     setIsAnalyzing(true);
-    setAnalyzeStep(0);
+    try {
+      const { interviewId } = await createReviewMutation.mutateAsync({
+        interviewId: selectedInterviewId,
+        ...(uploadMode === 'file' && uploadedFile
+          ? { file: uploadedFile }
+          : { transcript: pasteText })
+      });
+      const target = interviews.find((i) => i.id === selectedInterviewId);
+      showToast({
+        type: 'success',
+        title: '面试复盘已生成',
+        message: `已完成「${selectedJob?.company || '当前岗位'} ${target?.roundName || ''}」的深度逐题诊断与经历库反哺。`
+      });
+      navigateTo('interview_review_detail', { interviewId });
+    } catch (error) {
+      showToast({
+        type: 'error',
+        title: '面试复盘失败',
+        message: (error as Error).message || '请稍后重试'
+      });
+      setIsAnalyzing(false);
+    }
   };
 
-  // Progress animation (650ms per step)
-  useEffect(() => {
-    if (!isAnalyzing) return;
-
-    if (analyzeStep < analysisSteps.length) {
-      const timer = setTimeout(() => {
-        setAnalyzeStep((prev) => prev + 1);
-      }, 650);
-      return () => clearTimeout(timer);
-    } else {
-      const timer = setTimeout(async () => {
-        try {
-          // FE-REVIEW-01：手动录入模式下表单数据先创建面试记录（此前表单收了从不提交），
-          // 再把复盘挂到新记录上；轮次/日期时间/形式/面试官全部进入创建 payload。
-          let targetInterviewId = selectedInterviewId;
-          let createdRoundName = '';
-          if (isManualIntake) {
-            const created = await createInterviewMutation.mutateAsync({
-              jobId: selectedJobId,
-              company: selectedJob?.company || manualForm.company,
-              role: selectedJob?.role || manualForm.role,
-              roundNumber: manualForm.roundNumber,
-              roundName: manualForm.roundName,
-              roundType: roundTypeForNumber(manualForm.roundNumber),
-              time: `${manualForm.date} ${manualForm.time}`,
-              format: manualForm.format,
-              interviewer: manualForm.interviewer || undefined
-            });
-            targetInterviewId = created.id;
-            createdRoundName = created.roundName;
-          }
-
-          const { interviewId } = await createReviewMutation.mutateAsync({
-            interviewId: targetInterviewId,
-            ...(uploadMode === 'file' && uploadedFile
-              ? { file: uploadedFile }
-              : { transcript: pasteText })
-          });
-
-          const roundLabel = isManualIntake
-            ? createdRoundName
-            : interviews.find((i) => i.id === selectedInterviewId)?.roundName ||
-              manualForm.roundName;
-          showToast({
-            type: 'success',
-            title: '面试复盘已生成',
-            message: `已完成「${selectedJob?.company || manualForm.company || '当前岗位'} ${roundLabel}」的深度逐题诊断与经历库反哺。`
-          });
-          navigateTo('interview_review_detail', { interviewId });
-        } catch (error) {
-          showToast({
-            type: 'error',
-            title: '面试复盘失败',
-            message: (error as Error).message || '请稍后重试'
-          });
-          setIsAnalyzing(false);
-        }
-      }, 500);
-      return () => clearTimeout(timer);
-    }
-  }, [isAnalyzing, analyzeStep]);
-
-  // If in AI analysis mode, render standalone loading page (as in image 3)
+  // If in AI analysis mode, render standalone loading page
+  // （T-M8-4：删假步骤清单——进度以真实请求为准，仅保留诚实等待态）
   if (isAnalyzing) {
     return (
       <div className="min-h-full bg-page flex flex-col items-center justify-center px-4 py-16 animate-in fade-in duration-300">
@@ -303,37 +222,7 @@ export const CreateReview: React.FC<{ initialJobId?: string }> = ({ initialJobId
 
           {/* Titles */}
           <h2 className="text-xl font-bold text-ink mb-1 tracking-tight">AI 正在生成复盘报告</h2>
-          <p className="text-xs text-muted mb-6">请稍候，这通常需要 10–30 秒</p>
-
-          {/* Checklist container (exact match with image 3) */}
-          <div className="bg-[#f8f9f7] rounded-xl p-5 sm:p-6 border border-edge/60 text-left space-y-3.5">
-            {analysisSteps.map((stepName, idx) => {
-              const isDone = analyzeStep > idx;
-              const isCurrent = analyzeStep === idx;
-              return (
-                <div key={stepName} className="flex items-center gap-3 text-xs sm:text-sm transition-colors">
-                  {isDone ? (
-                    <span className="text-xs font-bold text-ink w-4 text-center shrink-0">✓</span>
-                  ) : isCurrent ? (
-                    <span className="text-xs font-bold text-ink w-4 text-center shrink-0 animate-pulse">◎</span>
-                  ) : (
-                    <span className="text-xs text-[#A8ADA8] w-4 text-center shrink-0">○</span>
-                  )}
-                  <span
-                    className={
-                      isDone
-                        ? 'text-ink font-medium'
-                        : isCurrent
-                        ? 'text-ink font-bold'
-                        : 'text-[#A8ADA8]'
-                    }
-                  >
-                    {stepName}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
+          <p className="text-xs text-muted">正在解析面试记录并生成逐题诊断，通常需要 10–30 秒，请稍候…</p>
         </div>
       </div>
     );
@@ -532,16 +421,16 @@ export const CreateReview: React.FC<{ initialJobId?: string }> = ({ initialJobId
               </div>
 
               {/* 已有面试列表 */}
-              {jobInterviews.length > 0 && !newInterviewMode ? (
+              {jobInterviews.length > 0 ? (
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <label className="text-xs font-semibold text-ink">选择面试场次 *</label>
                     <button
                       type="button"
-                      onClick={() => setNewInterviewMode(true)}
+                      onClick={() => setShowNewInterviewModal(true)}
                       className="text-xs font-semibold text-[#4A6559] hover:underline cursor-pointer"
                     >
-                      + 录入新面试场次
+                      + 新建面试
                     </button>
                   </div>
 
@@ -597,103 +486,21 @@ export const CreateReview: React.FC<{ initialJobId?: string }> = ({ initialJobId
                   </div>
                 </div>
               ) : (
-                /* 手动录入新面试场次 */
-                <div className="space-y-4 pt-2">
-                  <div className="flex items-center justify-between">
-                    <label className="text-xs font-semibold text-ink">录入新面试场次信息</label>
-                    {jobInterviews.length > 0 && (
-                      <button
-                        type="button"
-                        onClick={() => setNewInterviewMode(false)}
-                        className="text-xs font-semibold text-muted hover:text-ink cursor-pointer"
-                      >
-                        返回选择已有面试
-                      </button>
-                    )}
+                /* T-M8-4（Q3 向导收敛）：手动录入表单已删——空态引导经 NewInterviewModal 新建面试 */
+                <div className="space-y-4 pt-2 text-center border border-dashed border-[#A8ADA8]/70 rounded-xl p-6">
+                  <div>
+                    <p className="text-xs font-semibold text-ink">该岗位暂无面试场次</p>
+                    <p className="text-[11px] text-muted mt-1.5">
+                      新建面试会同时预建复盘场次行，创建后自动关联并继续上传记录。
+                    </p>
                   </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                    <div className="space-y-1.5">
-                      <label className="block text-xs font-semibold text-ink">面试轮次 *</label>
-                      <select
-                        value={manualForm.roundNumber}
-                        onChange={(e) => {
-                          const num = parseInt(e.target.value);
-                          setManualForm((prev) => ({
-                            ...prev,
-                            roundNumber: num,
-                            roundName:
-                              num === 1
-                                ? '第1面 · 业务初面'
-                                : num === 2
-                                ? '第2面 · 业务与技术交叉面'
-                                : num === 3
-                                ? '第3面 · 总监/业务负责人面'
-                                : num === 4
-                                ? '第4面 · HRBP综合面'
-                                : `第${num}面 · 终面`
-                          }));
-                        }}
-                        className="w-full px-3.5 py-2.5 bg-page border border-edge rounded-xl text-xs font-semibold text-ink focus:outline-none focus:border-sage transition cursor-pointer"
-                      >
-                        <option value={1}>第1面 · 业务初面</option>
-                        <option value={2}>第2面 · 业务与技术交叉面</option>
-                        <option value={3}>第3面 · 总监/业务负责人面</option>
-                        <option value={4}>第4面 · HRBP综合面</option>
-                        <option value={5}>第5面 · 终面</option>
-                      </select>
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <label className="block text-xs font-semibold text-ink">面试日期时间 *</label>
-                      {/* FE-REVIEW-01：日期/时间补齐采集（此前 date 无处提交），
-                          拼接契约与 CreateInterview 向导一致：`YYYY-MM-DD HH:mm` 入 Interview.time */}
-                      <div className="flex gap-2">
-                        <input
-                          type="date"
-                          value={manualForm.date}
-                          onChange={(e) => setManualForm({ ...manualForm, date: e.target.value })}
-                          className="w-full min-w-0 px-3.5 py-2.5 bg-page border border-edge rounded-xl text-xs text-ink focus:outline-none focus:border-sage transition"
-                        />
-                        <input
-                          type="time"
-                          value={manualForm.time}
-                          onChange={(e) => setManualForm({ ...manualForm, time: e.target.value })}
-                          className="w-full min-w-0 px-3.5 py-2.5 bg-page border border-edge rounded-xl text-xs text-ink focus:outline-none focus:border-sage transition"
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                    <div className="space-y-1.5">
-                      <label className="block text-xs font-semibold text-ink">面试形式</label>
-                      <select
-                        value={manualForm.format}
-                        onChange={(e) =>
-                          setManualForm({ ...manualForm, format: e.target.value as InterviewFormat })
-                        }
-                        className="w-full px-3.5 py-2.5 bg-page border border-edge rounded-xl text-xs font-semibold text-ink focus:outline-none focus:border-sage transition cursor-pointer"
-                      >
-                        <option value="video">视频面试 (Remote Video)</option>
-                        <option value="phone">电话面试 (Phone)</option>
-                        <option value="onsite">现场面试 (On-site)</option>
-                      </select>
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <label className="block text-xs font-semibold text-ink">面试官信息（可选）</label>
-                      <input
-                        type="text"
-                        value={manualForm.interviewer}
-                        onChange={(e) =>
-                          setManualForm({ ...manualForm, interviewer: e.target.value })
-                        }
-                        placeholder="如：业务主管、交叉技术官..."
-                        className="w-full px-3.5 py-2.5 bg-page border border-edge rounded-xl text-xs text-ink focus:outline-none focus:border-sage transition"
-                      />
-                    </div>
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowNewInterviewModal(true)}
+                    className="px-5 py-2.5 rounded-xl text-xs font-bold bg-[#395347] hover:bg-[#2d4239] text-white shadow-xs transition cursor-pointer"
+                  >
+                    + 新建面试
+                  </button>
                 </div>
               )}
             </div>
@@ -792,6 +599,15 @@ export const CreateReview: React.FC<{ initialJobId?: string }> = ({ initialJobId
             </div>
           )}
         </div>
+
+        {/* T-M8-4：新建面试复用 Modal（from-job 预选岗位；创建后停留本页并自动关联） */}
+        <NewInterviewModal
+          isOpen={showNewInterviewModal}
+          jobId={selectedJobId}
+          mode="from-job"
+          onClose={() => setShowNewInterviewModal(false)}
+          onCreated={(interview) => setSelectedInterviewId(interview.id)}
+        />
 
         {/* Bottom Actions Toolbar */}
         <div className="flex items-center justify-between mt-6">
