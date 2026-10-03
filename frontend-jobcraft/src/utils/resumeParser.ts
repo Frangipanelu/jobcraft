@@ -185,7 +185,6 @@ export function markdownToResume(
     updatedAt: updatedAt || '刚刚',
     personalInfo,
     summary,
-    aiSuggestions: [],
     sections,
   }
 }

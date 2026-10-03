@@ -10,7 +10,6 @@ import { useJobsQuery } from '../../features/jobs/hooks';
 import { useExperiencesQuery } from '../../features/experiences/hooks';
 import {
   useUpsertResumeMutation,
-  useGenerateResumeSuggestionsMutation,
   useGenerateResumeFromJdMutation
 } from '../../features/resume/hooks';
 import { useProfileQuery } from '../../features/profile/hooks';
@@ -63,7 +62,6 @@ export const JDReportDetailView: React.FC<JDReportDetailViewProps> = ({
   const shell = useOutletContext<AppShellOutletContext | null>();
 
   const upsertResume = useUpsertResumeMutation();
-  const generateSuggestions = useGenerateResumeSuggestionsMutation();
   const generateResumeFromJd = useGenerateResumeFromJdMutation();
 
   const { data: jdAnalyses = [], isLoading } = useJdAnalysesQuery();
@@ -298,21 +296,6 @@ export const JDReportDetailView: React.FC<JDReportDetailViewProps> = ({
           if (generated) {
             await upsertResume
               .mutateAsync({ resumeId: generated.resumeId, resume: generated.resume })
-              .then(() => {
-                // FE-RESUME-02 方案 B：简历生成成功后自动 fire 一次建议生成
-                // （异步不阻塞跳转；失败只 toast，不回滚简历生成）
-                generateSuggestions.mutate(
-                  { resumeId: generated.resumeId },
-                  {
-                    onError: (error) =>
-                      showToast({
-                        type: 'warning',
-                        title: '优化建议生成失败',
-                        message: `${(error as Error).message || '请稍后重试'}（可在简历编辑器手动重试）`,
-                      }),
-                  },
-                );
-              })
               .catch(() => undefined);
           }
         } catch {

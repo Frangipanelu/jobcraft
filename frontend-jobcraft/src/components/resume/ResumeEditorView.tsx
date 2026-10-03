@@ -5,30 +5,36 @@ import { useExperiencesQuery } from '../../features/experiences/hooks';
 import { useCreateExpressionMutation } from '../../features/experiences/expressionHooks';
 import {
   useResumesQuery,
-  useApplyResumeAiSuggestionMutation,
-  useRejectResumeAiSuggestionMutation,
-  useApplyAllResumeAiSuggestionsMutation,
   useUpdateResumeBulletTextMutation,
   useDeleteResumeBulletMutation,
   useSaveResumeMutation,
-  useGenerateResumeSuggestionsMutation,
+  useRewriteResumeBulletMutation,
   useSyncResumePersonalInfoMutation,
 } from '../../features/resume/hooks';
+import { useJdAnalysesQuery } from '../../features/jd/hooks';
 import { useProfileQuery } from '../../features/profile/hooks';
+import { dimensionLabel } from '../../utils/dimensions';
 import { ResumePrintPreview } from './ResumePrintPreview';
+import type { CapabilityGap } from '../../types/jobcraft';
 import {
   Sparkles,
-  Check,
   Download,
   Save,
   Trash2,
   Edit2,
   Layers,
   ArrowRight,
-  RotateCcw,
   Sparkle,
-  RefreshCcw
+  RefreshCcw,
+  Wand2
 } from 'lucide-react';
+
+/** T-M6-3：缺口严重度 → 徽标样式与文案。 */
+const SEVERITY_BADGE: Record<CapabilityGap['severity'], { label: string; cls: string }> = {
+  high: { label: '高', cls: 'bg-warning-bg text-warning border-warning/20' },
+  medium: { label: '中', cls: 'bg-sage-soft text-sage border-sage-soft' },
+  low: { label: '低', cls: 'bg-page text-faint border-edge' },
+};
 
 interface ResumeEditorViewProps {
   resumeId?: string;
@@ -47,16 +53,14 @@ export const ResumeEditorView: React.FC<ResumeEditorViewProps> = ({
   const { data: resumes = {} } = useResumesQuery();
   const { data: experiences = [] } = useExperiencesQuery();
 
-  const applySuggestion = useApplyResumeAiSuggestionMutation();
-  const rejectSuggestion = useRejectResumeAiSuggestionMutation();
-  const applyAllSuggestions = useApplyAllResumeAiSuggestionsMutation();
   const editBullet = useUpdateResumeBulletTextMutation();
   const deleteBullet = useDeleteResumeBulletMutation();
   const saveResume = useSaveResumeMutation();
-  const generateSuggestions = useGenerateResumeSuggestionsMutation();
+  const rewriteBullet = useRewriteResumeBulletMutation();
   const saveExpression = useCreateExpressionMutation();
   const { data: profile } = useProfileQuery();
   const syncPersonalInfo = useSyncResumePersonalInfoMutation();
+  const { data: jdAnalyses = [] } = useJdAnalysesQuery();
 
   // FE-RESUME-03：只读 A4 预览 + window.print() 打印导出（产品裁决①）
   const [showPrintPreview, setShowPrintPreview] = useState(false);
@@ -151,54 +155,48 @@ export const ResumeEditorView: React.FC<ResumeEditorViewProps> = ({
     );
   };
 
-  const handleApplySuggestion = (suggestionId: string) => {
-    applySuggestion
-      .mutateAsync({ resumeId: rid, suggestionId })
-      .then((result) => persistToast(result.synced, '已应用优化', '改写已同步保存。'))
-      .catch((error: unknown) => {
-        showToast({
-          type: 'error',
-          title: '应用失败',
-          message: (error as Error).message || '请稍后重试',
-        });
+  // T-M6-3：缺口任务列 → AI 改写选中要点（中栏点选为改写目标，1 次 LLM 后落库）
+  const handleRewriteFromGap = (gap: CapabilityGap) => {
+    if (!selectedBulletForSource) {
+      showToast({
+        type: 'info',
+        title: '请先点选要点',
+        message: '在中间栏点选要改写的要点后，再点击「AI 改写」。',
       });
-  };
-
-  const handleRejectSuggestion = (suggestionId: string) => {
-    rejectSuggestion
-      .mutateAsync({ resumeId: rid, suggestionId })
-      .then((result) => {
-        // T-M6-2：建议状态列已从 submission 剥离，仅本地标记（M6-3 接回前不落库）
-        showToast({
-          type: 'success',
-          title: '已忽略该建议',
-          message: result.synced
-            ? '状态已同步保存。'
-            : '已在本地标记忽略，建议域改版完成后将支持同步。',
-        });
+      return;
+    }
+    rewriteBullet
+      .mutateAsync({
+        resumeId: rid,
+        bulletId: selectedBulletForSource,
+        gap: {
+          dimension: gap.dimension,
+          current: gap.current,
+          jdEvidence: gap.jdEvidence,
+          rewriteHint: gap.rewriteHint,
+        },
       })
+      .then((result) => persistToast(result.synced, '已 AI 改写', '改写结果已同步保存。'))
       .catch((error: unknown) => {
         showToast({
           type: 'error',
-          title: '操作失败',
+          title: '改写失败',
           message: (error as Error).message || '请稍后重试',
         });
       });
   };
 
-  const handleApplyAllSuggestions = () => {
-    applyAllSuggestions
-      .mutateAsync({ resumeId: rid })
-      .then((result) =>
-        persistToast(result.synced, '已应用全部优化', `共改写 ${result.appliedCount} 条要点。`),
-      )
-      .catch((error: unknown) => {
-        showToast({
-          type: 'error',
-          title: '批量应用失败',
-          message: (error as Error).message || '请稍后重试',
-        });
+  // T-M6-3：evidence 缺口 → 按锚点经历卡跳经历资产库补强
+  const handleEvidenceJump = (gap: CapabilityGap) => {
+    if (!gap.cardId) {
+      showToast({
+        type: 'info',
+        title: '未锚定经历卡',
+        message: '该缺口未关联具体经历，请先在经历资产库补充对应素材。',
       });
+      return;
+    }
+    navigateTo('experiences', { expId: gap.cardId });
   };
 
   const handleDeleteBullet = (sectionId: string, itemId: string, bulletId: string) => {
@@ -212,49 +210,6 @@ export const ResumeEditorView: React.FC<ResumeEditorViewProps> = ({
           message: (error as Error).message || '请稍后重试',
         });
       });
-  };
-
-  // FE-RESUME-02：生成/重生成 AI 优化建议（fire-and-forget 不阻塞编辑）
-  const handleGenerateSuggestions = () => {
-    generateSuggestions.mutate(
-      { resumeId: rid },
-      {
-        onSuccess: (result) => {
-          if (!result.generated) {
-            if (result.reason === 'unavailable') {
-              showToast({
-                type: 'info',
-                title: 'AI 建议待接入',
-                message: '建议生成正在改版，当前可继续手动编辑与保存。',
-              });
-              return;
-            }
-            showToast(
-              result.reason === 'local'
-                ? {
-                    type: 'warning',
-                    title: '本地示例不支持',
-                    message: '示例简历没有后端记录，无法生成建议。',
-                  }
-                : { type: 'info', title: '暂无可优化要点', message: '简历中没有可分析的要点。' },
-            );
-            return;
-          }
-          showToast(
-            result.count > 0
-              ? { type: 'success', title: '优化建议已生成', message: `已生成 ${result.count} 条建议并同步保存。` }
-              : { type: 'info', title: '未发现明显问题', message: '当前简历表达已较完善。' },
-          );
-        },
-        onError: (error: unknown) => {
-          showToast({
-            type: 'error',
-            title: '生成失败',
-            message: (error as Error).message || '请稍后重试',
-          });
-        },
-      },
-    );
   };
 
   const handleSave = (resumeId: string) => {
@@ -375,7 +330,10 @@ export const ResumeEditorView: React.FC<ResumeEditorViewProps> = ({
     ? experiences.find((e) => e.id === activeBullet.originalExperienceId)
     : experiences[0];
 
-  const pendingSuggestions = (resume.aiSuggestions || []).filter((s) => !s.applied && !s.rejected);
+  // T-M6-3：缺口任务清单（版本关联的 JD 分析 capability_gaps；存量版本未关联则空态）
+  const capabilityGaps = resume.jobAnalysisId
+    ? jdAnalyses.find((a) => a.id === resume.jobAnalysisId)?.capabilityGaps || []
+    : [];
 
   return (
     <div className="p-6 md:p-8 max-w-[1600px] mx-auto space-y-5 animate-in fade-in duration-300">
@@ -461,122 +419,97 @@ export const ResumeEditorView: React.FC<ResumeEditorViewProps> = ({
 
       {/* 2. Three-Column Precision Workspace */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        {/* Left Column (3.5 cols): AI Optimization Suggestions */}
+        {/* Left Column (3 cols): JD 能力缺口任务清单（T-M6-3） */}
         <div className="lg:col-span-3 space-y-4">
           <div className="bg-white rounded-xl border border-edge p-4 shadow-2xs space-y-3">
             <div className="flex items-center justify-between border-b border-page pb-3">
               <div className="flex items-center gap-2">
                 <Sparkles className="w-4 h-4 text-sage" />
                 <h3 className="text-sm font-bold text-ink">
-                  AI 针对性优化 ({pendingSuggestions.length})
+                  缺口任务 ({capabilityGaps.length})
                 </h3>
               </div>
-              <div className="flex items-center gap-3">
-                {(resume.aiSuggestions || []).length > 0 && (
-                  <button
-                    onClick={handleGenerateSuggestions}
-                    disabled={generateSuggestions.isPending}
-                    title="结合岗位 JD 分析结论，根据当前简历重新生成优化建议"
-                    className="flex items-center gap-1 text-xs font-semibold text-sage hover:text-sage-dim transition disabled:opacity-50 cursor-pointer"
-                  >
-                    <RotateCcw className="w-3 h-3" />
-                    <span>{generateSuggestions.isPending ? '生成中…' : '重新生成'}</span>
-                  </button>
-                )}
-                {pendingSuggestions.length > 0 && (
-                  <button
-                    onClick={handleApplyAllSuggestions}
-                    className="text-xs font-semibold text-sage hover:text-sage-dim transition cursor-pointer"
-                  >
-                    全部应用
-                  </button>
-                )}
-              </div>
+              <span className="text-[11px] text-faint">按 JD 能力缺口</span>
             </div>
 
-            <div className="space-y-3 max-h-[calc(100vh-230px)] overflow-y-auto pr-1">
-              {(resume.aiSuggestions || []).length === 0 ? (
+            <p className="text-[11px] text-faint leading-relaxed">
+              中栏点选一条要点，点「AI 改写」按缺口方向改写；证据缺口跳经历资产库补强。
+            </p>
+
+            <div className="space-y-3 max-h-[calc(100vh-270px)] overflow-y-auto pr-1">
+              {capabilityGaps.length === 0 ? (
                 <div className="text-center py-6 space-y-2.5">
                   <Sparkle className="w-5 h-5 text-sage mx-auto" />
-                  <p className="text-xs text-muted">尚未生成优化建议</p>
-                  <button
-                    onClick={handleGenerateSuggestions}
-                    disabled={generateSuggestions.isPending}
-                    className="mx-auto flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-sage hover:bg-sage-dim text-white text-xs font-semibold shadow-2xs transition disabled:opacity-50 cursor-pointer"
-                  >
-                    <Sparkles className="w-3.5 h-3.5" />
-                    <span>
-                      {generateSuggestions.isPending ? '正在生成…' : '生成 AI 优化建议'}
-                    </span>
-                  </button>
-                  <p className="text-[11px] text-faint">逐条给出可直接应用的改写建议</p>
+                  <p className="text-xs text-muted">暂无缺口任务</p>
+                  <p className="text-[11px] text-faint leading-relaxed">
+                    {resume.jobAnalysisId
+                      ? '该岗位分析未产出能力缺口清单，或分析版本较早。'
+                      : '该简历未关联 JD 分析；从「JD 深度分析」生成的简历会自动带出缺口任务。'}
+                  </p>
                 </div>
               ) : (
-                (resume.aiSuggestions || []).map((sug, idx) => (
-                <div
-                  key={sug.id}
-                  className={`p-3 rounded-xl border text-xs space-y-2 transition ${
-                    sug.applied
-                      ? 'bg-sage-soft/60 border-sage-soft text-sage'
-                      : sug.rejected
-                      ? 'bg-page border-edge text-faint opacity-60'
-                      : 'bg-white border-edge hover:border-sage/50'
-                  }`}
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="font-bold text-ink text-xs">
-                      {idx + 1}. {sug.title}
-                    </span>
-                    {sug.applied ? (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-sage-soft text-sage font-semibold flex items-center gap-1 border border-sage-soft">
-                        <Check className="w-3 h-3" /> 已应用
-                      </span>
-                    ) : sug.rejected ? (
-                      <span className="text-[10px] text-faint">已忽略</span>
-                    ) : sug.stale ? (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-warning-bg text-warning font-semibold border border-warning/20">
-                        已失效
-                      </span>
-                    ) : null}
-                  </div>
+                capabilityGaps.map((gap) => {
+                  const isEvidence = gap.kind === 'evidence';
+                  const severity = SEVERITY_BADGE[gap.severity] || SEVERITY_BADGE.low;
+                  return (
+                    <div
+                      key={gap.id}
+                      className="p-3 rounded-xl border border-edge bg-white space-y-2 text-xs transition hover:border-sage/50"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-bold text-ink text-xs">
+                          {dimensionLabel(gap.dimension)}
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <span
+                            className={`text-[10px] px-1.5 py-0.5 rounded font-semibold border ${severity.cls}`}
+                          >
+                            {severity.label}
+                          </span>
+                          <span
+                            className={`text-[10px] px-1.5 py-0.5 rounded font-semibold border ${
+                              isEvidence
+                                ? 'bg-warning-bg text-warning border-warning/20'
+                                : 'bg-sage-soft text-sage border-sage-soft'
+                            }`}
+                          >
+                            {isEvidence ? '需补强' : '可改写'}
+                          </span>
+                        </span>
+                      </div>
 
-                  <div className="space-y-1">
-                    <div className="text-[11px] text-faint">
-                      <span className="text-muted font-medium">原表达：</span>
-                      <span className="line-through">{sug.originalText}</span>
-                    </div>
-                    <div className="text-xs text-sage font-medium bg-sage-soft p-2 rounded-lg border border-sage-soft leading-relaxed">
-                      <strong className="text-ink">建议改写：</strong> {sug.suggestedText}
-                    </div>
-                  </div>
+                      <p className="text-[11px] text-muted leading-relaxed">{gap.jdEvidence}</p>
 
-                  <p className="text-[11px] text-muted">{sug.reason}</p>
+                      {!isEvidence && gap.rewriteHint && (
+                        <p className="text-[11px] text-sage bg-sage-soft p-2 rounded-lg border border-sage-soft leading-relaxed">
+                          <strong className="text-ink">改写方向：</strong>
+                          {gap.rewriteHint}
+                        </p>
+                      )}
 
-                  {!sug.applied && !sug.rejected && (
-                    <div className="flex items-center gap-2 pt-1">
-                      <button
-                        onClick={() => handleApplySuggestion(sug.id)}
-                        disabled={sug.stale || applySuggestion.isPending}
-                        title={
-                          sug.stale
-                            ? '对应要点已变更或删除，点击「重新生成」刷新建议'
-                            : undefined
-                        }
-                        className="flex-1 py-1 rounded bg-sage hover:bg-sage-dim text-white text-xs font-semibold transition text-center shadow-2xs disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
-                      >
-                        应用优化
-                      </button>
-                      <button
-                        onClick={() => handleRejectSuggestion(sug.id)}
-                        disabled={rejectSuggestion.isPending}
-                        className="px-2.5 py-1 rounded bg-page hover:bg-edge text-muted text-xs transition disabled:opacity-40 cursor-pointer"
-                      >
-                        忽略
-                      </button>
+                      {isEvidence ? (
+                        <button
+                          onClick={() => handleEvidenceJump(gap)}
+                          disabled={!gap.cardId}
+                          title={gap.cardId ? undefined : '该缺口未锚定经历卡，暂无法跳转'}
+                          className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg bg-page hover:bg-edge text-ink font-semibold text-xs transition shadow-2xs disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                        >
+                          <span>去经历资产库补强</span>
+                          <ArrowRight className="w-3.5 h-3.5 text-sage" />
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => handleRewriteFromGap(gap)}
+                          disabled={rewriteBullet.isPending}
+                          className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg bg-sage hover:bg-sage-dim text-white text-xs font-semibold transition shadow-2xs disabled:opacity-50 cursor-pointer"
+                        >
+                          <Wand2 className="w-3.5 h-3.5" />
+                          <span>{rewriteBullet.isPending ? 'AI 改写中…' : 'AI 改写选中要点'}</span>
+                        </button>
+                      )}
                     </div>
-                  )}
-                </div>
-                ))
+                  );
+                })
               )}
             </div>
           </div>

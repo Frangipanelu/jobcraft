@@ -1,9 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as jobApi from '../../api/job';
-import type { ResumePersonalInfo, ResumeSuggestionWire } from '../../api/types';
+import type { ResumePersonalInfo } from '../../api/types';
 import { ResumeVersion } from '../../types/jobcraft';
 import { markdownToResume, resumeToMarkdown } from '../../utils/resumeParser';
-import { suggestionsToWire } from '../../utils/resumeSuggestionMapper';
 import { RESUMES_QUERY_KEY } from './mappers';
 import { JOBS_QUERY_KEY } from '../jobs/mappers';
 
@@ -30,43 +29,21 @@ function writeResumesMap(
 
 /**
  * FE-RESUME-02：统一落库出口（PATCH /resume-version/{id}，T-M6-2 起版本维度）。
- * - resume_markdown：正文变更（生成/编辑/增删/应用改写）
- * - resume_suggestions：版本表无此列（V0021 Q1-B），切换后暂不持久化——建议域
- *   仍挂 submission，M6-3（矩阵：下线/重构 aiSuggestions mutation）统一接回
+ * - resume_markdown：正文变更（生成/编辑/增删/AI 改写）
  * - 本地示例（resumeId 非数字）跳过 API，返回 false（调用方 toast 提示）
  * @returns 是否已同步后端；PATCH 失败上抛（调用方 error toast）
  */
 async function persistResumePatch(
   queryClient: ReturnType<typeof useQueryClient>,
   resumeId: string,
-  patch: {
-    resume_markdown?: string;
-    resume_suggestions?: ResumeSuggestionWire[];
-  },
+  patch: { resume_markdown?: string },
 ): Promise<boolean> {
   const versionId = Number(resumeId);
   if (Number.isNaN(versionId)) return false;
-  const versionPatch = { ...patch };
-  delete versionPatch.resume_suggestions;
-  if (!Object.keys(versionPatch).length) return false;
-  await jobApi.updateResumeVersion(versionId, versionPatch);
+  if (!patch.resume_markdown) return false;
+  await jobApi.updateResumeVersion(versionId, patch);
   queryClient.invalidateQueries({ queryKey: [...JOBS_QUERY_KEY] });
   return true;
-}
-
-/** 按 bullet id 在 sections 中定位 bullet（apply 运行时防错位校验用）。 */
-function findBulletById(
-  sections: ResumeVersion['sections'],
-  bulletId: string,
-): { text: string } | null {
-  for (const sec of sections) {
-    for (const item of sec.items || []) {
-      for (const b of item.bullets || []) {
-        if (b.id === bulletId) return b;
-      }
-    }
-  }
-  return null;
 }
 
 /**
@@ -76,7 +53,7 @@ function findBulletById(
  * - 归组键：job_analysis_id（存量版本可能无 job 行，FE 地图以 jdAnalysisId 关联），
  *   缺失回退 job_id，再回退版本 id（单行组）；
  * - 键 = 版本 id（字符串），resumeId 语义随之从 submission id 切换；
- * - resume_suggestions 挂 submission（V0021 无此列），存量 AI 建议暂不水合（M6-3 债）。
+ * - jobAnalysisId 挂到简历上（T-M6-3 缺口任务列取数键）。
  * @returns 以版本 id（字符串）为键的简历 map
  */
 export function useResumesQuery() {
@@ -96,7 +73,12 @@ export function useResumesQuery() {
           company: v.company ?? '',
           id: String(v.id),
         });
-        if (resume) next[String(v.id)] = resume;
+        if (resume) {
+          next[String(v.id)] =
+            v.job_analysis_id != null
+              ? { ...resume, jobAnalysisId: String(v.job_analysis_id) }
+              : resume;
+        }
       }
       return next;
     },
@@ -104,173 +86,12 @@ export function useResumesQuery() {
 }
 
 // ---------------------------------------------------------------------------
-// 纯编辑 mutation（cache 内函数式更新，无 API，与 legacy apply/reject/… 等价）
+// 纯编辑 mutation（cache 内函数式更新，无 API）
 // ---------------------------------------------------------------------------
 
 /**
- * 应用单条 AI 优化建议：命中 `targetBulletId` 时改写 bullet 文本，标记 applied，
- * 并落库 PATCH {resume_markdown, resume_suggestions}（失败上抛 → 视图 error toast）。
- * 运行时防错位：目标要点已删除 / 原文已变更 → 抛错（提示重新生成），不覆盖用户编辑。
- * @param mutationFn 入参 { resumeId, suggestionId }；返回 { synced }（本地示例为 false）
- */
-export function useApplyResumeAiSuggestionMutation() {
-  const queryClient = useQueryClient();
-
-  return useMutation<{ synced: boolean }, unknown, {
-    resumeId: string;
-    suggestionId: string;
-  }>({
-    mutationFn: async ({ resumeId, suggestionId }) => {
-      const prev = readResumesMap(queryClient);
-      const activeResume = prev[resumeId];
-      if (!activeResume) throw new Error('未找到对应的简历');
-
-      const sug = (activeResume.aiSuggestions || []).find((s) => s.id === suggestionId);
-      if (!sug) throw new Error('未找到该条优化建议');
-      if (sug.stale) throw new Error('该建议已失效（对应要点已变更），请重新生成');
-
-      let updatedSections = [...activeResume.sections];
-      let textChanged = false;
-
-      if (sug.targetBulletId) {
-        const target = findBulletById(activeResume.sections, sug.targetBulletId);
-        if (!target) throw new Error('建议对应要点已被删除，请重新生成建议');
-        if (target.text.trim() !== sug.originalText.trim()) {
-          throw new Error('要点原文已变更，请重新生成建议');
-        }
-        updatedSections = updatedSections.map((sec) => ({
-          ...sec,
-          items: sec.items.map((item) => ({
-            ...item,
-            bullets: item.bullets.map((b) =>
-              b.id === sug.targetBulletId ? { ...b, text: sug.suggestedText } : b,
-            ),
-          })),
-        }));
-        textChanged = true;
-      }
-
-      const updatedSuggestions = (activeResume.aiSuggestions || []).map((s) =>
-        s.id === suggestionId ? { ...s, applied: true, rejected: false, stale: undefined } : s,
-      );
-
-      const nextResume = {
-        ...activeResume,
-        aiSuggestions: updatedSuggestions,
-        sections: updatedSections,
-        updatedAt: '刚刚',
-      };
-      const synced = await persistResumePatch(queryClient, resumeId, {
-        ...(textChanged ? { resume_markdown: resumeToMarkdown(nextResume) } : {}),
-        resume_suggestions: suggestionsToWire(updatedSuggestions, nextResume),
-      });
-      writeResumesMap(queryClient, { ...prev, [resumeId]: nextResume });
-      return { synced };
-    },
-  });
-}
-
-/**
- * 忽略单条 AI 优化建议（标记 rejected，正文不变），落库 PATCH {resume_suggestions}。
- * @param mutationFn 入参 { resumeId, suggestionId }；返回 { synced }
- */
-export function useRejectResumeAiSuggestionMutation() {
-  const queryClient = useQueryClient();
-
-  return useMutation<{ synced: boolean }, unknown, {
-    resumeId: string;
-    suggestionId: string;
-  }>({
-    mutationFn: async ({ resumeId, suggestionId }) => {
-      const prev = readResumesMap(queryClient);
-      const activeResume = prev[resumeId];
-      if (!activeResume) throw new Error('未找到对应的简历');
-
-      const updatedSuggestions = (activeResume.aiSuggestions || []).map((s) =>
-        s.id === suggestionId ? { ...s, rejected: true, applied: false } : s,
-      );
-
-      const nextResume = {
-        ...activeResume,
-        aiSuggestions: updatedSuggestions,
-      };
-      const synced = await persistResumePatch(queryClient, resumeId, {
-        resume_suggestions: suggestionsToWire(updatedSuggestions, nextResume),
-      });
-      writeResumesMap(queryClient, { ...prev, [resumeId]: nextResume });
-      return { synced };
-    },
-  });
-}
-
-/**
- * 全部应用 AI 优化建议：逐个改写 target bullet 文本（已 reject / stale 跳过，
- * 目标已删或原文已变的条目标记 stale 并跳过），全部标记 applied，
- * 落库 PATCH {resume_markdown, resume_suggestions}。
- * @param mutationFn 入参 { resumeId }；返回 { synced, appliedCount }
- */
-export function useApplyAllResumeAiSuggestionsMutation() {
-  const queryClient = useQueryClient();
-
-  return useMutation<{ synced: boolean; appliedCount: number }, unknown, { resumeId: string }>({
-    mutationFn: async ({ resumeId }) => {
-      const prev = readResumesMap(queryClient);
-      const activeResume = prev[resumeId];
-      if (!activeResume) throw new Error('未找到对应的简历');
-
-      let updatedSections = [...activeResume.sections];
-      let textChanged = false;
-      let appliedCount = 0;
-
-      const updatedSuggestions = (activeResume.aiSuggestions || []).map((sug) => {
-        if (sug.rejected || sug.applied || sug.stale) return sug;
-
-        const target = sug.targetBulletId
-          ? findBulletById(activeResume.sections, sug.targetBulletId)
-          : null;
-        if (sug.targetBulletId && (!target || target.text.trim() !== sug.originalText.trim())) {
-          // 目标失效：标记 stale，跳过改写（不阻断其余建议）
-          return { ...sug, stale: true };
-        }
-        if (sug.targetBulletId && target) {
-          const bulletId = sug.targetBulletId;
-          updatedSections = updatedSections.map((sec) => ({
-            ...sec,
-            items: sec.items.map((item) => ({
-              ...item,
-              bullets: item.bullets.map((b) =>
-                b.id === bulletId ? { ...b, text: sug.suggestedText } : b,
-              ),
-            })),
-          }));
-          textChanged = true;
-          appliedCount += 1;
-          return { ...sug, applied: true, rejected: false, stale: undefined };
-        }
-        // 无 targetBulletId（历史数据）：仅标记 applied，不改写正文
-        appliedCount += 1;
-        return { ...sug, applied: true };
-      });
-
-      const nextResume = {
-        ...activeResume,
-        aiSuggestions: updatedSuggestions,
-        ...(textChanged ? { sections: updatedSections, updatedAt: '刚刚' } : {}),
-      };
-      const synced = await persistResumePatch(queryClient, resumeId, {
-        ...(textChanged ? { resume_markdown: resumeToMarkdown(nextResume) } : {}),
-        resume_suggestions: suggestionsToWire(updatedSuggestions, nextResume),
-      });
-      writeResumesMap(queryClient, { ...prev, [resumeId]: nextResume });
-      return { synced, appliedCount };
-    },
-  });
-}
-
-/**
- * 更新指定 bullet 的文本（section/item/bullet 逐层定位）。
- * 落库 PATCH {resume_markdown}（FE-RESUME-02：编辑即落库，修「假 toast」）；
- * 命中该要点的 pending 建议同步标记 stale（原文已变，防止误覆盖）。
+ * FE-RESUME-02：更新指定 bullet 的文本（section/item/bullet 逐层定位）。
+ * 落库 PATCH {resume_markdown}（FE-RESUME-02：编辑即落库，修「假 toast」）。
  * @param mutationFn 入参 { resumeId, sectionId, itemId, bulletId, newText }；返回 { synced }
  */
 export function useUpdateResumeBulletTextMutation() {
@@ -304,16 +125,9 @@ export function useUpdateResumeBulletTextMutation() {
         };
       });
 
-      const updatedSuggestions = (activeResume.aiSuggestions || []).map((s) =>
-        s.targetBulletId === bulletId && !s.applied && !s.rejected
-          ? { ...s, stale: true }
-          : s,
-      );
-
       const nextResume = {
         ...activeResume,
         sections: updatedSections,
-        aiSuggestions: updatedSuggestions,
         updatedAt: '刚刚',
       };
       const synced = await persistResumePatch(queryClient, resumeId, {
@@ -371,7 +185,7 @@ export function useSyncResumePersonalInfoMutation() {
 
 /**
  * 向指定 item 追加一条 bullet（legacy `addResumeBullet`，当前无 UI 消费，保留域能力）。
- * 落库 PATCH {resume_markdown}；存量建议靠 original_text 全文兜底重定位（索引后移不判 stale）。
+ * 落库 PATCH {resume_markdown}。
  * @param mutationFn 入参 { resumeId, sectionId, itemId, text, experienceId? }；返回 { synced }
  */
 export function useAddResumeBulletMutation() {
@@ -425,8 +239,7 @@ export function useAddResumeBulletMutation() {
 }
 
 /**
- * 删除指定 bullet。落库 PATCH {resume_markdown}；
- * 指向该要点的 pending 建议标记 stale（防止 dangling 应用）。
+ * 删除指定 bullet。落库 PATCH {resume_markdown}。
  * @param mutationFn 入参 { resumeId, sectionId, itemId, bulletId }；返回 { synced }
  */
 export function useDeleteResumeBulletMutation() {
@@ -457,16 +270,9 @@ export function useDeleteResumeBulletMutation() {
         };
       });
 
-      const updatedSuggestions = (activeResume.aiSuggestions || []).map((s) =>
-        s.targetBulletId === bulletId && !s.applied && !s.rejected
-          ? { ...s, stale: true }
-          : s,
-      );
-
       const nextResume = {
         ...activeResume,
         sections: updatedSections,
-        aiSuggestions: updatedSuggestions,
         updatedAt: '刚刚',
       };
       const synced = await persistResumePatch(queryClient, resumeId, {
@@ -560,7 +366,10 @@ export function useGenerateResumeFromJdMutation() {
         id: String(result.resume_version_id),
       });
       if (!resume) return null;
-      return { resumeId: String(result.resume_version_id), resume };
+      return {
+        resumeId: String(result.resume_version_id),
+        resume: { ...resume, jobAnalysisId: String(jobAnalysisId) },
+      };
     },
   });
 }
@@ -586,32 +395,73 @@ export function useUpsertResumeMutation() {
   });
 }
 
-export interface GenerateSuggestionsResult {
-  /** 是否完成生成（本地示例/无要点/暂不可用为 false） */
-  generated: boolean;
-  /** 本次生成的建议条数 */
-  count: number;
-  reason?: 'local' | 'empty' | 'unavailable';
-  /** 新建议是否已落库（PATCH resume_suggestions） */
-  synced: boolean;
+export interface RewriteResumeBulletGap {
+  /** 能力维度（D1-D8 / EXT） */
+  dimension: string;
+  /** 缺口现状 */
+  current: string;
+  /** JD 原文证据 */
+  jdEvidence: string;
+  /** 改写方向 */
+  rewriteHint: string;
 }
 
 /**
- * FE-RESUME-02：生成简历 AI 优化建议。
- *
- * T-M6-2 暂停：服务端建议链（`suggestResume` 端点 / `resume_suggest` 任务）仍以
- * submission id 取数，而 resumeId 已切换为 resume_version id——继续调用会以错误
- * id 打到 submission。简历读写身份迁移期间固定返回 `{reason:'unavailable'}`，
- * 待 M6-3（矩阵：下线/重构 aiSuggestions 空壳 mutation）以版本维度接回。
- * @param mutationFn 入参 { resumeId }
+ * T-M6-3：按能力缺口 AI 改写选中要点（POST /resume-version/{id}/rewrite，1 次 LLM）。
+ * - 先调 rewrite 端点拿 rewritten_text（失败上抛 → 视图 error toast）；
+ * - 缓存内替换 bullet 文本后 PATCH {resume_markdown} 落库；
+ * - 本地示例（resumeId 非数字）/ 要点已不存在 → 抛错，不覆盖用户数据。
+ * @param mutationFn 入参 { resumeId, bulletId, gap }；返回 { synced, rewrittenText }
  */
-export function useGenerateResumeSuggestionsMutation() {
-  return useMutation<GenerateSuggestionsResult, unknown, { resumeId: string }>({
-    mutationFn: async () => ({
-      generated: false,
-      count: 0,
-      reason: 'unavailable' as const,
-      synced: false,
-    }),
+export function useRewriteResumeBulletMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation<{ synced: boolean; rewrittenText: string }, unknown, {
+    resumeId: string;
+    bulletId: string;
+    gap: RewriteResumeBulletGap;
+  }>({
+    mutationFn: async ({ resumeId, bulletId, gap }) => {
+      const versionId = Number(resumeId);
+      if (Number.isNaN(versionId)) throw new Error('本地示例不支持 AI 改写');
+
+      const prev = readResumesMap(queryClient);
+      const activeResume = prev[resumeId];
+      if (!activeResume) throw new Error('未找到对应的简历');
+
+      const originalText = activeResume.sections
+        .flatMap((sec) => sec.items || [])
+        .flatMap((item) => item.bullets || [])
+        .find((b) => b.id === bulletId)?.text;
+      if (!originalText) throw new Error('选中要点已不存在，请重新点选');
+
+      const { rewritten_text } = await jobApi.rewriteResumeBullet(versionId, {
+        original_text: originalText,
+        dimension: gap.dimension,
+        gap_current: gap.current,
+        jd_evidence: gap.jdEvidence,
+        rewrite_hint: gap.rewriteHint,
+      });
+
+      const updatedSections = activeResume.sections.map((sec) => ({
+        ...sec,
+        items: (sec.items || []).map((item) => ({
+          ...item,
+          bullets: (item.bullets || []).map((b) =>
+            b.id === bulletId ? { ...b, text: rewritten_text } : b,
+          ),
+        })),
+      }));
+      const nextResume = {
+        ...activeResume,
+        sections: updatedSections,
+        updatedAt: '刚刚',
+      };
+      const synced = await persistResumePatch(queryClient, resumeId, {
+        resume_markdown: resumeToMarkdown(nextResume),
+      });
+      writeResumesMap(queryClient, { ...prev, [resumeId]: nextResume });
+      return { synced, rewrittenText: rewritten_text };
+    },
   });
 }

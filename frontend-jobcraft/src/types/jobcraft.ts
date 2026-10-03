@@ -181,26 +181,11 @@ export interface ResumeSection {
   items: ResumeSectionItem[];
 }
 
-export interface AISuggestion {
-  id: string;
-  type: 'keyword' | 'metric' | 'order' | 'prune' | 'polish';
-  title: string;
-  originalText: string;
-  suggestedText: string;
-  applied: boolean;
-  rejected?: boolean;
-  reason: string;
-  targetBulletId?: string;
-  /** FE-RESUME-02：wire 定位序号（生成时的 sections→items→bullets 展平索引） */
-  itemIndex?: number;
-  bulletIndex?: number;
-  /** FE-RESUME-02：水合定位失败（正文已变更/要点已删除）→ 禁止应用，需重新生成 */
-  stale?: boolean;
-}
-
 export interface ResumeVersion {
   id: string;
   jobId?: string;
+  /** T-M6-3：版本关联的 JD 分析 id（缺口任务列取数键；存量版本可能缺省） */
+  jobAnalysisId?: string;
   jobTitle: string;
   company: string;
   versionName: string;
@@ -215,7 +200,6 @@ export interface ResumeVersion {
     github?: string;
   };
   summary: string;
-  aiSuggestions: AISuggestion[];
   sections: ResumeSection[];
 }
 
