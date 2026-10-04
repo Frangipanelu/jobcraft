@@ -2800,6 +2800,55 @@ class TestInterviewReviewList:
         assert resp.status_code == 500
 
 
+class TestInterviewQaPairsAggregate:
+    """GET /api/jobcraft/interview-review/qa-pairs（T-M8-3 聚合题库）"""
+
+    def test_qa_pairs_all_records(self, monkeypatch):
+        captured = {}
+
+        def fake_list(user_id, job_analysis_id=None):
+            captured.update(user_id=user_id, job_analysis_id=job_analysis_id)
+            return [{"id": 1, "record_id": 55, "question_text": "讲讲你的项目"}]
+
+        monkeypatch.setattr(
+            "app.api.interview_review.db_tools.list_interview_qa_pairs_by_user",
+            fake_list,
+        )
+        resp = client.get("/api/jobcraft/interview-review/qa-pairs")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["qa_pair_count"] == 1
+        assert data["job_analysis_id"] is None
+        assert captured["user_id"] == 1
+        assert captured["job_analysis_id"] is None
+
+    def test_qa_pairs_filtered_by_job(self, monkeypatch):
+        captured = {}
+
+        def fake_list(user_id, job_analysis_id=None):
+            captured.update(user_id=user_id, job_analysis_id=job_analysis_id)
+            return []
+
+        monkeypatch.setattr(
+            "app.api.interview_review.db_tools.list_interview_qa_pairs_by_user",
+            fake_list,
+        )
+        resp = client.get("/api/jobcraft/interview-review/qa-pairs?job_analysis_id=12")
+        assert resp.status_code == 200
+        assert captured["job_analysis_id"] == 12
+
+    def test_qa_pairs_db_error_returns_500(self, monkeypatch):
+        def raise_err(*a, **kw):
+            raise Exception("db error")
+
+        monkeypatch.setattr(
+            "app.api.interview_review.db_tools.list_interview_qa_pairs_by_user",
+            raise_err,
+        )
+        resp = client.get("/api/jobcraft/interview-review/qa-pairs")
+        assert resp.status_code == 500
+
+
 class TestInterviewReviewDetail:
     """GET /api/jobcraft/interview-review/{record_id}"""
 
@@ -3614,3 +3663,66 @@ class TestResumeVersionRewrite:
         )
         assert resp.status_code == 502
         assert "改写失败" in resp.json()["error"]["message"]
+
+
+# ============================================================
+# /api/jobcraft/health — 深度健康检查（DB-VERIFY-01 验证发现）
+# ============================================================
+
+
+class TestApiHealthCheck:
+    """深度健康检查：SELECT 1 结果必须被消费，否则 cursor 关闭抛 Unread result → 恒 degraded。"""
+
+    class _FakeCursor:
+        def __init__(self):
+            self.read = False
+
+        def execute(self, _sql):
+            return None
+
+        def fetchone(self):
+            self.read = True
+            return (1,)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            if not self.read:
+                raise Exception("Unread result found")
+
+    class _FakeConn:
+        def cursor(self):
+            return TestApiHealthCheck._FakeCursor()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+    def test_db_check_consumes_result(self, monkeypatch):
+        monkeypatch.setattr("app.tools.db_config._jc_config", lambda: {})
+        monkeypatch.setattr("mysql.connector.connect", lambda **kw: self._FakeConn())
+        resp = client.get("/api/jobcraft/health")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["checks"]["database"] == "healthy"
+        assert body["status"] == "healthy"
+
+    def test_db_check_connection_failure_degraded(self, monkeypatch):
+        def _boom(**kw):
+            raise RuntimeError("connection refused")
+
+        monkeypatch.setattr("app.tools.db_config._jc_config", lambda: {})
+        monkeypatch.setattr("mysql.connector.connect", _boom)
+        resp = client.get("/api/jobcraft/health")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["checks"]["database"] == "unhealthy"
+        assert body["status"] == "degraded"
+
+    def test_shallow_health_no_db(self):
+        resp = client.get("/health")
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "healthy"

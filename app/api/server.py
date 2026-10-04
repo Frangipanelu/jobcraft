@@ -256,6 +256,7 @@ async def api_health_check():
         with connect(**_jc_config()) as conn:
             with conn.cursor() as cur:
                 cur.execute("SELECT 1")
+                cur.fetchone()
         db_status = "healthy"
     except Exception as e:
         logger.warning(f"数据库健康检查失败: {e}")
