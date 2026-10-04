@@ -98,6 +98,7 @@ export async function createInterviewReview(payload: {
   round_type?: string
   job_analysis_id?: number | null
   submission_id?: number | null
+  record_id?: number | null
   raw_text: string
 }): Promise<InterviewReviewCreateResult> {
   return request<InterviewReviewCreateResult>('/api/jobcraft/interview-review', {
@@ -116,6 +117,7 @@ export async function uploadInterviewReview(
     round_type?: string
     job_analysis_id?: number | null
     submission_id?: number | null
+    record_id?: number | null
   }
 ): Promise<InterviewReviewCreateResult> {
   const formData = new FormData()

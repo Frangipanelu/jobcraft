@@ -25,6 +25,7 @@ class InterviewReviewCreatePayload(BaseModel):
     round_type: str = "业务面"
     job_analysis_id: Optional[int] = None
     submission_id: Optional[int] = None
+    record_id: Optional[int] = None
     raw_text: str
 
 
@@ -90,16 +91,31 @@ def jobcraft_interview_review_create(
     if not payload.raw_text or not payload.raw_text.strip():
         raise HTTPException(status_code=400, detail="面试记录文本不能为空")
     try:
-        record_id = interview_review.create_interview_record(
-            user_id=current_user,
-            title=payload.title,
-            company=payload.company,
-            position=payload.position,
-            round_type=payload.round_type,
-            raw_text=payload.raw_text,
-            job_analysis_id=payload.job_analysis_id,
-            submission_id=payload.submission_id,
-        )
+        if payload.record_id is not None:
+            # T-M8-7：record_id → update 分支（复用预建 planned 行，不重复插行）
+            interview_review.fill_interview_record(
+                payload.record_id,
+                current_user,
+                title=payload.title,
+                company=payload.company,
+                position=payload.position,
+                round_type=payload.round_type,
+                raw_text=payload.raw_text,
+                job_analysis_id=payload.job_analysis_id,
+                submission_id=payload.submission_id,
+            )
+            record_id = payload.record_id
+        else:
+            record_id = interview_review.create_interview_record(
+                user_id=current_user,
+                title=payload.title,
+                company=payload.company,
+                position=payload.position,
+                round_type=payload.round_type,
+                raw_text=payload.raw_text,
+                job_analysis_id=payload.job_analysis_id,
+                submission_id=payload.submission_id,
+            )
         dialogue = interview_review._parse_dialogue(payload.raw_text)
         from app.workflows.question_table_flow import run_question_table_workflow
 
@@ -199,6 +215,7 @@ async def jobcraft_interview_review_upload(
     round_type: str = Form("业务面"),
     job_analysis_id: Optional[int] = Form(None),
     submission_id: Optional[int] = Form(None),
+    record_id: Optional[int] = Form(None),
 ):
     from app.tools import interview_review
 
@@ -249,24 +266,39 @@ async def jobcraft_interview_review_upload(
         )
 
     try:
-        record_id = interview_review.create_interview_record(
-            user_id=current_user,
-            title=title,
-            company=company,
-            position=position,
-            round_type=round_type,
-            raw_text=raw_text,
-            job_analysis_id=job_analysis_id,
-            submission_id=submission_id,
-        )
+        if record_id is not None:
+            # T-M8-7：record_id → update 分支（复用预建 planned 行，不重复插行）
+            interview_review.fill_interview_record(
+                record_id,
+                current_user,
+                title=title,
+                company=company,
+                position=position,
+                round_type=round_type,
+                raw_text=raw_text,
+                job_analysis_id=job_analysis_id,
+                submission_id=submission_id,
+            )
+            target_record_id = record_id
+        else:
+            target_record_id = interview_review.create_interview_record(
+                user_id=current_user,
+                title=title,
+                company=company,
+                position=position,
+                round_type=round_type,
+                raw_text=raw_text,
+                job_analysis_id=job_analysis_id,
+                submission_id=submission_id,
+            )
         dialogue = interview_review._parse_dialogue(raw_text)
         from app.workflows.question_table_flow import run_question_table_workflow
 
         qa_pairs_with_intent = run_question_table_workflow(
-            record_id, user_id=current_user
+            target_record_id, user_id=current_user
         )
         return {
-            "record_id": record_id,
+            "record_id": target_record_id,
             "status": "parsed",
             "qa_pairs": qa_pairs_with_intent,
             "qa_pair_count": len(qa_pairs_with_intent),

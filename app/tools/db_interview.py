@@ -419,6 +419,49 @@ def update_interview_record_session(
     return True
 
 
+def update_interview_record_fill(
+    record_id: int, user_id: int, fields: Dict[str, Any]
+) -> bool:
+    """T-M8-7：复盘填充白名单（transcript/解析产物/关联字段），先查归属再 UPDATE。
+
+    字段名按 DAO 语义映射到列（parsed_dialogue → parsed_dialogue_json）；
+    白名单外字段抛 ValueError（对齐 update_interview_qa_pair_fields 暴露原则），
+    空 fields 幂等返回 True；越权返回 False 不发 UPDATE。
+    """
+    column_map = {
+        "title": "title",
+        "company": "company",
+        "position": "position",
+        "round_type": "round_type",
+        "job_analysis_id": "job_analysis_id",
+        "submission_id": "submission_id",
+        "raw_text": "raw_text",
+        "parsed_dialogue": "parsed_dialogue_json",
+        "status": "status",
+    }
+    disallowed = set(fields) - set(column_map)
+    if disallowed:
+        raise ValueError(f"不允许填充字段: {sorted(disallowed)}")
+    if not fields:
+        return True
+    _ensure_interview_records_table()
+    if not query_one(
+        "SELECT id FROM interview_records WHERE id=%s AND user_id=%s",
+        (record_id, user_id),
+    ):
+        return False
+    set_clause = ", ".join(f"{column_map[k]}=%s" for k in fields)
+    params = [
+        json.dumps(v, ensure_ascii=False) if k == "parsed_dialogue" else v
+        for k, v in fields.items()
+    ]
+    execute(
+        f"UPDATE interview_records SET {set_clause} WHERE id=%s AND user_id=%s",
+        (*params, record_id, user_id),
+    )
+    return True
+
+
 def update_interview_record_analysis(record_id: int, analysis: Dict[str, Any]) -> None:
     """更新面试记录的分析结果"""
     _ensure_interview_records_table()

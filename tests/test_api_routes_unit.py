@@ -2692,6 +2692,91 @@ class TestInterviewSessionCreate:
         assert resp.status_code == 500
 
 
+class TestInterviewReviewRecordFill:
+    """POST /api/jobcraft/interview-review 带 record_id（T-M8-7 update 分支填充预建 planned 行）"""
+
+    def test_create_with_record_id_fills_existing_row(self, monkeypatch):
+        captured = {}
+
+        def fake_fill(record_id, user_id, **fields):
+            captured["record_id"] = record_id
+            captured["user_id"] = user_id
+            captured.update(fields)
+
+        def forbidden_insert(*a, **kw):
+            raise AssertionError("record_id 分支不得重复插行")
+
+        monkeypatch.setattr(
+            "app.tools.interview_review.fill_interview_record", fake_fill
+        )
+        monkeypatch.setattr(
+            "app.tools.interview_review.create_interview_record", forbidden_insert
+        )
+        monkeypatch.setattr(
+            "app.workflows.question_table_flow.run_question_table_workflow",
+            lambda *a, **kw: [],
+        )
+        resp = client.post(
+            "/api/jobcraft/interview-review",
+            json={
+                "record_id": 902,
+                "job_analysis_id": 12,
+                "submission_id": 3,
+                "company": "字节跳动",
+                "position": "AI 产品经理",
+                "round_type": "tech",
+                "raw_text": "面试官：讲讲你的项目。\n我：做了 RAG 评测。",
+            },
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["record_id"] == 902
+        assert captured["record_id"] == 902
+        assert captured["user_id"] == 1
+        assert captured["job_analysis_id"] == 12
+        assert captured["submission_id"] == 3
+        assert captured["round_type"] == "tech"
+        assert "RAG" in captured["raw_text"]
+
+    def test_create_with_unknown_record_id_returns_400(self, monkeypatch):
+        def raise_not_owned(*a, **kw):
+            raise ValueError("复盘场次不存在或无权访问")
+
+        monkeypatch.setattr(
+            "app.tools.interview_review.fill_interview_record", raise_not_owned
+        )
+        resp = client.post(
+            "/api/jobcraft/interview-review",
+            json={"record_id": 4242, "raw_text": "面试官：你好。"},
+        )
+        assert resp.status_code == 400
+        assert "无权访问" in resp.json()["error"]["message"]
+
+    def test_create_without_record_id_keeps_insert_path(self, monkeypatch):
+        def fake_insert(*a, **kw):
+            return 777
+
+        def forbidden_fill(*a, **kw):
+            raise AssertionError("无 record_id 不得走 update 分支")
+
+        monkeypatch.setattr(
+            "app.tools.interview_review.create_interview_record", fake_insert
+        )
+        monkeypatch.setattr(
+            "app.tools.interview_review.fill_interview_record", forbidden_fill
+        )
+        monkeypatch.setattr(
+            "app.workflows.question_table_flow.run_question_table_workflow",
+            lambda *a, **kw: [],
+        )
+        resp = client.post(
+            "/api/jobcraft/interview-review",
+            json={"raw_text": "面试官：你好，我叫小美。"},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["record_id"] == 777
+
+
 class TestInterviewReviewList:
     """GET /api/jobcraft/interview-review"""
 

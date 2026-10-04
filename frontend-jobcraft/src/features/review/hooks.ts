@@ -67,6 +67,11 @@ export function useCreateInterviewReviewMutation() {
         company: targetInterview.company,
         position: targetInterview.role,
         round_type: targetInterview.roundType,
+        // T-M8-7：修回流断点——透传岗位分析/投递/预建场次，题库才能拿到 JD 上下文，
+        // 且 record_id 命中时后端走 update 分支复用 planned 行（不重复插行）。
+        job_analysis_id: targetInterview.prepSource?.job_analysis_id ?? null,
+        submission_id: targetInterview.prepSource?.submission_id ?? null,
+        record_id: targetInterview.sessionRecordId ?? null,
       };
       let result: InterviewReviewCreateResult;
       if (file) {

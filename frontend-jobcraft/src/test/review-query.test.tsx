@@ -529,13 +529,16 @@ describe('useCreateInterviewReviewMutation（生成复盘）', () => {
     await waitFor(() => expect(screen.getByTestId('created-id').textContent).toBe('prep-7'));
 
     expect(auth.getCurrentUser).toHaveBeenCalled();
-    expect(interview.createInterviewReview).toHaveBeenCalledWith({
-      user_id: 1,
-      company: '字节跳动',
-      position: 'AI 产品经理',
-      round_type: 'tech',
-      raw_text: '面试逐字稿...',
-    });
+    expect(interview.createInterviewReview).toHaveBeenCalledWith(
+      // T-M8-7：载荷新增 job_analysis_id / submission_id / record_id 透传
+      expect.objectContaining({
+        user_id: 1,
+        company: '字节跳动',
+        position: 'AI 产品经理',
+        round_type: 'tech',
+        raw_text: '面试逐字稿...',
+      }),
+    );
     expect(tasks.runTaskOrSync).toHaveBeenCalledWith(
       'interview_review_analyze',
       { user_id: 1, record_id: 101, selected_sequences: [1] },
@@ -609,12 +612,12 @@ describe('useCreateInterviewReviewMutation（生成复盘）', () => {
     await waitFor(() => expect(screen.getByTestId('created-id').textContent).toBe('prep-7'));
     expect(interview.uploadInterviewReview).toHaveBeenCalledWith(
       file,
-      {
+      expect.objectContaining({
         user_id: 1,
         company: '字节跳动',
         position: 'AI 产品经理',
         round_type: 'tech',
-      },
+      }),
     );
     expect(interview.createInterviewReview).not.toHaveBeenCalled();
     expect(screen.getByTestId('cache-status').textContent).toBe('completed');
@@ -1129,6 +1132,10 @@ describe('T-M8-4 向导收敛（删手动录入表单，关联已有/新建面�
             position: 'AI 产品经理',
             round_type: 'tech',
             raw_text: '面试内容：聊了 RAG 评测。',
+            // T-M8-7：透传岗位分析/投递（题库回流断点），无预建场次则 record_id 为 null
+            job_analysis_id: 12,
+            submission_id: 1,
+            record_id: null,
           }),
         ),
       { timeout: 8000 },
@@ -1144,5 +1151,30 @@ describe('T-M8-4 向导收敛（删手动录入表单，关联已有/新建面�
       },
       { timeout: 8000 },
     );
+  }, 15000);
+
+  // T-M8-7：预建 planned 行在场（sessionRecordId）→ 复盘走 update 分支复用该行，不重复插行
+  it('预建场次在场：复盘透传 record_id 复用 planned 行', async () => {
+    const planned = { ...INT_YUAN, sessionRecordId: 902 };
+    const qc = createManualQc([planned]);
+    await gotoUploadStep(qc);
+
+    await screen.findByText(/选择面试场次/);
+    fireEvent.click(screen.getByText('下一步'));
+    await pasteAndStart();
+
+    await waitFor(
+      () =>
+        expect(interview.createInterviewReview).toHaveBeenCalledWith(
+          expect.objectContaining({
+            record_id: 902,
+            job_analysis_id: 12,
+            submission_id: 1,
+          }),
+        ),
+      { timeout: 8000 },
+    );
+    // 走 update 分支 → 绝不新建面试行
+    expect(interview.createInterviewSession).not.toHaveBeenCalled();
   }, 15000);
 });

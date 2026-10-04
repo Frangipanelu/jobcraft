@@ -2722,6 +2722,123 @@ class TestInterviewRecordSessionColumns:
         assert queried == [], "空 fields 直接幂等返回，不查归属"
 
 
+class TestInterviewRecordFillColumns:
+    """T-M8-7：复盘填充（record_id → update 分支）DAO 行为与白名单约束"""
+
+    def test_fill_maps_fields_and_json_encodes_dialogue(self, monkeypatch):
+        from app.tools import db_interview
+
+        calls = []
+        monkeypatch.setattr(
+            db_interview, "_ensure_interview_records_table", lambda: None
+        )
+        monkeypatch.setattr(db_interview, "query_one", lambda *a: {"id": 9})
+        monkeypatch.setattr(
+            db_interview,
+            "execute",
+            lambda sql, params: (calls.append((sql, params)), 1)[1],
+        )
+        ok = db_interview.update_interview_record_fill(
+            9,
+            1,
+            {
+                "title": "字节跳动-AI 产品经理-tech",
+                "raw_text": "面试官：你好。",
+                "parsed_dialogue": [{"speaker": "面试官", "role": "interviewer"}],
+                "status": "parsed",
+            },
+        )
+        assert ok is True
+        sql, params = calls[0]
+        assert "parsed_dialogue_json=%s" in sql
+        assert "analysis" not in sql, "填充不得改写 analysis"
+        assert params[0] == "字节跳动-AI 产品经理-tech"
+        assert isinstance(params[2], str) and '"interviewer"' in params[2]
+        assert params[3:] == ("parsed", 9, 1)
+
+    def test_fill_not_owned_skips_sql(self, monkeypatch):
+        from app.tools import db_interview
+
+        calls = []
+        monkeypatch.setattr(
+            db_interview, "_ensure_interview_records_table", lambda: None
+        )
+        monkeypatch.setattr(db_interview, "query_one", lambda *a: None)
+        monkeypatch.setattr(
+            db_interview,
+            "execute",
+            lambda sql, params: (calls.append((sql, params)), 1)[1],
+        )
+        assert (
+            db_interview.update_interview_record_fill(999, 1, {"raw_text": "x"})
+            is False
+        )
+        assert calls == [], "越权不得触达 UPDATE"
+
+    def test_fill_rejects_non_whitelist_fields(self, monkeypatch):
+        from app.tools import db_interview
+
+        calls = []
+        monkeypatch.setattr(
+            db_interview, "_ensure_interview_records_table", lambda: None
+        )
+        monkeypatch.setattr(db_interview, "query_one", lambda *a: {"id": 9})
+        monkeypatch.setattr(
+            db_interview,
+            "execute",
+            lambda sql, params: (calls.append((sql, params)), 1)[1],
+        )
+        with pytest.raises(ValueError, match="不允许填充字段"):
+            db_interview.update_interview_record_fill(9, 1, {"analysis": {}})
+        assert calls == [], "白名单外字段不得触达 SQL"
+
+    def test_fill_record_tool_raises_when_not_owned(self, monkeypatch):
+        from app.tools import interview_review
+
+        monkeypatch.setattr(
+            interview_review.db_tools,
+            "update_interview_record_fill",
+            lambda *a, **kw: False,
+        )
+        with pytest.raises(ValueError, match="无权访问"):
+            interview_review.fill_interview_record(
+                999,
+                1,
+                title="",
+                company="字节跳动",
+                position="AI 产品经理",
+                round_type="tech",
+                raw_text="面试官：你好，我叫小美。今天来聊下项目经历。",
+            )
+
+    def test_fill_record_tool_defaults_title_and_status_parsed(self, monkeypatch):
+        from app.tools import interview_review
+
+        captured = {}
+        monkeypatch.setattr(
+            interview_review.db_tools,
+            "update_interview_record_fill",
+            lambda rid, uid, fields: (
+                captured.update(record_id=rid, user_id=uid, fields=fields) or True
+            ),
+        )
+        interview_review.fill_interview_record(
+            9,
+            1,
+            title="",
+            company="字节跳动",
+            position="AI 产品经理",
+            round_type="tech",
+            raw_text="面试官：你好，我叫小美。今天来聊下项目经历。",
+            job_analysis_id=12,
+        )
+        assert captured["record_id"] == 9
+        assert captured["fields"]["title"] == "字节跳动-AI 产品经理-tech"
+        assert captured["fields"]["status"] == "parsed"
+        assert captured["fields"]["job_analysis_id"] == 12
+        assert isinstance(captured["fields"]["parsed_dialogue"], list)
+
+
 class TestDbResumeVersion:
     """T-M6-1 / M6-Q1-B：resume_version DAO（每岗自增版本、单选设当前、归属校验）"""
 

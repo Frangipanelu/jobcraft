@@ -83,6 +83,43 @@ def create_interview_record(
     return record_id
 
 
+def fill_interview_record(
+    record_id: int,
+    user_id: int,
+    *,
+    title: str,
+    company: str,
+    position: str,
+    round_type: str,
+    raw_text: str,
+    job_analysis_id: Optional[int] = None,
+    submission_id: Optional[int] = None,
+) -> None:
+    """T-M8-7：预建 planned 行 → 复盘填充（record_id → update 分支）。
+
+    覆盖 transcript 与解析产物、关联字段，status 置 parsed；
+    归属校验失败（记录不存在或非本人）抛 ValueError，由 API 层转 400。
+    """
+    parsed_dialogue = _parse_dialogue(raw_text)
+    ok = db_tools.update_interview_record_fill(
+        record_id,
+        user_id,
+        {
+            "title": title or f"{company}-{position}-{round_type}",
+            "company": company,
+            "position": position,
+            "round_type": round_type,
+            "job_analysis_id": job_analysis_id,
+            "submission_id": submission_id,
+            "raw_text": raw_text,
+            "parsed_dialogue": parsed_dialogue,
+            "status": "parsed",
+        },
+    )
+    if not ok:
+        raise ValueError("复盘场次不存在或无权访问")
+
+
 def preview_question_intents(
     qa_pairs: List[Dict[str, Any]],
     company: str = "",
