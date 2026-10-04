@@ -39,6 +39,8 @@ def gate_client(monkeypatch):
         "ledger": [],
         "card": {"id": 42, "version": 1},
         "update_calls": [],
+        "apply_calls": [],
+        "advance_calls": [],
     }
 
     def get_record(record_id, user_id=None):
@@ -96,6 +98,42 @@ def gate_client(monkeypatch):
         state["card"] = {**state["card"], "version": state["card"]["version"] + 1}
         return True
 
+    def apply_write(
+        record_id,
+        user_id,
+        target_type,
+        target_ref,
+        card_id,
+        updates,
+        analysis_run_id="",
+        decision="accepted",
+    ):
+        """T-M8-9：写卡 + 记台账收敛为一次单事务调用。"""
+        state["apply_calls"].append(
+            {
+                "record_id": record_id,
+                "card_id": card_id,
+                "updates": dict(updates),
+                "decision": decision,
+                "analysis_run_id": analysis_run_id,
+            }
+        )
+        update_card(card_id, updates, user_id=user_id)
+        row = decide(
+            record_id=record_id,
+            user_id=user_id,
+            target_type=target_type,
+            target_ref=target_ref,
+            decision=decision,
+            card_version=state["card"]["version"],
+            analysis_run_id=analysis_run_id,
+        )
+        return {"card_version": state["card"]["version"], "ledger": row}
+
+    def advance(record_id, target, user_id=None):
+        state["advance_calls"].append((record_id, target))
+        return target
+
     monkeypatch.setattr(
         "app.api.interview_review.db_tools.get_interview_record", get_record
     )
@@ -110,6 +148,12 @@ def gate_client(monkeypatch):
     )
     monkeypatch.setattr("app.api.interview_review.db_tools.get_card", get_card)
     monkeypatch.setattr("app.api.interview_review.db_tools.update_card", update_card)
+    monkeypatch.setattr(
+        "app.api.interview_review.db_tools.apply_feedback_card_write", apply_write
+    )
+    monkeypatch.setattr(
+        "app.api.interview_review.db_tools.advance_interview_record_status", advance
+    )
     return client, state
 
 
@@ -281,6 +325,323 @@ class TestFeedbackGateReject:
         assert resp.json()["decision"] == "accepted"
         assert len(state["ledger"]) == 1
         assert len(state["update_calls"]) == 1
+
+    def test_reject_accepted_candidate_returns_409(self, gate_client):
+        """T-M8-9：已确认沉淀的候选禁止直接忽略（否则卡已写、状态却说已忽略）"""
+        client, state = gate_client
+        client.post(
+            "/api/jobcraft/interview-review/7/feedback-candidates/accept",
+            json={"target_ref": "42", "results": ["rs"]},
+        )
+        resp = client.post(
+            "/api/jobcraft/interview-review/7/feedback-candidates/reject",
+            json={"target_ref": "42"},
+        )
+        assert resp.status_code == 409
+        assert "回滚" in resp.json()["error"]["message"]
+        assert state["ledger"][0]["decision"] == "accepted"
+
+    def test_reject_repeated_is_idempotent_flagged(self, gate_client):
+        client, state = gate_client
+        first = client.post(
+            "/api/jobcraft/interview-review/7/feedback-candidates/reject",
+            json={"target_ref": "42"},
+        )
+        second = client.post(
+            "/api/jobcraft/interview-review/7/feedback-candidates/reject",
+            json={"target_ref": "42"},
+        )
+        assert first.json()["idempotent"] is False
+        assert second.json()["idempotent"] is True
+        assert len(state["ledger"]) == 1
+
+
+class TestFeedbackGateAtomicityAndPhase:
+    """T-M8-9：单事务写卡 + edited 决策 + 全决策后阶段推进 done"""
+
+    def test_accept_uses_single_transaction_helper(self, gate_client):
+        """写卡与台账必须收敛为一次 apply_feedback_card_write（DATA_MODEL §31）"""
+        client, state = gate_client
+        resp = client.post(
+            "/api/jobcraft/interview-review/7/feedback-candidates/accept",
+            json={"target_ref": "42", "results": ["rs"]},
+        )
+        assert resp.status_code == 200
+        assert len(state["apply_calls"]) == 1
+        call = state["apply_calls"][0]
+        assert call["card_id"] == 42
+        assert call["decision"] == "accepted"
+        assert call["updates"] == {"results": ["rs"]}
+
+    def test_edited_flag_records_edited_decision(self, gate_client):
+        """SPEC §23：用户手工改过槽位 → 台账记 edited"""
+        client, state = gate_client
+        resp = client.post(
+            "/api/jobcraft/interview-review/7/feedback-candidates/accept",
+            json={"target_ref": "42", "problem": "我自己改过", "edited": True},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["decision"] == "edited"
+        assert state["ledger"][0]["decision"] == "edited"
+
+    def test_all_decided_advances_phase_to_done(self, gate_client):
+        client, state = gate_client
+        resp = client.post(
+            "/api/jobcraft/interview-review/7/feedback-candidates/reject",
+            json={"target_ref": "42"},
+        )
+        assert resp.json()["gate_status"] == "done"
+        assert state["advance_calls"] == [(7, "done")]
+
+    def test_pending_candidate_does_not_advance_phase(self, gate_client):
+        """仍有待决策候选 → 不推进阶段（awaiting_confirmation 保持）"""
+        client, state = gate_client
+        state["record"] = {
+            **RECORD,
+            "analysis": {
+                "experienceFeedbacks": [
+                    *RECORD["analysis"]["experienceFeedbacks"],
+                    {"experienceId": "43", "experienceTitle": "另一段经历"},
+                ]
+            },
+        }
+        resp = client.post(
+            "/api/jobcraft/interview-review/7/feedback-candidates/reject",
+            json={"target_ref": "42"},
+        )
+        assert resp.json()["gate_status"] == "awaiting_confirmation"
+        assert state["advance_calls"] == []
+
+    def test_idempotent_accept_does_not_rewite_card(self, gate_client):
+        client, state = gate_client
+        client.post(
+            "/api/jobcraft/interview-review/7/feedback-candidates/accept",
+            json={"target_ref": "42", "results": ["rs"]},
+        )
+        resp = client.post(
+            "/api/jobcraft/interview-review/7/feedback-candidates/accept",
+            json={"target_ref": "42", "results": ["rs"]},
+        )
+        assert resp.json()["idempotent"] is True
+        assert len(state["apply_calls"]) == 1
+        assert len(state["update_calls"]) == 1
+
+
+class TestInterviewRecordStatusProgression:
+    """T-M8-9：状态推进序（防降级）——替代原 `status != "done"` 字面量判断"""
+
+    def test_rank_order_matches_spec_six_states(self):
+        assert db_interview.status_rank("planned") == 0
+        assert db_interview.status_rank("parsed") == 1
+        assert db_interview.status_rank("question_table") == 2
+        assert db_interview.status_rank("analyzed") == 3
+        assert db_interview.status_rank("awaiting_confirmation") == 4
+        assert db_interview.status_rank("done") == 5
+
+    def test_failed_and_unknown_rank_lowest_for_retry(self):
+        assert db_interview.status_rank("failed") == -1
+        assert db_interview.status_rank("unknown_state") == -1
+        assert db_interview.status_rank(None) == -1
+
+    def test_advance_skips_downgrade(self, monkeypatch):
+        monkeypatch.setattr(
+            db_interview, "get_interview_record", lambda *a, **k: {"status": "done"}
+        )
+        writes = []
+        monkeypatch.setattr(
+            db_interview,
+            "update_interview_record_status",
+            lambda rid, st: writes.append((rid, st)),
+        )
+        result = db_interview.advance_interview_record_status(7, "question_table")
+        assert result == "done"
+        assert writes == [], "已 done 不得降级回 question_table"
+
+    def test_advance_writes_when_rank_increases(self, monkeypatch):
+        monkeypatch.setattr(
+            db_interview,
+            "get_interview_record",
+            lambda *a, **k: {"status": "question_table"},
+        )
+        writes = []
+        monkeypatch.setattr(
+            db_interview,
+            "update_interview_record_status",
+            lambda rid, st: writes.append((rid, st)),
+        )
+        result = db_interview.advance_interview_record_status(7, "analyzed")
+        assert result == "analyzed"
+        assert writes == [(7, "analyzed")]
+
+    def test_advance_rejects_unknown_target(self):
+        with pytest.raises(ValueError, match="未知面试记录状态"):
+            db_interview.advance_interview_record_status(7, "not_a_stage")
+
+    def test_analysis_without_feedback_marks_analyzed(self, monkeypatch):
+        captured = {}
+
+        def fake_execute(sql, params=None):
+            captured["params"] = params
+
+        monkeypatch.setattr(
+            db_interview, "_ensure_interview_records_table", lambda: None
+        )
+        monkeypatch.setattr(db_interview, "execute", fake_execute)
+        db_interview.update_interview_record_analysis(7, {"summary": "x"})
+        assert captured["params"][1] == "analyzed"
+
+    def test_analysis_with_feedback_marks_awaiting_confirmation(self, monkeypatch):
+        captured = {}
+
+        def fake_execute(sql, params=None):
+            captured["params"] = params
+
+        monkeypatch.setattr(
+            db_interview, "_ensure_interview_records_table", lambda: None
+        )
+        monkeypatch.setattr(db_interview, "execute", fake_execute)
+        db_interview.update_interview_record_analysis(
+            7, {"patch": {"experienceFeedbacks": [{"experienceId": "42"}]}}
+        )
+        assert captured["params"][1] == "awaiting_confirmation"
+
+
+class TestFeedbackCardWriteTransaction:
+    """T-M8-9：apply_feedback_card_write 单事务编排（mock 连接，不连真库）"""
+
+    def test_illegal_decision_rejected_before_touching_db(self):
+        with pytest.raises(ValueError, match="非法决策值"):
+            db_interview.apply_feedback_card_write(
+                record_id=7,
+                user_id=1,
+                target_type="experience",
+                target_ref="42",
+                card_id=42,
+                updates={"results": ["rs"]},
+                decision="maybe",
+            )
+
+    def test_missing_card_raises_value_error(self, monkeypatch):
+        monkeypatch.setattr(
+            db_interview, "_ensure_interview_records_table", lambda: None
+        )
+        monkeypatch.setattr(
+            db_interview, "_ensure_feedback_candidates_table", lambda: None
+        )
+        monkeypatch.setattr(
+            db_interview,
+            "transaction",
+            lambda: _NullTransaction(_FakeConn(_ScriptedCursor([None]))),
+        )
+        with pytest.raises(ValueError, match="经历卡不存在"):
+            db_interview.apply_feedback_card_write(
+                record_id=7,
+                user_id=1,
+                target_type="experience",
+                target_ref="42",
+                card_id=42,
+                updates={"results": ["rs"]},
+            )
+
+    def test_writes_card_and_ledger_in_one_transaction(self, monkeypatch):
+        calls = {"commit": 0, "rollback": 0}
+        cursor = _ScriptedCursor(
+            [
+                {"id": 42, "version": 3},
+                {"version": 4},
+                {
+                    "id": 1,
+                    "decision": "accepted",
+                    "card_version": 4,
+                    "decided_at": "2026-10-04 12:00:00",
+                },
+            ]
+        )
+        conn = _FakeConn(cursor)
+        conn.on_commit = lambda: calls.__setitem__("commit", calls["commit"] + 1)
+        conn.on_rollback = lambda: calls.__setitem__("rollback", calls["rollback"] + 1)
+        monkeypatch.setattr(
+            db_interview, "_ensure_interview_records_table", lambda: None
+        )
+        monkeypatch.setattr(
+            db_interview, "_ensure_feedback_candidates_table", lambda: None
+        )
+        monkeypatch.setattr(db_interview, "update_card_with_conn", lambda *a, **k: True)
+        monkeypatch.setattr(db_interview, "transaction", lambda: _NullTransaction(conn))
+        result = db_interview.apply_feedback_card_write(
+            record_id=7,
+            user_id=1,
+            target_type="experience",
+            target_ref="42",
+            card_id=42,
+            updates={"results": ["rs"]},
+            decision="accepted",
+        )
+        assert result["card_version"] == 4
+        assert result["ledger"]["decision"] == "accepted"
+        assert calls == {"commit": 0, "rollback": 0}, "替身事务不自行提交"
+        sqls = [sql for sql, _ in cursor.executed]
+        assert any("INSERT INTO feedback_candidates" in s for s in sqls)
+
+
+class _NullTransaction:
+    """最小 transaction() 替身：只做上下文管理，不连真库、不提交。"""
+
+    def __init__(self, conn):
+        self._conn = conn
+
+    def __enter__(self):
+        return self._conn
+
+    def __exit__(self, *exc):
+        return False
+
+
+class _FakeConn:
+    """最小连接替身：cursor 复用同一脚本化游标。"""
+
+    def __init__(self, cursor):
+        self._cursor = cursor
+        self.on_commit = None
+        self.on_rollback = None
+
+    def cursor(self, dictionary=False):
+        return self._cursor
+
+    def commit(self):
+        if self.on_commit:
+            self.on_commit()
+
+    def rollback(self):
+        if self.on_rollback:
+            self.on_rollback()
+
+    def close(self):
+        return None
+
+
+class _ScriptedCursor:
+    """按 fetchone 次数顺序吐预设行的游标替身。"""
+
+    def __init__(self, rows):
+        self._rows = list(rows)
+        self._fetch_idx = 0
+        self.rowcount = 1
+        self.executed = []
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def execute(self, sql, params=None):
+        self.executed.append((" ".join(sql.split()), params))
+
+    def fetchone(self):
+        row = self._rows[self._fetch_idx]
+        self._fetch_idx += 1
+        return row
 
 
 class TestFeedbackCandidateLedger:

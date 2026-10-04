@@ -85,6 +85,8 @@ from app.tools.db_submission import (  # noqa: E402, F401
 )
 
 from app.tools.db_interview import (  # noqa: E402, F401
+    advance_interview_record_status,
+    apply_feedback_card_write,
     decide_feedback_candidate,
     delete_interview_qa_pair,
     delete_interview_qa_pairs_by_record,
@@ -101,6 +103,7 @@ from app.tools.db_interview import (  # noqa: E402, F401
     list_interview_qa_pairs_by_user,
     list_interview_preps,
     list_interview_records,
+    status_rank,
     update_interview_prep_company_research,
     update_interview_prep_drafts,
     update_interview_qa_pair_fields,

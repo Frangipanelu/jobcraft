@@ -44,9 +44,12 @@ class InterviewReviewAnalyzePayload(BaseModel):
 class FeedbackCandidateDecisionPayload(BaseModel):
     """T-M8-1 反馈闸门：候选决策请求体。
 
-    target_ref 为候选定位键（experience 目标下即经历卡 id 字符串）。
+        target_ref 为候选定位键（experience 目标下即经历卡 id 字符串）。
     四槽位内容（background/problem/actions/results）仅 accept 需要，
-    由前端在本地合成后提交，服务端只负责「幂等落卡 + 记台账」。
+        由前端在本地合成后提交，服务端只负责「幂等落库 + 记台账」。
+        `edited=True` 表示用户手工改过槽位内容再确认，台账记 `edited`
+        而非 `accepted`（SPEC §23 决策枚举）；该标记只影响台账标签，
+        不影响是否写卡（写卡与否仍由 target_ref + 归属校验决定）。
     """
 
     target_type: str = "experience"
@@ -56,6 +59,7 @@ class FeedbackCandidateDecisionPayload(BaseModel):
     actions: Optional[List[str]] = None
     results: Optional[List[str]] = None
     analysis_run_id: str = ""
+    edited: bool = False
 
 
 class InterviewSessionCreatePayload(BaseModel):
@@ -574,8 +578,9 @@ def _feedback_gate_items(record: dict, ledger: List[dict]) -> List[dict]:
 def _gate_status(items: List[dict]) -> str:
     """闸门状态由台账推导：有待决策候选 → awaiting_confirmation，否则 done。
 
-    不新增 interview_records.status 取值（SPEC §5 分期：`failed`/`done` 是否入库
-    留待 M9 裁决），状态由 feedback_candidates 台账派生，刷新不丢。
+    台账是**决策的唯一权威**（刷新不丢），`interview_records.status` 只作阶段镜像，
+    由 DB 层阶段序推进（T-M8-9），二者不冲突：status 服务于状态机，gate_status
+    服务于前端闸门渲染。
     """
     if not items:
         return "none"
@@ -584,6 +589,18 @@ def _gate_status(items: List[dict]) -> str:
         if any(item["decision"] == "pending" for item in items)
         else "done"
     )
+
+
+def _sync_gate_phase(record_id: int, items: List[dict], user_id: int) -> None:
+    """候选全部决策完成 → 阶段推进到 done（T-M8-9：awaiting_confirmation → done）
+
+    未全部决策时**不降级**回 awaiting_confirmation：重新分析出新候选时
+    `update_interview_record_analysis` 会写入 awaiting_confirmation，
+    而已决策完的记录再次查看不会回退阶段（`advance` 的阶段序保证）。
+    """
+    if _gate_status(items) != "done":
+        return
+    db_tools.advance_interview_record_status(record_id, "done", user_id=user_id)
 
 
 @router.get("/{record_id}/feedback-candidates")
@@ -617,10 +634,12 @@ def jobcraft_interview_review_feedback_accept(
     payload: FeedbackCandidateDecisionPayload,
     current_user: int = Depends(get_current_user),
 ):
-    """T-M8-1 反馈闸门：确认沉淀（幂等）——服务端写卡 + 记台账。
+    """T-M8-1 反馈闸门：确认沉淀（幂等 + 单事务）——服务端写卡 + 记台账。
 
-    幂等：唯一键 (record_id, target_type, target_ref) 已有 accepted 决策时
+    幂等：唯一键 (record_id, target_type, target_ref) 已有 accepted/edited 决策时
     直接返回原决策，不重复写卡（SPEC「重跑复盘 MUST NOT 重复落永久反馈」）。
+    原子：写卡（含版本快照）+ 台账 upsert 在**同一事务**内，失败整体回滚
+    （DATA_MODEL §31 Accept Feedback；T-M8-9 修正此前两步各自提交的中间态）。
     """
     try:
         record = db_tools.get_interview_record(record_id, current_user)
@@ -633,13 +652,13 @@ def jobcraft_interview_review_feedback_accept(
         existing = db_tools.get_feedback_candidate(
             record_id, payload.target_type, target_ref
         )
-        if existing and existing["decision"] == "accepted":
+        if existing and existing["decision"] in ("accepted", "edited"):
             ledger = db_tools.list_feedback_candidates(record_id, current_user)
             items = _feedback_gate_items(record, ledger)
             return {
                 "record_id": record_id,
                 "target_ref": target_ref,
-                "decision": "accepted",
+                "decision": existing["decision"],
                 "card_version": existing["card_version"],
                 "decided_at": existing["decided_at"],
                 "idempotent": True,
@@ -672,28 +691,29 @@ def jobcraft_interview_review_feedback_accept(
             )
             if v is not None
         }
-        if updates:
-            db_tools.update_card(card_id, updates, user_id=current_user)
-        card_version = (db_tools.get_card(card_id, current_user) or {}).get("version")
-
-        row = db_tools.decide_feedback_candidate(
+        # SPEC §23 决策枚举含 edited：用户手工改过内容再确认 → 记 edited 而非 accepted
+        decision = "edited" if payload.edited else "accepted"
+        applied = db_tools.apply_feedback_card_write(
             record_id=record_id,
             user_id=current_user,
             target_type=payload.target_type,
             target_ref=target_ref,
-            decision="accepted",
-            card_version=card_version,
+            card_id=card_id,
+            updates=updates,
             analysis_run_id=payload.analysis_run_id,
+            decision=decision,
         )
         ledger = db_tools.list_feedback_candidates(record_id, current_user)
+        items = _feedback_gate_items(record, ledger)
+        _sync_gate_phase(record_id, items, current_user)
         return {
             "record_id": record_id,
             "target_ref": target_ref,
-            "decision": row["decision"],
-            "card_version": row["card_version"],
-            "decided_at": row["decided_at"],
+            "decision": applied["ledger"]["decision"],
+            "card_version": applied["card_version"],
+            "decided_at": applied["ledger"]["decided_at"],
             "idempotent": False,
-            "gate_status": _gate_status(_feedback_gate_items(record, ledger)),
+            "gate_status": _gate_status(items),
         }
     except HTTPException:
         raise
@@ -710,7 +730,11 @@ def jobcraft_interview_review_feedback_reject(
     payload: FeedbackCandidateDecisionPayload,
     current_user: int = Depends(get_current_user),
 ):
-    """T-M8-1 反馈闸门：忽略候选（不写卡，仅记台账，可反悔重确认）"""
+    """T-M8-1 反馈闸门：忽略候选（不写卡，仅记台账，可反悔重确认）
+
+    T-M8-9：已 accepted/edited 的候选禁止直接忽略（409）——卡片已写入，
+    忽略只会让台账与卡片状态矛盾；需先在卡片页回滚内容。
+    """
     try:
         record = db_tools.get_interview_record(record_id, current_user)
         if not record:
@@ -718,6 +742,15 @@ def jobcraft_interview_review_feedback_reject(
         target_ref = payload.target_ref.strip()
         if not target_ref:
             raise HTTPException(status_code=400, detail="target_ref 不能为空")
+
+        existing = db_tools.get_feedback_candidate(
+            record_id, payload.target_type, target_ref
+        )
+        if existing and existing["decision"] in ("accepted", "edited"):
+            raise HTTPException(
+                status_code=409,
+                detail="该候选已确认沉淀到经历卡，请先在卡片页回滚内容后再忽略",
+            )
 
         ledger = db_tools.list_feedback_candidates(record_id, current_user)
         items = _feedback_gate_items(record, ledger)
@@ -729,6 +762,7 @@ def jobcraft_interview_review_feedback_reject(
         if not matched:
             raise HTTPException(status_code=404, detail="反馈候选不存在")
 
+        already_rejected = bool(existing and existing["decision"] == "rejected")
         row = db_tools.decide_feedback_candidate(
             record_id=record_id,
             user_id=current_user,
@@ -738,13 +772,16 @@ def jobcraft_interview_review_feedback_reject(
             analysis_run_id=payload.analysis_run_id,
         )
         ledger = db_tools.list_feedback_candidates(record_id, current_user)
+        items = _feedback_gate_items(record, ledger)
+        _sync_gate_phase(record_id, items, current_user)
         return {
             "record_id": record_id,
             "target_ref": target_ref,
             "decision": row["decision"],
             "card_version": row["card_version"],
             "decided_at": row["decided_at"],
-            "gate_status": _gate_status(_feedback_gate_items(record, ledger)),
+            "idempotent": already_rejected,
+            "gate_status": _gate_status(items),
         }
     except HTTPException:
         raise

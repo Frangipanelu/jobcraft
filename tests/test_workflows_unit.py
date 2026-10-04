@@ -1509,8 +1509,8 @@ class TestQuestionTableFlow:
             lambda data: 1,
         )
         monkeypatch.setattr(
-            "app.workflows.question_table_flow.db_tools.update_interview_record_status",
-            lambda rid, status: None,
+            "app.workflows.question_table_flow.db_tools.advance_interview_record_status",
+            lambda rid, status, user_id=None: None,
         )
 
         result = run_question_table_workflow(record_id=1, user_id=1)
@@ -1567,8 +1567,8 @@ class TestQuestionTableFlow:
             lambda data: 1,
         )
         monkeypatch.setattr(
-            "app.workflows.question_table_flow.db_tools.update_interview_record_status",
-            lambda rid, status: None,
+            "app.workflows.question_table_flow.db_tools.advance_interview_record_status",
+            lambda rid, status, user_id=None: None,
         )
 
         result = run_question_table_workflow(record_id=1, user_id=1)
@@ -1639,8 +1639,8 @@ class TestQuestionTableFlow:
             lambda data: 1,
         )
         monkeypatch.setattr(
-            "app.workflows.question_table_flow.db_tools.update_interview_record_status",
-            lambda rid, status: None,
+            "app.workflows.question_table_flow.db_tools.advance_interview_record_status",
+            lambda rid, status, user_id=None: None,
         )
 
         result = run_question_table_workflow(record_id=1, user_id=1)
@@ -1696,8 +1696,8 @@ class TestQuestionTablePersistUpsert:
             lambda qid: deletes.append(qid),
         )
         monkeypatch.setattr(
-            "app.workflows.question_table_flow.db_tools.update_interview_record_status",
-            lambda rid, s: status_calls.append(s),
+            "app.workflows.question_table_flow.db_tools.advance_interview_record_status",
+            lambda rid, s, user_id=None: status_calls.append(s),
         )
         monkeypatch.setattr(
             "app.workflows.question_table_flow.db_tools.delete_interview_qa_pairs_by_record",
@@ -1753,7 +1753,12 @@ class TestQuestionTablePersistUpsert:
         assert status_calls == ["question_table"]
 
     def test_done_status_not_downgraded(self, monkeypatch):
-        """深度分析已完成（done）的记录不因重新生成问题表而降级"""
+        """T-M8-9：状态推进改走阶段序入口，不再由 flow 判断 `!= done`
+
+        防降级语义下沉到 `advance_interview_record_status`（DB 层唯一权威，
+        阶段序 analyzed/awaiting_confirmation/done 均高于 question_table）；
+        flow 只负责声明目标阶段。此处锁定「flow 不再自行判定」。
+        """
         from app.workflows.question_table_flow import _persist
 
         _, inserts, _, status_calls, wipes = self._spy(monkeypatch, [])
@@ -1761,7 +1766,7 @@ class TestQuestionTablePersistUpsert:
         _persist(self._state(record_status="done"))
 
         assert wipes == []
-        assert status_calls == [], "已 done 的记录不得改回 question_table"
+        assert status_calls == ["question_table"], "flow 应交由阶段序判定，不自行降级"
         assert len(inserts) == 2
 
 

@@ -4,7 +4,7 @@ import json
 import logging
 import re
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from app.tools.db_conn import (
     connection,
@@ -577,11 +577,51 @@ def update_card(
         再更新主表 version=COALESCE(version,0)+1。AI 自动写缓存（ai_structured/
         tags/dimensions）及非内容维护字段不触发版本化。
     """
+
     _ensure_experience_card_columns()
     updates = dict(updates)
     content_change = bool(set(updates) & _VERSION_CONTENT_FIELDS)
     if content_change or confirm:
         _ensure_card_versions_table()
+    sets, values = _prepare_card_update_fields(card_id, updates, user_id)
+
+    if not sets and not confirm:
+        return False
+
+    where = " AND user_id=%s" if user_id is not None else ""
+    with transaction() as conn:
+        changed, found = _update_card_in_conn(
+            conn,
+            card_id,
+            sets=sets,
+            values=values,
+            where=where,
+            user_id=user_id,
+            content_change=content_change,
+            confirm=confirm,
+        )
+    return found if confirm else changed
+
+
+def _prepare_card_update_fields(
+    card_id: int,
+    updates: Dict[str, Any],
+    user_id: Optional[int] = None,
+) -> Tuple[List[str], List[Any]]:
+    """把白名单字段整理为 SET 子句与参数（T-M8-9 自 update_card 抽出）
+
+    含 STAR A/R 槽位按索引合并进 `ai_structured`（EXPERIENCE_SPEC §30.4.2）与
+    JSON 字段序列化；`actions` / `results` 不直接落列，合并后被弹出。
+
+    Args:
+        card_id: 经历卡 ID（STAR 合并需读当前 `ai_structured`）。
+        updates: 字段增量，函数内复制后处理，不修改入参。
+        user_id: 可选归属校验。
+
+    Returns:
+        Tuple[List[str], List[Any]]: ``(sets, values)``，可直接拼进 UPDATE SET。
+    """
+    updates = dict(updates)
     field_map = {
         "title": "title",
         "raw_text": "raw_text",
@@ -621,71 +661,133 @@ def update_card(
         if json_field in updates and updates[json_field] is not None:
             sets.append(f"{json_field}=%s")
             values.append(json.dumps(updates[json_field], ensure_ascii=False))
+    return sets, values
 
-    if not sets and not confirm:
-        return False
 
-    where = " AND user_id=%s" if user_id is not None else ""
+def _update_card_in_conn(
+    conn: Any,
+    card_id: int,
+    sets: List[str],
+    values: List[Any],
+    where: str,
+    user_id: Optional[int],
+    content_change: bool,
+    confirm: bool,
+) -> Tuple[bool, bool]:
+    """在调用方连接上执行卡片 UPDATE / 版本快照 / 定稿（T-M8-9 自 update_card 抽出）
+
+    不开事务也不提交——事务边界由调用方决定：`update_card` 自开事务，
+    而复盘反馈闸门 accept 需与台账写入共用同一事务（DATA_MODEL §31）。
+
+    Args:
+        conn: 已开启事务的连接。
+        card_id: 经历卡 ID。
+        sets: SET 子句列表。
+        values: 与 sets 对应的参数。
+        where: 归属过滤片段（``" AND user_id=%s"`` 或空串）。
+        user_id: 可选归属校验。
+        content_change: 是否内容变更（决定版本化）。
+        confirm: 是否执行定稿哨兵基线写入。
+
+    Returns:
+        Tuple[bool, bool]: ``(changed, found)``，分别表示是否写入、是否命中卡片。
+    """
     changed = False
     found = False
-    with transaction() as conn:
-        # dictionary=True：pre 须为 dict（_insert_version_snapshot/insert_original_baseline
-        # 与 is_confirmed/version 均按列名索引）；默认 cursor 返回 tuple 会致内容编辑 500
-        with conn.cursor(dictionary=True) as cur:
-            pre: Optional[Dict[str, Any]] = None
-            if confirm or content_change:
-                select_sql = (
-                    "SELECT id, title, raw_text, tags, is_confirmed, version "
-                    "FROM experience_card WHERE id=%s" + where
-                )
-                cur.execute(
-                    select_sql,
-                    tuple([card_id] + ([user_id] if where else [])),
-                )
-                pre = cur.fetchone()
-                if confirm:
-                    found = pre is not None
-            if sets:
-                sql = (
-                    "UPDATE experience_card SET "
-                    + ", ".join(sets)
-                    + " WHERE id=%s"
-                    + where
-                )
-                cur.execute(
-                    sql, tuple(values + [card_id] + ([user_id] if where else []))
-                )
-                changed = cur.rowcount > 0
-            # EXP-P1-05 §28：已定稿卡内容变更 → 快照当前值（先写）→ version+1
-            if content_change and pre and pre["is_confirmed"] and changed:
-                _insert_version_snapshot(
-                    cur,
-                    pre,
-                    version_type="user_edit",
-                    source_type="card_edit",
-                    source_id=0,
-                    note=f"编辑保存 V{(pre.get('version') or 0) + 1}",
-                )
-                bump_sql = (
-                    "UPDATE experience_card SET version = COALESCE(version, 0) + 1 "
-                    "WHERE id=%s" + where
-                )
-                cur.execute(
-                    bump_sql,
-                    tuple([card_id] + ([user_id] if where else [])),
-                )
-            if confirm and pre and not pre["is_confirmed"]:
-                insert_original_baseline(
-                    cur,
-                    pre,
-                    note="V1 哨兵基线（确认定稿）",
-                )
-                cur.execute(
-                    "UPDATE experience_card SET is_confirmed=1 WHERE id=%s",
-                    (card_id,),
-                )
-    if confirm:
-        return found
+    # dictionary=True：pre 须为 dict（_insert_version_snapshot/insert_original_baseline
+    # 与 is_confirmed/version 均按列名索引）；默认 cursor 返回 tuple 会致内容编辑 500
+    with conn.cursor(dictionary=True) as cur:
+        pre: Optional[Dict[str, Any]] = None
+        if confirm or content_change:
+            select_sql = (
+                "SELECT id, title, raw_text, tags, is_confirmed, version "
+                "FROM experience_card WHERE id=%s" + where
+            )
+            cur.execute(
+                select_sql,
+                tuple([card_id] + ([user_id] if where else [])),
+            )
+            pre = cur.fetchone()
+            if confirm:
+                found = pre is not None
+        if sets:
+            sql = (
+                "UPDATE experience_card SET " + ", ".join(sets) + " WHERE id=%s" + where
+            )
+            cur.execute(sql, tuple(values + [card_id] + ([user_id] if where else [])))
+            changed = cur.rowcount > 0
+        # EXP-P1-05 §28：已定稿卡内容变更 → 快照当前值（先写）→ version+1
+        if content_change and pre and pre["is_confirmed"] and changed:
+            _insert_version_snapshot(
+                cur,
+                pre,
+                version_type="user_edit",
+                source_type="card_edit",
+                source_id=0,
+                note=f"编辑保存 V{(pre.get('version') or 0) + 1}",
+            )
+            bump_sql = (
+                "UPDATE experience_card SET version = COALESCE(version, 0) + 1 "
+                "WHERE id=%s" + where
+            )
+            cur.execute(
+                bump_sql,
+                tuple([card_id] + ([user_id] if where else [])),
+            )
+        if confirm and pre and not pre["is_confirmed"]:
+            insert_original_baseline(
+                cur,
+                pre,
+                note="V1 哨兵基线（确认定稿）",
+            )
+            cur.execute(
+                "UPDATE experience_card SET is_confirmed=1 WHERE id=%s",
+                (card_id,),
+            )
+    return changed, found
+
+
+def update_card_with_conn(
+    conn: Any,
+    card_id: int,
+    updates: Dict[str, Any],
+    user_id: Optional[int] = None,
+) -> bool:
+    """在**调用方已开启的事务连接**上更新经历卡（T-M8-9，供跨表原子编排复用）
+
+    复盘反馈闸门 accept 需「写卡 + 版本快照 + 记决策台账」同事务落库
+    （DATA_MODEL §31 Accept Feedback）。`transaction()` 只对自身连接生效，
+    若分别调用 `update_card` 与台账写入，两者各走全局连接（autocommit），
+    会留下「卡已写、台账未记」的中间态，故暴露同连接写入入口。
+
+    Args:
+        conn: 已开启事务的连接（`with transaction() as conn` 得到的对象）。
+        card_id: 经历卡 ID。
+        updates: 白名单字段增量，语义与 :func:`update_card` 一致。
+        user_id: 可选归属校验。
+
+    Returns:
+        bool: 是否实际发生写入。
+    """
+    _ensure_experience_card_columns()
+    updates = dict(updates)
+    content_change = bool(set(updates) & _VERSION_CONTENT_FIELDS)
+    if content_change:
+        _ensure_card_versions_table()
+    sets, values = _prepare_card_update_fields(card_id, updates, user_id)
+    if not sets:
+        return False
+    where = " AND user_id=%s" if user_id is not None else ""
+    changed, _ = _update_card_in_conn(
+        conn,
+        card_id,
+        sets,
+        values,
+        where,
+        user_id,
+        content_change,
+        False,
+    )
     return changed
 
 

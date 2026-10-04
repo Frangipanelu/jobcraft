@@ -14,6 +14,7 @@ from app.tools.db_conn import (
     transaction,
 )
 from app.tools.db_conn import _parse_json
+from app.tools.db_experience import update_card_with_conn
 
 logger = logging.getLogger("jobcraft.db.interview")
 
@@ -463,8 +464,16 @@ def update_interview_record_fill(
 
 
 def update_interview_record_analysis(record_id: int, analysis: Dict[str, Any]) -> None:
-    """更新面试记录的分析结果"""
+    """更新面试记录的分析结果（T-M8-9：状态改走阶段序，落 `analyzed`）
+
+    修订历史：原实现直写 `done`，导致 SPEC §5 六态中的 `analyzed` / `awaiting_confirmation`
+    永不可达、且「问题表不降级已分析记录」只能靠字面量 `!= "done"` 判断。
+    现改为：`analyzed`（无可沉淀候选）或 `awaiting_confirmation`（有候选待用户确认），
+    降级保护由 `advance_interview_record_status` 的阶段序统一承担。
+    """
     _ensure_interview_records_table()
+    feedbacks = (analysis.get("patch") or {}).get("experienceFeedbacks") or []
+    target = "awaiting_confirmation" if feedbacks else "analyzed"
     execute(
         """
         UPDATE interview_records
@@ -473,14 +482,85 @@ def update_interview_record_analysis(record_id: int, analysis: Dict[str, Any]) -
         """,
         (
             json.dumps(analysis, ensure_ascii=False),
-            "done",
+            target,
             record_id,
         ),
     )
 
 
+# SPEC §5 六态的推进序（DB 侧唯一权威，供 advance_interview_record_status 判降级）。
+# failed = -1：失败态不算进度，任何阶段都可覆盖重试（SPEC §5「失败可重试」）。
+_STATUS_RANK: Dict[str, int] = {
+    "failed": -1,
+    "planned": 0,
+    "parsed": 1,
+    "question_table": 2,
+    "analyzed": 3,
+    "awaiting_confirmation": 4,
+    "done": 5,
+}
+
+
+def status_rank(status: Optional[str]) -> int:
+    """返回状态推进序；空/未知状态视为 -1（允许写入，不阻断推进）。
+
+    Args:
+        status: 状态字符串，允许为 ``None``。
+
+    Returns:
+        int: 推进序，未知值返回 ``-1``。
+    """
+    if not status:
+        return -1
+    return _STATUS_RANK.get(status, -1)
+
+
+def advance_interview_record_status(
+    record_id: int,
+    target_status: str,
+    user_id: Optional[int] = None,
+) -> str:
+    """按阶段序推进面试记录状态（防降级，T-M8-9）
+
+    这是状态写入的唯一业务入口：只有 `rank(target) > rank(current)` 才发 UPDATE，
+    避免各调用点用字面量比较（如 `if status != "done"`）漏掉新状态。
+
+    Args:
+        record_id: 面试记录 ID。
+        target_status: 目标状态，需为 ``_STATUS_RANK`` 中的阶段值。
+        user_id: 可选归属校验；给定则越权记录不推进。
+
+    Returns:
+        str: 推进后的实际状态（未推进时返回原状态）。
+    """
+    if target_status not in _STATUS_RANK:
+        raise ValueError(f"未知面试记录状态: {target_status}")
+    record = (
+        get_interview_record(record_id, user_id)
+        if user_id
+        else get_interview_record(record_id)
+    )
+    if not record:
+        raise ValueError(f"面试记录不存在: {record_id}")
+    current = record.get("status") or ""
+    if status_rank(target_status) <= status_rank(current):
+        logger.info(
+            "跳过状态推进（防降级）record_id=%s current=%s target=%s",
+            record_id,
+            current,
+            target_status,
+        )
+        return current
+    update_interview_record_status(record_id, target_status)
+    return target_status
+
+
 def update_interview_record_status(record_id: int, status: str) -> None:
-    """更新面试记录状态（如 parsed / question_table / done）"""
+    """更新面试记录状态（如 parsed / question_table / done）
+
+    注意：业务代码请优先用 :func:`advance_interview_record_status`（带防降级判定），
+    本函数仅作底层写入口保留。
+    """
     _ensure_interview_records_table()
     execute(
         "UPDATE interview_records SET status=%s WHERE id=%s",
@@ -812,7 +892,7 @@ def decide_feedback_candidate(
     :returns: 决策后的行
     :raises ValueError: decision 取值非法
     """
-    if decision not in ("accepted", "rejected"):
+    if decision not in ("accepted", "edited", "rejected"):
         raise ValueError(f"非法决策值: {decision}")
     _ensure_feedback_candidates_table()
     execute(
@@ -841,6 +921,96 @@ def decide_feedback_candidate(
     if row is None:  # pragma: no cover - ON DUPLICATE 后必然可读
         raise RuntimeError("反馈候选决策写入后读取失败")
     return row
+
+
+def apply_feedback_card_write(
+    record_id: int,
+    user_id: int,
+    target_type: str,
+    target_ref: str,
+    card_id: int,
+    updates: Dict[str, Any],
+    analysis_run_id: str = "",
+    decision: str = "accepted",
+) -> Dict[str, Any]:
+    """单事务「写卡 + 版本快照 + 记决策台账」（T-M8-9，DATA_MODEL §31 Accept Feedback）
+
+    规格要求 `status=accepted → formal write-back → create Validation → 更新目标版本`
+    为一个原子操作，且「不得依赖前端多次请求顺序」。此前 API 层分两次调用
+    `update_card` 与 `decide_feedback_candidate`，两者各走全局连接（autocommit），
+    中途失败会留下「卡已写、台账未记」的中间态；本函数把三条写放在同一事务内。
+
+    T-M9-1 的 `create Validation(user_confirmed)` 将追加到同一事务内。
+
+    Args:
+        record_id: 面试记录 ID。
+        user_id: 归属用户。
+        target_type: 候选目标类型（当前仅 experience）。
+        target_ref: 候选目标引用（experienceId）。
+        card_id: 目标经历卡 ID。
+        updates: 写卡字段增量（白名单语义同 `update_card`）。
+        analysis_run_id: 分析批次号，写入台账备查。
+        decision: 台账决策值（accepted / edited / rejected）。
+
+    Returns:
+        Dict[str, Any]: ``{"card_version": int | None, "ledger": dict}``。
+
+    Raises:
+        ValueError: decision 取值非法，或卡片不存在/不属于该用户。
+    """
+    if decision not in ("accepted", "edited", "rejected"):
+        raise ValueError(f"非法决策值: {decision}")
+    _ensure_interview_records_table()
+    _ensure_feedback_candidates_table()
+    with transaction() as conn:
+        with conn.cursor(dictionary=True) as cur:
+            cur.execute(
+                "SELECT id, version FROM experience_card WHERE id=%s AND user_id=%s",
+                (card_id, user_id),
+            )
+            card = cur.fetchone()
+            if not card:
+                raise ValueError(f"目标经历卡不存在或无权访问: {card_id}")
+            card_changed = update_card_with_conn(conn, card_id, updates, user_id)
+            card_version: Optional[int] = card.get("version")
+            if card_changed:
+                cur.execute(
+                    "SELECT version FROM experience_card WHERE id=%s", (card_id,)
+                )
+                refreshed = cur.fetchone()
+                if refreshed:
+                    card_version = refreshed.get("version")
+            cur.execute(
+                """
+                INSERT INTO feedback_candidates
+                    (user_id, interview_record_id, target_type, target_ref,
+                     analysis_run_id, decision, card_version, decided_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
+                ON DUPLICATE KEY UPDATE
+                    decision=VALUES(decision),
+                    card_version=VALUES(card_version),
+                    analysis_run_id=VALUES(analysis_run_id),
+                    decided_at=CURRENT_TIMESTAMP
+                """,
+                (
+                    user_id,
+                    record_id,
+                    target_type,
+                    str(target_ref),
+                    analysis_run_id,
+                    decision,
+                    card_version,
+                ),
+            )
+            cur.execute(
+                "SELECT * FROM feedback_candidates "
+                "WHERE interview_record_id=%s AND target_type=%s AND target_ref=%s",
+                (record_id, target_type, str(target_ref)),
+            )
+            ledger_row = cur.fetchone()
+    if not ledger_row:  # pragma: no cover - ON DUPLICATE 后必然可读
+        raise RuntimeError("反馈候选决策写入后读取失败")
+    return {"card_version": card_version, "ledger": dict(ledger_row)}
 
 
 def delete_interview_record(record_id: int, user_id: Optional[int] = None) -> None:

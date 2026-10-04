@@ -83,13 +83,13 @@ def _persist(state: Dict[str, Any]) -> Dict[str, Any]:
 
     BE-QT-01：按 sequence upsert——已存在的行只刷新 intent/dimension/level，
     保留深度研判字段（score/feedback/suggestions/related_card_id/expected_answer），
-    不再全量删除重写；分析完成（status=done）的记录不因重新生成问题表而降级。
+    不再全量删除重写；状态推进交由 `advance_interview_record_status` 的阶段序判定，
+    已完成深度分析的记录不因重新生成问题表而降级（T-M8-9）。
     """
     record_id = state["record_id"]
     user_id = state.get("user_id", 1)
     qa_pairs = state.get("qa_pairs", [])
     intent_by_seq = state.get("intent_by_seq", {})
-    record = state.get("record", {})
 
     result = []
     for qa in qa_pairs:
@@ -159,9 +159,12 @@ def _persist(state: Dict[str, Any]) -> Dict[str, Any]:
         if seq not in new_sequences:
             db_tools.delete_interview_qa_pair(row["id"])
 
-    # 已完成深度分析（done）的记录保持 done，不降级回 question_table
-    if record.get("status") != "done":
-        db_tools.update_interview_record_status(record_id, "question_table")
+    # 状态推进统一走 DB 层阶段序（T-M8-9）：已完成深度分析的记录（analyzed/
+    # awaiting_confirmation/done）rank 更高，不会被降级回 question_table。
+    # 业务代码不再做 `status != "done"` 字面量判断——新增状态时无需改各调用点。
+    db_tools.advance_interview_record_status(
+        record_id, "question_table", user_id=user_id
+    )
     logger.info(
         "问题表生成完成 record_id=%s questions=%s inserted=%s updated=%s",
         record_id,
