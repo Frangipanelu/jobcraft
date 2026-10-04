@@ -527,19 +527,23 @@ def test_v0017_profile_github_matched_in_runtime_ddl():
 
 
 def test_v0007_soft_delete_follows_split_convention():
-    """DB-04：V0007 语句块应遵守 SPLIT 约定（无尾分号），可被 runner 逐条执行。"""
+    """DB-04/DB-VERIFY-02：V0007 走 information_schema 探测 + PREPARE/EXECUTE
+    幂等惯例（2 列 × 5 语句 = 10 块），遵守 SPLIT 约定（无尾分号）。"""
     v0007 = os.path.join(runner.MIGRATIONS_DIR, "V0007__soft_delete.sql")
     with open(v0007, encoding="utf-8") as fh:
         sql = fh.read()
+    assert "information_schema.COLUMNS" in sql, "V0007 应走列探测幂等"
+    assert sql.count("\nPREPARE _mig_stmt_") == 2
     stmts = [s.strip() for s in sql.split(";--SPLIT--")]
     real = [s for s in stmts if s]
-    assert len(real) == 2, f"V0007 应含 2 条语句块，实际 {len(real)}"
+    assert len(real) == 10, f"V0007 应含 10 条语句块（2 列 × 5），实际 {len(real)}"
     for stmt in real:
         assert not stmt.endswith(";"), f"V0007 语句块含尾分号: {stmt[:60]}"
 
 
 def test_v0008_confirm_draft_follows_split_convention():
-    """EXP-P1-03：V0008 只加 is_confirmed/fields 两列，遵守 SPLIT 约定。"""
+    """EXP-P1-03/DB-VERIFY-02：V0008 只加 is_confirmed/fields 两列，
+    走 information_schema 探测幂等（2 列 × 5 语句 = 10 块），遵守 SPLIT 约定。"""
     v0008 = os.path.join(runner.MIGRATIONS_DIR, "V0008__confirm_draft_fields.sql")
     assert os.path.exists(v0008)
     with open(v0008, encoding="utf-8") as fh:
@@ -553,9 +557,11 @@ def test_v0008_confirm_draft_follows_split_convention():
     )
     # direction/expression 表延期到 P2（V0009），本期不得新增表
     assert "CREATE TABLE" not in sql
+    assert "information_schema.COLUMNS" in sql, "V0008 应走列探测幂等"
+    assert sql.count("\nPREPARE _mig_stmt_") == 2
     stmts = [s.strip() for s in sql.split(";--SPLIT--")]
     real = [s for s in stmts if s]
-    assert len(real) == 2, f"V0008 应含 2 条语句块，实际 {len(real)}"
+    assert len(real) == 10, f"V0008 应含 10 条语句块（2 列 × 5），实际 {len(real)}"
     for stmt in real:
         assert not stmt.endswith(";"), f"V0008 语句块含尾分号: {stmt[:60]}"
 
@@ -1254,8 +1260,8 @@ def test_v0021_migrate_is_applied_via_runner(fake_conn):
 
 
 def test_v0022_resume_version_analysis_backfill_follows_convention():
-    """T-M6-2：V0022 加 job_analysis_id 列 + 存量快照一次性迁 v1（裁决
-    「一次性 SQL」），只加列/插行不动既有列，遵守 SPLIT 约定。"""
+    """T-M6-2/DB-VERIFY-02：V0022 加 job_analysis_id 列 + 存量快照一次性迁 v1（裁决
+    「一次性 SQL」），只加列/插行不动既有列；列/索引走探测幂等，遵守 SPLIT 约定。"""
     v0022 = os.path.join(
         runner.MIGRATIONS_DIR, "V0022__resume_version_analysis_backfill.sql"
     )
@@ -1275,7 +1281,11 @@ def test_v0022_resume_version_analysis_backfill_follows_convention():
     ):
         assert frag in flat, f"V0022 缺少定义: {frag}"
     stmts = [s.strip() for s in sql.split(";--SPLIT--") if s.strip()]
-    assert len(stmts) == 2, f"V0022 应含 2 条语句块（ALTER+INSERT），实际 {len(stmts)}"
+    assert len(stmts) == 11, (
+        f"V0022 应含 11 条语句块（列探测 5 + 索引探测 5 + INSERT），实际 {len(stmts)}"
+    )
+    assert "information_schema.COLUMNS" in sql, "V0022 加列应走探测幂等"
+    assert "information_schema.STATISTICS" in sql, "V0022 加索引应走探测幂等"
 
     def _bare(stmt: str) -> str:
         """去掉行首注释后的语句体（块头注释不算语句）。"""
@@ -1283,9 +1293,9 @@ def test_v0022_resume_version_analysis_backfill_follows_convention():
             line for line in stmt.splitlines() if not line.strip().startswith("--")
         ).strip()
 
-    assert _bare(stmts[0]).upper().startswith("ALTER"), "V0022 第一块应为 ALTER 加列"
-    assert _bare(stmts[1]).upper().startswith("INSERT"), (
-        "V0022 第二块应为 INSERT 迁数据"
+    assert _bare(stmts[0]).upper().startswith("SET"), "V0022 第一块应为列探测 SET @cnt"
+    assert _bare(stmts[-1]).upper().startswith("INSERT"), (
+        "V0022 最后一块应为 INSERT 迁数据"
     )
     upper = sql.upper()
     assert "DROP" not in upper, "V0022 不得删表"

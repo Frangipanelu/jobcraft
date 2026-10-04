@@ -8,15 +8,43 @@
 --
 -- 前向兼容（AGENTS §4.4）：只加列 + 插入行，不改/删既有列；旧代码不读新列。
 -- 语句顺序：先 ALTER（INSERT 的 NOT EXISTS 要引用新列），后 INSERT。
--- 幂等：runner 以 schema_migrations 保证只执行一次；INSERT 的 NOT EXISTS
---   按 (user_id, job_analysis_id) 防重复迁入（同岗位已有版本则跳过）。
+-- 幂等（DB-02 / DB-VERIFY-02）：加列与加索引走 information_schema.COLUMNS /
+--   STATISTICS 探测 + PREPARE/EXECUTE 动态执行（同 V0014/V0017 惯例），存量库
+--   （列/索引已由运行时守卫建成、schema_migrations 无记录）重放安全；
+--   INSERT 的 NOT EXISTS 按 (user_id, job_analysis_id) 防重复迁入
+--   （同岗位已有版本则跳过），重复执行不产生重复行。
 -- 语句分隔：多条语句间用 SPLIT 标记（分号加短横线 SPLIT 短横线）。
 
-ALTER TABLE resume_version
-    ADD COLUMN job_analysis_id INT NULL,
-    ADD KEY idx_resume_version_analysis (job_analysis_id)
+SET @cnt = (SELECT COUNT(*) FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+              AND TABLE_NAME = 'resume_version'
+              AND COLUMN_NAME = 'job_analysis_id')
 ;--SPLIT--
-
+SET @ddl = IF(@cnt = 0,
+              'ALTER TABLE resume_version ADD COLUMN job_analysis_id INT NULL, ADD KEY idx_resume_version_analysis (job_analysis_id)',
+              'SET @noop = 1')
+;--SPLIT--
+PREPARE _mig_stmt_221 FROM @ddl
+;--SPLIT--
+EXECUTE _mig_stmt_221
+;--SPLIT--
+DEALLOCATE PREPARE _mig_stmt_221
+;--SPLIT--
+SET @cnt = (SELECT COUNT(*) FROM information_schema.STATISTICS
+            WHERE TABLE_SCHEMA = DATABASE()
+              AND TABLE_NAME = 'resume_version'
+              AND INDEX_NAME = 'idx_resume_version_analysis')
+;--SPLIT--
+SET @ddl = IF(@cnt = 0,
+              'ALTER TABLE resume_version ADD KEY idx_resume_version_analysis (job_analysis_id)',
+              'SET @noop = 1')
+;--SPLIT--
+PREPARE _mig_stmt_222 FROM @ddl
+;--SPLIT--
+EXECUTE _mig_stmt_222
+;--SPLIT--
+DEALLOCATE PREPARE _mig_stmt_222
+;--SPLIT--
 INSERT INTO resume_version
     (user_id, job_id, job_analysis_id, version_no, version_name,
      sections, resume_markdown, selected_for_application, source_expression_refs)
