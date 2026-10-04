@@ -2,6 +2,19 @@
 
 > 本文件用于追踪项目整体进度。AI 在每次会话结束或完成子任务时，必须更新本文件的对应板块。
 
+## T-M6-4 中栏结构化编辑器：两级拖拽+↑↓+增删+模块显隐+双击直编（2026-10-04，M6 批次第四任务）
+
+> Q6 裁决 A 落地（参照用户示例 HTML 交互基准，架构改造为结构化 sections）。两处实现裁决（默认推荐项）：① 单击=选中（T-M6-3 改写目标契约保留）、**双击=直编**（textarea 内联，规避 contenteditable 中文 IME 坑）；② **导出 markdown 跳过隐藏模块**（prep/下载天然干净），sections JSON 为编辑权威、md 为派生导出。零迁移、零 BE 改动（PATCH `sections` 字段 V0021 起即存在）、零新依赖（原生 HTML5 DnD，红线合规）。
+
+- [x] **类型与导出** `f782d05`（8 文件 +1412/-162）：`ResumeSection.hidden?: boolean`；`resumeToMarkdown` 重写——可见模块全部导出（此前单模块截断，教育/项目段落曾丢失）、hidden 跳过、全隐藏保底 `## 工作经历` 空骨架（保持 md 可回读头部）；`normalizeStructuredSections(unknown)` 归一化 DB sections JSON（非数组/空/title 缺失→null 回退 md；id 兜底、`hidden===true` 保留、脏项整体判 null 不静默丢内容）。
+- [x] **水合（JSON 优先）**：`useResumesQuery` 解析头部后用归一化 sections **覆盖** md 解析结果（顺序/显隐/id 稳定）；md 不可回读 + 结构化在场 → 最小头部兜底不让简历从地图消失；`jobAnalysisId` 挂载逻辑不变。
+- [x] **落库双写**：`persistResumePatch` 扩为 `{resume_markdown, sections}`，6 处编辑 mutation（改/删/增 bullet、AI 改写、同步头部、saveResume）全部带上 sections；新增 5 mutation——`useReorderResumeMutation`（scope section/item，id 定位、任一缺失抛错不静默乱序，拖拽与 ↑↓ 共用）、`useToggleSectionHiddenMutation`、`useAddResumeItemMutation`/`useRenameResumeItemMutation`/`useDeleteResumeItemMutation`（标题空抛错；删除视图先 `window.confirm`），共享 `commitSectionsEdit` 通用出口。
+- [x] **中栏组件拆分**：新建 `components/resume/ResumeSectionsEditor.tsx`（编辑 UI 态内聚：直编/改名/添加行/拖拽指示；业务变更与 toast 经 props 回调留视图层）；`ResumeEditorView` 换组件调用 + 5 handler 接线（含 confirm 与 toast）。交互：grip 把手起拖（原生 DnD，条目仅限同模块内、自我不响应）、模块头 Eye/EyeOff + ↑↓、条目 hover ↑↓/删除、标题双击改名、模块尾「+ 添加条目」行（Enter/Escape）、要点单击选中/双击直编（保留「直接编辑」铅笔与「删除要点」title 契约）。
+- [x] **测试**：新 `resume-layout.test.tsx` 9（JSON 优先水合/单击不进编辑+双击双写/模块 ↑↓ 顺序+md 同步/模块 DnD/显隐 hidden=true+md 跳过/条目 ↑↓/添加条目/删除 confirm 双分支/标题双击改名）、`resume-export.test.ts` 8（多模块全导出/hidden 跳过/全隐藏骨架/归一化 5 例）；`resume-query`/`resume-gap` 既有契约零破坏。
+- **门禁**：encoding **398/0**、tsc 0、vitest **270/270（34 文件）**、`npm run build` ✓；BE 未触（ruff/pytest 不涉及，上批 1077/7 基线）。
+- **边界/债**：隐藏的「核心能力」模块不影响 summary 导出（summary 为独立字段，轻微不对称，可接受）；拖拽为按目标位插入的原语义（无 before/after 细分）；`ResumeEditorView` 本体仍 ~750 行（已拆出 sections 编辑器，进一步拆分待后续）；jsdom 拖拽经 fireEvent 状态传递（未走 dataTransfer.setData）。
+- **⚠️ 共享工作区**：pathspec 提交（`git commit -- <8 files>`），他窗在途 `app/api/server.py`、`tests/test_api_routes_unit.py` 未卷入。
+
 ## T-M7-4 / T-M8-2 / T-M8-4 / T-M8-6 / T-M8-7 面试复盘域批（2026-10-04，C 窗口第四轮）
 
 - [x] **T-M7-4 面试场次骨架 + 预建端点**（commits `793132c` BE / `90b0993` FE）：V0023 迁移补 `interview_records` 场次列（`round_seq` / `occurred_at` / `interviewer` / `format` / `resume_version_id`）——迁移 DDL + 运行时 `SHOW COLUMNS` 守卫 + `docker/mysql/jobcraft.sql` 基线三处收敛；DAO `insert_interview_record` 直读 session 骨架字段（`planned` → 记 `record_id` → 挂 `Interview.sessionRecordId`）+ `update_interview_record_session`（白名单外抛 `ValueError`、先查归属再 `UPDATE`、空 `fields` 幂等、越权返 `False` 不发 SQL）；新端点 `POST /api/jobcraft/interview-review/session` → `{record_id, status: 'planned'}`（公司/岗位空 400、`round_seq<1` 400、`occurred_at` 解析失败 400、`job_analysis_id` 不存在/无权 400、插入失败 500）；FE `useCreateInterviewMutation` 在 `runTaskOrSync('interview_prep')` 成功后调 `createInterviewSession` 并回填 `sessionRecordId`（**场次行随备战成功才建，不预建空行**——对齐 M7-Q3-A）
