@@ -178,8 +178,8 @@ class TestFeedbackGateAccept:
                 "target_ref": "42",
                 "background": "bg",
                 "problem": "pb",
-                "actions": "ac",
-                "results": "rs",
+                "actions": ["ac1", "ac2"],
+                "results": ["rs1"],
             },
         )
         assert resp.status_code == 200
@@ -188,22 +188,22 @@ class TestFeedbackGateAccept:
         assert data["idempotent"] is False
         assert data["card_version"] == 2  # update_card 后端版本 +1
         assert data["gate_status"] == "done"
-        # 服务端写卡（四槽位透传，未传字段不入 updates）
+        # 服务端写卡（四槽位透传，未传字段不入 updates；actions/results 为列表）
         assert state["update_calls"] == [
             (
                 42,
                 {
                     "background": "bg",
                     "problem": "pb",
-                    "actions": "ac",
-                    "results": "rs",
+                    "actions": ["ac1", "ac2"],
+                    "results": ["rs1"],
                 },
             )
         ]
 
     def test_accept_is_idempotent_no_second_write(self, gate_client):
         client, state = gate_client
-        payload = {"target_ref": "42", "results": "rs"}
+        payload = {"target_ref": "42", "results": ["rs"]}
         first = client.post(
             "/api/jobcraft/interview-review/7/feedback-candidates/accept", json=payload
         )
@@ -229,7 +229,7 @@ class TestFeedbackGateAccept:
         state["card"] = None
         resp = client.post(
             "/api/jobcraft/interview-review/7/feedback-candidates/accept",
-            json={"target_ref": "42", "results": "rs"},
+            json={"target_ref": "42", "results": ["rs"]},
         )
         assert resp.status_code == 404
         assert state["update_calls"] == []
@@ -276,7 +276,7 @@ class TestFeedbackGateReject:
         )
         resp = client.post(
             "/api/jobcraft/interview-review/7/feedback-candidates/accept",
-            json={"target_ref": "42", "results": "rs"},
+            json={"target_ref": "42", "results": ["rs"]},
         )
         assert resp.json()["decision"] == "accepted"
         assert len(state["ledger"]) == 1

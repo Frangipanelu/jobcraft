@@ -4,6 +4,10 @@
 
 import { request, requestFormData } from './client'
 import type {
+  FeedbackCandidateItem,
+  FeedbackCandidatesResponse,
+  FeedbackDecisionPayload,
+  FeedbackDecisionResult,
   InterviewPrepResult,
   InterviewPrepRecord,
   InterviewReviewCreateResult,
@@ -13,6 +17,8 @@ import type {
   InterviewSessionCreateResult,
   QuestionBankResponse,
 } from './types'
+
+export type { FeedbackCandidateItem, FeedbackDecisionResult }
 
 // ============================================================
 // 面试准备
@@ -175,6 +181,39 @@ export async function getInterviewReviewDetail(
 ): Promise<InterviewReviewDetailResponse> {
   return request<InterviewReviewDetailResponse>(
     `/api/jobcraft/interview-review/${recordId}`
+  )
+}
+
+/**
+ * T-M8-1 反馈闸门：列出复盘候选建议 + 各自动策状态（刷新不丢，后端台账为准）。
+ */
+export async function listFeedbackCandidates(
+  recordId: number
+): Promise<FeedbackCandidatesResponse> {
+  return request<FeedbackCandidatesResponse>(
+    `/api/jobcraft/interview-review/${recordId}/feedback-candidates`
+  )
+}
+
+/** T-M8-1 反馈闸门：确认沉淀（服务端幂等写卡 + 记台账） */
+export async function acceptFeedbackCandidate(
+  recordId: number,
+  payload: FeedbackDecisionPayload
+): Promise<FeedbackDecisionResult> {
+  return request<FeedbackDecisionResult>(
+    `/api/jobcraft/interview-review/${recordId}/feedback-candidates/accept`,
+    { method: 'POST', body: JSON.stringify(payload) }
+  )
+}
+
+/** T-M8-1 反馈闸门：忽略候选（不写卡，仅记台账，可反悔重确认） */
+export async function rejectFeedbackCandidate(
+  recordId: number,
+  payload: { target_ref: string; target_type?: string }
+): Promise<FeedbackDecisionResult> {
+  return request<FeedbackDecisionResult>(
+    `/api/jobcraft/interview-review/${recordId}/feedback-candidates/reject`,
+    { method: 'POST', body: JSON.stringify(payload) }
   )
 }
 

@@ -53,8 +53,8 @@ class FeedbackCandidateDecisionPayload(BaseModel):
     target_ref: str
     background: Optional[str] = None
     problem: Optional[str] = None
-    actions: Optional[str] = None
-    results: Optional[str] = None
+    actions: Optional[List[str]] = None
+    results: Optional[List[str]] = None
     analysis_run_id: str = ""
 
 

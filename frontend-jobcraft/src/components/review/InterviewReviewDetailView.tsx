@@ -3,7 +3,9 @@ import { useToastActions } from '../../context/JobCraftContext';
 import { useInterviewsQuery } from '../../features/interview/hooks';
 import {
   useApplyReviewFeedbackMutation,
+  useFeedbackGateQuery,
   useInterviewReviewDetailQuery,
+  useRejectFeedbackCandidateMutation,
 } from '../../features/review/hooks';
 import { buildReviewFromRecord } from '../../features/review/mappers';
 import { useTabNavigate } from '../../router/tabPaths';
@@ -28,6 +30,7 @@ export const InterviewReviewDetailView: React.FC<InterviewReviewDetailViewProps>
   const { showToast } = useToastActions();
   const { data: interviews = [] } = useInterviewsQuery();
   const applyFeedbackMutation = useApplyReviewFeedbackMutation();
+  const rejectFeedbackMutation = useRejectFeedbackCandidateMutation();
   const go = useTabNavigate();
 
   const currentInterview = interviews.find((i) => i.id === interviewId);
@@ -42,6 +45,12 @@ export const InterviewReviewDetailView: React.FC<InterviewReviewDetailViewProps>
   const [selectedQAIndex, setSelectedQAIndex] = useState<number>(0);
   // P10-b-lite 轻闸门：写回经历资产前需用户二次确认（§19.4/§19.6）
   const [pendingConfirmIndex, setPendingConfirmIndex] = useState<number | null>(null);
+  // T-M8-1：闸门决策以服务端台账为准（刷新不丢），applied 标记不再只活在本地 cache
+  //（hook 必须在早返回之前，违反 hook 顺序会连带崩掉整页渲染）
+  const recordId = review?.recordId ?? currentInterview?.review?.recordId;
+  const gateQuery = useFeedbackGateQuery(recordId);
+  const gateDecisionFor = (experienceId?: string) =>
+    gateQuery.data?.candidates.find((c) => c.experience_id === experienceId)?.decision;
 
   if (!currentInterview || !review) {
     return (
@@ -61,6 +70,28 @@ export const InterviewReviewDetailView: React.FC<InterviewReviewDetailViewProps>
 
   const qaList: InterviewQA[] = review.qaList && review.qaList.length > 0 ? review.qaList : [];
   const selectedQA: InterviewQA | undefined = qaList[selectedQAIndex] || qaList[0];
+
+  const handleRejectFeedback = async (experienceId: string) => {
+    if (recordId === undefined || recordId === null) return;
+    try {
+      await rejectFeedbackMutation.mutateAsync({
+        interviewId: currentInterview!.id,
+        recordId,
+        targetRef: experienceId,
+      });
+      showToast({
+        type: 'success',
+        title: '已忽略该条建议',
+        message: '未写入经历资产库；之后仍可在复盘详情重新确认沉淀。',
+      });
+    } catch (e) {
+      showToast({
+        type: 'error',
+        title: '忽略失败',
+        message: (e as Error).message || '请稍后重试',
+      });
+    }
+  };
 
   const handleApplyFeedback = async (feedbackIndex: number) => {
     try {
@@ -355,11 +386,21 @@ export const InterviewReviewDetailView: React.FC<InterviewReviewDetailViewProps>
                 </div>
               </div>
 
-              {relatedFeedback.applied ? (
+              {gateDecisionFor(relatedFeedback.experienceId) === 'accepted' ||
+              relatedFeedback.applied ? (
                 <span className="flex items-center gap-1 text-sage font-bold text-xs bg-sage-soft px-3 py-1.5 rounded-lg border border-sage-soft shrink-0">
                   <CheckCircle2 className="w-3.5 h-3.5" />
                   <span>已同步</span>
                 </span>
+              ) : gateDecisionFor(relatedFeedback.experienceId) === 'rejected' ? (
+                /* T-M8-1：已忽略（服务端台账），允许反悔重新确认 */
+                <button
+                  onClick={() => handleApplyFeedback(feedbackIndex ?? -1)}
+                  disabled={applyFeedbackMutation.isPending || feedbackIndex === undefined}
+                  className="flex items-center gap-1 px-3 py-1.5 bg-page hover:bg-edge text-muted text-xs font-bold rounded-lg border border-edge transition cursor-pointer shrink-0 disabled:opacity-60"
+                >
+                  <span>已忽略 · 重新确认</span>
+                </button>
               ) : pendingConfirmIndex === feedbackIndex ? (
                 /* P10-b-lite 轻闸门确认态：明确告知「追加新版本、不覆盖已定稿」 */
                 <div className="flex items-center gap-2 shrink-0">
@@ -381,16 +422,26 @@ export const InterviewReviewDetailView: React.FC<InterviewReviewDetailViewProps>
                   </button>
                 </div>
               ) : (
-                <button
-                  onClick={() => {
-                    setPendingConfirmIndex(feedbackIndex);
-                  }}
-                  disabled={applyFeedbackMutation.isPending}
-                  className="flex items-center gap-1 px-3.5 py-1.5 bg-sage hover:bg-sage-dim text-white text-xs font-bold rounded-lg transition shadow-xs cursor-pointer shrink-0 disabled:opacity-60"
-                >
-                  <span>沉淀至经历库</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </button>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    onClick={() => {
+                      setPendingConfirmIndex(feedbackIndex);
+                    }}
+                    disabled={applyFeedbackMutation.isPending}
+                    className="flex items-center gap-1 px-3.5 py-1.5 bg-sage hover:bg-sage-dim text-white text-xs font-bold rounded-lg transition shadow-xs cursor-pointer shrink-0 disabled:opacity-60"
+                  >
+                    <span>沉淀至经历库</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    onClick={() => handleRejectFeedback(relatedFeedback.experienceId)}
+                    disabled={rejectFeedbackMutation.isPending || recordId === undefined || recordId === null}
+                    title="不写入经历资产库，仅记录本次忽略"
+                    className="px-2.5 py-1.5 bg-page hover:bg-edge text-muted text-xs font-semibold rounded-lg border border-edge transition cursor-pointer shrink-0 disabled:opacity-60"
+                  >
+                    忽略
+                  </button>
+                </div>
               )}
             </div>
           )}

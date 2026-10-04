@@ -50,6 +50,10 @@ const interview = vi.hoisted(() => ({
   listInterviewReviewRecords: vi.fn(),
   listQuestionBankQaPairs: vi.fn(),
   getInterviewReviewDetail: vi.fn(),
+  // T-M8-1 反馈闸门
+  listFeedbackCandidates: vi.fn(),
+  acceptFeedbackCandidate: vi.fn(),
+  rejectFeedbackCandidate: vi.fn(),
 }));
 
 const tasks = vi.hoisted(() => ({
@@ -175,6 +179,9 @@ const buildInt = (record: InterviewPrepRecord, review?: InterviewReview): Interv
 });
 
 const INT_YUAN = buildInt(RECORD_YUAN, REVIEW);
+// T-M8-1：反馈闸门需要 interview_records.id 作定位键（缺则确认沉淀诚实报错）
+const REVIEW_GATE: InterviewReview = { ...REVIEW, recordId: 55 };
+const INT_YUAN_GATE = buildInt(RECORD_YUAN, REVIEW_GATE);
 const INT_TX_PREP = buildInt(RECORD_TX);
 
 const EXP_V1: Experience = {
@@ -442,6 +449,56 @@ beforeEach(() => {
     ],
   }));
   interview.listInterviewPreps.mockResolvedValue({ records: [] });
+  // T-M8-1 反馈闸门默认态：无候选（不伪造 pending 建议）
+  interview.listFeedbackCandidates.mockResolvedValue({
+    record_id: 55,
+    candidates: [],
+    candidate_count: 0,
+    pending_count: 0,
+    gate_status: 'none',
+  });
+  interview.acceptFeedbackCandidate.mockImplementation(
+    async (
+      recordId: number,
+      payload: {
+        target_ref: string;
+        background?: string;
+        problem?: string;
+        actions?: string[];
+        results?: string[];
+      },
+    ) => {
+      // 服务端落卡语义：写四槽位 + version+1（前端不再直调 updateCard）
+      const card = serverCards.find((c) => String(c.id) === payload.target_ref);
+      if (card) {
+        if (payload.background !== undefined) card.background = payload.background;
+        if (payload.problem !== undefined) card.problem = payload.problem;
+        if (payload.actions !== undefined) card.actions = payload.actions;
+        if (payload.results !== undefined) card.results = payload.results;
+        card.version = (card.version ?? 1) + 1;
+      }
+      return {
+        record_id: recordId,
+        target_ref: payload.target_ref,
+        decision: 'accepted' as const,
+        card_version: card?.version ?? null,
+        decided_at: '2026-10-04T12:00:00',
+        idempotent: false,
+        gate_status: 'done' as const,
+      };
+    },
+  );
+  interview.rejectFeedbackCandidate.mockImplementation(
+    async (recordId: number, payload: { target_ref: string }) => ({
+      record_id: recordId,
+      target_ref: payload.target_ref,
+      decision: 'rejected' as const,
+      card_version: null,
+      decided_at: '2026-10-04T12:00:00',
+      idempotent: false,
+      gate_status: 'done' as const,
+    }),
+  );
   // T-M8-2 详情直读默认：服务端无 record（组件回退内存 review / 空态）
   interview.listInterviewReviewRecords.mockResolvedValue({ records: [] });
   interview.getInterviewReviewDetail.mockResolvedValue({
@@ -672,16 +729,22 @@ describe('useCreateInterviewReviewMutation（生成复盘）', () => {
 
 describe('useApplyReviewFeedbackMutation（反哺经历资产）', () => {
   beforeEach(() => {
-    // 反哺的 updateCard 写入需在服务端可回读：listCards 返回有状态卡片，
+    // 反哺的写入需在服务端可回读：listCards 返回有状态卡片，
     // EXPERIENCES invalidate refetch 后内容/版本与乐观补丁一致。
     serverCards = [{ ...CARD_A }];
+    // 详情直读返回 null → 视图回退内存 review（反哺用例聚焦闸门写卡链路）
+    interview.getInterviewReviewDetail.mockResolvedValue(null);
   });
 
-  it('proposedChanges 路径：updateCard 持久化 + EXPERIENCES/INTERVIEWS cache 反哺', async () => {
+  it('proposedChanges 路径：accept 端点落卡 + EXPERIENCES/INTERVIEWS cache 反哺', async () => {
     renderWithProviders(
       <>
-        <Seeder {...seedProps} />
-        <ApplyHarness interviews={[INT_YUAN]} />
+        <Seeder
+          interviews={[INT_YUAN_GATE, INT_TX_PREP]}
+          experiences={[EXP_V1]}
+          jobs={[JOB_12]}
+        />
+        <ApplyHarness interviews={[INT_YUAN_GATE]} />
       </>,
     );
 
@@ -691,18 +754,21 @@ describe('useApplyReviewFeedbackMutation（反哺经历资产）', () => {
 
     // EXPERIENCES cache：字段变更 + 后端版本回流（versionHistory 来自 card_versions）
     await waitFor(() => expect(screen.getByTestId('cache-exp-version').textContent).toBe('V2'));
-    // 内容已持久化到后端，且 P10-b-lite 轻闸门：只追加新版本、不强制定稿
-    expect(experience.updateCard).toHaveBeenCalledWith(
-      7,
+    // T-M8-1：内容变更交后端 accept 端点落盘（服务端版本化 + 决策记台账），
+    // 前端不再直调 updateCard；P10-b-lite 轻闸门：只追加新版本、不强制定稿
+    expect(interview.acceptFeedbackCandidate).toHaveBeenCalledWith(
+      55,
       expect.objectContaining({
+        target_ref: '7',
         problem: '新职责（含选型对比）',
         actions: ['旧动作A', '旧动作B'],
       }),
     );
-    expect(experience.updateCard).not.toHaveBeenCalledWith(
-      7,
+    expect(interview.acceptFeedbackCandidate).not.toHaveBeenCalledWith(
+      55,
       expect.objectContaining({ is_confirmed: true })
     );
+    expect(experience.updateCard).not.toHaveBeenCalled();
     expect(screen.getByTestId('cache-exp-problem').textContent).toBe('新职责（含选型对比）');
     expect(screen.getByTestId('cache-exp-hist').textContent).toBe('2');
     // INTERVIEWS cache：feedback applied
@@ -714,11 +780,13 @@ describe('useApplyReviewFeedbackMutation（反哺经历资产）', () => {
     renderWithProviders(
       <>
         <Seeder
-          interviews={[buildInt(RECORD_YUAN, REVIEW_SUGG)]}
+          interviews={[buildInt(RECORD_YUAN, { ...REVIEW_SUGG, recordId: 55 })]}
           experiences={[EXP_V1]}
           jobs={[JOB_12]}
         />
-        <ApplyHarness interviews={[buildInt(RECORD_YUAN, REVIEW_SUGG)]} />
+        <ApplyHarness
+          interviews={[buildInt(RECORD_YUAN, { ...REVIEW_SUGG, recordId: 55 })]}
+        />
       </>,
     );
 
@@ -727,17 +795,19 @@ describe('useApplyReviewFeedbackMutation（反哺经历资产）', () => {
     fireEvent.click(screen.getByText('应用反馈'));
 
     await waitFor(() => expect(screen.getByTestId('cache-exp-version').textContent).toBe('V2'));
-    // suggestions 前置动作已持久化到后端（P10-b-lite：不再强制定稿）
-    expect(experience.updateCard).toHaveBeenCalledWith(
-      7,
+    // suggestions 前置动作已随 accept 提交给后端（P10-b-lite：不再强制定稿）
+    expect(interview.acceptFeedbackCandidate).toHaveBeenCalledWith(
+      55,
       expect.objectContaining({
+        target_ref: '7',
         actions: ['[面试复盘升级] 补充量化选型对比', '旧动作A', '旧动作B'],
       }),
     );
-    expect(experience.updateCard).not.toHaveBeenCalledWith(
-      7,
+    expect(interview.acceptFeedbackCandidate).not.toHaveBeenCalledWith(
+      55,
       expect.objectContaining({ is_confirmed: true })
     );
+    expect(experience.updateCard).not.toHaveBeenCalled();
     expect(screen.getByTestId('cache-exp-action').textContent).toBe('[面试复盘升级] 补充量化选型对比');
     expect(screen.getByTestId('cache-exp-hist').textContent).toBe('2');
     expect(screen.getByTestId('apply-error').textContent).toBe('');
@@ -895,6 +965,8 @@ describe('P10-b-lite 轻闸门：复盘反哺写回前需二次确认', () => {
         },
       ],
     });
+    // T-M8-1：详情直读返回 null → 回退内存 review（反哺入口来自内存 qaList）
+    interview.getInterviewReviewDetail.mockResolvedValue(null);
   });
 
   // 带 qaList（relatedExperienceId 命中经历卡 7）→ 渲染反哺入口
@@ -915,10 +987,13 @@ describe('P10-b-lite 轻闸门：复盘反哺写回前需二次确认', () => {
     ],
   };
 
+  // T-M8-1：带 recordId 的复盘才能走闸门（interview_records.id 定位键）
+  const REVIEW_QA_GATE: InterviewReview = { ...REVIEW_QA, recordId: 55 };
+
   const renderDetail = () =>
     renderWithProviders(
       <>
-        <Seeder interviews={[buildInt(RECORD_YUAN, REVIEW_QA)]} experiences={[EXP_V1]} jobs={[JOB_12]} />
+        <Seeder interviews={[buildInt(RECORD_YUAN, REVIEW_QA_GATE)]} experiences={[EXP_V1]} jobs={[JOB_12]} />
         <InterviewReviewDetailView interviewId="prep-7" />
       </>,
     );
@@ -930,7 +1005,7 @@ describe('P10-b-lite 轻闸门：复盘反哺写回前需二次确认', () => {
     // 确认态出现（说明追加新版本 + 保留历史），且不写回
     expect(await screen.findByText('确认写入')).toBeInTheDocument();
     expect(screen.getByText(/保留历史/)).toBeInTheDocument();
-    expect(experience.updateCard).not.toHaveBeenCalled();
+    expect(interview.acceptFeedbackCandidate).not.toHaveBeenCalled();
   });
 
   it('二次点击确认后才写回，且不强制定稿', async () => {
@@ -939,12 +1014,13 @@ describe('P10-b-lite 轻闸门：复盘反哺写回前需二次确认', () => {
     fireEvent.click(await screen.findByText('沉淀至经历库'));
     fireEvent.click(await screen.findByText('确认写入'));
 
-    await waitFor(() => expect(experience.updateCard).toHaveBeenCalledWith(
-      7,
-      expect.objectContaining({ problem: '新职责（含选型对比）' }),
+    // T-M8-1：写卡与决策台账由服务端 accept 端点一次完成
+    await waitFor(() => expect(interview.acceptFeedbackCandidate).toHaveBeenCalledWith(
+      55,
+      expect.objectContaining({ target_ref: '7', problem: '新职责（含选型对比）' }),
     ));
-    expect(experience.updateCard).not.toHaveBeenCalledWith(
-      7,
+    expect(interview.acceptFeedbackCandidate).not.toHaveBeenCalledWith(
+      55,
       expect.objectContaining({ is_confirmed: true })
     );
   });
@@ -956,7 +1032,145 @@ describe('P10-b-lite 轻闸门：复盘反哺写回前需二次确认', () => {
     fireEvent.click(await screen.findByText('取消'));
 
     await waitFor(() => expect(screen.getByText('沉淀至经历库')).toBeInTheDocument());
+    expect(interview.acceptFeedbackCandidate).not.toHaveBeenCalled();
+  });
+});
+
+describe('T-M8-1 反馈闸门（决策以服务端台账为准）', () => {
+  beforeEach(() => {
+    auth.getCurrentUser.mockResolvedValue(AUTH_USER);
+    job.getDashboard.mockResolvedValue({ submissions: [] });
+    interview.listInterviewPreps.mockResolvedValue([RECORD_YUAN, RECORD_TX]);
+    experience.listCards.mockResolvedValue([CARD_A]);
+    experience.listCardVersions.mockResolvedValue({
+      card_id: 7,
+      current_version: 2,
+      versions: [],
+    });
+    serverCards = [{ ...CARD_A }];
+    interview.getInterviewReviewDetail.mockResolvedValue(null);
+  });
+
+  const REVIEW_QA_GATE: InterviewReview = {
+    ...REVIEW,
+    recordId: 55,
+    qaList: [
+      {
+        id: 'qa-1',
+        qIndex: 1,
+        question: '介绍端侧量化方案',
+        candidateAnswer: '答题内容',
+        interviewerIntent: {
+          mainPoints: ['技术深度'],
+          importanceStars: 4,
+          productAbilityStars: 3,
+          techDepthStars: 5,
+        },
+        answerAnalysis: {
+          completeness: 80,
+          structure: 75,
+          persuasiveness: 70,
+          jobRelevance: 85,
+        },
+        identifiedIssues: ['缺选型对比'],
+        suggestionAdvice: '补充量化对比',
+        relatedExperienceId: '7',
+      },
+    ],
+  };
+
+  const gateCandidate = (decision: 'pending' | 'accepted' | 'rejected') => ({
+    record_id: 55,
+    candidates: [
+      {
+        target_type: 'experience',
+        target_ref: '7',
+        experience_id: '7',
+        experience_title: '端侧大模型量化评测',
+        discovered_issues: ['缺选型对比'],
+        suggestions: ['补充量化对比'],
+        current_version: 'V1',
+        proposed_version: 'V2',
+        proposed_changes: [],
+        decision,
+        card_version: decision === 'accepted' ? 2 : null,
+        decided_at: decision === 'pending' ? null : '2026-10-04T12:00:00',
+      },
+    ],
+    candidate_count: 1,
+    pending_count: decision === 'pending' ? 1 : 0,
+    gate_status: decision === 'pending' ? ('awaiting_confirmation' as const) : ('done' as const),
+  });
+
+  const renderGate = () =>
+    renderWithProviders(
+      <>
+        <Seeder
+          interviews={[buildInt(RECORD_YUAN, REVIEW_QA_GATE)]}
+          experiences={[EXP_V1]}
+          jobs={[JOB_12]}
+        />
+        <InterviewReviewDetailView interviewId="prep-7" />
+      </>,
+    );
+
+  it('台账 accepted → 直接显示已同步（刷新后不再显示可写按钮）', async () => {
+    interview.listFeedbackCandidates.mockResolvedValue(gateCandidate('accepted'));
+    renderGate();
+
+    expect(await screen.findByText('已同步')).toBeInTheDocument();
+    expect(screen.queryByText('沉淀至经历库')).not.toBeInTheDocument();
+  });
+
+  it('台账 rejected → 显示可反悔的「已忽略 · 重新确认」', async () => {
+    interview.listFeedbackCandidates.mockResolvedValue(gateCandidate('rejected'));
+    renderGate();
+
+    expect(await screen.findByText('已忽略 · 重新确认')).toBeInTheDocument();
+  });
+
+  it('pending → 点忽略只记台账，不写卡', async () => {
+    interview.listFeedbackCandidates.mockResolvedValue(gateCandidate('pending'));
+    renderGate();
+
+    fireEvent.click(await screen.findByText('忽略'));
+
+    await waitFor(() =>
+      expect(interview.rejectFeedbackCandidate).toHaveBeenCalledWith(55, {
+        target_ref: '7',
+        target_type: 'experience',
+      }),
+    );
     expect(experience.updateCard).not.toHaveBeenCalled();
+    expect(interview.acceptFeedbackCandidate).not.toHaveBeenCalled();
+  });
+
+  it('复盘缺 recordId → 点确认沉淀诚实报错，不静默跳过', async () => {
+    // 无 recordId 的复盘（老数据）：闸门无从定位，必须报错而不是假装成功
+    interview.listFeedbackCandidates.mockResolvedValue({
+      record_id: -1,
+      candidates: [],
+      candidate_count: 0,
+      pending_count: 0,
+      gate_status: 'none',
+    });
+    renderWithProviders(
+      <>
+        <Seeder
+          interviews={[buildInt(RECORD_YUAN, { ...REVIEW_QA_GATE, recordId: undefined })]}
+          experiences={[EXP_V1]}
+          jobs={[JOB_12]}
+        />
+        <InterviewReviewDetailView interviewId="prep-7" />
+        <ToastContainer />
+      </>,
+    );
+
+    fireEvent.click(await screen.findByText('沉淀至经历库'));
+    fireEvent.click(await screen.findByText('确认写入'));
+
+    expect(await screen.findByText('沉淀失败')).toBeInTheDocument();
+    expect(interview.acceptFeedbackCandidate).not.toHaveBeenCalled();
   });
 });
 

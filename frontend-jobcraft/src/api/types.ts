@@ -422,6 +422,60 @@ export interface InterviewReviewDetailResponse {
   qa_pairs: InterviewReviewQaPair[]
 }
 
+/** T-M8-1：反馈候选决策状态（后端 feedback_candidates 台账，刷新不丢） */
+export type FeedbackDecisionStatus = 'pending' | 'accepted' | 'rejected'
+
+/** T-M8-1：闸门状态由台账推导，不新增 interview_records.status 取值 */
+export type FeedbackGateStatus = 'none' | 'awaiting_confirmation' | 'done'
+
+/**
+ * T-M8-1：GET /{record_id}/feedback-candidates 响应。
+ * 候选正文来自 analysis_json（唯一来源），decision 来自决策台账。
+ */
+export interface FeedbackCandidateItem {
+  target_type: string
+  target_ref: string
+  experience_id: string
+  experience_title: string
+  discovered_issues: string[]
+  suggestions: string[]
+  current_version: string
+  proposed_version: string
+  proposed_changes: Array<Record<string, string>>
+  decision: FeedbackDecisionStatus
+  card_version: number | null
+  decided_at: string | null
+}
+
+export interface FeedbackCandidatesResponse {
+  record_id: number
+  candidates: FeedbackCandidateItem[]
+  candidate_count: number
+  pending_count: number
+  gate_status: FeedbackGateStatus
+}
+
+/** T-M8-1：accept 请求体（四槽位内容由前端本地合成后提交，服务端只管幂等落卡） */
+export interface FeedbackDecisionPayload {
+  target_ref: string
+  target_type?: string
+  background?: string
+  problem?: string
+  actions?: string[]
+  results?: string[]
+  analysis_run_id?: string
+}
+
+export interface FeedbackDecisionResult {
+  record_id: number
+  target_ref: string
+  decision: FeedbackDecisionStatus
+  card_version: number | null
+  decided_at: string | null
+  idempotent: boolean
+  gate_status: FeedbackGateStatus
+}
+
 // ============================================================
 // 面试准备稿
 // ============================================================

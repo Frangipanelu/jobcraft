@@ -253,12 +253,14 @@ export interface ApplyReviewFeedbackArgs {
 
 /**
  * 将复盘反馈中的经历升级提案落地到经历资产库。
- * EXP-P1-06b §34.6：不再本地拼接假版本记录——
- * - mutationFn 先 updateCard 持久化四槽位变更（服务端写 card_versions 快照 + version+1），
+ * EXP-P1-06b §34.6 + T-M8-1 反馈闸门：
+ * - 四槽位变更在本地合成后交给**后端 accept 端点**落卡（服务端 update_card 自动
+ *   版本化：card_versions 快照 + version+1），决策同时写入 feedback_candidates 台账；
+ * - 服务端对同一候选幂等（唯一键），重复确认不会二次写卡；
  * - 再从 listCardVersions 回流真实版本历史；currentVersion/versionHistory 以后端为准，
- * - 版本服务不可用时保留升级内容、逐级回退原有版本信息。
+ *   版本服务不可用时保留升级内容、逐级回退原有版本信息。
  * - 成功后 EXPERIENCES cache（内容 + 后端版本）+ INTERVIEWS cache（applied 标记）。
- * P10-b-lite 轻闸门：反哺「只追加新版本、不强制定稿」（不传 is_confirmed），
+ * P10-b-lite 轻闸门：反哺「只追加新版本、不强制定稿」（后端不传 is_confirmed），
  * 写回确认由 UI 层二段确认承担（InterviewReviewDetailView）。
  */
 export function useApplyReviewFeedbackMutation() {
@@ -279,6 +281,11 @@ export function useApplyReviewFeedbackMutation() {
       if (!feedback) {
         throw new Error('未找到该条复盘反馈');
       }
+      // T-M8-1：闸门以 interview_records.id 为定位键（T-M8-2 起随复盘写入）
+      const recordId = interview.review.recordId;
+      if (recordId === undefined || recordId === null) {
+        throw new Error('该复盘缺少记录 ID，无法确认沉淀（请重新创建复盘）');
+      }
 
       const experiences =
         queryClient.getQueryData<Experience[]>([...EXPERIENCES_QUERY_KEY]) || [];
@@ -295,30 +302,32 @@ export function useApplyReviewFeedbackMutation() {
           ? applyProposedChanges(exp, proposedChanges)
           : applyFeedbackSuggestions(exp, feedback.suggestions || []);
 
-      // EXP-P1-06b：内容变更持久化到后端（updateCard 自动版本化，§28）
-      // P10-b-lite 轻闸门：复盘反哺只「追加新版本」，不强制定稿——
-      // 不再透传 is_confirmed，避免绕过 §19.4/§19.6 用户确认闸门把草稿卡直接定稿；
-      // 已定稿卡的内容变更由后端同事务写 card_versions 快照 + version+1（历史可回溯），
-      // 未定稿卡保持草稿态，待用户在经历卡页显式确认。
+      // EXP-P1-06b：内容变更交后端落盘（服务端版本化，§28）；T-M8-1：闸门决策同事务记台账
       const cardId = parseInt(feedback.experienceId);
-      if (!isNaN(cardId)) {
-        await experienceApi.updateCard(cardId, {
-          background: base.background,
-          problem: base.problem,
-          actions: base.actions,
-          results: base.results,
-        });
+      if (isNaN(cardId)) {
+        throw new Error('复盘反馈未关联有效的经历卡 ID，无法沉淀');
       }
+      const decision = await interviewApi.acceptFeedbackCandidate(recordId, {
+        target_ref: feedback.experienceId,
+        target_type: 'experience',
+        background: base.background,
+        problem: base.problem,
+        actions: base.actions,
+        results: base.results,
+      });
 
-      // 版本历史回流：以后端快照为准；失败则保留升级内容、回退原有版本信息
-      let currentVersion = proposedVersion;
+      // 版本历史回流：以后端快照为准；失败则保留 accept 返回的版本号与原版本信息
+      let currentVersion =
+        decision.card_version !== null && decision.card_version !== undefined
+          ? `V${decision.card_version}`
+          : proposedVersion;
       let versionHistory = exp.versionHistory || [];
       try {
         const res = await experienceApi.listCardVersions(cardId);
         currentVersion = `V${res.current_version}`;
         versionHistory = versionsToHistory(res.versions, res.current_version);
       } catch {
-        // 版本服务不可用：不阻塞反哺落地
+        // 版本服务不可用：不阻塞反哺落地（版本号以 accept 响应为准）
       }
 
       const finalExp: Experience = {
@@ -357,7 +366,78 @@ export function useApplyReviewFeedbackMutation() {
         };
       });
       queryClient.setQueryData([...INTERVIEWS_QUERY_KEY], nextInt);
+      // T-M8-1：决策已落台账，刷新闸门查询让「已确认/已忽略」以后端为准
+      const recordId = (
+        queryClient.getQueryData<Interview[]>([...INTERVIEWS_QUERY_KEY]) || []
+      ).find((i) => i.id === interviewId)?.review?.recordId;
+      if (recordId !== undefined && recordId !== null) {
+        queryClient.invalidateQueries({ queryKey: feedbackGateKey(recordId) });
+      }
+    },
+  });
+}
 
+// ---------------------------------------------------------------------------
+// 反馈闸门（T-M8-1）
+// ---------------------------------------------------------------------------
+
+export const FEEDBACK_GATE_QUERY_KEY = 'review-feedback-gate';
+
+/** 闸门查询 key：按 record 维度（决策以服务端台账为准） */
+export function feedbackGateKey(recordId: number): [string, number] {
+  return [FEEDBACK_GATE_QUERY_KEY, recordId];
+}
+
+/**
+ * T-M8-1：读取反馈闸门（候选建议 + 决策状态 + gate_status）。
+ * recordId 缺失时 enabled=false，不发请求（不伪造空候选）。
+ */
+export function useFeedbackGateQuery(recordId?: number | null) {
+  return useQuery({
+    queryKey: feedbackGateKey(recordId ?? -1),
+    queryFn: () => interviewApi.listFeedbackCandidates(recordId as number),
+    enabled: recordId !== undefined && recordId !== null,
+  });
+}
+
+/**
+ * T-M8-1：忽略候选（不写卡，仅记台账；可反悔重确认）。
+ * 成功后刷新闸门查询 + 同步 INTERVIEWS cache 的 applied 标记为 false。
+ */
+export function useRejectFeedbackCandidateMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation<
+    { recordId: number; targetRef: string },
+    unknown,
+    { interviewId: string; recordId: number; targetRef: string }
+  >({
+    mutationFn: async ({ recordId, targetRef }) => {
+      const result = await interviewApi.rejectFeedbackCandidate(recordId, {
+        target_ref: targetRef,
+        target_type: 'experience',
+      });
+      return { recordId, targetRef: result.target_ref };
+    },
+    onSuccess: ({ recordId }, { interviewId, targetRef }) => {
+      queryClient.invalidateQueries({ queryKey: feedbackGateKey(recordId) });
+      const prevInt =
+        queryClient.getQueryData<Interview[]>([...INTERVIEWS_QUERY_KEY]) || [];
+      queryClient.setQueryData(
+        [...INTERVIEWS_QUERY_KEY],
+        prevInt.map((int): Interview => {
+          if (int.id !== interviewId || !int.review) return int;
+          return {
+            ...int,
+            review: {
+              ...int.review,
+              experienceFeedbacks: (int.review.experienceFeedbacks || []).map((fb) =>
+                fb.experienceId === targetRef ? { ...fb, applied: false } : fb,
+              ),
+            },
+          };
+        }),
+      );
     },
   });
 }
