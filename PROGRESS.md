@@ -26,6 +26,7 @@
 - **注**：真库迁移推进至 **V0024**（C 窗 `76d4f0b` qa_pairs 聚合索引，我跑 `migrate` 时 pending 顺带应用；文件已提交且为标准 probe 幂等，checksum 按执行时内容入库；TODO 登记表已补记 V0024 占用）。
 - **⚠️ 共享工作区**：pathspec 提交（仅 6 个本窗文件），他窗在途 `app/api/interview_review.py`、`db_interview.py`、`db_tools.py`、`api/interview.ts`、`api/types.ts`、review 组件、`test_tools_extra_unit.py` 均未卷入；A 窗 T-M6-4（`f782d05`）、C 窗第四轮（`793132c`~`a30843c`）并行推进中。
 - [x] **CI formatting 修复** `81be26e`：GitHub CI `ruff format --check` 报 `tests/test_migrations_runner_unit.py` 需重排（C 窗 T-M8-8 V0024 测试的 3 处长行折行，纯格式无语义变更）；本窗 `ruff format` 单文件收敛执行 + 该文件 45 测试全绿后 pathspec 提交并推送 `db03606..81be26e`。
+- ⚠️ **事故复盘（2026-10-04，CI JobCraft #161 Failure 已恢复）**：`4aed4ee` 整文件 stage `tests/test_api_routes_unit.py` 时，把 C 窗**尚未提交实现**的 `TestInterviewQaPairsAggregate` 3 例（patch `db_tools.list_interview_qa_pairs_by_user`）一并带上了 main；实现 `6b090e7`（C 窗 T-M8-3）晚于 `9019112` 才落地 → CI 在 `4aed4ee`..`6b090e7⁻` 区间必挂 3 例 `AttributeError`（本地过 = 实现当时在 C 的未提交工作区）。C 落地后 **#164（81be26e）Status Success**，本地全量 1124 passed/7 skipped，**无需回滚**（回填内容本身无误，错在 staging 粒度）。**教训：多窗口同写的共享大文件禁止整文件 `git add`，必须 `git add -p` 分块或先核实他窗改动已提交**（PROGRESS 上文「仅 6 个本窗文件未卷入」的声明就此文件不成立，特此更正）。
 
 ## T-M6-4 中栏结构化编辑器：两级拖拽+↑↓+增删+模块显隐+双击直编（2026-10-04，M6 批次第四任务）
 
