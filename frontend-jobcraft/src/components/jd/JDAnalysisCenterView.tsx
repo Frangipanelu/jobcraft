@@ -16,6 +16,14 @@ import {
   useJdAnalysesQuery,
   useSplitJdMutation,
 } from '../../features/jd/hooks';
+import { JDClassificationSection } from './JDClassificationSection';
+import {
+  EMPTY_CLASSIFICATION,
+  hasClassificationInput,
+  submitClassification,
+} from '../../features/jd/classification';
+import type { ClassificationSource, ClassificationValue } from '../../features/jd/classification';
+import { suggestDirection } from '../../api/direction';
 
 export const JDAnalysisCenterView: React.FC = () => {
   const { navigateTo } = useJobCraft();
@@ -34,6 +42,10 @@ export const JDAnalysisCenterView: React.FC = () => {
   const [pastedRaw, setPastedRaw] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  // T-M4-3 方向分类（选填）：六维 + 方向名，零 LLM 词典建议
+  const [classification, setClassification] = useState<ClassificationValue>(EMPTY_CLASSIFICATION);
+  const [classificationSource, setClassificationSource] = useState<ClassificationSource>('manual');
+  const [isSuggesting, setIsSuggesting] = useState(false);
 
   const TAG_LABELS: Record<string, string> = {
     hard: '硬性门槛',
@@ -84,6 +96,48 @@ export const JDAnalysisCenterView: React.FC = () => {
     }
   };
 
+  const handleClassChange = (patch: Partial<ClassificationValue>) => {
+    setClassification((prev) => ({ ...prev, ...patch }));
+    // 任何手动编辑 → 来源翻回 manual（用户确认，后端记 confirmed/high）
+    setClassificationSource('manual');
+  };
+
+  const handleSuggest = async () => {
+    const text = [role, dutyText, requirements.map((r) => r.text).join('\n')]
+      .filter((s) => s.trim())
+      .join('\n');
+    if (!text.trim()) return;
+    setIsSuggesting(true);
+    try {
+      const result = await suggestDirection(text);
+      if (!result.matched) {
+        showToast({
+          type: 'info',
+          title: '词典未命中',
+          message: '没有匹配到方向模板，可手动填写分类字段。',
+        });
+        return;
+      }
+      setClassification((prev) => ({
+        ...prev,
+        directionName: prev.directionName.trim() || result.direction_name,
+        industry: result.industry || prev.industry,
+        product: result.product || prev.product,
+        scenario: result.scenario || prev.scenario,
+        skills: result.skills || prev.skills,
+      }));
+      setClassificationSource('rule');
+    } catch (e) {
+      showToast({
+        type: 'error',
+        title: '词典建议失败',
+        message: (e as Error).message || '可手动填写分类字段',
+      });
+    } finally {
+      setIsSuggesting(false);
+    }
+  };
+
   const handleStartAnalysis = async (e: React.FormEvent) => {
     e.preventDefault();
     const duties = dutyText.split('\n').map((d) => d.trim()).filter(Boolean);
@@ -98,16 +152,49 @@ export const JDAnalysisCenterView: React.FC = () => {
         duties,
         requirements: nonEmptyReqs.map((r) => ({ text: r.text.trim(), tag: r.tag }))
       });
+
+      // T-M4-3：分析创建成功后串方向分类（选填链，独立报错不回滚分析）
+      let classificationSaved = false;
+      const jobAnalysisId = Number(analysis.id);
+      if (
+        Number.isInteger(jobAnalysisId) &&
+        jobAnalysisId > 0 &&
+        hasClassificationInput(classification)
+      ) {
+        try {
+          const clsResult = await submitClassification(
+            jobAnalysisId,
+            classification,
+            classificationSource
+          );
+          if (clsResult.status === 'saved') {
+            classificationSaved = true;
+          } else if (clsResult.reason) {
+            showToast({ type: 'warning', title: '方向分类', message: clsResult.reason });
+          }
+        } catch (clsError) {
+          showToast({
+            type: 'error',
+            title: '方向分类保存失败',
+            message: (clsError as Error).message || '分析已生成，可稍后重试'
+          });
+        }
+      }
+
       setCompany('');
       setRole('');
       setDutyText('');
       setRequirements([]);
       setPastedRaw('');
+      setClassification(EMPTY_CLASSIFICATION);
+      setClassificationSource('manual');
 
       showToast({
         type: 'success',
         title: '结构化 JD 分析完成',
-        message: `已解析「${analysis.company} · ${analysis.role}」的职责与任职要求细节。`
+        message: `已解析「${analysis.company} · ${analysis.role}」的职责与任职要求细节${
+          classificationSaved ? '，并已保存方向分类' : ''
+        }。`
       });
 
       // Navigate to the full JD report to view results and provide return button
@@ -362,6 +449,20 @@ export const JDAnalysisCenterView: React.FC = () => {
                 </ul>
               </div>
             </div>
+
+            {/* T-M4-3 方向分类（选填）：六维手动 + 词典规则建议，零 LLM */}
+            <JDClassificationSection
+              value={classification}
+              source={classificationSource}
+              suggesting={isSuggesting}
+              suggestDisabled={
+                !role.trim() &&
+                dutyText.trim() === '' &&
+                requirements.every((r) => !r.text.trim())
+              }
+              onChange={handleClassChange}
+              onSuggest={handleSuggest}
+            />
 
             {/* Submit Action Bar */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-4 border-t border-edge">

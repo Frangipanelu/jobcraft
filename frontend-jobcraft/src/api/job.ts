@@ -121,6 +121,35 @@ export async function splitJd(jdText: string): Promise<{
 }
 
 // ============================================================
+// 六维方向分类（T-M3-2 后端 / T-M4-3 表单接线，Q4 零 LLM）
+// ============================================================
+
+/** 六维分类载荷（与后端 JdClassificationPayload 同构；六维至少一项非空 → 否则 422）。 */
+export interface JdClassificationPayload {
+  direction_id?: number | null
+  job_function?: string
+  primary_role?: string
+  industry?: string
+  product?: string
+  scenario?: string
+  skills?: string
+  confidence?: '' | 'high' | 'medium' | 'low'
+  source?: 'manual' | 'rule' | 'ai'
+  status?: 'proposed' | 'confirmed'
+}
+
+/** 提交/更新该分析的六维分类（全量 upsert，一行一分析）。 */
+export async function upsertJdClassification(
+  jobAnalysisId: number,
+  payload: JdClassificationPayload,
+): Promise<unknown> {
+  return request(`/api/jobcraft/job/${jobAnalysisId}/jd-classification`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+// ============================================================
 // 岗位实体（T-M5-1 / M5-Q2 Job 先行：创建岗位 ≠ 投递）
 // ============================================================
 
