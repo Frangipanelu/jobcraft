@@ -2,6 +2,17 @@
 
 > 本文件用于追踪项目整体进度。AI 在每次会话结束或完成子任务时，必须更新本文件的对应板块。
 
+## T-M5-8 迁移批：DB-VERIFY-01/02 收口（2026-10-04，B 窗口第五轮）
+
+> 任务面：真库迁移重复执行验证（DB-VERIFY-01）+ 存量库 runner 阻塞解除（DB-VERIFY-02）+ 顺带修复深度健康检查 bug。真库 owner 窗口独占操作（docker/3308），其余窗口全程 mock。
+
+- [x] **DB-VERIFY-01 真库双跑验证**：① 新鲜库全链——临时库 `jobcraft_migrate_check` 跑全量 23 迁移（run1 23 applied → run2 `0 applied/0 pending`、无 changed），复核 schema_migrations 23 行 / is_active 列 / 5 张关键表在位，验证后删库；② 脏库 `jobcraft` 全量重放——run1 应用 0007-0023 共 **16 applied/0 pending** → run2 `0 applied/0 pending`，status 0007-0023 全 applied；③ API 真实连接——`/health` 200、`/api/jobcraft/health` `database: healthy`，启动日志由「核心表缺失 expression/direction」告警转「**schema 引导完成，请求路径 _ensure_* 短路生效**」。
+- [x] **深度健康检查恒 degraded bug** `4aed4ee`：`app/api/server.py` `api_health_check` 的 `SELECT 1` 未 `fetchone` → mysql.connector cursor 关闭抛 `InternalError: Unread result found` 被 catch 成 `database: unhealthy`（真库连接其实正常）。修复 = 消费结果（+1 行）；+3 回归测试 `TestApiHealthCheck`（fake cursor 未读即关抛 Unread → healthy / 连接失败 → degraded / 浅层 `/health` 不触 DB）；重建 backend 镜像后真容器复验 `healthy`。
+- [x] **DB-VERIFY-02 runner 阻塞解除** `9c9e147`：审计全部 pending 迁移幂等性，仅 **V0007/V0008/V0015/V0022** 四个裸 ALTER 非幂等（其余已 probe 或 CREATE IF NOT EXISTS），四文件改 `information_schema.COLUMNS/STATISTICS 探测 + PREPARE/EXECUTE`（同 V0014/V0017 惯例；均无存量记录无 checksum 冲突；V0022 INSERT NOT EXISTS 数据语句本身幂等 + 列/索引双探测）；3 个块数断言测试同步（V0007/V0008 2→10 块、V0022 2→11 块 + probe 断言）。
+- **门禁**：encoding **401/0**、ruff check + format 绿、**pytest 1119 passed / 7 skipped**；FE 未触（他窗在途文件存在，未跑 FE 构建门禁，避免把他窗半成品算进本批结论）。
+- **遗留**：V0002/V0004 status=`changed`（DB-02 幂等化改文件晚于记录，不伪造 UPDATE 掩盖，后续如需可单独立项）；EVAL-018 / TEST-ISOLATION-01 仍开；`ruff format .` 全仓执行时报 2 文件重排（`check --fix` 零应用、格式变更语义中性，未逐一定位到具体文件——下批起格式化范围收敛到本窗文件）。
+- **⚠️ 共享工作区**：pathspec 提交（仅 6 个本窗文件），他窗在途 `app/api/interview_review.py`、`db_interview.py`、`db_tools.py`、`api/interview.ts`、`api/types.ts`、review 组件、`test_tools_extra_unit.py` 均未卷入；A 窗 T-M6-4（`f782d05`）、C 窗第四轮（`793132c`~`a30843c`）并行推进中。
+
 ## T-M6-4 中栏结构化编辑器：两级拖拽+↑↓+增删+模块显隐+双击直编（2026-10-04，M6 批次第四任务）
 
 > Q6 裁决 A 落地（参照用户示例 HTML 交互基准，架构改造为结构化 sections）。两处实现裁决（默认推荐项）：① 单击=选中（T-M6-3 改写目标契约保留）、**双击=直编**（textarea 内联，规避 contenteditable 中文 IME 坑）；② **导出 markdown 跳过隐藏模块**（prep/下载天然干净），sections JSON 为编辑权威、md 为派生导出。零迁移、零 BE 改动（PATCH `sections` 字段 V0021 起即存在）、零新依赖（原生 HTML5 DnD，红线合规）。
