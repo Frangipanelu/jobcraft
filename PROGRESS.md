@@ -2,6 +2,17 @@
 
 > 本文件用于追踪项目整体进度。AI 在每次会话结束或完成子任务时，必须更新本文件的对应板块。
 
+## T-M4-3 结构化表单方向分类（2026-10-04，B 窗口第六轮）
+
+> Q4 裁决落地：手动 + 词典规则建议、低置信用户确认、**零 LLM**；全自动六维归 Phase-2。**零迁移**（V0014 `direction` / V0019 `jd_classification` 已就绪）。
+
+- [x] **后端 `565c9a0`**（6 文件 +456/-1）：`app/pipeline/data/direction_dictionary.json`（17 条方向模板，name/keywords + industry/product/scenario/skills 四维，长度合规 100/200/200/500）；`app/tools/direction_dict.py` `suggest_direction(text)`（ASCII lower 归一 + 关键词命中计数，平手按词典序 → 确定性输出；命中返回 direction_name+四维，未命中 `{}`）；`POST /direction/suggest`（`DirectionSuggestRequest{text}` 超长 422；命中 `matched=true`，未命中 `matched=false` 200 空串）。词典只产 Industry/Product/Scenario/Skills 四维——job_function/primary_role 由用户手动填写。
+- [x] **前端 `50508ec`**（6 文件 +891/-1）：`api/direction.ts` +`findDirectionOrCreate`/`suggestDirection`/`listDirections`；`api/job.ts` +`JdClassificationPayload`/`upsertJdClassification`；`features/jd/classification.ts` 提交链 `submitClassification`（无输入 → skipped 零 API 调用；有方向名 → `find-or-create` 播种；六维 = 表单值优先、空字段回退所选方向画像；回退后仍全空 → skipped+reason 不写分类行防 422；**provenance 映射**：词典建议未改动 → `rule/low/proposed`、手动填写或改过 → `manual/high/confirmed`，任何手动编辑把 rule 翻回 manual）；新组件 `JDClassificationSection`（六维 + 方向名、来源徽标、词典建议按钮、方向名 focus 懒加载 datalist，加载失败静默降级手输）；`JDAnalysisCenterView` 接线（分析创建成功后串提交链，分类失败 error toast **不回滚分析**，提交后含分类区复位，成功消息追加「并已保存方向分类」）。
+- [x] **测试**：BE `test_direction_dict_unit.py`（结构守卫/真词典冒烟/合成词典逻辑）+ `test_direction_suggest_unit.py`（401/命中/未命中/空/422）+ `test_auth_security.py` 401 表补 1 行；FE `direction-field.test.tsx` **14 例**（组件交互 4：六维渲染与 patch、rule 徽标、禁用态、datalist 懒加载；提交链 6 分支：空跳过/manual upsert/rule 播种/方向画像回退/空画像 skipped+reason/upsert 失败上抛；视图集成 4：建议→rule 落库+复位、manual 落库不查方向、留空整体跳过、未命中 info 提示）。
+- **门禁**：本窗 12 文件 encoding **0 错**（全仓扫描唯一报错 = C 窗在途 `tests/test_interview_review_feedback_gate_unit.py:404` 1 处 U+FFFD——HEAD 版干净、损坏仅在工作区，属 C 窗在途未提交改动，未越权修复，已待报）；ruff check + format 绿；**pytest 1174 passed / 7 skipped**；vitest **299/299（35 文件，含 `jd-query` 回归）**；tsc 0；`npm run build` ✓。
+- **⚠️ 共享工作区**：pathspec 提交仅 12 个本窗文件，C 窗在途（`app/api/interview_review.py`、`db_experience.py`、`db_interview.py`、`db_tools.py`、`question_table_flow.py`、`api/types.ts`、review 组件、`test_workflows_unit.py`、`test_interview_review_feedback_gate_unit.py`）全部未卷入；PROGRESS 本条提交随带 C 窗已成文的 T-M8-1/T-M8-8 文档回填（其代码 `bbad32a`/`145fee4` 已在 HEAD，内容自洽）。
+- **下一步**：T-M4-4（历史表格 + 报告详情方向字段；同碰 `JDReportDetailView`，A 窗已收口无冲突）。
+
 ## T-M6-5/6 真下载接线 + 生成链接线清账（2026-10-04，M6 批次第五任务）
 
 > T-M6-5 残量收口：真预览/打印/下线假 `export_pdf` 已由 FE-RESUME-03（2026-10-01）提前完成，本任务补「真下载」接线；T-M6-6 的两个缺陷本体已由缺陷修复批次完成 → 本任务为纯清账。
@@ -52,11 +63,17 @@
 - [ ] **未提交（他域在途）**：`frontend-jobcraft/src/features/resume/hooks.ts`、`utils/resumeParser.ts`、`types/jobcraft.ts`（T-M6-4 简历结构化，A 窗口文件）——本窗口按 pathspec 错峰提交，未纳入上述任何 commit
 - [x] **T-M8-5 上传接真（审计判定：陈旧任务，FE/BE 双侧已闭环）**：FE `reviewFileError` 与后端 `SUPPORTED_EXTS`/10MB 契约逐项对齐（TXT/MD/PDF/DOCX，`accept` 无音频）、真实 multipart → `POST /interview-review/upload`（BE 测试 `tests/test_api_routes_unit.py:2943`）、音频诚实标注「待接入转写（spec §3：转写为上游能力）」、无假成功 toast——原缺口已由 FE-UPLOAD-01 + T-M8-4 覆盖，无新增改动
 - [x] **T-M8-3 聚合题库**（commit `6b090e7`，用户裁决：按岗位聚合+可选全量 / 复盘中心内 tab / 只读浏览+复制题目）：BE `list_interview_qa_pairs_by_user`（**单 JOIN 免 N+1**，归属经 `records.user_id` 收口，`job_analysis_id` 可选过滤，每行附场次上下文 company/position/round_type/title）+ `GET /api/jobcraft/interview-review/qa-pairs`（**声明须早于 `/{record_id}`**，否则被路径参数吞掉）；FE `QuestionBankPanel`（复盘中心「面试题库」tab、搜索过滤、复制题目+参考要点、**复制失败如实报错不假报成功**、空态诚实）+ `useQuestionBankQuery`
-- [x] **T-M8-8 部分（打包清理第一批）**（commit `76d4f0b`）：**假分下线**——分析失败时不再按题数伪造 `Math.round((qa_pair_count||4)*10)`（1 题→10 分），改记 `0 = 未评分`（与 T-M8-2 `buildReviewFromRecord` 的「无分数则 0」约定对齐）；**状态机子集分期注**——`INTERVIEW_REVIEW_SPEC.md` §5 补落地对照表（六态设计中仅 `parsed` 落地，`awaiting_confirmation` 随 T-M8-1、`failed`/`done` 随 M9 裁决；DB 侧 `interview_records.status` 合法取值仅 `planned`/`parsed`/`question_table`，不做 CHECK 约束保前向兼容）；**BE-INDEX-01(qa_pairs)**——V0024 迁移幂等补 `idx_record`/`idx_sequence`（索引虽在 V0001 基线/运行时 DDL/docker 基线三处声明，**存量库无迁移回填**；聚合题库上线后该路径成热路径）
+- [x] **T-M8-8 部分（打包清理第一批）**（commit `76d4f0b`）：**假分下线**——分析失败时不再按题数伪造 `Math.round((qa_pair_count||4)*10)`（1 题→10 分），改记 `0 = 未评分`（与 T-M8-2 `buildReviewFromRecord` 的「无分数则 0」约定对齐）；**状态机子集分期注**——`INTERVIEW_REVIEW_SPEC.md` §5 补落地对照表（六态落地对照见 SPEC §5，**该判定已于 T-M8-1 修正**：nalyze 实写 done、waiting_confirmation 改由 eedback_candidates 台账派生，详见下方 T-M8-1 条）；**BE-INDEX-01(qa_pairs)**——V0024 迁移幂等补 `idx_record`/`idx_sequence`（索引虽在 V0001 基线/运行时 DDL/docker 基线三处声明，**存量库无迁移回填**；聚合题库上线后该路径成热路径）
 - [x] **T-M8-8 第二批（打包清理收尾）**（commit `fbd39fe`）：**Raw transcript 区块**——`InterviewQA.transcript` 是 `candidateAnswer` 的恒等别名（`qaPairsToQaList` 两处 `transcript: p.my_answer || undefined`），详情页「回答记录」块渲染 `transcript || candidateAnswer` 实为同一段文本两个来源；现下线该字段（类型 + 两处映射 + 详情页），空回答改显式诚实文案「本题未记录回答内容」。**raw transcript 原文只在 BE `interview_records.raw_text` 保留**（spec §4「MUST remain unchanged」指数据不丢，非前端重复展示）
 - [x] **FE-UNUSED×12（审计判定：陈旧任务，已闭环）**：`FE-UNUSED-01`（2026-10-01，commit `1bd3fdb`）已清 83 处未使用 import、脚本复扫归零；本轮用 `tsc --noEmit --noUnusedLocals` 复核全仓仅 7 处（`playwright.config.ts`、`components/jobs/JobsListView.tsx`、`components/workbench/WorkbenchView.tsx` 的 `finishedCount`、`features/jd/hooks.ts`、3 处测试文件），**review/interview 域 0 命中**。泛化死导出清理归**T-M10-3 死代码分派**（TODO 已列该项，含 wire 类型等契约文档，不在 M8 域内动）
 - [x] **FE-NAV/TAB review 段（审计判定：已闭环）**：FE-NAV-01（`e956a0d`）真导航 + FE-TAB-01 已于 2026-09-30 落地；review 段路由 `/review`、`/review/new`、`/review/new/:jobId`、`/review/:interviewId` 与 `tabPaths.ts` 四个 case 一致，`routes-03.test.tsx` + `route-tab-sync.test.tsx` 锁定；React Router 按具体度排序，`/review/new/:jobId` 不被 `/review/:interviewId` 吞（无声明顺序问题）
-- [ ] **M8 剩余**：T-M8-1 反馈闸门（V0014 `feedback_candidates` + accept 端点 + 详情页确认 + 写卡版本，2.5d，建议独立批次）
+- [x] **T-M8-1 反馈闸门（BE `bbad32a` + FE `145fee4`）**：**真相核验先纠正两处误判**——(1) 子 agent 报告「FE 无 feedback 代码 / 无 `db_interview_review*.py`」与实际不符（已弃用该报告）；(2) M8-8 第一批 PROGRESS 写的「`analyzed` 不改 status / `done` 未落」**有误**：`update_interview_record_analysis`（`db_interview.py:465`）实则直接写 `status='done'`，且 `question_table_flow` 有 `done` 不降级测试依赖，故不改该语义，只修正文档。
+  - **V0025 `feedback_candidates` 决策台账**：只记决策（accepted/rejected）+ `card_version`，**不复制候选正文**（候选仍以 `interview_records.analysis_json` 为唯一来源，避免两处存储漂移）；唯一键 `(record_id, target_type, target_ref)` + `INSERT ... ON DUPLICATE KEY UPDATE` 实现幂等；复盘删除时同事务清理台账防孤儿行；`target_type` 预留 SPEC §W12 八类，当前只落 `experience`（唯一有写卡通路的类型）。
+  - **BE 三端点**：`GET /{record_id}/feedback-candidates`（合并候选正文 + 台账，`gate_status` **由台账派生**：`awaiting_confirmation`/`done`/`none`，不新增 `interview_records.status` 取值）、`POST .../accept`（**服务端** `update_card` 落卡 → 自动版本化 → 记台账；重复确认幂等短路不二次写卡）、`POST .../reject`（不写卡，可反悔重确认）。候选必须真实存在于 `analysis_json` 且卡片归属本人，否则 404 防凭空写卡。
+  - **FE 接线**：`useApplyReviewFeedbackMutation` 从「前端直调 `experienceApi.updateCard`」改为「本地合成四槽位 → 提交 `accept` 端点」（写卡与决策一次完成，前端不再绕过闸门直接改卡）；新增 `useFeedbackGateQuery`（决策以服务端台账为准，刷新不丢）与 `useRejectFeedbackCandidateMutation`；详情页「已同步 / 已忽略 · 重新确认 / 忽略」三态由台账驱动；缺 `recordId` 的老复盘点确认**诚实报错**不静默跳过。
+  - **测试**：BE 15 项（合并/幂等/越权/404/非法决策值/台账 upsert）+ FE 4 项闸门用例 + 3 项反哺用例按新契约重写。全量门禁：pytest 1139 passed、vitest 283 passed、tsc 0、build 通过、ruff + encoding 通过。
+  - **遗留（诚实记录）**：`awaiting_confirmation` 目前是**派生态**而非 DB 状态值——若要真正落库需先解耦 `question_table_flow` 对 `done` 的依赖（另议）；SPEC §32「沉淀=AI 建议+用户确认闸门」的**汇总式一次确认**（§24.2）尚未做，当前是逐题确认。
+- [ ] **M8 剩余**：无（M8-2/3/4/5/6/7/8 + M8-1 已闭环）
 - [ ] **他域发现（不在本窗口动）**：`WorkbenchView.tsx:46finishedCount` 死变量（workbench 域）；`components/jobs/JobsListView.tsx` 的 `Filter` 未用 import（jobs 域）；`features/jd/hooks.ts:17readJdAnalyses` 未用导出（jd 域）——建议各归所属窗口或 T-M10-3
 
 ## T-M5-2~7 岗位投递域批全量完成（2026-10-03，B 窗口第四轮）
@@ -187,7 +204,7 @@
 - [x] **三处加注写入**（`docs/` 在 .gitignore，本地文档变更**无 git 提交**，格式对齐 §25.1 / T-M1-4 风格）：
   1. **§8 `resumeVersionId` 不加列**（矩阵 U-P2a）：复用粒度裁决=**方向**，P6 简历表带 `direction_id` 即完成关联；空窗期靠中文命名（职位-公司-日期）肉眼挑选不建临时机制；spec 字段保留为远期契约占位。
   2. **§8 `type` 生产入口依赖**（U-P2c）：`standardized`✅ → `direction`（P3 验收清单含生产入口+方向选择器）→ `job_specific`（P4，含 `job_id` 归属校验）；对应模块落地前仅有存量消费、**前端不得暴露创建入口**。
-  3. **§32 沉淀闸门**（U-P2b）：消费链**不静默自动入库**，沉淀=AI 建议+用户确认闸门（=§24.2 Feedback Candidate，复盘结束汇总一次确认）；现行 `useApplyReviewFeedbackMutation` 绕闸直改+强制定稿违规，修复落点 **P9**（T-M8-1/T-M9-1）；prep 手动沉淀（T-M9-3）属用户主动触发、合规。
+  3. **§32 沉淀闸门**（U-P2b）：消费链**不静默自动入库**，沉淀=AI 建议+用户确认闸门（=§24.2 Feedback Candidate，复盘结束汇总一次确认）；现行 `useApplyReviewFeedbackMutation` 绕闸直改+强制定稿违规 → **T-M8-1 已修**（`bbad32a`/`145fee4`：改走服务端 accept 端点 + `feedback_candidates` 决策台账 + 忽略/反悔确认）；「复盘结束汇总一次确认」仍归 T-M9-1；prep 手动沉淀（T-M9-3）属用户主动触发、合规。
 - [x] 验证：`check_encoding` 393 文件 0 错；TODO 总表 T-M2-1 已勾选。**M2 模块任务全部完成**（仅此一项）。
 - **⚠️共享工作区**：同一 worktree 内 B 窗口（interview / jobs 域）存在未提交改动，本批按 hunk 精确暂存 C 域文件（`types/jobcraft.ts` 只入 C 侧 hunk），提交前逐文件核对 `git diff --cached --stat`。
 
@@ -1512,13 +1529,20 @@
 
 ### v0.4 JD 生成四步收口（软校验 + 本体归位 + 职责/技能纠正 + 回归报告）
 
-- [x] **Issue: C' 软校验（ACCEPT/REVIEW/REJECT 三档）** -> 提交 `2587be7`；econcile_evidence 仅丢弃 REJECT、REVIEW 项保留并写入 eview_flagged，	rusted_view 剥离 REVIEW 供信任面；_ACCEPT_THRESHOLD=0.6、_REVIEW_THRESHOLD=0.4。实测：字符 Dice 档位下 REVIEW 队列过窄（40 例仅个位数入队），调阈值无效果，REVIEW 语义门槛 ~0.78 需嵌入相似度（列为 Layer-2 架构迭代）。
+- [x] **Issue: C' 软校验（ACCEPT/REVIEW/REJECT 三档）** -> 提交 `2587be7`；
+econcile_evidence 仅丢弃 REJECT、REVIEW 项保留并写入 
+eview_flagged，	rusted_view 剥离 REVIEW 供信任面；_ACCEPT_THRESHOLD=0.6、_REVIEW_THRESHOLD=0.4。实测：字符 Dice 档位下 REVIEW 队列过窄（40 例仅个位数入队），调阈值无效果，REVIEW 语义门槛 ~0.78 需嵌入相似度（列为 Layer-2 架构迭代）。
 - [x] **Issue: 本体归位（教育/年限从技能列表迁出）** -> 提交 `424cf7a`；split_ontology_claims 确定性格式化迁往 education/years_of_experience（含 _EDU_PATTERNS/_YEARS_RE 等常量），混合短语保守不拆；v3/v2 prompt 补归位铁律。
-- [x] **Issue: Responsibilities/有限技能纠正** -> 提交 `4a15175`；classify_sentence_role（能力动词→skill / 动作动词→responsibility / 其他→ambiguous）+ eclassify_claims 对称移动动词引导条目；两版朴素端点（全部→技能 / 全部→职责）经验证放弃；v3 铁律5 / v2 规则10。
-- [x] **回归报告修复** -> 提交 `5deee6d`；un_jd_eval 增加 ebuild_pipeline：C' 证据校验列与顶部汇总都按 当前管线（本体归位→职责/技能纠正→软校验）从缓存 raw 重建，消除旧 ats 缓存失真。
+- [x] **Issue: Responsibilities/有限技能纠正** -> 提交 `4a15175`；classify_sentence_role（能力动词→skill / 动作动词→responsibility / 其他→ambiguous）+ 
+eclassify_claims 对称移动动词引导条目；两版朴素端点（全部→技能 / 全部→职责）经验证放弃；v3 铁律5 / v2 规则10。
+- [x] **回归报告修复** -> 提交 `5deee6d`；
+un_jd_eval 增加 
+ebuild_pipeline：C' 证据校验列与顶部汇总都按 当前管线（本体归位→职责/技能纠正→软校验）从缓存 raw 重建，消除旧 ats 缓存失真。
 - [x] 全量验证：uv run pytest tests/ -q 472 passed, 6 skipped；ruff 通过。报告重生成（0 LLM 调用，全部走缓存 raw 重建）。
 - [x] 三特征提交（`2587be7`/`424cf7a`/`4a15175` 未推送）+ 报告修复（`5deee6d`）与格式清扫（`1178909`）已提交，待推 origin/main。
-- [x] **当前 v3 主管线**：raw -> split_ontology_claims -> eclassify_claims -> econcile_evidence(soft)，返回 {ats, raw, review_flagged}。
+- [x] **当前 v3 主管线**：raw -> split_ontology_claims -> 
+eclassify_claims -> 
+econcile_evidence(soft)，返回 {ats, raw, review_flagged}。
 - [x] **回归指标（v3 全量 LLM 实测 40/40，2026-09-10，确定性管线）**：Critical (C' 校验) **13.51%** < v1 基线 23.14% < C raw 22.55%；Salary raw 25/40 -> 校验 31/40、Location 23/40 -> 30/40；Required F1 0.5880(raw)->0.5435(校验)、Responsibility 0.4411->0.3586、Preferred 0.5735->0.5920（校验反升）；E1 597 / E2 97 / E3 56 / 总错误 902(raw)->836(校验)；证据命中 32/40、条目 434、REJECT 丢弃 139；结论：软校验把 Critical 压到三类最低并靠标量回填抬升 Salary/Location，职责召回仍是代价（REVIEW 宽度 ~0.78 嵌入相似度升级为 Layer-2 待办），dimension/keywords 偏弱需单独方案；3 例 1305 繁忙补跑成功（jd_015/029/035）。
 - [x] **v3 prompt 全量 LLM 实测**：40/40 成功（3 例 1305 补跑），指标见上；push 待用户确认后推送；结论建议落 PRODUCT/ARCHITECTURE 文档。
 - [ ] **架构迭代（Layer-2）**：REVIEW 宽度升级到嵌入相似度（~0.78），实操 3 层流水线（Extraction -> Normalization -> Validation）+ A/B/C/C' 实验矩阵。
