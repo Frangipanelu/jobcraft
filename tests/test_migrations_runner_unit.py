@@ -489,7 +489,9 @@ def test_v0024_qa_pairs_index_matched_in_runtime_ddl_and_baseline():
         assert index_ddl in sql, f"V0024 缺 {index_ddl}"
     assert "DROP" not in sql.upper(), "前向兼容：只加索引，不得出现 DROP"
     assert "MODIFY" not in sql.upper(), "前向兼容：不得改列类型"
-    assert sql.count("FROM information_schema.STATISTICS") == 2, "两索引各需一次幂等探测"
+    assert sql.count("FROM information_schema.STATISTICS") == 2, (
+        "两索引各需一次幂等探测"
+    )
     assert "ADD KEY IF NOT EXISTS" not in sql.upper(), "MySQL 8 不支持该语法，须用探测"
 
     from app.tools.db_interview import _ensure_interview_qa_pairs_table
@@ -532,7 +534,10 @@ def test_v0024_qa_pairs_index_matched_in_runtime_ddl_and_baseline():
     ]
     assert creates, "未捕获到 CREATE TABLE 语句"
     normalized = _normalize_ddl(creates[0])
-    for fragment in ("KEY idx_record (record_id)", "KEY idx_sequence (record_id, sequence)"):
+    for fragment in (
+        "KEY idx_record (record_id)",
+        "KEY idx_sequence (record_id, sequence)",
+    ):
         assert fragment in normalized, f"运行时建表缺 {fragment}"
 
     repo_root = os.path.dirname(os.path.dirname(runner.MIGRATIONS_DIR))
@@ -540,7 +545,10 @@ def test_v0024_qa_pairs_index_matched_in_runtime_ddl_and_baseline():
         os.path.join(repo_root, "docker", "mysql", "jobcraft.sql"), encoding="utf-8"
     ) as fh:
         seed = fh.read()
-    for fragment in ("KEY idx_record (record_id)", "KEY idx_sequence (record_id, sequence)"):
+    for fragment in (
+        "KEY idx_record (record_id)",
+        "KEY idx_sequence (record_id, sequence)",
+    ):
         assert fragment in seed, f"docker 基线缺 {fragment}"
 
 
