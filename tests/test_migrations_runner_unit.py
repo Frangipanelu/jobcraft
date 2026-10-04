@@ -471,6 +471,79 @@ def test_v0023_interview_session_columns_matched_in_runtime_ddl_and_baseline():
         assert fragment in seed, f"docker 基线缺 {fragment}"
 
 
+def test_v0024_qa_pairs_index_matched_in_runtime_ddl_and_baseline():
+    """T-M8-8 / BE-INDEX-01：V0024 只加索引，且迁移 / 运行时建表 / docker 基线三处收敛一致。
+
+    背景：T-M8-3 聚合题库走 record_id 过滤 + (record_id, sequence) 排序；
+    索引虽在基线/运行时/docker 声明，存量库无迁移回填——V0024 补此缺口。
+    """
+    v0024 = os.path.join(runner.MIGRATIONS_DIR, "V0024__interview_qa_pairs_index.sql")
+    assert os.path.exists(v0024)
+    with open(v0024, encoding="utf-8") as fh:
+        sql = fh.read()
+
+    for index_ddl in (
+        "ALTER TABLE interview_qa_pairs ADD KEY idx_record (record_id)",
+        "ALTER TABLE interview_qa_pairs ADD KEY idx_sequence (record_id, sequence)",
+    ):
+        assert index_ddl in sql, f"V0024 缺 {index_ddl}"
+    assert "DROP" not in sql.upper(), "前向兼容：只加索引，不得出现 DROP"
+    assert "MODIFY" not in sql.upper(), "前向兼容：不得改列类型"
+    assert sql.count("FROM information_schema.STATISTICS") == 2, "两索引各需一次幂等探测"
+    assert "ADD KEY IF NOT EXISTS" not in sql.upper(), "MySQL 8 不支持该语法，须用探测"
+
+    from app.tools.db_interview import _ensure_interview_qa_pairs_table
+    import app.tools.db_interview as mod
+
+    executed: list[tuple[str, str]] = []
+
+    class _Cursor:
+        def execute(self, sql, params=None):
+            executed.append((sql, str(params)))
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    class _Conn:
+        def cursor(self, *a, **k):
+            return _Cursor()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    original_ready = mod.is_schema_ready
+    original_conn = mod.connection
+    try:
+        mod.is_schema_ready = lambda: False
+        mod.connection = lambda: _Conn()
+        _ensure_interview_qa_pairs_table()
+    finally:
+        mod.is_schema_ready = original_ready
+        mod.connection = original_conn
+
+    creates = [
+        s for s, _ in executed if "CREATE TABLE IF NOT EXISTS" in _normalize_ddl(s)
+    ]
+    assert creates, "未捕获到 CREATE TABLE 语句"
+    normalized = _normalize_ddl(creates[0])
+    for fragment in ("KEY idx_record (record_id)", "KEY idx_sequence (record_id, sequence)"):
+        assert fragment in normalized, f"运行时建表缺 {fragment}"
+
+    repo_root = os.path.dirname(os.path.dirname(runner.MIGRATIONS_DIR))
+    with open(
+        os.path.join(repo_root, "docker", "mysql", "jobcraft.sql"), encoding="utf-8"
+    ) as fh:
+        seed = fh.read()
+    for fragment in ("KEY idx_record (record_id)", "KEY idx_sequence (record_id, sequence)"):
+        assert fragment in seed, f"docker 基线缺 {fragment}"
+
+
 def test_v0017_profile_github_matched_in_runtime_ddl():
     """FE-RESUME-03：V0017(github) 只加列，且迁移 / 运行时
     _ensure_user_profiles_table 建表+守卫补列两路径收敛一致。

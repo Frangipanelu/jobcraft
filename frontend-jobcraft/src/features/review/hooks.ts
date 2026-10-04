@@ -114,7 +114,9 @@ export function useCreateInterviewReviewMutation() {
       const patch = analysis
         ? buildReviewPatchFromAnalysis(analysis, result.qa_pair_count || 0)
         : {
-            overallScore: Math.round((result.qa_pair_count || 4) * 10),
+            // T-M8-8：分析缺失时按域内既有约定记 0（= 未评分）。
+            // 原按题数伪造分数（qa_pair_count×10，空时兜底 4）已下线——FE-FAKE-01。
+            overallScore: 0,
             totalQACount: result.qa_pair_count || 0,
           };
 

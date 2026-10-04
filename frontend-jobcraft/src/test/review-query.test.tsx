@@ -571,8 +571,8 @@ describe('useCreateInterviewReviewMutation（生成复盘）', () => {
     fireEvent.click(screen.getByText('生成复盘'));
 
     await waitFor(() => expect(screen.getByTestId('created-id').textContent).toBe('prep-7'));
-    // 1 道题 → Math.round((qa_pair_count || 4) * 10) = 10
-    expect(screen.getByTestId('cache-score').textContent).toBe('10');
+    // T-M8-8：分析缺失不再按题数伪造分数（原 1 题 → 10 分），记 0 = 未评分
+    expect(screen.getByTestId('cache-score').textContent).toBe('0');
     expect(screen.getByTestId('cache-status').textContent).toBe('completed');
     expect(screen.getByTestId('create-error').textContent).toBe('');
   });
