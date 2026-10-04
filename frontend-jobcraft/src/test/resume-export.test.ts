@@ -1,5 +1,9 @@
-import { describe, it, expect } from 'vitest';
-import { resumeToMarkdown, normalizeStructuredSections } from '../utils/resumeParser';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import {
+  resumeToMarkdown,
+  normalizeStructuredSections,
+} from '../utils/resumeParser';
+import { triggerBlobDownload, downloadElementAsHtml } from '../utils/download';
 import type { ResumeVersion } from '../types/jobcraft';
 
 function baseResume(sections: ResumeVersion['sections']): ResumeVersion {
@@ -115,5 +119,88 @@ describe('normalizeStructuredSections（DB sections JSON 归一化）', () => {
     ]);
     expect(out).toHaveLength(1);
     expect(out?.[0]).toMatchObject({ id: 'sec-edu', title: '教育经历', hidden: true });
+  });
+});
+
+describe('triggerBlobDownload / downloadElementAsHtml（T-M6-5 真下载工具）', () => {
+  /** jsdom 的 Blob 无 .text()，统一走 FileReader 读文本。 */
+  function blobText(blob: Blob): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = () => reject(reader.error);
+      reader.readAsText(blob);
+    });
+  }
+
+  const createUrlSpy = vi.fn((_content: Blob | string) => 'blob:mock-url');
+  const revokeUrlSpy = vi.fn();
+  let clickSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    Object.defineProperty(URL, 'createObjectURL', {
+      value: createUrlSpy,
+      writable: true,
+      configurable: true,
+    });
+    Object.defineProperty(URL, 'revokeObjectURL', {
+      value: revokeUrlSpy,
+      writable: true,
+      configurable: true,
+    });
+    createUrlSpy.mockClear();
+    revokeUrlSpy.mockClear();
+    clickSpy = vi
+      .spyOn(HTMLAnchorElement.prototype, 'click')
+      .mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    clickSpy.mockRestore();
+    Reflect.deleteProperty(URL, 'createObjectURL');
+    Reflect.deleteProperty(URL, 'revokeObjectURL');
+  });
+
+  it('triggerBlobDownload：Blob 类型/内容 → ObjectURL → a.click → revoke', async () => {
+    triggerBlobDownload('# 张三\n求职意向', '张三-求职简历.md', 'text/markdown;charset=utf-8');
+
+    expect(createUrlSpy).toHaveBeenCalledTimes(1);
+    const blob = createUrlSpy.mock.calls[0][0] as Blob;
+    expect(blob.type).toContain('text/markdown');
+    expect(await blobText(blob)).toContain('# 张三');
+    expect(clickSpy).toHaveBeenCalledTimes(1);
+    expect(revokeUrlSpy).toHaveBeenCalledWith('blob:mock-url');
+  });
+
+  it('downloadElementAsHtml：包装独立 HTML 文档并内联页面 style 文本', async () => {
+    const style = document.createElement('style');
+    style.textContent = '@page { size: A4; margin: 0; }';
+    document.head.appendChild(style);
+
+    const el = document.createElement('article');
+    el.setAttribute('data-testid', 'resume-a4-page');
+    el.innerHTML = '<h1>张三</h1>';
+    document.body.appendChild(el);
+
+    try {
+      const ok = await downloadElementAsHtml(el, '张三-简历.html');
+      expect(ok).toBe(true);
+      const blob = createUrlSpy.mock.calls[0][0] as Blob;
+      expect(blob.type).toContain('text/html');
+      const text = await blobText(blob);
+      expect(text).toContain('<!DOCTYPE html>');
+      expect(text).toContain('@page { size: A4');
+      expect(text).toContain('data-testid="resume-a4-page"');
+      expect(text).toContain('张三');
+    } finally {
+      style.remove();
+      el.remove();
+    }
+  });
+
+  it('downloadElementAsHtml：元素不存在 → 返回 false 且不触发下载', async () => {
+    const ok = await downloadElementAsHtml(null, '缺失.html');
+    expect(ok).toBe(false);
+    expect(createUrlSpy).not.toHaveBeenCalled();
   });
 });

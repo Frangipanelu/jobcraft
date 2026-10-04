@@ -329,3 +329,73 @@ describe('resume-layout 结构化编辑（T-M6-4 · M6-Q6）', () => {
     });
   });
 });
+
+describe('T-M6-5 真下载接线（下载 MD / 下载 HTML）', () => {
+  /** jsdom 的 Blob 无 .text()，统一走 FileReader 读文本。 */
+  function blobText(blob: Blob): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = () => reject(reader.error);
+      reader.readAsText(blob);
+    });
+  }
+
+  const createUrlSpy = vi.fn((_content: Blob | string) => 'blob:mock-url');
+  const revokeUrlSpy = vi.fn();
+
+  beforeEach(() => {
+    Object.defineProperty(URL, 'createObjectURL', {
+      value: createUrlSpy,
+      writable: true,
+      configurable: true,
+    });
+    Object.defineProperty(URL, 'revokeObjectURL', {
+      value: revokeUrlSpy,
+      writable: true,
+      configurable: true,
+    });
+    createUrlSpy.mockClear();
+    revokeUrlSpy.mockClear();
+    // 文件级 restoreAllMocks 可能清掉 vi.fn 实现 → 每个用例前恢复
+    createUrlSpy.mockImplementation(() => 'blob:mock-url');
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined);
+  });
+
+  it('顶栏「下载 MD」：导出当前编辑态 markdown 为 .md 文件 + toast', async () => {
+    renderEditor();
+    await screen.findByText(BULLET_TEXT);
+
+    fireEvent.click(screen.getByTestId('download-md-action'));
+
+    expect(await screen.findByText('已下载 Markdown')).toBeTruthy();
+    expect(createUrlSpy).toHaveBeenCalledTimes(1);
+    const blob = createUrlSpy.mock.calls[0][0] as Blob;
+    expect(blob.type).toContain('text/markdown');
+    const text = await blobText(blob);
+    expect(text).toContain('# 张三');
+    expect(text).toContain(BULLET_TEXT);
+    expect(revokeUrlSpy).toHaveBeenCalledWith('blob:mock-url');
+  });
+
+  it('预览「下载 HTML」：A4 页序列化为独立 html 文档', async () => {
+    renderEditor();
+    await screen.findByText(BULLET_TEXT);
+
+    fireEvent.click(screen.getByRole('button', { name: '导出 PDF' }));
+    await screen.findByTestId('resume-print-preview');
+
+    fireEvent.click(screen.getByTestId('download-html-action'));
+
+    // downloadElementAsHtml 为 async（收集样式）→ 等待触发
+    await vi.waitFor(() => {
+      expect(createUrlSpy).toHaveBeenCalledTimes(1);
+    });
+    const blob = createUrlSpy.mock.calls[0][0] as Blob;
+    expect(blob.type).toContain('text/html');
+    const text = await blobText(blob);
+    expect(text).toContain('<!DOCTYPE html>');
+    expect(text).toContain(BULLET_TEXT);
+    expect(text).toContain('张三');
+  });
+});

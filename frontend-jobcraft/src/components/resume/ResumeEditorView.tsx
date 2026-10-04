@@ -19,12 +19,15 @@ import {
 import { useJdAnalysesQuery } from '../../features/jd/hooks';
 import { useProfileQuery } from '../../features/profile/hooks';
 import { dimensionLabel } from '../../utils/dimensions';
+import { resumeToMarkdown } from '../../utils/resumeParser';
+import { triggerBlobDownload } from '../../utils/download';
 import { ResumePrintPreview } from './ResumePrintPreview';
 import { ResumeSectionsEditor } from './ResumeSectionsEditor';
 import type { CapabilityGap } from '../../types/jobcraft';
 import {
   Sparkles,
   Download,
+  FileDown,
   Save,
   Layers,
   ArrowRight,
@@ -377,6 +380,21 @@ export const ResumeEditorView: React.FC<ResumeEditorViewProps> = ({
     setShowPrintPreview(true);
   };
 
+  // T-M6-5：真下载——把当前编辑态导出为 .md（前端态即权威，磁盘生成文件编辑后已过期）
+  const handleDownloadMd = () => {
+    const md = resumeToMarkdown(resume);
+    const base = (resume.personalInfo.name || resume.versionName).replace(
+      /[\\/:*?"<>|]/g,
+      '',
+    );
+    triggerBlobDownload(md, `${base}-求职简历.md`, 'text/markdown;charset=utf-8');
+    showToast({
+      type: 'success',
+      title: '已下载 Markdown',
+      message: '当前编辑态内容已导出为 .md 文件',
+    });
+  };
+
   // U2b「存为表达」：把选中 bullet 的定制文本保存为目标经历卡的标准化表达（candidate 态）
   const handleSaveExpression = () => {
     if (!activeBullet || !linkedExp) return;
@@ -464,6 +482,16 @@ export const ResumeEditorView: React.FC<ResumeEditorViewProps> = ({
             </button>
 
             <button
+              onClick={handleDownloadMd}
+              data-testid="download-md-action"
+              title="把当前编辑态导出为 Markdown 文件"
+              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg border border-edge bg-white hover:bg-page text-ink text-xs font-semibold transition cursor-pointer"
+            >
+              <FileDown className="w-3.5 h-3.5" />
+              <span>下载 MD</span>
+            </button>
+
+            <button
               onClick={handleExportPDF}
               className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-sage hover:bg-sage-dim text-white text-xs font-semibold shadow-xs transition cursor-pointer"
             >
@@ -502,8 +530,18 @@ export const ResumeEditorView: React.FC<ResumeEditorViewProps> = ({
             </button>
 
             <button
+              onClick={handleDownloadMd}
+              data-testid="download-md-action"
+              title="把当前编辑态导出为 Markdown 文件"
+              className="flex items-center gap-1 px-3 py-1 rounded-md border border-edge bg-white hover:bg-page text-ink text-xs font-semibold transition cursor-pointer"
+            >
+              <FileDown className="w-3.5 h-3.5" />
+              <span>下载 MD</span>
+            </button>
+
+            <button
               onClick={handleExportPDF}
-              className="flex items-center gap-1.5 px-3.5 py-1 rounded-md bg-sage hover:bg-sage-dim text-white text-xs font-semibold shadow-xs transition cursor-pointer"
+              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-md bg-sage hover:bg-sage-dim text-white text-xs font-semibold shadow-xs transition cursor-pointer"
             >
               <Download className="w-3.5 h-3.5" />
               <span>导出 PDF</span>

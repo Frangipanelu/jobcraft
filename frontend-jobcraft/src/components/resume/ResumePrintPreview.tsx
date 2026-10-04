@@ -1,6 +1,7 @@
 import React from 'react';
 import { createPortal } from 'react-dom';
-import { Printer, X } from 'lucide-react';
+import { FileDown, Printer, X } from 'lucide-react';
+import { downloadElementAsHtml } from '../../utils/download';
 import type { ResumeVersion } from '../../types/jobcraft';
 
 interface ResumePrintPreviewProps {
@@ -15,6 +16,7 @@ interface ResumePrintPreviewProps {
  * - 「打印 / 另存 PDF」调用 `window.print()`，A4 版式由 index.css 的
  *   `@page { size: A4; margin: 0 }` + 组件内边距控制；打印时应用壳（#root）隐藏，
  *   本组件经 portal 直挂 body，不受影响；
+ * - 「下载 HTML」（T-M6-5）：把当前 A4 页序列化为独立 .html 文档（内联页面样式）；
  * - 屏幕态：遮罩 + 工具栏（print:hidden），内容区可滚动。
  */
 export const ResumePrintPreview: React.FC<ResumePrintPreviewProps> = ({
@@ -32,6 +34,18 @@ export const ResumePrintPreview: React.FC<ResumePrintPreviewProps> = ({
     personalInfo.title && `职位：${personalInfo.title}`,
     personalInfo.github && `GitHub/作品：${personalInfo.github}`,
   ].filter(Boolean) as string[];
+
+  // T-M6-5：下载独立 HTML（预览打开时 A4 页必在渲染，元素缺失视为不变量破坏）
+  const handleDownloadHtml = () => {
+    const page = document.querySelector<HTMLElement>(
+      '[data-testid="resume-a4-page"]',
+    );
+    const base = (personalInfo.name || resume.versionName).replace(
+      /[\\/:*?"<>|]/g,
+      '',
+    );
+    void downloadElementAsHtml(page, `${base}-简历.html`);
+  };
 
   return createPortal(
     <div
@@ -53,6 +67,15 @@ export const ResumePrintPreview: React.FC<ResumePrintPreviewProps> = ({
         >
           <X className="w-3.5 h-3.5" />
           <span>关闭</span>
+        </button>
+        <button
+          type="button"
+          onClick={handleDownloadHtml}
+          data-testid="download-html-action"
+          className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg border border-edge bg-white hover:bg-page text-ink text-xs font-semibold transition cursor-pointer"
+        >
+          <FileDown className="w-3.5 h-3.5" />
+          <span>下载 HTML</span>
         </button>
         <button
           type="button"
