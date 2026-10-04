@@ -5,6 +5,8 @@
 - code（DIR-n）服务端生成，创建响应回带；
 - ``POST /find-or-create``（T-M3-3 表单方向字段数据侧接线）：按 name 复用
   已有方向，无则创建；命中不覆盖六维，响应 ``{direction, created}``；
+- ``POST /suggest``（T-M4-3 结构化表单方向分类字段）：零 LLM 词典规则建议，
+  命中返回方向名 + 四维（industry/product/scenario/skills），未命中 matched=false；
 - 删除守卫：被 expression 等下游引用 → 409 提示改用归档
   （PATCH status=archived，DIRECTION_SPEC §15 状态机）；
 - 统一错误信封由 server.py exception handler 包装，此处只抛 HTTPException。
@@ -14,6 +16,7 @@ import logging
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, Field
 
 from app.auth.dependencies import get_current_user
 from app.schemas.jobcraft import (
@@ -23,7 +26,7 @@ from app.schemas.jobcraft import (
     DirectionSummaryResponse,
     DirectionUpdate,
 )
-from app.tools import db_capability_gap, db_direction
+from app.tools import db_capability_gap, db_direction, direction_dict
 
 router = APIRouter(prefix="/api/jobcraft/direction", tags=["direction"])
 
@@ -81,6 +84,48 @@ def find_or_create_direction(
     except Exception as e:
         logger.exception("方向 find-or-create 失败")
         raise HTTPException(status_code=500, detail=f"find-or-create 失败: {e}")
+
+
+class DirectionSuggestRequest(BaseModel):
+    """词典建议请求（T-M4-3 零 LLM；text = 岗位名/职责/要求拼接）。"""
+
+    text: str = Field("", max_length=5000, description="JD 文本（可为空）")
+
+
+class DirectionSuggestResponse(BaseModel):
+    """词典建议响应（matched=false 时除 matched 外全为占位空串）。
+
+    只含词典产出的四维 + 建议方向名：job_function / primary_role
+    由用户手动填写（Q4 范围），词典不产。
+    """
+
+    matched: bool
+    direction_name: str = ""
+    industry: str = ""
+    product: str = ""
+    scenario: str = ""
+    skills: str = ""
+
+
+@router.post("/suggest", response_model=DirectionSuggestResponse)
+def direction_suggest(
+    payload: DirectionSuggestRequest,
+    current_user: int = Depends(get_current_user),
+):
+    """词典规则建议（T-M4-3：结构化表单方向分类字段，零 LLM）。
+
+    确定性关键词匹配（app.tools.direction_dict），未命中 → matched=false
+    （200，非错误——表单回落手动填写）。文本超长 → 422。
+    """
+    _ = current_user  # 建议为纯词典计算，不依赖用户态（端点仍强制认证）
+    try:
+        hit = direction_dict.suggest_direction(payload.text)
+    except Exception as e:
+        logger.exception("方向词典建议失败")
+        raise HTTPException(status_code=500, detail=f"词典建议失败: {e}")
+    if not hit:
+        return DirectionSuggestResponse(matched=False)
+    return DirectionSuggestResponse(matched=True, **hit)
 
 
 @router.get("/summary", response_model=DirectionSummaryResponse)

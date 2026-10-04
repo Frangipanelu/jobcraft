@@ -52,6 +52,8 @@ _BUSINESS_ENDPOINTS = [
     ("POST", "/api/jobcraft/direction/find-or-create", {"name": "方向A"}),
     # direction summary（T-M3-6 方向沉淀汇总）
     ("GET", "/api/jobcraft/direction/summary", None),
+    # direction 词典建议（T-M4-3 零 LLM）
+    ("POST", "/api/jobcraft/direction/suggest", {"text": "跨境电商"}),
     # jd_classification（T-M3-2）
     ("GET", "/api/jobcraft/job/1/jd-classification", None),
     (
