@@ -15,6 +15,7 @@
 - [x] **遗留收口② TEST-ISOLATION-01** `9f16b87`：conftest autouse 守卫 `_block_external_network`——`socket.connect`/`connect_ex` 仅放行回环与 AF_UNIX 等非 IP 地址，非回环出站 `RuntimeError` 快速失败（未 mock 的真实调用 = 确定性失败而非 429 偶发），`slow` 标记豁免（--runslow 真 e2e 不受影响）；+4 条守卫回归测试 `test_isolation_guard_unit.py`；全量 **1124 passed / 7 skipped 零误伤**；CI 核查仅假 `JWT_SECRET_KEY`、无真实 LLM 凭据（「CI 禁真实凭据」天然满足）。**EVAL-018 仍挂起**（需真实 LLM 花费 + 跨天回归，待用户拍板错峰执行）。
 - **注**：真库迁移推进至 **V0024**（C 窗 `76d4f0b` qa_pairs 聚合索引，我跑 `migrate` 时 pending 顺带应用；文件已提交且为标准 probe 幂等，checksum 按执行时内容入库；TODO 登记表已补记 V0024 占用）。
 - **⚠️ 共享工作区**：pathspec 提交（仅 6 个本窗文件），他窗在途 `app/api/interview_review.py`、`db_interview.py`、`db_tools.py`、`api/interview.ts`、`api/types.ts`、review 组件、`test_tools_extra_unit.py` 均未卷入；A 窗 T-M6-4（`f782d05`）、C 窗第四轮（`793132c`~`a30843c`）并行推进中。
+- [x] **CI formatting 修复** `81be26e`：GitHub CI `ruff format --check` 报 `tests/test_migrations_runner_unit.py` 需重排（C 窗 T-M8-8 V0024 测试的 3 处长行折行，纯格式无语义变更）；本窗 `ruff format` 单文件收敛执行 + 该文件 45 测试全绿后 pathspec 提交并推送 `db03606..81be26e`。
 
 ## T-M6-4 中栏结构化编辑器：两级拖拽+↑↓+增删+模块显隐+双击直编（2026-10-04，M6 批次第四任务）
 
