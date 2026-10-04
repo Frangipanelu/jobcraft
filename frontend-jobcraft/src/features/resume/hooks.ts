@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as jobApi from '../../api/job';
 import type { ResumePersonalInfo } from '../../api/types';
 import { ResumeVersion } from '../../types/jobcraft';
-import { markdownToResume, resumeToMarkdown } from '../../utils/resumeParser';
+import { markdownToResume, resumeToMarkdown, normalizeStructuredSections } from '../../utils/resumeParser';
 import { RESUMES_QUERY_KEY } from './mappers';
 import { JOBS_QUERY_KEY } from '../jobs/mappers';
 
@@ -29,14 +29,15 @@ function writeResumesMap(
 
 /**
  * FE-RESUME-02：统一落库出口（PATCH /resume-version/{id}，T-M6-2 起版本维度）。
- * - resume_markdown：正文变更（生成/编辑/增删/AI 改写）
+ * - resume_markdown：派生导出（T-M6-4：可见模块，hidden 跳过）
+ * - sections：结构化编辑权威（T-M6-4 起双写，含顺序/显隐/id；BE 为 JSON 列不解释内容）
  * - 本地示例（resumeId 非数字）跳过 API，返回 false（调用方 toast 提示）
  * @returns 是否已同步后端；PATCH 失败上抛（调用方 error toast）
  */
 async function persistResumePatch(
   queryClient: ReturnType<typeof useQueryClient>,
   resumeId: string,
-  patch: { resume_markdown?: string },
+  patch: { resume_markdown?: string; sections?: ResumeVersion['sections'] },
 ): Promise<boolean> {
   const versionId = Number(resumeId);
   if (Number.isNaN(versionId)) return false;
@@ -68,11 +69,38 @@ export function useResumesQuery() {
       }
       const next: Record<string, ResumeVersion> = {};
       for (const v of latestByJob.values()) {
-        const resume = markdownToResume(v.resume_markdown, {
+        const meta = {
           position: v.position ?? '',
           company: v.company ?? '',
           id: String(v.id),
-        });
+        };
+        let resume = markdownToResume(v.resume_markdown, meta);
+        // T-M6-4：结构化 sections 为编辑权威（顺序/显隐/id 稳定），存在即覆盖 md 解析结果；
+        // md 不可回读（防御态：仅结构化存在）时以最小头部 + 结构化兜底，不让简历从地图消失。
+        const structured = normalizeStructuredSections(v.sections);
+        if (structured) {
+          if (resume) {
+            resume = { ...resume, sections: structured };
+          } else {
+            resume = {
+              id: meta.id,
+              jobId: meta.id,
+              jobTitle: v.position ?? '',
+              company: v.company ?? '',
+              versionName: v.version_name ?? (v.position || '我的简历'),
+              updatedAt: '刚刚',
+              personalInfo: {
+                name: '',
+                email: '',
+                phone: '',
+                title: v.position ?? '',
+                location: '',
+              },
+              summary: '',
+              sections: structured,
+            };
+          }
+        }
         if (resume) {
           next[String(v.id)] =
             v.job_analysis_id != null
@@ -132,6 +160,7 @@ export function useUpdateResumeBulletTextMutation() {
       };
       const synced = await persistResumePatch(queryClient, resumeId, {
         resume_markdown: resumeToMarkdown(nextResume),
+        sections: updatedSections,
       });
       writeResumesMap(queryClient, { ...prev, [resumeId]: nextResume });
       return { synced };
@@ -176,6 +205,7 @@ export function useSyncResumePersonalInfoMutation() {
       };
       const synced = await persistResumePatch(queryClient, resumeId, {
         resume_markdown: resumeToMarkdown(nextResume),
+        sections: activeResume.sections,
       });
       writeResumesMap(queryClient, { ...prev, [resumeId]: nextResume });
       return { synced, applied };
@@ -231,6 +261,7 @@ export function useAddResumeBulletMutation() {
       };
       const synced = await persistResumePatch(queryClient, resumeId, {
         resume_markdown: resumeToMarkdown(nextResume),
+        sections: updatedSections,
       });
       writeResumesMap(queryClient, { ...prev, [resumeId]: nextResume });
       return { synced };
@@ -277,6 +308,7 @@ export function useDeleteResumeBulletMutation() {
       };
       const synced = await persistResumePatch(queryClient, resumeId, {
         resume_markdown: resumeToMarkdown(nextResume),
+        sections: updatedSections,
       });
       writeResumesMap(queryClient, { ...prev, [resumeId]: nextResume });
       return { synced };
@@ -313,7 +345,10 @@ export function useSaveResumeMutation() {
       if (Number.isNaN(versionId)) {
         return { saved: false, reason: 'local' as const };
       }
-      await jobApi.updateResumeVersion(versionId, { resume_markdown: markdown });
+      await jobApi.updateResumeVersion(versionId, {
+        resume_markdown: markdown,
+        sections: resume.sections,
+      });
       return { saved: true, markdown };
     },
     onSuccess: (result, { resumeId }) => {
@@ -459,9 +494,214 @@ export function useRewriteResumeBulletMutation() {
       };
       const synced = await persistResumePatch(queryClient, resumeId, {
         resume_markdown: resumeToMarkdown(nextResume),
+        sections: updatedSections,
       });
       writeResumesMap(queryClient, { ...prev, [resumeId]: nextResume });
       return { synced, rewrittenText: rewritten_text };
     },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// T-M6-4：结构化布局编辑（两级重排 / 模块显隐 / 条目增删改名，双写落库）
+// ---------------------------------------------------------------------------
+
+/**
+ * 结构化编辑通用出口：cache 函数式更新 + 双写（sections JSON 权威 + markdown 派生导出）。
+ * @param update 基于当前 sections 的纯函数（返回新数组；不改原对象）
+ * @returns { synced }；简历缺失/ PATCH 失败上抛（调用方 error toast）
+ */
+async function commitSectionsEdit(
+  queryClient: ReturnType<typeof useQueryClient>,
+  resumeId: string,
+  update: (sections: ResumeVersion['sections']) => ResumeVersion['sections'],
+): Promise<{ synced: boolean }> {
+  const prev = readResumesMap(queryClient);
+  const activeResume = prev[resumeId];
+  if (!activeResume) throw new Error('未找到对应的简历');
+  const updatedSections = update(activeResume.sections);
+  const nextResume = { ...activeResume, sections: updatedSections, updatedAt: '刚刚' };
+  const synced = await persistResumePatch(queryClient, resumeId, {
+    resume_markdown: resumeToMarkdown(nextResume),
+    sections: updatedSections,
+  });
+  writeResumesMap(queryClient, { ...prev, [resumeId]: nextResume });
+  return { synced };
+}
+
+/** 按 id 重排：把 fromId 元素移动到 toId 位置；任一不存在/同位返回 null（不静默乱序）。 */
+function moveById<T extends { id: string }>(arr: T[], fromId: string, toId: string): T[] | null {
+  const from = arr.findIndex((x) => x.id === fromId);
+  const to = arr.findIndex((x) => x.id === toId);
+  if (from < 0 || to < 0 || from === to) return null;
+  const next = arr.slice();
+  const [moved] = next.splice(from, 1);
+  next.splice(to, 0, moved);
+  return next;
+}
+
+export interface ReorderResumeArgs {
+  resumeId: string;
+  /** section = 模块间重排；item = 模块内条目重排（需 sectionId） */
+  scope: 'section' | 'item';
+  sectionId?: string;
+  fromId: string;
+  toId: string;
+}
+
+/**
+ * T-M6-4：两级重排（拖拽 drop 与 ↑↓ 备用共用同一 mutation）。
+ * - scope=section：模块数组整体移动；
+ * - scope=item：仅同模块内条目移动（sectionId 缺失/不存在抛错，不跨模块拖拽）。
+ * @param mutationFn 入参 { resumeId, scope, sectionId?, fromId, toId }；返回 { synced }
+ */
+export function useReorderResumeMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation<{ synced: boolean }, unknown, ReorderResumeArgs>({
+    mutationFn: ({ resumeId, scope, sectionId, fromId, toId }) =>
+      commitSectionsEdit(queryClient, resumeId, (sections) => {
+        if (scope === 'section') {
+          const moved = moveById(sections, fromId, toId);
+          if (!moved) throw new Error('模块不存在');
+          return moved;
+        }
+        if (!sectionId) throw new Error('缺少所属模块');
+        const target = sections.find((sec) => sec.id === sectionId);
+        if (!target) throw new Error('条目不存在');
+        const movedItems = moveById(target.items, fromId, toId);
+        if (!movedItems) throw new Error('条目不存在');
+        return sections.map((sec) =>
+          sec.id === sectionId ? { ...sec, items: movedItems } : sec,
+        );
+      }),
+  });
+}
+
+/**
+ * T-M6-4：模块显隐开关（hidden 翻转；导出 markdown 自动跳过隐藏模块）。
+ * @param mutationFn 入参 { resumeId, sectionId }；返回 { synced, hidden }
+ */
+export function useToggleSectionHiddenMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation<{ synced: boolean; hidden: boolean }, unknown, {
+    resumeId: string;
+    sectionId: string;
+  }>({
+    mutationFn: async ({ resumeId, sectionId }) => {
+      let hidden = false;
+      const result = await commitSectionsEdit(queryClient, resumeId, (sections) => {
+        let hit = false;
+        const next = sections.map((sec) => {
+          if (sec.id !== sectionId) return sec;
+          hit = true;
+          hidden = !sec.hidden;
+          return { ...sec, hidden: hidden || undefined };
+        });
+        if (!hit) throw new Error('模块不存在');
+        return next;
+      });
+      return { ...result, hidden };
+    },
+  });
+}
+
+/**
+ * T-M6-4：模块尾部添加条目（空 bullet 随条目创建，正文由双击直编补）。
+ * @param mutationFn 入参 { resumeId, sectionId, title }；返回 { synced, itemId }
+ */
+export function useAddResumeItemMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation<{ synced: boolean; itemId: string }, unknown, {
+    resumeId: string;
+    sectionId: string;
+    title: string;
+  }>({
+    mutationFn: async ({ resumeId, sectionId, title }) => {
+      const itemId = `item-${Date.now().toString(36)}`;
+      const trimmed = title.trim();
+      if (!trimmed) throw new Error('条目标题不能为空');
+      const result = await commitSectionsEdit(queryClient, resumeId, (sections) => {
+        let hit = false;
+        const next = sections.map((sec) => {
+          if (sec.id !== sectionId) return sec;
+          hit = true;
+          return {
+            ...sec,
+            items: [
+              ...sec.items,
+              { id: itemId, title: trimmed, bullets: [{ id: `bullet-${itemId}`, text: '' }] },
+            ],
+          };
+        });
+        if (!hit) throw new Error('模块不存在');
+        return next;
+      });
+      return { ...result, itemId };
+    },
+  });
+}
+
+/**
+ * T-M6-4：条目改名（添加条目行与双击标题共用）。
+ * @param mutationFn 入参 { resumeId, sectionId, itemId, title }；返回 { synced }
+ */
+export function useRenameResumeItemMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation<{ synced: boolean }, unknown, {
+    resumeId: string;
+    sectionId: string;
+    itemId: string;
+    title: string;
+  }>({
+    mutationFn: ({ resumeId, sectionId, itemId, title }) => {
+      const trimmed = title.trim();
+      if (!trimmed) throw new Error('条目标题不能为空');
+      return commitSectionsEdit(queryClient, resumeId, (sections) => {
+        let hit = false;
+        const next = sections.map((sec) => {
+          if (sec.id !== sectionId) return sec;
+          return {
+            ...sec,
+            items: sec.items.map((it) => {
+              if (it.id !== itemId) return it;
+              hit = true;
+              return { ...it, title: trimmed };
+            }),
+          };
+        });
+        if (!hit) throw new Error('条目不存在');
+        return next;
+      });
+    },
+  });
+}
+
+/**
+ * T-M6-4：删除条目（含其全部要点；视图层先 confirm 再调用）。
+ * @param mutationFn 入参 { resumeId, sectionId, itemId }；返回 { synced }
+ */
+export function useDeleteResumeItemMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation<{ synced: boolean }, unknown, {
+    resumeId: string;
+    sectionId: string;
+    itemId: string;
+  }>({
+    mutationFn: ({ resumeId, sectionId, itemId }) =>
+      commitSectionsEdit(queryClient, resumeId, (sections) => {
+        let hit = false;
+        const next = sections.map((sec) => {
+          if (sec.id !== sectionId) return sec;
+          hit = sec.items.some((it) => it.id === itemId);
+          return hit ? { ...sec, items: sec.items.filter((it) => it.id !== itemId) } : sec;
+        });
+        if (!hit) throw new Error('条目不存在');
+        return next;
+      }),
   });
 }

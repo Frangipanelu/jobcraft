@@ -179,6 +179,8 @@ export interface ResumeSection {
   id: string;
   title: string;
   items: ResumeSectionItem[];
+  /** T-M6-4：模块显隐（true=隐藏；导出 markdown 跳过，编辑器显示灰色折叠卡可恢复） */
+  hidden?: boolean;
 }
 
 export interface ResumeVersion {

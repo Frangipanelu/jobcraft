@@ -246,26 +246,86 @@ export function resumeToMarkdown(resume: ResumeVersion): string {
     pushBlank()
   }
 
-  const workSection = resume.sections.find((s) => s.title === '工作经历') || resume.sections[0]
-  push(workSection ? `## ${workSection.title}` : '## 工作经历')
-  pushBlank()
-  const items = workSection?.items || []
-  for (const item of items) {
-    push(`### ${item.title}${item.period ? ` · ${item.period}` : ''}`)
+  // T-M6-4：导出 = 可见模块（hidden 跳过 → LLM/下载天然干净；核心能力由 summary 承载）。
+  // 顺序与编辑器一致，多模块（工作/教育/项目…）全部落盘；全部隐藏时保底空骨架，
+  // 保证 markdownToResume 仍可回读头部信息（结构化 sections 才是编辑权威）。
+  const bodySections = resume.sections.filter((s) => !s.hidden && s.title !== '核心能力')
+  if (!bodySections.length) {
+    push('## 工作经历')
     pushBlank()
-    for (const bullet of item.bullets || []) {
-      const parts = bullet.text.split(/\r?\n/)
-      push(`### ${parts[0]}`)
-      if (parts.length > 1) {
-        for (const p of parts.slice(1)) {
-          if (p && p.trim()) push(p)
-        }
-      }
+  }
+  for (const section of bodySections) {
+    push(`## ${section.title}`)
+    pushBlank()
+    for (const item of section.items || []) {
+      push(`### ${item.title}${item.period ? ` · ${item.period}` : ''}`)
       pushBlank()
+      for (const bullet of item.bullets || []) {
+        const parts = bullet.text.split(/\r?\n/)
+        push(`### ${parts[0]}`)
+        if (parts.length > 1) {
+          for (const p of parts.slice(1)) {
+            if (p && p.trim()) push(p)
+          }
+        }
+        pushBlank()
+      }
     }
   }
 
   return lines.join('\n').replace(/\n{3,}/g, '\n\n').trim() + '\n'
+}
+
+/**
+ * T-M6-4：把 DB `resume_version.sections` JSON 归一化为前端结构（编辑权威）。
+ *
+ * - 非数组 / 空数组 / 关键字段（title 非字符串）缺失 → 返回 null（调用方回退 markdown 解析）；
+ * - 容忍逐项脏数据：id 缺失按位置生成，items/bullets 非数组视为空，隐藏标记仅认 `hidden === true`；
+ * - 与 markdownToResume 互为补充：结构化存在的版本以本结果覆盖 md 解析出的 sections
+ *   （顺序 / 显隐 / id 稳定，重排与隐藏不再依赖 markdown 回读）。
+ *
+ * @param raw wire.sections 原始值（unknown）
+ * @returns 归一化后的 sections；不可用时返回 null
+ */
+export function normalizeStructuredSections(raw: unknown): ResumeSection[] | null {
+  if (!Array.isArray(raw) || raw.length === 0) return null
+  const out: ResumeSection[] = []
+  for (let i = 0; i < raw.length; i++) {
+    const sec = raw[i] as Partial<ResumeSection> | null
+    if (!sec || typeof sec !== 'object' || typeof sec.title !== 'string') return null
+    const items: ResumeSectionItem[] = []
+    const rawItems = Array.isArray(sec.items) ? sec.items : []
+    for (let j = 0; j < rawItems.length; j++) {
+      const it = rawItems[j] as Partial<ResumeSectionItem> | null
+      if (!it || typeof it !== 'object' || typeof it.title !== 'string') return null
+      const bullets: ResumeBullet[] = []
+      const rawBullets = Array.isArray(it.bullets) ? it.bullets : []
+      for (const b of rawBullets as unknown[]) {
+        const rb = b as Partial<ResumeBullet> | null
+        if (!rb || typeof rb !== 'object' || typeof rb.text !== 'string') return null
+        bullets.push({
+          id: typeof rb.id === 'string' && rb.id ? rb.id : `bullet-${bullets.length}-${Date.now().toString(36)}`,
+          text: rb.text,
+          originalExperienceId: typeof rb.originalExperienceId === 'string' ? rb.originalExperienceId : undefined,
+          jdMatchTag: typeof rb.jdMatchTag === 'string' ? rb.jdMatchTag : undefined,
+        })
+      }
+      items.push({
+        id: typeof it.id === 'string' && it.id ? it.id : `item-${j}-${Date.now().toString(36)}`,
+        title: it.title,
+        subtitle: typeof it.subtitle === 'string' ? it.subtitle : undefined,
+        period: typeof it.period === 'string' ? it.period : undefined,
+        bullets,
+      })
+    }
+    out.push({
+      id: typeof sec.id === 'string' && sec.id ? sec.id : `sec-${i}-${Date.now().toString(36)}`,
+      title: sec.title,
+      hidden: sec.hidden === true ? true : undefined,
+      items,
+    })
+  }
+  return out
 }
 
 interface KeyValue { key: string; value: string }

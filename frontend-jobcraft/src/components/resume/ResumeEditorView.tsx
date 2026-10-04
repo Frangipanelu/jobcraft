@@ -10,18 +10,22 @@ import {
   useSaveResumeMutation,
   useRewriteResumeBulletMutation,
   useSyncResumePersonalInfoMutation,
+  useReorderResumeMutation,
+  useToggleSectionHiddenMutation,
+  useAddResumeItemMutation,
+  useRenameResumeItemMutation,
+  useDeleteResumeItemMutation,
 } from '../../features/resume/hooks';
 import { useJdAnalysesQuery } from '../../features/jd/hooks';
 import { useProfileQuery } from '../../features/profile/hooks';
 import { dimensionLabel } from '../../utils/dimensions';
 import { ResumePrintPreview } from './ResumePrintPreview';
+import { ResumeSectionsEditor } from './ResumeSectionsEditor';
 import type { CapabilityGap } from '../../types/jobcraft';
 import {
   Sparkles,
   Download,
   Save,
-  Trash2,
-  Edit2,
   Layers,
   ArrowRight,
   Sparkle,
@@ -61,6 +65,11 @@ export const ResumeEditorView: React.FC<ResumeEditorViewProps> = ({
   const { data: profile } = useProfileQuery();
   const syncPersonalInfo = useSyncResumePersonalInfoMutation();
   const { data: jdAnalyses = [] } = useJdAnalysesQuery();
+  const reorder = useReorderResumeMutation();
+  const toggleHidden = useToggleSectionHiddenMutation();
+  const addItem = useAddResumeItemMutation();
+  const renameItem = useRenameResumeItemMutation();
+  const deleteItem = useDeleteResumeItemMutation();
 
   // FE-RESUME-03：只读 A4 预览 + window.print() 打印导出（产品裁决①）
   const [showPrintPreview, setShowPrintPreview] = useState(false);
@@ -81,8 +90,6 @@ export const ResumeEditorView: React.FC<ResumeEditorViewProps> = ({
 
   const activeId = activeResumeId && resumes[activeResumeId] ? activeResumeId : boundResumeId;
   const resume = activeId ? resumes[activeId] : null;
-  const [editingBulletId, setEditingBulletId] = useState<string | null>(null);
-  const [tempBulletText, setTempBulletText] = useState('');
   const [selectedBulletForSource, setSelectedBulletForSource] = useState<string | null>(null);
 
   if (!resume) {
@@ -109,41 +116,29 @@ export const ResumeEditorView: React.FC<ResumeEditorViewProps> = ({
     );
   }
 
-  const handleStartEditBullet = (bulletId: string, currentText: string) => {
-    setEditingBulletId(bulletId);
-    setTempBulletText(currentText);
-    setSelectedBulletForSource(bulletId);
-  };
-
   // resume 非空已由上方早退保证 → activeId 必非空（TS 需显式收窄）
   const rid = activeId as string;
 
-  // FE-RESUME-02：保存要点编辑 → 落库 PATCH resume_markdown（失败保留编辑态 + error toast）
-  const handleSaveBulletEdit = async (
-    sectionId: string,
-    itemId: string,
-    bulletId: string,
-  ) => {
+  // T-M6-4：双击直编保存 → 双写落库（失败已 toast 后上抛，组件保留编辑态）
+  const handleSaveBulletEdit = async (args: {
+    sectionId: string;
+    itemId: string;
+    bulletId: string;
+    newText: string;
+  }) => {
     try {
       const result = await editBullet.mutateAsync({
         resumeId: rid,
-        sectionId,
-        itemId,
-        bulletId,
-        newText: tempBulletText,
+        ...args,
       });
-      setEditingBulletId(null);
-      showToast(
-        result.synced
-          ? { type: 'success', title: '要点已保存', message: '修改已同步到投递记录。' }
-          : { type: 'warning', title: '本地示例已更新', message: '该简历为本地示例，未同步后端。' },
-      );
+      persistToast(result.synced, '要点已保存', '修改已同步到简历版本。');
     } catch (error: unknown) {
       showToast({
         type: 'error',
         title: '保存失败',
         message: (error as Error).message || '请稍后重试',
       });
+      throw error;
     }
   };
 
@@ -202,7 +197,7 @@ export const ResumeEditorView: React.FC<ResumeEditorViewProps> = ({
   const handleDeleteBullet = (sectionId: string, itemId: string, bulletId: string) => {
     deleteBullet
       .mutateAsync({ resumeId: rid, sectionId, itemId, bulletId })
-      .then((result) => persistToast(result.synced, '要点已删除', '修改已同步到投递记录。'))
+      .then((result) => persistToast(result.synced, '要点已删除', '修改已同步到简历版本。'))
       .catch((error: unknown) => {
         showToast({
           type: 'error',
@@ -210,6 +205,106 @@ export const ResumeEditorView: React.FC<ResumeEditorViewProps> = ({
           message: (error as Error).message || '请稍后重试',
         });
       });
+  };
+
+  // ---------------------------------------------------------------------------
+  // T-M6-4：结构化布局编辑（两级重排 / 显隐 / 条目增删改名，双写落库）
+  // ---------------------------------------------------------------------------
+
+  const runLayoutEdit = (
+    promise: Promise<{ synced: boolean }>,
+    okTitle: string,
+    failTitle: string,
+  ) => {
+    promise
+      .then((result) => persistToast(result.synced, okTitle, '修改已同步到简历版本。'))
+      .catch((error: unknown) => {
+        showToast({
+          type: 'error',
+          title: failTitle,
+          message: (error as Error).message || '请稍后重试',
+        });
+      });
+  };
+
+  const handleReorderSection = ({ fromId, toId }: { fromId: string; toId: string }) => {
+    runLayoutEdit(
+      reorder.mutateAsync({ resumeId: rid, scope: 'section', fromId, toId }),
+      '模块顺序已调整',
+      '调整失败',
+    );
+  };
+
+  const handleReorderItem = (args: { sectionId: string; fromId: string; toId: string }) => {
+    runLayoutEdit(
+      reorder.mutateAsync({ resumeId: rid, scope: 'item', ...args }),
+      '条目顺序已调整',
+      '调整失败',
+    );
+  };
+
+  const handleToggleHidden = ({ sectionId }: { sectionId: string }) => {
+    toggleHidden
+      .mutateAsync({ resumeId: rid, sectionId })
+      .then((result) =>
+        persistToast(
+          result.synced,
+          result.hidden ? '模块已隐藏' : '模块已显示',
+          result.hidden
+            ? '隐藏模块不会出现在导出与面试准备内容中。'
+            : '修改已同步到简历版本。',
+        ),
+      )
+      .catch((error: unknown) => {
+        showToast({
+          type: 'error',
+          title: '操作失败',
+          message: (error as Error).message || '请稍后重试',
+        });
+      });
+  };
+
+  const handleAddItem = async ({ sectionId, title }: { sectionId: string; title: string }) => {
+    try {
+      const result = await addItem.mutateAsync({ resumeId: rid, sectionId, title });
+      persistToast(result.synced, '条目已添加', '修改已同步到简历版本。');
+    } catch (error: unknown) {
+      showToast({
+        type: 'error',
+        title: '添加失败',
+        message: (error as Error).message || '请稍后重试',
+      });
+      throw error;
+    }
+  };
+
+  const handleRenameItem = async (args: { sectionId: string; itemId: string; title: string }) => {
+    try {
+      const result = await renameItem.mutateAsync({ resumeId: rid, ...args });
+      persistToast(result.synced, '条目已更新', '修改已同步到简历版本。');
+    } catch (error: unknown) {
+      showToast({
+        type: 'error',
+        title: '重命名失败',
+        message: (error as Error).message || '请稍后重试',
+      });
+      throw error;
+    }
+  };
+
+  const handleDeleteItem = (args: { sectionId: string; itemId: string; itemTitle: string }) => {
+    if (
+      !window.confirm(
+        `确定要删除条目「${args.itemTitle}」及其全部要点吗？此操作不可撤销。`,
+      )
+    ) {
+      return;
+    }
+    runLayoutEdit(
+      deleteItem.mutateAsync({ resumeId: rid, sectionId: args.sectionId, itemId: args.itemId }),
+      '条目已删除',
+      '删除失败',
+    );
   };
 
   const handleSave = (resumeId: string) => {
@@ -537,114 +632,20 @@ export const ResumeEditorView: React.FC<ResumeEditorViewProps> = ({
             </p>
           </div>
 
-          {/* Sections */}
-          {resume.sections.map((section) => (
-            <div key={section.id} className="space-y-3">
-              <h3 className="text-xs font-bold text-ink uppercase tracking-wider border-b border-page pb-1">
-                {section.title}
-              </h3>
-
-              <div className="space-y-4">
-                {section.items.map((item) => (
-                  <div key={item.id} className="space-y-1.5">
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="font-bold text-ink">{item.title}</span>
-                      {item.period && (
-                        <span className="text-faint font-mono text-[11px]">{item.period}</span>
-                      )}
-                    </div>
-                    {item.subtitle && (
-                      <div className="text-xs font-medium text-muted italic">
-                        {item.subtitle}
-                      </div>
-                    )}
-
-                    {/* Bullet points */}
-                    <ul className="space-y-2 pt-1">
-                      {item.bullets.map((bullet) => {
-                        const isEditing = editingBulletId === bullet.id;
-                        const isSelected = selectedBulletForSource === bullet.id;
-
-                        return (
-                          <li
-                            key={bullet.id}
-                            onClick={() => setSelectedBulletForSource(bullet.id)}
-                            className={`text-xs text-ink rounded-lg p-2 transition group relative cursor-pointer border ${
-                              isSelected
-                                ? 'border-sage bg-sage-soft/30'
-                                : 'border-transparent hover:border-edge hover:bg-page'
-                            }`}
-                          >
-                            {isEditing ? (
-                              <div className="space-y-2">
-                                <textarea
-                                  value={tempBulletText}
-                                  onChange={(e) => setTempBulletText(e.target.value)}
-                                  rows={3}
-                                  className="w-full p-2 text-xs border border-sage rounded-lg focus:outline-none bg-white font-sans leading-relaxed text-ink"
-                                />
-                                <div className="flex items-center gap-2 justify-end">
-                                  <button
-                                    onClick={() => setEditingBulletId(null)}
-                                    className="px-2 py-1 text-xs text-faint hover:bg-page rounded cursor-pointer"
-                                  >
-                                    取消
-                                  </button>
-                                  <button
-                                    onClick={() =>
-                                      handleSaveBulletEdit(section.id, item.id, bullet.id)
-                                    }
-                                    className="px-3 py-1 text-xs bg-sage text-white font-semibold rounded hover:bg-sage-dim shadow-2xs cursor-pointer"
-                                  >
-                                    保存修改
-                                  </button>
-                                </div>
-                              </div>
-                            ) : (
-                              <div className="flex items-start justify-between gap-2">
-                                <div className="flex-1 leading-relaxed">
-                                  <span className="text-sage font-bold mr-1.5">•</span>
-                                  <span>{bullet.text}</span>
-                                  {bullet.jdMatchTag && (
-                                    <span className="ml-2 inline-block text-[10px] px-1.5 py-0.2 rounded bg-warning-bg text-warning font-semibold border border-warning/20">
-                                      {bullet.jdMatchTag}
-                                    </span>
-                                  )}
-                                </div>
-
-                                <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1 shrink-0 transition">
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleStartEditBullet(bullet.id, bullet.text);
-                                    }}
-                                    className="p-1 text-faint hover:text-sage rounded transition cursor-pointer"
-                                    title="直接编辑"
-                                  >
-                                    <Edit2 className="w-3.5 h-3.5" />
-                                  </button>
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleDeleteBullet(section.id, item.id, bullet.id);
-                                    }}
-                                    className="p-1 text-faint hover:text-error rounded transition cursor-pointer"
-                                    title="删除要点"
-                                  >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                  </button>
-                                </div>
-                              </div>
-                            )}
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))}
+          {/* Sections（T-M6-4：结构化编辑器——两级拖拽/↑↓/增删/显隐/双击直编） */}
+          <ResumeSectionsEditor
+            resume={resume}
+            selectedBulletId={selectedBulletForSource}
+            onSelectBullet={setSelectedBulletForSource}
+            onSaveBulletEdit={handleSaveBulletEdit}
+            onDeleteBullet={(args) => handleDeleteBullet(args.sectionId, args.itemId, args.bulletId)}
+            onReorderSection={handleReorderSection}
+            onReorderItem={handleReorderItem}
+            onToggleHidden={handleToggleHidden}
+            onAddItem={handleAddItem}
+            onRenameItem={handleRenameItem}
+            onDeleteItem={handleDeleteItem}
+          />
         </div>
 
         {/* Right Column (3 cols): Evidence Traceability & Structure */}
