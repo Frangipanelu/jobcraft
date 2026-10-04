@@ -41,6 +41,23 @@ class InterviewReviewAnalyzePayload(BaseModel):
     selected_sequences: List[int]
 
 
+class FeedbackCandidateDecisionPayload(BaseModel):
+    """T-M8-1 反馈闸门：候选决策请求体。
+
+    target_ref 为候选定位键（experience 目标下即经历卡 id 字符串）。
+    四槽位内容（background/problem/actions/results）仅 accept 需要，
+    由前端在本地合成后提交，服务端只负责「幂等落卡 + 记台账」。
+    """
+
+    target_type: str = "experience"
+    target_ref: str
+    background: Optional[str] = None
+    problem: Optional[str] = None
+    actions: Optional[str] = None
+    results: Optional[str] = None
+    analysis_run_id: str = ""
+
+
 class InterviewSessionCreatePayload(BaseModel):
     """T-M7-4 预建面试场次（status=planned）请求体：向导字段全透传。"""
 
@@ -522,6 +539,220 @@ def jobcraft_mock_chat(
     except Exception as e:
         logger.exception("模拟面试对话失败")
         raise HTTPException(status_code=500, detail=f"模拟面试对话失败: {e}")
+
+
+def _feedback_gate_items(record: dict, ledger: List[dict]) -> List[dict]:
+    """合并候选正文（analysis_json 唯一来源）与决策台账，输出闸门条目。
+
+    台账只记决策，候选内容仍在 analysis_json——避免同一建议两处存储漂移。
+    """
+    feedbacks = (record.get("analysis") or {}).get("experienceFeedbacks") or []
+    decided = {(row["target_type"], row["target_ref"]): row for row in ledger}
+    items: List[dict] = []
+    for fb in feedbacks:
+        target_ref = str(fb.get("experienceId") or "")
+        row = decided.get((fb.get("target_type") or "experience", target_ref))
+        items.append(
+            {
+                "target_type": fb.get("target_type") or "experience",
+                "target_ref": target_ref,
+                "experience_id": target_ref,
+                "experience_title": fb.get("experienceTitle") or "",
+                "discovered_issues": fb.get("discoveredIssues") or [],
+                "suggestions": fb.get("suggestions") or [],
+                "current_version": fb.get("currentVersion") or "",
+                "proposed_version": fb.get("proposedVersion") or "",
+                "proposed_changes": fb.get("proposedChanges") or [],
+                "decision": (row or {}).get("decision") or "pending",
+                "card_version": (row or {}).get("card_version"),
+                "decided_at": (row or {}).get("decided_at"),
+            }
+        )
+    return items
+
+
+def _gate_status(items: List[dict]) -> str:
+    """闸门状态由台账推导：有待决策候选 → awaiting_confirmation，否则 done。
+
+    不新增 interview_records.status 取值（SPEC §5 分期：`failed`/`done` 是否入库
+    留待 M9 裁决），状态由 feedback_candidates 台账派生，刷新不丢。
+    """
+    if not items:
+        return "none"
+    return (
+        "awaiting_confirmation"
+        if any(item["decision"] == "pending" for item in items)
+        else "done"
+    )
+
+
+@router.get("/{record_id}/feedback-candidates")
+def jobcraft_interview_review_feedback_candidates(
+    record_id: int, current_user: int = Depends(get_current_user)
+):
+    """T-M8-1 反馈闸门：列出复盘候选建议 + 各自动策状态（pending/accepted/rejected）"""
+    try:
+        record = db_tools.get_interview_record(record_id, current_user)
+        if not record:
+            raise HTTPException(status_code=404, detail="面试记录不存在")
+        ledger = db_tools.list_feedback_candidates(record_id, current_user)
+        items = _feedback_gate_items(record, ledger)
+        return {
+            "record_id": record_id,
+            "candidates": items,
+            "candidate_count": len(items),
+            "pending_count": sum(1 for i in items if i["decision"] == "pending"),
+            "gate_status": _gate_status(items),
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("获取复盘反馈候选失败")
+        raise HTTPException(status_code=500, detail=f"获取复盘反馈候选失败: {e}")
+
+
+@router.post("/{record_id}/feedback-candidates/accept")
+def jobcraft_interview_review_feedback_accept(
+    record_id: int,
+    payload: FeedbackCandidateDecisionPayload,
+    current_user: int = Depends(get_current_user),
+):
+    """T-M8-1 反馈闸门：确认沉淀（幂等）——服务端写卡 + 记台账。
+
+    幂等：唯一键 (record_id, target_type, target_ref) 已有 accepted 决策时
+    直接返回原决策，不重复写卡（SPEC「重跑复盘 MUST NOT 重复落永久反馈」）。
+    """
+    try:
+        record = db_tools.get_interview_record(record_id, current_user)
+        if not record:
+            raise HTTPException(status_code=404, detail="面试记录不存在")
+        target_ref = payload.target_ref.strip()
+        if not target_ref:
+            raise HTTPException(status_code=400, detail="target_ref 不能为空")
+
+        existing = db_tools.get_feedback_candidate(
+            record_id, payload.target_type, target_ref
+        )
+        if existing and existing["decision"] == "accepted":
+            ledger = db_tools.list_feedback_candidates(record_id, current_user)
+            items = _feedback_gate_items(record, ledger)
+            return {
+                "record_id": record_id,
+                "target_ref": target_ref,
+                "decision": "accepted",
+                "card_version": existing["card_version"],
+                "decided_at": existing["decided_at"],
+                "idempotent": True,
+                "gate_status": _gate_status(items),
+            }
+
+        # 候选必须真实存在于 analysis_json，禁止凭空写卡
+        ledger = db_tools.list_feedback_candidates(record_id, current_user)
+        items = _feedback_gate_items(record, ledger)
+        matched = [
+            i
+            for i in items
+            if i["target_type"] == payload.target_type and i["target_ref"] == target_ref
+        ]
+        if not matched:
+            raise HTTPException(status_code=404, detail="反馈候选不存在")
+
+        card_id = int(target_ref)
+        card = db_tools.get_card(card_id, current_user)
+        if not card:
+            raise HTTPException(status_code=404, detail="目标经历卡不存在或无权访问")
+
+        updates = {
+            k: v
+            for k, v in (
+                ("background", payload.background),
+                ("problem", payload.problem),
+                ("actions", payload.actions),
+                ("results", payload.results),
+            )
+            if v is not None
+        }
+        if updates:
+            db_tools.update_card(card_id, updates, user_id=current_user)
+        card_version = (db_tools.get_card(card_id, current_user) or {}).get("version")
+
+        row = db_tools.decide_feedback_candidate(
+            record_id=record_id,
+            user_id=current_user,
+            target_type=payload.target_type,
+            target_ref=target_ref,
+            decision="accepted",
+            card_version=card_version,
+            analysis_run_id=payload.analysis_run_id,
+        )
+        ledger = db_tools.list_feedback_candidates(record_id, current_user)
+        return {
+            "record_id": record_id,
+            "target_ref": target_ref,
+            "decision": row["decision"],
+            "card_version": row["card_version"],
+            "decided_at": row["decided_at"],
+            "idempotent": False,
+            "gate_status": _gate_status(_feedback_gate_items(record, ledger)),
+        }
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.exception("复盘反馈确认失败")
+        raise HTTPException(status_code=500, detail=f"复盘反馈确认失败: {e}")
+
+
+@router.post("/{record_id}/feedback-candidates/reject")
+def jobcraft_interview_review_feedback_reject(
+    record_id: int,
+    payload: FeedbackCandidateDecisionPayload,
+    current_user: int = Depends(get_current_user),
+):
+    """T-M8-1 反馈闸门：忽略候选（不写卡，仅记台账，可反悔重确认）"""
+    try:
+        record = db_tools.get_interview_record(record_id, current_user)
+        if not record:
+            raise HTTPException(status_code=404, detail="面试记录不存在")
+        target_ref = payload.target_ref.strip()
+        if not target_ref:
+            raise HTTPException(status_code=400, detail="target_ref 不能为空")
+
+        ledger = db_tools.list_feedback_candidates(record_id, current_user)
+        items = _feedback_gate_items(record, ledger)
+        matched = [
+            i
+            for i in items
+            if i["target_type"] == payload.target_type and i["target_ref"] == target_ref
+        ]
+        if not matched:
+            raise HTTPException(status_code=404, detail="反馈候选不存在")
+
+        row = db_tools.decide_feedback_candidate(
+            record_id=record_id,
+            user_id=current_user,
+            target_type=payload.target_type,
+            target_ref=target_ref,
+            decision="rejected",
+            analysis_run_id=payload.analysis_run_id,
+        )
+        ledger = db_tools.list_feedback_candidates(record_id, current_user)
+        return {
+            "record_id": record_id,
+            "target_ref": target_ref,
+            "decision": row["decision"],
+            "card_version": row["card_version"],
+            "decided_at": row["decided_at"],
+            "gate_status": _gate_status(_feedback_gate_items(record, ledger)),
+        }
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.exception("复盘反馈忽略失败")
+        raise HTTPException(status_code=500, detail=f"复盘反馈忽略失败: {e}")
 
 
 @router.get("/{record_id}")

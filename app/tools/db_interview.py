@@ -719,10 +719,135 @@ def list_interview_qa_pairs_by_user(
     ]
 
 
+def _ensure_feedback_candidates_table() -> None:
+    """确保 feedback_candidates 决策台账存在（V0025，schema 已就绪时短路）
+
+    只记决策（accepted / rejected）与写卡版本号，**不复制候选正文**——
+    候选内容以 interview_records.analysis_json 为唯一来源，避免两处存储漂移。
+    """
+    if is_schema_ready():
+        return
+    with connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS feedback_candidates (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    user_id INT NOT NULL DEFAULT 1,
+                    interview_record_id INT NOT NULL,
+                    target_type VARCHAR(32) NOT NULL DEFAULT 'experience',
+                    target_ref VARCHAR(64) NOT NULL,
+                    analysis_run_id VARCHAR(64) NOT NULL DEFAULT '',
+                    decision VARCHAR(16) NOT NULL DEFAULT 'pending',
+                    card_version INT NULL,
+                    decided_at TIMESTAMP NULL DEFAULT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                    UNIQUE KEY uk_feedback_candidate (interview_record_id, target_type, target_ref),
+                    KEY idx_feedback_candidates_record (interview_record_id, decision),
+                    KEY idx_feedback_candidates_user (user_id)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+                """
+            )
+
+
+def _feedback_candidate_row(row: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "id": row["id"],
+        "user_id": row["user_id"],
+        "interview_record_id": row["interview_record_id"],
+        "target_type": row["target_type"] or "experience",
+        "target_ref": row["target_ref"],
+        "analysis_run_id": row["analysis_run_id"] or "",
+        "decision": row["decision"] or "pending",
+        "card_version": row["card_version"],
+        "decided_at": row["decided_at"].isoformat() if row.get("decided_at") else None,
+    }
+
+
+def list_feedback_candidates(
+    record_id: int, user_id: Optional[int] = None
+) -> List[Dict[str, Any]]:
+    """列出某条复盘的全部候选决策（按 target_ref 排序，稳定输出）"""
+    _ensure_feedback_candidates_table()
+    sql = "SELECT * FROM feedback_candidates WHERE interview_record_id=%s"
+    params: List[Any] = [record_id]
+    if user_id is not None:
+        sql += " AND user_id=%s"
+        params.append(user_id)
+    sql += " ORDER BY target_type ASC, target_ref ASC"
+    return [_feedback_candidate_row(row) for row in query_all(sql, tuple(params))]
+
+
+def get_feedback_candidate(
+    record_id: int, target_type: str, target_ref: str
+) -> Optional[Dict[str, Any]]:
+    """按唯一键取单条候选决策（幂等判定的依据）"""
+    _ensure_feedback_candidates_table()
+    row = query_one(
+        "SELECT * FROM feedback_candidates "
+        "WHERE interview_record_id=%s AND target_type=%s AND target_ref=%s",
+        (record_id, target_type, target_ref),
+    )
+    return _feedback_candidate_row(row) if row else None
+
+
+def decide_feedback_candidate(
+    record_id: int,
+    user_id: int,
+    target_type: str,
+    target_ref: str,
+    decision: str,
+    card_version: Optional[int] = None,
+    analysis_run_id: str = "",
+) -> Dict[str, Any]:
+    """幂等写入候选决策（accepted / rejected）。
+
+    唯一键 (interview_record_id, target_type, target_ref) + INSERT ... ON DUPLICATE
+    KEY UPDATE：重复确认同一条候选只更新决策与版本，不新增行，
+    满足 SPEC「重跑复盘 MUST NOT 重复落永久反馈」。
+
+    :param decision: 仅允许 accepted / rejected（pending 不由本函数写入，
+        未决策候选不出现在台账里，由调用方按缺省 pending 呈现）
+    :returns: 决策后的行
+    :raises ValueError: decision 取值非法
+    """
+    if decision not in ("accepted", "rejected"):
+        raise ValueError(f"非法决策值: {decision}")
+    _ensure_feedback_candidates_table()
+    execute(
+        """
+        INSERT INTO feedback_candidates
+            (user_id, interview_record_id, target_type, target_ref,
+             analysis_run_id, decision, card_version, decided_at)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
+        ON DUPLICATE KEY UPDATE
+            decision=VALUES(decision),
+            card_version=VALUES(card_version),
+            analysis_run_id=VALUES(analysis_run_id),
+            decided_at=CURRENT_TIMESTAMP
+        """,
+        (
+            user_id,
+            record_id,
+            target_type,
+            str(target_ref),
+            analysis_run_id,
+            decision,
+            card_version,
+        ),
+    )
+    row = get_feedback_candidate(record_id, target_type, str(target_ref))
+    if row is None:  # pragma: no cover - ON DUPLICATE 后必然可读
+        raise RuntimeError("反馈候选决策写入后读取失败")
+    return row
+
+
 def delete_interview_record(record_id: int, user_id: Optional[int] = None) -> None:
-    """删除面试记录及其 QA 对（可选按 user_id 过滤所有权，越权时无操作）"""
+    """删除面试记录及其 QA 对、反馈决策台账（可选按 user_id 过滤所有权，越权时无操作）"""
     _ensure_interview_records_table()
     _ensure_interview_qa_pairs_table()
+    _ensure_feedback_candidates_table()
     with transaction() as conn:
         with conn.cursor() as cur:
             sql = "DELETE FROM interview_records WHERE id=%s"
@@ -735,4 +860,9 @@ def delete_interview_record(record_id: int, user_id: Optional[int] = None) -> No
                 return
             cur.execute(
                 "DELETE FROM interview_qa_pairs WHERE record_id=%s", (record_id,)
+            )
+            # T-M8-1：复盘删除时一并清理反馈决策台账，避免孤儿行
+            cur.execute(
+                "DELETE FROM feedback_candidates WHERE interview_record_id=%s",
+                (record_id,),
             )
