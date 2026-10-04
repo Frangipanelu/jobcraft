@@ -270,8 +270,11 @@ export const InterviewReviewDetailView: React.FC<InterviewReviewDetailViewProps>
                 <Quote className="w-3.5 h-3.5 text-sage" />
                 <span>回答记录</span>
               </div>
+              {/* T-M8-8：原 transcript 别名字段下线（实为 candidateAnswer 的重复别名，
+                  同一段文本渲染两次来源无意义）；raw transcript 原文只在 BE
+                  interview_records.raw_text 保留，前端不重复展示 */}
               <div className="p-4 rounded-xl bg-canvas border border-edge text-xs text-ink leading-relaxed whitespace-pre-line font-normal">
-                {selectedQA?.transcript || selectedQA?.candidateAnswer}
+                {selectedQA?.candidateAnswer || '（本题未记录回答内容）'}
               </div>
             </div>
 

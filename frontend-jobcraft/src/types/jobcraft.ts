@@ -256,7 +256,6 @@ export interface InterviewQA {
   duration?: string;
   score?: number;
   candidateAnswer: string;
-  transcript?: string;
   metricCards?: {
     clarityScore: number;
     clarityDesc: string;

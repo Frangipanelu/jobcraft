@@ -45,7 +45,6 @@ export function buildReviewPatchFromAnalysis(
       question: q.question_text || '未记录题目',
       score,
       candidateAnswer: q.my_answer || '',
-      transcript: q.my_answer || undefined,
       metricCards: {
         clarityScore: score,
         clarityDesc: 'AI 综合评估',
@@ -105,7 +104,6 @@ export function qaPairsToQaList(pairs: InterviewReviewQaPair[]): InterviewQA[] {
       question: p.question_text || '未记录题目',
       score,
       candidateAnswer: p.my_answer || '',
-      transcript: p.my_answer || undefined,
       metricCards: {
         clarityScore: score,
         clarityDesc: 'AI 综合评估',

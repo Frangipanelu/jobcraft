@@ -198,6 +198,13 @@ describe('qaPairsToQaList（T-M8-2 直读行映射）', () => {
     expect(qa.suggestionAdvice).toBe('补充选型对比');
   });
 
+  // T-M8-8：transcript 别名字段下线（曾恒等于 candidateAnswer，同一段文本两个来源）
+  it('不再产出 transcript 重复别名字段', () => {
+    const qa = qaPairsToQaList([QA_PAIR])[0];
+    expect('transcript' in qa).toBe(false);
+    expect(qa.candidateAnswer).toBe('拆分评测维度，离线指标 + 线上 A/B');
+  });
+
   it('related_card_id → relatedExperienceId 打通反哺关联；null 时不产生；题目缺失兜底', () => {
     const [mapped] = qaPairsToQaList([QA_PAIR]);
     expect(mapped.relatedExperienceId).toBe('7');
