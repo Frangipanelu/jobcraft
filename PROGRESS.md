@@ -2,6 +2,16 @@
 
 > 本文件用于追踪项目整体进度。AI 在每次会话结束或完成子任务时，必须更新本文件的对应板块。
 
+## T-M6-5/6 真下载接线 + 生成链接线清账（2026-10-04，M6 批次第五任务）
+
+> T-M6-5 残量收口：真预览/打印/下线假 `export_pdf` 已由 FE-RESUME-03（2026-10-01）提前完成，本任务补「真下载」接线；T-M6-6 的两个缺陷本体已由缺陷修复批次完成 → 本任务为纯清账。
+
+- [x] **T-M6-5 真下载** `abb8890`（5 文件 +303/-4）：新 `utils/download.ts`——`triggerBlobDownload`（Blob → ObjectURL → 临时 `a[download]` 点击 → 即回收；**前端当前编辑态即权威**，磁盘生成文件在编辑后已过期故不接 BE 文件路径）+ `downloadElementAsHtml`（A4 节点序列化为独立 .html：内联 `<style>` 文本 + 尽力 fetch 外链 CSS，单个失败跳过不阻断下载）；`ResumeEditorView` 顶栏两分支（desktop/embedded）加「下载 MD」（`resumeToMarkdown` 当前态 → `.md` + toast），`ResumePrintPreview` 工具栏加「下载 HTML」（`data-testid="download-html-action"`）。
+- [x] **T-M6-6 清账（零代码）**：任务描述的两个缺陷即已修本体——BE-ATS-01（`ats_profile` 传入生成器，`2a8d96e`，+3 测试）与 BE-TASKDIV-01（异步/同步透传参数，`453dabc`），均 2026-10-01 缺陷批次完成 → 标 ✅，无余量接线。
+- [x] **测试**：`resume-export` +3（Blob 类型/内容 + ObjectURL/revoke + a.click、独立 html 含 doctype/内联样式/A4 内容、元素缺失返 false 不触发）、`resume-layout` +2（顶栏下载 md：FileReader 读回 `# 张三`/要点文本 + toast、预览下载 html：doctype + A4 内容）；jsdom Blob 无 `.text()` → 测试统一 FileReader；`downloadElementAsHtml` 为 async → 断言经 `vi.waitFor`。
+- **门禁**：encoding **404/0**、tsc 0、vitest **279/279（34 文件，首轮 268+1error 为并行偶发，重跑 exit 0）**、`npm run build` ✓；BE 未触。
+- **边界**：独立 .html 样式以内联+可取回外链为限（开发态取不到外链时结构完整、样式可能降级，不视为假功能——内容为真实渲染态）；与 FE-RESUME-03 的 `window.print`（→另存 PDF）并存互补；M6-Q3 的「下载 html」选预览 DOM 序列化而非 BE 磁盘文件（磁盘文件编辑后过期，不接假路径）。
+
 ## T-M5-8 迁移批：DB-VERIFY-01/02 收口（2026-10-04，B 窗口第五轮）
 
 > 任务面：真库迁移重复执行验证（DB-VERIFY-01）+ 存量库 runner 阻塞解除（DB-VERIFY-02）+ 顺带修复深度健康检查 bug。真库 owner 窗口独占操作（docker/3308），其余窗口全程 mock。
