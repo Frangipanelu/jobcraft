@@ -73,6 +73,13 @@
   - **FE 接线**：`useApplyReviewFeedbackMutation` 从「前端直调 `experienceApi.updateCard`」改为「本地合成四槽位 → 提交 `accept` 端点」（写卡与决策一次完成，前端不再绕过闸门直接改卡）；新增 `useFeedbackGateQuery`（决策以服务端台账为准，刷新不丢）与 `useRejectFeedbackCandidateMutation`；详情页「已同步 / 已忽略 · 重新确认 / 忽略」三态由台账驱动；缺 `recordId` 的老复盘点确认**诚实报错**不静默跳过。
   - **测试**：BE 15 项（合并/幂等/越权/404/非法决策值/台账 upsert）+ FE 4 项闸门用例 + 3 项反哺用例按新契约重写。全量门禁：pytest 1139 passed、vitest 283 passed、tsc 0、build 通过、ruff + encoding 通过。
   - **遗留（诚实记录）**：`awaiting_confirmation` 目前是**派生态**而非 DB 状态值——若要真正落库需先解耦 `question_table_flow` 对 `done` 的依赖（另议）；SPEC §32「沉淀=AI 建议+用户确认闸门」的**汇总式一次确认**（§24.2）尚未做，当前是逐题确认。
+- [x] **T-M8-9 遗留修复 A+B**（BE `a84c39f` + FE `da38bc0`）：关闭 M8-1 的两条诚实遗留。
+  - **遗留 1 关闭——`awaiting_confirmation` / `done` 真落库**：新增 `_STATUS_RANK`（`failed -1 → planned 0 → parsed 1 → question_table 2 → analyzed 3 → awaiting_confirmation 4 → done 5`）+ `advance_interview_record_status()` 作为**状态写入唯一业务入口**（只在 rank 递增时发 UPDATE）。`question_table_flow` 不再写 `if status != "done"` 字面量判断（`question_table_flow.py:165`），防降级语义下沉到 DB 层单点；`update_interview_record_analysis` 改写 `analyzed`（无候选）/`awaiting_confirmation`（有候选），SPEC §5 六态全部可达。**权威分工**：台账=决策权威（前端 `gate_status` 由此派生，刷新不丢），`interview_records.status`=阶段镜像。
+  - **accept 真单事务（DATA_MODEL §31 合规）**：新增 `apply_feedback_card_write()`——写卡 + `card_versions` 快照 + `version+1` + 台账 upsert 在**同一条 `transaction()` 连接**内完成。关键修正：`transaction()` 只对自身连接生效，此前 API 层分两次调用 `update_card` / `decide_feedback_candidate`（各走全局 autocommit 连接）会留下「卡已写、台账未记」中间态。`update_card` 相应拆出 `_prepare_card_update_fields` / `_update_card_in_conn` + 公开同连接入口 `update_card_with_conn`（218 项经历卡/版本测试验证无回归），T-M9-1 的 `create Validation(user_confirmed)` 已预留同一插入点。
+  - **SPEC 一致性补齐**：台账决策枚举补 `edited`（用户改后确认，`apply_feedback_card_write` + payload `edited` 双端支持；诚实记录：详情页确认弹层当前无编辑输入，故 FE 暂不传该字段）；`reject` 覆盖已 accepted/edited 的候选返回 **409**（卡已写、再忽略会让台账与卡片矛盾，须先在卡片页回滚）；`reject` 响应补 `idempotent` 字段（对齐 TS 契约）。
+  - **V0025 真库已应用**：`migrations/runner.py migrate 25`（注意 `limit` 是目标版本号而非条数），`feedback_candidates` 建表成功、0 行；TODO 台账已认领 V0025。
+  - **门禁**：pytest 1174 passed / vitest 299 passed / tsc 0 / build 通过 / ruff + encoding 通过。BE 新增 17 项测试（阶段序 7 + 单事务编排 3 + edited/409/幂等/推进 7）。
+- [ ] **遗留 C（§24.2「复盘结束汇总一次确认」）**：仍未做，当前为逐题确认；方案已定（analyze 完成时物化 pending 台账行 → `POST .../feedback-candidates/confirm` 批量单事务端点 → 复盘中心汇总卡片），待排期。
 - [ ] **M8 剩余**：无（M8-2/3/4/5/6/7/8 + M8-1 已闭环）
 - [ ] **他域发现（不在本窗口动）**：`WorkbenchView.tsx:46finishedCount` 死变量（workbench 域）；`components/jobs/JobsListView.tsx` 的 `Filter` 未用 import（jobs 域）；`features/jd/hooks.ts:17readJdAnalyses` 未用导出（jd 域）——建议各归所属窗口或 T-M10-3
 
