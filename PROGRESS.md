@@ -2,6 +2,17 @@
 
 > 本文件用于追踪项目整体进度。AI 在每次会话结束或完成子任务时，必须更新本文件的对应板块。
 
+## T-M7-4 / T-M8-2 / T-M8-4 / T-M8-6 / T-M8-7 面试复盘域批（2026-10-04，C 窗口第四轮）
+
+- [x] **T-M7-4 面试场次骨架 + 预建端点**（commits `793132c` BE / `90b0993` FE）：V0023 迁移补 `interview_records` 场次列（`round_seq` / `occurred_at` / `interviewer` / `format` / `resume_version_id`）——迁移 DDL + 运行时 `SHOW COLUMNS` 守卫 + `docker/mysql/jobcraft.sql` 基线三处收敛；DAO `insert_interview_record` 直读 session 骨架字段（`planned` → 记 `record_id` → 挂 `Interview.sessionRecordId`）+ `update_interview_record_session`（白名单外抛 `ValueError`、先查归属再 `UPDATE`、空 `fields` 幂等、越权返 `False` 不发 SQL）；新端点 `POST /api/jobcraft/interview-review/session` → `{record_id, status: 'planned'}`（公司/岗位空 400、`round_seq<1` 400、`occurred_at` 解析失败 400、`job_analysis_id` 不存在/无权 400、插入失败 500）；FE `useCreateInterviewMutation` 在 `runTaskOrSync('interview_prep')` 成功后调 `createInterviewSession` 并回填 `sessionRecordId`（**场次行随备战成功才建，不预建空行**——对齐 M7-Q3-A）
+- [x] **T-M8-2 题库保存链**（持久化 upsert + 详情页直读 `interview_qa_pairs` + 删 6 零消费封装；`pickReviewRecordId` 统一 record 解析）
+- [x] **T-M8-4 向导收敛（FE-STATE-01 review 段）**（commit `d3ab53f`）：删手动录入表单分支（「录入新面试场次信息」/轮次-日期-时间-形式-面试官 5 字段收集后从不入 payload 的老坑一并下线）与假进度清单（`analysisSteps` 逐条自增 4s 动画）；空态改「该岗位暂无面试场次 + 新建面试」CTA，新建复用 `NewInterviewModal`（`mode='from-job'` + 新增 `onCreated` 回调，`aria-label="关闭"`）；分析中页改诚实 spinner（无清单无假进度）；`handleStartAnalysis` 改 async 真请求（成功 toast「面试复盘已生成」+ 跳详情，失败 error toast + 复位 `isAnalyzing`）；无场次可关联时「下一步」禁用（FE-UPLOAD-01 段）。**净删 219 行**
+- [x] **T-M8-6 解除 8 题限制**（commit `7781a51` FE）：分析轮询 timeout 按题量放大 `max(180s, 30s×题数)`
+- [x] **T-M8-7 record 填充对接（修回流断点）**（commit `a30843c`）：`POST /interview-review` 与 `/upload` 均加 `record_id` → `fill_interview_record` → `update_interview_record_fill`（白名单 `title/company/position/round_type/job_analysis_id/submission_id/raw_text/parsed_dialogue/status`，`parsed_dialogue` 按 DAO 语义映射 `parsed_dialogue_json` 且 JSON 编码；白名单外抛 `ValueError`、空 `fields` 幂等、越权返 `False` → 工具层抛「复盘场次不存在或无权访问」→ API 400）；**复用 M7-4 预建的 `planned` 行，不重复插行**。FE `useCreateInterviewReviewMutation` 载荷透传 `job_analysis_id` / `submission_id`（取 `prepSource`，题库回流拿得到 JD 上下文——原断点即此处从不透传）+ `record_id`（`sessionRecordId`，`FormData` 自动跳过 `null` 故老路径零行为变化）
+- [x] **本轮门禁**（T-M8-7 收口）：pytest **1111 passed/7 skipped**、vitest **253**/32 files、encoding **398** 文件 0 错、ruff check + format 全绿、tsc 0、`npm run build` ✅
+- [ ] **未提交（他域在途）**：`frontend-jobcraft/src/features/resume/hooks.ts`、`utils/resumeParser.ts`、`types/jobcraft.ts`（T-M6-4 简历结构化，A 窗口文件）——本窗口按 pathspec 错峰提交，未纳入上述任何 commit
+- [ ] **M8 剩余**：T-M8-1 反馈闸门（feedback_candidates 表 + accept 端点 + 写卡版本，并入 V0014）、T-M8-3 聚合题库页、T-M8-5 上传接真（`file` → `POST /upload`，accept 去音频）、T-M8-8 打包清理
+
 ## T-M5-2~7 岗位投递域批全量完成（2026-10-03，B 窗口第四轮）
 
 > M5 批次 6 任务连做（零迁移、全程 mock）：数据源切 job 表 → 词表/去轮次 → jd-byte-1 → 静默 catch → Q4 硬编码。BE-DRIFT-01 应用层默认值经核对已全 PREPARED（`test_tools_extra_unit` 既有锁定测试 1733/1752），DDL 三处默认不一致归 T-M5-8 迁移统一。
