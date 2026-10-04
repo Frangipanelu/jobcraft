@@ -2839,6 +2839,76 @@ class TestInterviewRecordFillColumns:
         assert isinstance(captured["fields"]["parsed_dialogue"], list)
 
 
+class TestQaPairsAggregateQuery:
+    """T-M8-3 聚合题库 DAO：单 JOIN 免 N+1、归属收口、场次上下文映射"""
+
+    ROW = {
+        "id": 3,
+        "record_id": 55,
+        "sequence": 2,
+        "speaker": "面试官",
+        "start_time": "00:10",
+        "content": "讲讲你的项目",
+        "is_question": 1,
+        "question_text": "讲讲你的项目",
+        "dimension": "项目深挖",
+        "level": "L2",
+        "intent": "验证真实性",
+        "expected_answer": "STAR",
+        "my_answer": "我做了 RAG 评测",
+        "feedback_json": '[{"text":"ok"}]',
+        "suggestions_json": None,
+        "score": 80,
+        "related_card_id": 7,
+        "related_card_title": "RAG 项目",
+        "record_title": "腾讯-后端-技术面",
+        "record_company": "腾讯",
+        "record_position": "后端工程师",
+        "record_round_type": "技术面",
+        "record_job_analysis_id": 12,
+    }
+
+    def test_all_records_joins_and_orders(self, monkeypatch):
+        from app.tools import db_interview
+
+        captured = {}
+
+        def fake_query_all(sql, params):
+            captured.update(sql=sql, params=params)
+            return [dict(self.ROW)]
+
+        monkeypatch.setattr(
+            db_interview, "_ensure_interview_qa_pairs_table", lambda: None
+        )
+        monkeypatch.setattr(db_interview, "query_all", fake_query_all)
+        rows = db_interview.list_interview_qa_pairs_by_user(1)
+        assert captured["params"] == (1,)
+        assert "JOIN interview_records r ON r.id = q.record_id" in captured["sql"]
+        assert "r.user_id=%s" in captured["sql"]
+        assert "ORDER BY r.created_at DESC" in captured["sql"]
+        assert rows[0]["record_company"] == "腾讯"
+        assert rows[0]["record_job_analysis_id"] == 12
+        assert rows[0]["is_question"] is True
+        assert rows[0]["feedback"] == [{"text": "ok"}]
+        assert rows[0]["suggestions"] == []
+
+    def test_job_filter_appends_param(self, monkeypatch):
+        from app.tools import db_interview
+
+        captured = {}
+        monkeypatch.setattr(
+            db_interview, "_ensure_interview_qa_pairs_table", lambda: None
+        )
+        monkeypatch.setattr(
+            db_interview,
+            "query_all",
+            lambda sql, params: (captured.update(sql=sql, params=params), [])[1],
+        )
+        db_interview.list_interview_qa_pairs_by_user(1, job_analysis_id=12)
+        assert captured["params"] == (1, 12)
+        assert "AND r.job_analysis_id=%s" in captured["sql"]
+
+
 class TestDbResumeVersion:
     """T-M6-1 / M6-Q1-B：resume_version DAO（每岗自增版本、单选设当前、归属校验）"""
 

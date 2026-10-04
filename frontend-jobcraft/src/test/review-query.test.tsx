@@ -48,6 +48,7 @@ const interview = vi.hoisted(() => ({
   uploadInterviewReview: vi.fn(),
   analyzeInterviewReview: vi.fn(),
   listInterviewReviewRecords: vi.fn(),
+  listQuestionBankQaPairs: vi.fn(),
   getInterviewReviewDetail: vi.fn(),
 }));
 
@@ -762,6 +763,111 @@ describe('InterviewReviewCenterView 读路径', () => {
       target: { value: '腾讯' },
     });
     expect(screen.getByText('未找到复盘记录')).toBeInTheDocument();
+  });
+});
+
+describe('T-M8-3 聚合题库 tab（只读浏览 + 复制题目）', () => {
+  const BANK_PAIR = {
+    id: 31,
+    record_id: 55,
+    sequence: 2,
+    speaker: '面试官',
+    start_time: '00:10',
+    content: '讲讲你的 RAG 项目',
+    is_question: true,
+    question_text: '讲讲你的 RAG 项目',
+    dimension: '项目深挖',
+    level: 'L2',
+    intent: '验证真实性',
+    expected_answer: 'STAR 展开',
+    my_answer: '我做了评测集',
+    feedback: [],
+    suggestions: [],
+    score: 80,
+    related_card_id: null,
+    related_card_title: null,
+    record_title: '腾讯-后端-技术面',
+    record_company: '腾讯',
+    record_position: '后端工程师',
+    record_round_type: '技术面',
+    record_job_analysis_id: 12,
+  };
+
+  it('切到题库 tab 直读聚合端点，搜索过滤生效', async () => {
+    interview.listQuestionBankQaPairs.mockResolvedValue({
+      qa_pairs: [BANK_PAIR],
+      qa_pair_count: 1,
+      job_analysis_id: null,
+    });
+    renderWithProviders(
+      <>
+        <Seeder {...seedProps} />
+        <InterviewReviewCenterView />
+      </>,
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: '面试题库' }));
+
+    // 单次聚合调用（不按 record 逐个拉详情）
+    expect(await screen.findByText('讲讲你的 RAG 项目')).toBeInTheDocument();
+    expect(interview.listQuestionBankQaPairs).toHaveBeenCalledTimes(1);
+    expect(interview.listQuestionBankQaPairs).toHaveBeenCalledWith(undefined);
+    expect(interview.getInterviewReviewDetail).not.toHaveBeenCalled();
+    // 场次上下文 + 参考要点直读
+    expect(screen.getByText(/腾讯 · 后端工程师/)).toBeInTheDocument();
+    expect(screen.getByText(/STAR 展开/)).toBeInTheDocument();
+
+    // 搜索过滤
+    fireEvent.change(screen.getByPlaceholderText('搜索题目 / 公司 / 岗位'), {
+      target: { value: '不存在的题' },
+    });
+    expect(screen.getByText('没有匹配的题目')).toBeInTheDocument();
+  });
+
+  it('复制失败如实报错，不假报成功', async () => {
+    const writeText = vi.fn().mockRejectedValue(new Error('未授予剪贴板权限'));
+    Object.assign(navigator, { clipboard: { writeText } });
+    interview.listQuestionBankQaPairs.mockResolvedValue({
+      qa_pairs: [BANK_PAIR],
+      qa_pair_count: 1,
+      job_analysis_id: null,
+    });
+    renderWithProviders(
+      <>
+        <Seeder {...seedProps} />
+        <InterviewReviewCenterView />
+      </>,
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: '面试题库' }));
+    await screen.findByText('讲讲你的 RAG 项目');
+    fireEvent.click(screen.getByRole('button', { name: /复制题目/ }));
+
+    // 复制失败：按钮态与提示均如实报错，不假报成功
+    expect(writeText).toHaveBeenCalledTimes(1);
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /复制题目/ })).toHaveTextContent(
+        '复制失败'
+      )
+    );
+  });
+
+  it('题库为空时给诚实空态，不显示假数据', async () => {
+    interview.listQuestionBankQaPairs.mockResolvedValue({
+      qa_pairs: [],
+      qa_pair_count: 0,
+      job_analysis_id: null,
+    });
+    renderWithProviders(
+      <>
+        <Seeder {...seedProps} />
+        <InterviewReviewCenterView />
+      </>,
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: '面试题库' }));
+    expect(await screen.findByText('题库暂无内容')).toBeInTheDocument();
+    expect(screen.getByText(/完成一次面试复盘后/)).toBeInTheDocument();
   });
 });
 

@@ -662,6 +662,63 @@ def list_interview_qa_pairs(record_id: int) -> List[Dict[str, Any]]:
     ]
 
 
+def list_interview_qa_pairs_by_user(
+    user_id: int, job_analysis_id: Optional[int] = None
+) -> List[Dict[str, Any]]:
+    """T-M8-3 聚合题库：跨场次列出本人全部 QA 对（可按岗位过滤），单条 JOIN 免 N+1。
+
+    归属经 interview_records.user_id 收口；job_analysis_id 为 None 时不按岗位过滤。
+    每行附带所属场次上下文（公司/岗位/轮次/标题/岗位分析 id），供题库视图直读。
+    """
+    _ensure_interview_qa_pairs_table()
+    sql = (
+        "SELECT q.id, q.record_id, q.sequence, q.speaker, q.start_time, q.content, "
+        "q.is_question, q.question_text, q.dimension, q.level, q.intent, "
+        "q.expected_answer, q.my_answer, q.feedback_json, q.suggestions_json, q.score, "
+        "q.related_card_id, q.related_card_title, "
+        "r.title AS record_title, r.company AS record_company, "
+        "r.position AS record_position, r.round_type AS record_round_type, "
+        "r.job_analysis_id AS record_job_analysis_id "
+        "FROM interview_qa_pairs q "
+        "JOIN interview_records r ON r.id = q.record_id "
+        "WHERE r.user_id=%s"
+    )
+    params: List[Any] = [user_id]
+    if job_analysis_id is not None:
+        sql += " AND r.job_analysis_id=%s"
+        params.append(job_analysis_id)
+    sql += " ORDER BY r.created_at DESC, q.record_id DESC, q.sequence ASC"
+    rows = query_all(sql, tuple(params))
+    return [
+        {
+            "id": row["id"],
+            "record_id": row["record_id"],
+            "sequence": row["sequence"],
+            "speaker": row["speaker"] or "",
+            "start_time": row["start_time"] or "",
+            "content": row["content"] or "",
+            "is_question": bool(row["is_question"]),
+            "question_text": row["question_text"] or "",
+            "dimension": row["dimension"] or "",
+            "level": row["level"] or "",
+            "intent": row["intent"] or "",
+            "expected_answer": row["expected_answer"] or "",
+            "my_answer": row["my_answer"] or "",
+            "feedback": _parse_json(row["feedback_json"]) or [],
+            "suggestions": _parse_json(row["suggestions_json"]) or [],
+            "score": row["score"] or 0,
+            "related_card_id": row["related_card_id"],
+            "related_card_title": row["related_card_title"] or "",
+            "record_title": row["record_title"] or "",
+            "record_company": row["record_company"] or "",
+            "record_position": row["record_position"] or "",
+            "record_round_type": row["record_round_type"] or "",
+            "record_job_analysis_id": row["record_job_analysis_id"],
+        }
+        for row in rows
+    ]
+
+
 def delete_interview_record(record_id: int, user_id: Optional[int] = None) -> None:
     """删除面试记录及其 QA 对（可选按 user_id 过滤所有权，越权时无操作）"""
     _ensure_interview_records_table()

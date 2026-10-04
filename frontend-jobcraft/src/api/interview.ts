@@ -11,6 +11,7 @@ import type {
   InterviewReviewRecord,
   InterviewReviewResult,
   InterviewSessionCreateResult,
+  QuestionBankResponse,
 } from './types'
 
 // ============================================================
@@ -152,6 +153,20 @@ export async function listInterviewReviewRecords(): Promise<{
   records: InterviewReviewRecord[]
 }> {
   return request<{ records: InterviewReviewRecord[] }>('/api/jobcraft/interview-review')
+}
+
+/**
+ * T-M8-3 聚合题库：跨场次列出本人 QA 对（jobAnalysisId 省略/空 = 全量）。
+ * 只读端点，不改题库内容（浏览 + 复制题目，不写 prep 数据）。
+ */
+export async function listQuestionBankQaPairs(
+  jobAnalysisId?: number | null
+): Promise<QuestionBankResponse> {
+  const qs =
+    jobAnalysisId === undefined || jobAnalysisId === null
+      ? ''
+      : `?job_analysis_id=${encodeURIComponent(String(jobAnalysisId))}`
+  return request<QuestionBankResponse>(`/api/jobcraft/interview-review/qa-pairs${qs}`)
 }
 
 /** T-M8-2：详情页直读——record（含 analysis）+ interview_qa_pairs 题库行 */

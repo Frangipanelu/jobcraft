@@ -432,6 +432,29 @@ def jobcraft_interview_review_list(current_user: int = Depends(get_current_user)
         raise HTTPException(status_code=500, detail=f"获取面试复盘列表失败: {e}")
 
 
+@router.get("/qa-pairs")
+def jobcraft_interview_review_qa_pairs(
+    job_analysis_id: Optional[int] = None,
+    current_user: int = Depends(get_current_user),
+):
+    """T-M8-3 聚合题库：跨场次列出本人 QA 对；不传 job_analysis_id 即全量。
+
+    声明须早于 `@router.get("/{record_id}")`，否则被路径参数吞掉。
+    """
+    try:
+        qa_pairs = db_tools.list_interview_qa_pairs_by_user(
+            user_id=current_user, job_analysis_id=job_analysis_id
+        )
+        return {
+            "qa_pairs": qa_pairs,
+            "qa_pair_count": len(qa_pairs),
+            "job_analysis_id": job_analysis_id,
+        }
+    except Exception as e:
+        logger.exception("获取聚合题库失败")
+        raise HTTPException(status_code=500, detail=f"获取聚合题库失败: {e}")
+
+
 @router.post("/{record_id}/question-table")
 def jobcraft_interview_review_question_table(
     record_id: int, current_user: int = Depends(get_current_user)

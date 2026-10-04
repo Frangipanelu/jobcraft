@@ -400,6 +400,22 @@ export interface InterviewReviewQaPair {
   related_card_title: string | null
 }
 
+/** T-M8-3：聚合题库行——QA 对 + 所属场次上下文（跨 record 聚合，只读） */
+export interface QuestionBankQaPair extends InterviewReviewQaPair {
+  record_title: string
+  record_company: string
+  record_position: string
+  record_round_type: string
+  record_job_analysis_id: number | null
+}
+
+/** T-M8-3：GET /api/jobcraft/interview-review/qa-pairs 响应 */
+export interface QuestionBankResponse {
+  qa_pairs: QuestionBankQaPair[]
+  qa_pair_count: number
+  job_analysis_id: number | null
+}
+
 /** T-M8-2：GET /api/jobcraft/interview-review/{record_id} 响应（record + 直读题库） */
 export interface InterviewReviewDetailResponse {
   record: InterviewReviewDetailRecord

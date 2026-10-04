@@ -8,6 +8,7 @@ import type {
   InterviewReviewDetailResponse,
   InterviewReviewRecord,
   InterviewReviewResult,
+  QuestionBankResponse,
 } from '../../api/types';
 import { Experience, Interview, InterviewReview, Job } from '../../types/jobcraft';
 import { EXPERIENCES_QUERY_KEY, versionsToHistory } from '../experiences/mappers';
@@ -160,6 +161,9 @@ const nextJobs: Job[] = jobs.map((j) =>
 
 export const INTERVIEW_REVIEW_DETAIL_QUERY_KEY = 'interview-review-detail';
 
+/** T-M8-3：聚合题库 query key 前缀（后缀为 job_analysis_id 或 null=全量） */
+export const QUESTION_BANK_QUERY_KEY = ['interview-review', 'qa-pairs'] as const;
+
 /**
  * 定位 interview 对应的 interview_records 行：
  * 1) job_analysis_id 精确匹配（T-M8-7 FE 透传后的稳态路径）；
@@ -212,6 +216,22 @@ export function useInterviewReviewDetailQuery(interview?: Interview) {
         ? interviewApi.getInterviewReviewDetail(recordId)
         : null;
     },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// useQuestionBankQuery（T-M8-3 聚合题库，只读）
+// ---------------------------------------------------------------------------
+
+/**
+ * 跨场次聚合题库：jobAnalysisId 省略/空 = 本人全部（端点单 JOIN 聚合，免 N+1）。
+ * 只读消费（浏览 / 检索 / 复制题目），不写 prep 数据；变更侧为复盘分析本身。
+ */
+export function useQuestionBankQuery(jobAnalysisId?: number | null) {
+  return useQuery<QuestionBankResponse>({
+    queryKey: [...QUESTION_BANK_QUERY_KEY, jobAnalysisId ?? null],
+    staleTime: 60_000,
+    queryFn: () => interviewApi.listQuestionBankQaPairs(jobAnalysisId),
   });
 }
 

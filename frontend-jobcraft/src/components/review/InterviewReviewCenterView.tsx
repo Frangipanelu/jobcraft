@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useJobCraft } from '../../context/JobCraftContext';
 import { useInterviewsQuery } from '../../features/interview/hooks';
+import { QuestionBankPanel } from './QuestionBankPanel';
 import {
   Plus,
   Calendar,
@@ -14,6 +15,8 @@ export const InterviewReviewCenterView: React.FC<InterviewReviewCenterViewProps>
   const { navigateTo } = useJobCraft();
   const { data: interviews = [] } = useInterviewsQuery();
   const [searchQuery, setSearchQuery] = useState('');
+  // T-M8-3：复盘中心内新增「题库」tab（聚合题库只读浏览，复用本视图不新增路由）
+  const [activeTab, setActiveTab] = useState<'reviews' | 'bank'>('reviews');
 
   const interviewsWithReviews = interviews.filter((i) => !!i.review);
   const interviewsWithoutReviews = interviews.filter((i) => !i.review);
@@ -68,6 +71,7 @@ export const InterviewReviewCenterView: React.FC<InterviewReviewCenterViewProps>
       </div>
 
       {/* Metrics Summary Strip */}
+      {activeTab === 'reviews' && (
       <div className="bg-white rounded-xl border border-edge p-4 shadow-2xs grid grid-cols-1 sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x divide-edge">
         <div className="p-2 sm:px-4 space-y-1">
           <div className="text-[11px] font-semibold text-muted uppercase">已完成逐题复盘</div>
@@ -95,8 +99,34 @@ export const InterviewReviewCenterView: React.FC<InterviewReviewCenterViewProps>
           </div>
         </div>
       </div>
+      )}
+
+      {/* T-M8-3：tab 切换（复盘台账 / 聚合题库） */}
+      <div className="flex items-center gap-1 border-b border-edge -mb-6">
+        <button
+          onClick={() => setActiveTab('reviews')}
+          className={`px-3.5 py-2 text-xs font-bold transition cursor-pointer border-b-2 -mb-px ${
+            activeTab === 'reviews'
+              ? 'border-sage text-ink'
+              : 'border-transparent text-muted hover:text-ink'
+          }`}
+        >
+          复盘台账
+        </button>
+        <button
+          onClick={() => setActiveTab('bank')}
+          className={`px-3.5 py-2 text-xs font-bold transition cursor-pointer border-b-2 -mb-px ${
+            activeTab === 'bank'
+              ? 'border-sage text-ink'
+              : 'border-transparent text-muted hover:text-ink'
+          }`}
+        >
+          面试题库
+        </button>
+      </div>
 
       {/* Structured Review Ledger Table */}
+      {activeTab === 'reviews' && (
       <div className="bg-white rounded-xl border border-edge overflow-hidden shadow-2xs">
         <div className="p-3.5 bg-page border-b border-edge flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <h2 className="text-xs font-bold text-ink">已复盘面试台账</h2>
@@ -199,6 +229,10 @@ export const InterviewReviewCenterView: React.FC<InterviewReviewCenterViewProps>
           </table>
         </div>
       </div>
+      )}
+
+      {/* T-M8-3：聚合题库（只读浏览 + 复制题目，不写 prep 数据） */}
+      {activeTab === 'bank' && <QuestionBankPanel />}
     </div>
   );
 };
