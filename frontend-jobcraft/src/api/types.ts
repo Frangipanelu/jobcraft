@@ -422,10 +422,18 @@ export interface InterviewReviewDetailResponse {
   qa_pairs: InterviewReviewQaPair[]
 }
 
-/** T-M8-1：反馈候选决策状态（后端 feedback_candidates 台账，刷新不丢） */
-export type FeedbackDecisionStatus = 'pending' | 'accepted' | 'rejected'
+/** T-M8-1：反馈候选决策状态（后端 feedback_candidates 台账，刷新不丢）
+ *
+ * T-M8-9：新增 `edited`（用户手工改过槽位再确认，SPEC §23 枚举），
+ * 语义上等同 `accepted`（已沉淀到卡片），仅台账标签不同。
+ */
+export type FeedbackDecisionStatus =
+  | 'pending'
+  | 'accepted'
+  | 'edited'
+  | 'rejected'
 
-/** T-M8-1：闸门状态由台账推导，不新增 interview_records.status 取值 */
+/** T-M8-1：闸门状态由台账推导；T-M8-9 起 DB 侧阶段序也落 awaiting_confirmation/done */
 export type FeedbackGateStatus = 'none' | 'awaiting_confirmation' | 'done'
 
 /**
@@ -464,6 +472,12 @@ export interface FeedbackDecisionPayload {
   actions?: string[]
   results?: string[]
   analysis_run_id?: string
+  /** T-M8-9：用户手工改过槽位再确认 → 台账记 `edited` 而非 `accepted`。
+   *
+   * 当前详情页确认弹层只做预览、无编辑输入，故前端暂不传该字段（恒为 accepted）；
+   * 服务端已支持该语义，供后续「编辑后确认」UI 直接启用。
+   */
+  edited?: boolean
 }
 
 export interface FeedbackDecisionResult {

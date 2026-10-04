@@ -18,6 +18,7 @@ import {
   Quote,
   Lightbulb
 } from 'lucide-react';
+import { FeedbackDecisionStatus } from '../../api/types';
 import { InterviewQA } from '../../types/jobcraft';
 
 interface InterviewReviewDetailViewProps {
@@ -386,11 +387,16 @@ export const InterviewReviewDetailView: React.FC<InterviewReviewDetailViewProps>
                 </div>
               </div>
 
-              {gateDecisionFor(relatedFeedback.experienceId) === 'accepted' ||
+              {['accepted', 'edited'].includes(gateDecisionFor(relatedFeedback.experienceId) as
+                FeedbackDecisionStatus) ||
               relatedFeedback.applied ? (
                 <span className="flex items-center gap-1 text-sage font-bold text-xs bg-sage-soft px-3 py-1.5 rounded-lg border border-sage-soft shrink-0">
                   <CheckCircle2 className="w-3.5 h-3.5" />
-                  <span>已同步</span>
+                  <span>
+                    {gateDecisionFor(relatedFeedback.experienceId) === 'edited'
+                      ? '已编辑确认'
+                      : '已同步'}
+                  </span>
                 </span>
               ) : gateDecisionFor(relatedFeedback.experienceId) === 'rejected' ? (
                 /* T-M8-1：已忽略（服务端台账），允许反悔重新确认 */

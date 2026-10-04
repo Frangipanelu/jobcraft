@@ -1079,7 +1079,9 @@ describe('T-M8-1 反馈闸门（决策以服务端台账为准）', () => {
     ],
   };
 
-  const gateCandidate = (decision: 'pending' | 'accepted' | 'rejected') => ({
+  const gateCandidate = (
+    decision: 'pending' | 'accepted' | 'edited' | 'rejected',
+  ) => ({
     record_id: 55,
     candidates: [
       {
@@ -1093,13 +1095,14 @@ describe('T-M8-1 反馈闸门（决策以服务端台账为准）', () => {
         proposed_version: 'V2',
         proposed_changes: [],
         decision,
-        card_version: decision === 'accepted' ? 2 : null,
+        card_version: decision === 'pending' || decision === 'rejected' ? null : 2,
         decided_at: decision === 'pending' ? null : '2026-10-04T12:00:00',
       },
     ],
     candidate_count: 1,
     pending_count: decision === 'pending' ? 1 : 0,
-    gate_status: decision === 'pending' ? ('awaiting_confirmation' as const) : ('done' as const),
+    gate_status:
+      decision === 'pending' ? ('awaiting_confirmation' as const) : ('done' as const),
   });
 
   const renderGate = () =>
@@ -1127,6 +1130,40 @@ describe('T-M8-1 反馈闸门（决策以服务端台账为准）', () => {
     renderGate();
 
     expect(await screen.findByText('已忽略 · 重新确认')).toBeInTheDocument();
+  });
+
+  it('台账 edited（T-M8-9）→ 显示「已编辑确认」且无写入按钮', async () => {
+    interview.listFeedbackCandidates.mockResolvedValue(gateCandidate('edited'));
+    renderGate();
+
+    expect(await screen.findByText('已编辑确认')).toBeInTheDocument();
+    expect(screen.queryByText('沉淀至经历库')).not.toBeInTheDocument();
+  });
+
+  it('已确认沉淀的候选忽略失败 → 透传服务端 409 原因', async () => {
+    interview.listFeedbackCandidates.mockResolvedValue(gateCandidate('pending'));
+    interview.rejectFeedbackCandidate.mockRejectedValue(
+      new Error('该候选已确认沉淀到经历卡，请先在卡片页回滚内容后再忽略'),
+    );
+    renderWithProviders(
+      <>
+        <Seeder
+          interviews={[buildInt(RECORD_YUAN, REVIEW_QA_GATE)]}
+          experiences={[EXP_V1]}
+          jobs={[JOB_12]}
+        />
+        <InterviewReviewDetailView interviewId="prep-7" />
+        <ToastContainer />
+      </>,
+    );
+
+    fireEvent.click(await screen.findByText('忽略'));
+
+    expect(
+      await screen.findByText(
+        '该候选已确认沉淀到经历卡，请先在卡片页回滚内容后再忽略',
+      ),
+    ).toBeInTheDocument();
   });
 
   it('pending → 点忽略只记台账，不写卡', async () => {
