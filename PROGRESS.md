@@ -2,6 +2,19 @@
 
 > 本文件用于追踪项目整体进度。AI 在每次会话结束或完成子任务时，必须更新本文件的对应板块。
 
+## EVAL-018 跨天复测 + Regression 基线固化（2026-10-04，B 窗口第六轮·拍板项）
+
+> 用户拍板「重跑一次」收口挂起已久的 TASK-EVAL-018。真 LLM 出网复测（全项目少数非 mock 任务），成本可忽略。
+
+- [x] **复测执行** `097864e`：`uv run python -m evaluation.run_chinese_eval --gold evaluation/datasets/chinese_cases.jsonl`（25 天后重跑，10 真 calls / 缓存命中 0 / 77.2s / **$0.0032**）。**插曲（如实记录）**：首跑漏传 `--gold`，脚本默认 `DEFAULT_DATASET=matching_cases.jsonl`（英文 v0.1）跑错数据集作废一轮（$0.0011，教训已记 TODO——runner 默认集是英文，中文集必须显式传参）；另首跑跑前 9/09 报告与预测已先备份 `evaluation/results/baseline_20260909/`，无数据丢失。
+- [x] **抖动量化（归因前提 = 确定性对照）**：Keyword 路两轮**六项指标逐位一致**（0.5667/0.1676/1.0/0.1875/40.1333/0.9845）→ 评测代码与数据集零漂移，LLM 路 delta 全来自模型侧。LLM 路 9/09→10/04：acc **0.90→0.80**、macro_f1 0.599→0.360、recall 0.8125→0.625、MAE 13.20→17.73；逐 case 30 卡中 **19 卡（63%）分数变化、12 卡（40%）label 翻转**，平均 |Δ| 18.4 / 最大 45，仅 cn_008/cn_009（全 0 negative）稳定。归因：① LLM 采样随机性（主因）；② 模型版本 **glm-4-flash → glm-4.7-flash**（混杂因素，completion 1828→7279 佐证行为差异，两者无法完全分离）。
+- [x] **复测验证的结论**：① `max(Local,LLM)≡LLM` 成立（hybrid_c 与 llm 持平）→ **生产 max 策略（EVAL-PROD-001）维持不回滚**；② Hybrid A 加权仍负贡献（acc 0.60<0.80）；③ **排序类指标稳定**（ndcg 0.9845→0.9868、precision 恒 1.0）而**绝对分/阈值类抖动明显** → 阈值判档不得依赖单次跑分，须多轮聚合或锚定排序。
+- [x] **基线固化**：`evaluation/results/regression_v1.json`——数据集指纹（sha256 `02e73d38…`）、两轮全量指标 + usage、抖动归因、回归协议（hard_checks：**数据集指纹校验 / keyword 逐位对照 / ndcg+precision ±0.02 硬验收**；绝对分抖动带 acc ±0.15、mae ±5、f1 ±0.25）；首测报告+预测归档 `results/baseline_20260909/`。
+- [x] **顺手修脚本**：`run_chinese_eval.py` 报告文案写死 `2026-09-09`/`glm-4-flash` → 改 `time.strftime` + `os.getenv("LLM_model")` 动态化。
+- **门禁**：ruff 绿、改动三文件 encoding 0 错、`test_evaluation_unit + test_jobcraft_analyze_unit` **50 passed**；报告已补双轮对比与抖动分析节。
+- **注**：复测中 DB 观测路径报 `localhost:3308 拒连`（真库 docker 未起），observability 落库静默失败，**不影响评测**（指标照常产出、exit 0）；`predictions/` 目录本就 gitignore（惯例），新轮预测仅本地留存。
+- **遗留关闭**：EVAL-018 为缺陷链 `DB-VERIFY-01 → EVAL-018 → TEST-ISOLATION-01` 最后一项，**三项全部 ✅**，该链收口。
+
 ## T-M4-3 结构化表单方向分类（2026-10-04，B 窗口第六轮）
 
 > Q4 裁决落地：手动 + 词典规则建议、低置信用户确认、**零 LLM**；全自动六维归 Phase-2。**零迁移**（V0014 `direction` / V0019 `jd_classification` 已就绪）。
