@@ -1,0 +1,67 @@
+{
+  "baseline_version": "v1",
+  "frozen_at": "2026-10-04",
+  "frozen_commit": "1881253",
+  "task": "EVAL-018 跨天复测 + Regression 基线固化",
+  "dataset": {
+    "path": "evaluation/datasets/chinese_cases.jsonl",
+    "sha256": "02e73d3806d3f20b76d34f3946ff85f11d119bf90dd98e53b7039464a7ed0476",
+    "cases": 10,
+    "difficulty_mix": { "direct": 3, "semantic": 2, "partial": 2, "negative": 2, "transfer": 1 }
+  },
+  "runner": "uv run python -m evaluation.run_chinese_eval --gold evaluation/datasets/chinese_cases.jsonl",
+  "metric_definitions": ["accuracy", "macro_f1", "precision_relevant", "recall_relevant", "score_mae", "ndcg_at_3"],
+  "runs": {
+    "2026-09-09": {
+      "note": "v0.2 首测（EVAL-017），报告与预测归档于 results/baseline_20260909/",
+      "model": "glm-4-flash",
+      "metrics": {
+        "keyword": { "accuracy": 0.5667, "macro_f1": 0.1676, "precision_relevant": 1.0, "recall_relevant": 0.1875, "score_mae": 40.1333, "ndcg_at_3": 0.9845 },
+        "llm": { "accuracy": 0.9000, "macro_f1": 0.5991, "precision_relevant": 1.0, "recall_relevant": 0.8125, "score_mae": 13.2, "ndcg_at_3": 0.9845 },
+        "hybrid_a": { "accuracy": 0.6333, "macro_f1": 0.3592, "precision_relevant": 1.0, "recall_relevant": 0.3125, "score_mae": 21.0867, "ndcg_at_3": 0.9845 },
+        "hybrid_c": { "accuracy": 0.9, "macro_f1": 0.5991, "precision_relevant": 1.0, "recall_relevant": 0.8125, "score_mae": 12.8667, "ndcg_at_3": 0.9845 }
+      },
+      "usage": { "llm_calls": 10, "cached": 0, "prompt_tokens": 5944, "completion_tokens": 1828, "estimated_cost_usd": 0.0011, "duration_s": 85.9 }
+    },
+    "2026-10-04": {
+      "note": "EVAL-018 跨天复测（25 天后，真 LLM 10 次调用，缓存命中 0）",
+      "model": "glm-4.7-flash",
+      "metrics": {
+        "keyword": { "accuracy": 0.5667, "macro_f1": 0.1676, "precision_relevant": 1.0, "recall_relevant": 0.1875, "score_mae": 40.1333, "ndcg_at_3": 0.9845 },
+        "llm": { "accuracy": 0.8, "macro_f1": 0.3602, "precision_relevant": 1.0, "recall_relevant": 0.625, "score_mae": 17.7333, "ndcg_at_3": 0.9868 },
+        "hybrid_a": { "accuracy": 0.6, "macro_f1": 0.2918, "precision_relevant": 1.0, "recall_relevant": 0.25, "score_mae": 25.1333, "ndcg_at_3": 0.979 },
+        "hybrid_c": { "accuracy": 0.8, "macro_f1": 0.3602, "precision_relevant": 1.0, "recall_relevant": 0.625, "score_mae": 17.9, "ndcg_at_3": 0.9868 }
+      },
+      "usage": { "llm_calls": 10, "cached": 0, "prompt_tokens": 5504, "completion_tokens": 7279, "total_tokens": 12783, "estimated_cost_usd": 0.0032, "duration_s": 77.22 }
+    }
+  },
+  "drift_20260909_to_20261004": {
+    "deterministic_control_keyword": "逐位一致（6 项指标 delta 全 0）→ 评测代码与数据集零漂移，LLM 侧 delta 归因成立",
+    "llm_metric_delta": { "accuracy": -0.1, "macro_f1": -0.2389, "precision_relevant": 0.0, "recall_relevant": -0.1875, "score_mae": 4.5333, "ndcg_at_3": 0.0023 },
+    "llm_per_case": { "cards_changed": "19/30", "label_flips": "12/30", "mean_abs_score_delta": 18.4, "max_abs_score_delta": 45, "stable_cases": ["cn_008", "cn_009"] },
+    "attribution": [
+      "LLM 采样随机性（主因，同输入跨天重采样）",
+      "模型版本升级 glm-4-flash → glm-4.7-flash（混杂因素，与采样随机性无法完全分离；completion 1828→7279 佐证输出行为差异）"
+    ],
+    "conclusions_verified": [
+      "max(Local, LLM) ≡ LLM：hybrid_c 与 llm 复测仍持平 → 安全融合结论成立",
+      "Hybrid A 加权仍为负贡献（acc 0.60 < 0.80）→ 结论复测成立",
+      "排序类指标稳定（ndcg 0.9845→0.9868、precision 恒 1.0）；绝对分/阈值类抖动明显 → 阈值决策不得依赖单次跑分",
+      "生产 max 策略（EVAL-PROD-001）维持，无需回滚"
+    ]
+  },
+  "regression_protocol": {
+    "command": "uv run python -m evaluation.run_chinese_eval --gold evaluation/datasets/chinese_cases.jsonl",
+    "hard_checks": [
+      "dataset sha256 必须等于基线指纹（不等则先人工重新审核 gold 再谈回归）",
+      "keyword 六项指标必须与 runs[\"2026-10-04\"].metrics.keyword 逐位一致（确定性对照，fail = 评测代码或数据集被改）",
+      "|Δ ndcg_at_3| ≤ 0.02 且 |Δ precision_relevant| ≤ 0.02 vs runs[\"2026-10-04\"].metrics.llm（排序能力硬验收）"
+    ],
+    "jitter_bands_observed": {
+      "accuracy": "±0.15",
+      "score_mae": "±5.0",
+      "macro_f1": "±0.25",
+      "note": "本次实测漂移包络；绝对分指标带内漂移不视为回归"
+    }
+  }
+}

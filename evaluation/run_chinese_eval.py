@@ -233,14 +233,16 @@ def build_report(result: dict[str, Any], report_path: Path) -> None:
     usage = result["usage"]
     latency = result["latency"]
 
+    today = time.strftime("%Y-%m-%d")
+    model_name = os.getenv("LLM_model", "unknown")
     header = [
         "# Chinese Real-world Matching Benchmark (v0.2)",
         "",
         "## Status",
         "",
-        f"**v0.2 — 中文真实风格 JD 回测完成（{len(gold_cases)} cases，2026-09-09）。**",
+        f"**v0.2 — 中文真实风格 JD 回测完成（{len(gold_cases)} cases，{today}）。**",
         "",
-        "模型: `glm-4-flash`。对比 Keyword baseline / LLM / Hybrid A（0.4 加权）/ Hybrid C（max）。",
+        f"模型: `{model_name}`。对比 Keyword baseline / LLM / Hybrid A（0.4 加权）/ Hybrid C（max）。",
         "LLM 预测共享同一份文件，Hybrid A/C 为确定性离线融合；Latency/Calls/Cost 由 usage observer 实测。",
         "",
         f"- LLM 调用: {usage['llm_calls']}（缓存命中 {usage['llm_calls_cached']}）",
