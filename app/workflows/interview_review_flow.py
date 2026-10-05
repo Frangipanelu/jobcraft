@@ -125,6 +125,68 @@ def _gate_check(state: Dict[str, Any]) -> Dict[str, Any]:
     return agent.run(state)
 
 
+MAX_FEEDBACK_CANDIDATES = 5
+MAX_CANDIDATE_ISSUES = 3
+MAX_CANDIDATE_SUGGESTIONS = 5
+
+
+def _dedupe_extend(target: List[str], source: Optional[List[str]]) -> None:
+    """把 source 中的非空文本按出现顺序去重追加到 target。"""
+    for text in source or []:
+        if text and text not in target:
+            target.append(text)
+
+
+def _propose_feedback_candidates(state: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """W12 候选生产者（规则版；LLM 升级位合同见 W12_FEEDBACK_PRODUCER_DESIGN.md §3/§6）。
+
+    按 related_card_id 把已解析题的 feedback/suggestions 聚合成经历卡级候选：
+    rid 无效不参与；卡内合并去重保序；合并后 suggestions 至少 1 条才生成；
+    issues 截断前 3、suggestions 截断前 5；按截断前建议数降序（并列卡 id 升序）
+    取前 5 卡。零候选返回空列表（合法结果）。
+
+    :param state: workflow state，读取 job_context.cards / tech_results / soft_results
+    :return: experienceFeedbacks 数组（顶层 camelCase 契约）
+    """
+    valid_cards: Dict[int, Dict[str, Any]] = {
+        c["id"]: c
+        for c in (state.get("job_context") or {}).get("cards", [])
+        if c.get("id") is not None
+    }
+    issues_by_card: Dict[int, List[str]] = {}
+    suggestions_by_card: Dict[int, List[str]] = {}
+    analyses = (state.get("tech_results") or []) + (state.get("soft_results") or [])
+    for item in analyses:
+        rid = item.get("related_card_id")
+        if rid not in valid_cards:
+            continue
+        _dedupe_extend(issues_by_card.setdefault(rid, []), item.get("feedback"))
+        _dedupe_extend(suggestions_by_card.setdefault(rid, []), item.get("suggestions"))
+
+    ordered = sorted(
+        ((rid, suggs) for rid, suggs in suggestions_by_card.items() if suggs),
+        key=lambda kv: (-len(kv[1]), kv[0]),
+    )[:MAX_FEEDBACK_CANDIDATES]
+
+    candidates: List[Dict[str, Any]] = []
+    for rid, suggestions in ordered:
+        card = valid_cards[rid]
+        version = card.get("version") or 1
+        candidates.append(
+            {
+                "experienceId": str(rid),
+                "experienceTitle": card.get("title") or "",
+                "discoveredIssues": issues_by_card.get(rid, [])[:MAX_CANDIDATE_ISSUES],
+                "suggestions": suggestions[:MAX_CANDIDATE_SUGGESTIONS],
+                "currentVersion": f"V{version}",
+                "proposedVersion": f"V{version + 1}",
+                "proposedChanges": [],
+                "applied": False,
+            }
+        )
+    return candidates
+
+
 def _assemble_result(state: Dict[str, Any]) -> Dict[str, Any]:
     """第5步：组装最终结果，写入 DB，无 LLM"""
     record = state["record"]

@@ -305,6 +305,138 @@ class TestInterviewReviewFlow:
         assert result["overall_score"] == 80
 
 
+class TestProposeFeedbackCandidates:
+    """W12 候选生产者规则版（设计 §4）：分组合并 / 门槛a / 截断 / 排序上限 / 字段映射"""
+
+    @staticmethod
+    def _state(cards, tech=None, soft=None):
+        return {
+            "job_context": {"cards": cards},
+            "tech_results": tech or [],
+            "soft_results": soft or [],
+        }
+
+    @staticmethod
+    def _item(seq, feedback=None, suggestions=None, rid=None):
+        return {
+            "sequence": seq,
+            "score": 75,
+            "dimension": "D1 技术深度",
+            "level": "L3",
+            "intent": "考察技术",
+            "expected_answer": "应描述过程",
+            "feedback": feedback or [],
+            "suggestions": suggestions or [],
+            "related_card_id": rid,
+        }
+
+    def test_same_card_questions_merge_dedup_order_and_field_mapping(self):
+        from app.workflows.interview_review_flow import _propose_feedback_candidates
+
+        state = self._state(
+            cards=[{"id": 1, "title": "推荐系统"}],
+            tech=[
+                self._item(1, feedback=["问题A"], suggestions=["建议1", "建议2"], rid=1)
+            ],
+            soft=[
+                self._item(
+                    3,
+                    feedback=["问题A", "问题B"],
+                    suggestions=["建议2", "建议3"],
+                    rid=1,
+                )
+            ],
+        )
+        cands = _propose_feedback_candidates(state)
+        assert len(cands) == 1
+        c = cands[0]
+        assert c["experienceId"] == "1"
+        assert c["experienceTitle"] == "推荐系统"
+        assert c["discoveredIssues"] == ["问题A", "问题B"]
+        assert c["suggestions"] == ["建议1", "建议2", "建议3"]
+        assert c["currentVersion"] == "V1"
+        assert c["proposedVersion"] == "V2"
+        assert c["proposedChanges"] == []
+        assert c["applied"] is False
+
+    def test_current_and_proposed_version_from_card_version(self):
+        from app.workflows.interview_review_flow import _propose_feedback_candidates
+
+        state = self._state(
+            cards=[{"id": 7, "title": "T", "version": 3}],
+            tech=[self._item(1, suggestions=["s"], rid=7)],
+        )
+        c = _propose_feedback_candidates(state)[0]
+        assert c["experienceId"] == "7"
+        assert c["currentVersion"] == "V3"
+        assert c["proposedVersion"] == "V4"
+
+    def test_threshold_excludes_missing_rid_and_feedback_only_cards(self):
+        from app.workflows.interview_review_flow import _propose_feedback_candidates
+
+        state = self._state(
+            cards=[{"id": 1, "title": "A"}, {"id": 2, "title": "B"}],
+            tech=[
+                self._item(1, feedback=["问题"], suggestions=["建议"], rid=None),
+                self._item(2, feedback=["只有问题"], suggestions=[], rid=2),
+                self._item(3, suggestions=["可执行建议"], rid=1),
+            ],
+        )
+        cands = _propose_feedback_candidates(state)
+        assert [c["experienceId"] for c in cands] == ["1"]
+        assert cands[0]["discoveredIssues"] == []
+
+    def test_truncates_issues_to_3_and_suggestions_to_5_keeps_order(self):
+        from app.workflows.interview_review_flow import _propose_feedback_candidates
+
+        state = self._state(
+            cards=[{"id": 1, "title": "A"}],
+            tech=[
+                self._item(
+                    1,
+                    feedback=[f"F{i}" for i in range(5)],
+                    suggestions=[f"S{i}" for i in range(7)],
+                    rid=1,
+                )
+            ],
+        )
+        c = _propose_feedback_candidates(state)[0]
+        assert c["discoveredIssues"] == ["F0", "F1", "F2"]
+        assert c["suggestions"] == ["S0", "S1", "S2", "S3", "S4"]
+
+    def test_sorts_by_merged_suggestion_count_desc_using_pre_truncation_count(self):
+        from app.workflows.interview_review_flow import _propose_feedback_candidates
+
+        state = self._state(
+            cards=[{"id": 1, "title": "A"}, {"id": 2, "title": "B"}],
+            tech=[
+                self._item(1, suggestions=[f"S{i}" for i in range(5)], rid=1),
+                self._item(2, suggestions=[f"T{i}" for i in range(7)], rid=2),
+            ],
+        )
+        cands = _propose_feedback_candidates(state)
+        # 卡2 合并 7 条（截断后显示 5）必须排在卡1（恰好 5 条）之前
+        # → 证明排序用截断前数量；若用截断后数量则平局按 id 序得 ["1","2"]
+        assert [c["experienceId"] for c in cands] == ["2", "1"]
+
+    def test_tie_break_by_card_id_asc_and_cap_5(self):
+        from app.workflows.interview_review_flow import _propose_feedback_candidates
+
+        cards = [{"id": i, "title": f"C{i}"} for i in range(1, 8)]
+        tech = [self._item(i, suggestions=["s1", "s2"], rid=i) for i in range(1, 8)]
+        cands = _propose_feedback_candidates(self._state(cards, tech=tech))
+        assert [c["experienceId"] for c in cands] == ["1", "2", "3", "4", "5"]
+
+    def test_zero_candidates_returns_empty_list(self):
+        from app.workflows.interview_review_flow import _propose_feedback_candidates
+
+        state = self._state(
+            cards=[{"id": 1, "title": "A"}],
+            tech=[self._item(1, feedback=["f"], suggestions=[], rid=None)],
+        )
+        assert _propose_feedback_candidates(state) == []
+
+
 # ============================================================
 #  2. job_analysis_flow
 # ============================================================
