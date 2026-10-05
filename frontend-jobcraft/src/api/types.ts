@@ -490,6 +490,38 @@ export interface FeedbackDecisionResult {
   gate_status: FeedbackGateStatus
 }
 
+/** T-M8-9 遗留 C：§24.2 汇总一次确认——批次内单条决策（服务端先整批校验后单事务写入） */
+export interface FeedbackBatchDecisionItem {
+  target_ref: string
+  target_type?: string
+  /** accepted/edited 走写卡，rejected 仅记台账 */
+  decision: 'accepted' | 'edited' | 'rejected'
+  background?: string
+  problem?: string
+  actions?: string[]
+  results?: string[]
+  analysis_run_id?: string
+}
+
+export interface FeedbackBatchConfirmPayload {
+  decisions: FeedbackBatchDecisionItem[]
+}
+
+export interface FeedbackBatchItemResult {
+  target_ref: string
+  decision: FeedbackDecisionStatus
+  card_version: number | null
+  decided_at: string | null
+  idempotent: boolean
+}
+
+export interface FeedbackBatchConfirmResult {
+  record_id: number
+  results: FeedbackBatchItemResult[]
+  decision_count: number
+  gate_status: FeedbackGateStatus
+}
+
 // ============================================================
 // 面试准备稿
 // ============================================================

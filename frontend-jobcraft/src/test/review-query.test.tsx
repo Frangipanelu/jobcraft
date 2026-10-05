@@ -17,6 +17,7 @@ import { prepRecordToInterview } from '../features/interview/mappers';
 import { cardToExperience } from '../features/experiences/mappers';
 import {
   useApplyReviewFeedbackMutation,
+  useConfirmFeedbackDecisionsMutation,
   useCreateInterviewReviewMutation,
 } from '../features/review/hooks';
 import type { InterviewPrepRecord, InterviewReviewResult, ExperienceCard } from '../api/types';
@@ -54,6 +55,8 @@ const interview = vi.hoisted(() => ({
   listFeedbackCandidates: vi.fn(),
   acceptFeedbackCandidate: vi.fn(),
   rejectFeedbackCandidate: vi.fn(),
+  // T-M8-9 遗留 C：§24.2 汇总一次确认
+  confirmFeedbackCandidates: vi.fn(),
 }));
 
 const tasks = vi.hoisted(() => ({
@@ -353,6 +356,32 @@ const ApplyHarness = ({ interviews }: { interviews: Interview[] }) => {
   );
 };
 
+/** T-M8-9 遗留 C：§24.2 汇总一次确认 harness（accept + reject 合并为一次请求） */
+const ConfirmHarness = ({
+  ids = { acceptIds: ['7'], rejectIds: ['8'] },
+}: {
+  ids?: { acceptIds: string[]; rejectIds: string[] };
+}) => {
+  const confirmDecisions = useConfirmFeedbackDecisionsMutation();
+  const [error, setError] = useState('');
+  return (
+    <div>
+      <button
+        onClick={() => {
+          setError('');
+          confirmDecisions
+            .mutateAsync({ interviewId: 'prep-7', ...ids })
+            .catch((e: unknown) => setError((e as Error).message));
+        }}
+      >
+        汇总确认
+      </button>
+      <span data-testid="confirm-error">{error}</span>
+      <CacheReader />
+    </div>
+  );
+};
+
 const seedProps = {
   interviews: [INT_YUAN, INT_TX_PREP],
   experiences: [EXP_V1],
@@ -498,6 +527,55 @@ beforeEach(() => {
       idempotent: false,
       gate_status: 'done' as const,
     }),
+  );
+  // T-M8-9 遗留 C：批量确认 mock——服务端语义（接受型写卡 version+1，忽略型只记台账）
+  interview.confirmFeedbackCandidates.mockImplementation(
+    async (
+      recordId: number,
+      payload: {
+        decisions: Array<{
+          target_ref: string;
+          decision: 'accepted' | 'edited' | 'rejected';
+          background?: string;
+          problem?: string;
+          actions?: string[];
+          results?: string[];
+        }>;
+      },
+    ) => {
+      const results = payload.decisions.map((d) => {
+        if (d.decision === 'rejected') {
+          return {
+            target_ref: d.target_ref,
+            decision: 'rejected' as const,
+            card_version: null,
+            decided_at: '2026-10-04T12:00:00',
+            idempotent: false,
+          };
+        }
+        const card = serverCards.find((c) => String(c.id) === d.target_ref);
+        if (card) {
+          if (d.background !== undefined) card.background = d.background;
+          if (d.problem !== undefined) card.problem = d.problem;
+          if (d.actions !== undefined) card.actions = d.actions;
+          if (d.results !== undefined) card.results = d.results;
+          card.version = (card.version ?? 1) + 1;
+        }
+        return {
+          target_ref: d.target_ref,
+          decision: 'accepted' as const,
+          card_version: card?.version ?? null,
+          decided_at: '2026-10-04T12:00:00',
+          idempotent: false,
+        };
+      });
+      return {
+        record_id: recordId,
+        results,
+        decision_count: results.length,
+        gate_status: 'done' as const,
+      };
+    },
   );
   // T-M8-2 详情直读默认：服务端无 record（组件回退内存 review / 空态）
   interview.listInterviewReviewRecords.mockResolvedValue({ records: [] });
@@ -1208,6 +1286,193 @@ describe('T-M8-1 反馈闸门（决策以服务端台账为准）', () => {
 
     expect(await screen.findByText('沉淀失败')).toBeInTheDocument();
     expect(interview.acceptFeedbackCandidate).not.toHaveBeenCalled();
+  });
+});
+
+describe('T-M8-9 遗留 C：§24.2 汇总一次确认', () => {
+  const REVIEW_BATCH_GATE: InterviewReview = {
+    ...REVIEW,
+    recordId: 55,
+    experienceFeedbacks: [
+      ...REVIEW.experienceFeedbacks!,
+      {
+        experienceId: '8',
+        experienceTitle: '第二段经历',
+        discoveredIssues: ['缺口径'],
+        suggestions: ['补指标'],
+        currentVersion: 'V1',
+        proposedVersion: 'V2',
+        proposedChanges: [],
+        applied: false,
+      },
+    ],
+  };
+
+  const pendingGate = (overrides: Record<string, unknown> = {}) => ({
+    record_id: 55,
+    candidates: [
+      {
+        target_type: 'experience',
+        target_ref: '7',
+        experience_id: '7',
+        experience_title: '端侧大模型量化评测',
+        discovered_issues: ['缺选型对比'],
+        suggestions: ['补充量化对比'],
+        current_version: 'V1',
+        proposed_version: 'V2',
+        proposed_changes: [],
+        decision: 'pending',
+        card_version: null,
+        decided_at: null,
+      },
+    ],
+    candidate_count: 1,
+    pending_count: 1,
+    gate_status: 'awaiting_confirmation',
+    ...overrides,
+  });
+
+  beforeEach(() => {
+    serverCards = [{ ...CARD_A }];
+    // 聚焦闸门写卡链路：详情直读返回 null → 视图/缓存回退内存 review
+    interview.getInterviewReviewDetail.mockResolvedValue(null);
+    interview.listInterviewReviewRecords.mockResolvedValue({ records: [] });
+  });
+
+  it('accept + reject 合并为一次批量请求（不再逐条调单端点）', async () => {
+    renderWithProviders(
+      <>
+        <Seeder
+          interviews={[buildInt(RECORD_YUAN, REVIEW_BATCH_GATE)]}
+          experiences={[EXP_V1]}
+          jobs={[JOB_12]}
+        />
+        <ConfirmHarness />
+      </>,
+    );
+
+    await screen.findByText('汇总确认');
+    await waitForSeed();
+    fireEvent.click(screen.getByText('汇总确认'));
+
+    await waitFor(() =>
+      expect(interview.confirmFeedbackCandidates).toHaveBeenCalledWith(55, {
+        decisions: [
+          expect.objectContaining({
+            target_ref: '7',
+            decision: 'accepted',
+            problem: '新职责（含选型对比）',
+            actions: ['旧动作A', '旧动作B'],
+          }),
+          expect.objectContaining({ target_ref: '8', decision: 'rejected' }),
+        ],
+      }),
+    );
+    expect(interview.acceptFeedbackCandidate).not.toHaveBeenCalled();
+    expect(interview.rejectFeedbackCandidate).not.toHaveBeenCalled();
+    // 服务端落卡后 EXPERIENCES refetch 回流版本；INTERVIEWS applied 标记同步
+    await waitFor(() =>
+      expect(screen.getByTestId('cache-exp-version').textContent).toBe('V2'),
+    );
+    expect(screen.getByTestId('cache-applied').textContent).toBe('true');
+    expect(screen.getByTestId('confirm-error').textContent).toBe('');
+  });
+
+  it('空选择 → 报错且不发请求', async () => {
+    renderWithProviders(
+      <>
+        <Seeder
+          interviews={[buildInt(RECORD_YUAN, REVIEW_BATCH_GATE)]}
+          experiences={[EXP_V1]}
+          jobs={[JOB_12]}
+        />
+        <ConfirmHarness ids={{ acceptIds: [], rejectIds: [] }} />
+      </>,
+    );
+
+    await screen.findByText('汇总确认');
+    await waitForSeed();
+    fireEvent.click(screen.getByText('汇总确认'));
+
+    expect(await screen.findByTestId('confirm-error')).toHaveTextContent(
+      '未选择任何候选决策',
+    );
+    expect(interview.confirmFeedbackCandidates).not.toHaveBeenCalled();
+  });
+
+  const renderPanel = (gate: ReturnType<typeof pendingGate> = pendingGate()) => {
+    interview.listFeedbackCandidates.mockResolvedValue(gate);
+    renderWithProviders(
+      <>
+        <Seeder
+          interviews={[buildInt(RECORD_YUAN, REVIEW_BATCH_GATE)]}
+          experiences={[EXP_V1]}
+          jobs={[JOB_12]}
+        />
+        <InterviewReviewDetailView interviewId="prep-7" />
+        <ToastContainer />
+      </>,
+    );
+  };
+
+  it('pending → 汇总面板默认全选，一次请求完成确认沉淀', async () => {
+    renderPanel();
+
+    expect(await screen.findByTestId('feedback-batch-panel')).toBeInTheDocument();
+    fireEvent.click(await screen.findByText('确认沉淀（1 条）'));
+
+    await waitFor(() =>
+      expect(interview.confirmFeedbackCandidates).toHaveBeenCalledWith(55, {
+        decisions: [
+          expect.objectContaining({ target_ref: '7', decision: 'accepted' }),
+        ],
+      }),
+    );
+    expect(interview.acceptFeedbackCandidate).not.toHaveBeenCalled();
+    expect(await screen.findByText('已沉淀 1 条建议')).toBeInTheDocument();
+  });
+
+  it('反选后按钮为 0 条并禁用，点击不发请求', async () => {
+    renderPanel();
+
+    const checkbox = await screen.findByRole('checkbox');
+    fireEvent.click(checkbox);
+
+    const submit = screen.getByText('确认沉淀（0 条）');
+    expect(submit).toBeDisabled();
+    fireEvent.click(submit);
+    expect(interview.confirmFeedbackCandidates).not.toHaveBeenCalled();
+  });
+
+  it('全部忽略走两段确认，批量提交 rejected 决策', async () => {
+    renderPanel();
+
+    await screen.findByTestId('feedback-batch-panel');
+    fireEvent.click(screen.getByText('全部忽略'));
+    fireEvent.click(await screen.findByText('确认忽略全部 1 条？'));
+
+    await waitFor(() =>
+      expect(interview.confirmFeedbackCandidates).toHaveBeenCalledWith(55, {
+        decisions: [
+          expect.objectContaining({ target_ref: '7', decision: 'rejected' }),
+        ],
+      }),
+    );
+    expect(interview.rejectFeedbackCandidate).not.toHaveBeenCalled();
+    expect(await screen.findByText('已忽略 1 条候选')).toBeInTheDocument();
+  });
+
+  it('无 pending 候选 → 不渲染汇总面板', async () => {
+    renderPanel({
+      ...pendingGate(),
+      candidates: [],
+      candidate_count: 0,
+      pending_count: 0,
+      gate_status: 'done',
+    });
+
+    expect(await screen.findByText('QA 题目清单 (0)')).toBeInTheDocument();
+    expect(screen.queryByTestId('feedback-batch-panel')).not.toBeInTheDocument();
   });
 });
 

@@ -4,6 +4,8 @@ import * as experienceApi from '../../api/experience';
 import * as interviewApi from '../../api/interview';
 import * as tasksApi from '../../api/tasks';
 import type {
+  FeedbackBatchDecisionItem,
+  FeedbackBatchItemResult,
   InterviewReviewCreateResult,
   InterviewReviewDetailResponse,
   InterviewReviewRecord,
@@ -434,6 +436,135 @@ export function useRejectFeedbackCandidateMutation() {
               experienceFeedbacks: (int.review.experienceFeedbacks || []).map((fb) =>
                 fb.experienceId === targetRef ? { ...fb, applied: false } : fb,
               ),
+            },
+          };
+        }),
+      );
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// 汇总一次确认（T-M8-9 遗留 C，SPEC §24.2）
+// ---------------------------------------------------------------------------
+
+export interface ConfirmFeedbackDecisionsArgs {
+  interviewId: string;
+  /** 需要沉淀的经历卡 ID（experienceId 字符串）；四槽位由前端按单条确认的同款逻辑合成 */
+  acceptIds: string[];
+  /** 需要忽略的经历卡 ID */
+  rejectIds: string[];
+}
+
+export interface ConfirmFeedbackDecisionsResult {
+  recordId: number;
+  acceptedIds: string[];
+  rejectedIds: string[];
+  results: FeedbackBatchItemResult[];
+}
+
+/**
+ * 复盘结束「汇总一次确认」：把多条候选合并为**一次**批量请求。
+ *
+ * - 服务端先整批校验、再单事务写入（DATA_MODEL §31），故不做逐条重试；
+ * - accept 条目复用与单条确认完全相同的槽位合成（proposedChanges 优先，
+ *   缺失时 suggestions 回退），保证两种入口产物一致；
+ * - 成功后：INTERVIEWS cache 标记 applied、EXPERIENCES 与闸门查询失效刷新。
+ */
+export function useConfirmFeedbackDecisionsMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation<
+    ConfirmFeedbackDecisionsResult,
+    unknown,
+    ConfirmFeedbackDecisionsArgs
+  >({
+    mutationFn: async ({ interviewId, acceptIds, rejectIds }) => {
+      const interviews =
+        queryClient.getQueryData<Interview[]>([...INTERVIEWS_QUERY_KEY]) || [];
+      const interview = interviews.find((i) => i.id === interviewId);
+      if (!interview?.review) {
+        throw new Error('未找到对应的复盘报告');
+      }
+      const recordId = interview.review.recordId;
+      if (recordId === undefined || recordId === null) {
+        throw new Error('该复盘缺少记录 ID，无法确认沉淀（请重新创建复盘）');
+      }
+      const feedbacks = interview.review.experienceFeedbacks || [];
+      const experiences =
+        queryClient.getQueryData<Experience[]>([...EXPERIENCES_QUERY_KEY]) || [];
+
+      const decisions: FeedbackBatchDecisionItem[] = [];
+      for (const experienceId of acceptIds) {
+        const feedback = feedbacks.find((f) => f.experienceId === experienceId);
+        if (!feedback) {
+          throw new Error(`未找到该条复盘反馈: ${experienceId}`);
+        }
+        const exp = experiences.find((e) => e.id === experienceId);
+        if (!exp) {
+          throw new Error('未找到对应的经历资产');
+        }
+        if (isNaN(parseInt(experienceId, 10))) {
+          throw new Error('复盘反馈未关联有效的经历卡 ID，无法沉淀');
+        }
+        const proposedChanges = feedback.proposedChanges || [];
+        const base =
+          proposedChanges.length > 0
+            ? applyProposedChanges(exp, proposedChanges)
+            : applyFeedbackSuggestions(exp, feedback.suggestions || []);
+        decisions.push({
+          target_type: 'experience',
+          target_ref: experienceId,
+          decision: 'accepted',
+          background: base.background,
+          problem: base.problem,
+          actions: base.actions,
+          results: base.results,
+        });
+      }
+      for (const experienceId of rejectIds) {
+        decisions.push({
+          target_type: 'experience',
+          target_ref: experienceId,
+          decision: 'rejected',
+        });
+      }
+      if (decisions.length === 0) {
+        throw new Error('未选择任何候选决策');
+      }
+
+      const result = await interviewApi.confirmFeedbackCandidates(recordId, {
+        decisions,
+      });
+      return {
+        recordId,
+        acceptedIds: acceptIds,
+        rejectedIds: rejectIds,
+        results: result.results,
+      };
+    },
+    onSuccess: ({ recordId, acceptedIds, rejectedIds }, { interviewId }) => {
+      queryClient.invalidateQueries({ queryKey: feedbackGateKey(recordId) });
+      queryClient.invalidateQueries({ queryKey: [...EXPERIENCES_QUERY_KEY] });
+      const prevInt =
+        queryClient.getQueryData<Interview[]>([...INTERVIEWS_QUERY_KEY]) || [];
+      queryClient.setQueryData(
+        [...INTERVIEWS_QUERY_KEY],
+        prevInt.map((int): Interview => {
+          if (int.id !== interviewId || !int.review) return int;
+          return {
+            ...int,
+            review: {
+              ...int.review,
+              experienceFeedbacks: (int.review.experienceFeedbacks || []).map((fb) => {
+                if (acceptedIds.includes(fb.experienceId)) {
+                  return { ...fb, applied: true };
+                }
+                if (rejectedIds.includes(fb.experienceId)) {
+                  return { ...fb, applied: false };
+                }
+                return fb;
+              }),
             },
           };
         }),

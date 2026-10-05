@@ -3,6 +3,7 @@ import { useToastActions } from '../../context/JobCraftContext';
 import { useInterviewsQuery } from '../../features/interview/hooks';
 import {
   useApplyReviewFeedbackMutation,
+  useConfirmFeedbackDecisionsMutation,
   useFeedbackGateQuery,
   useInterviewReviewDetailQuery,
   useRejectFeedbackCandidateMutation,
@@ -32,6 +33,8 @@ export const InterviewReviewDetailView: React.FC<InterviewReviewDetailViewProps>
   const { data: interviews = [] } = useInterviewsQuery();
   const applyFeedbackMutation = useApplyReviewFeedbackMutation();
   const rejectFeedbackMutation = useRejectFeedbackCandidateMutation();
+  // T-M8-9 遗留 C：§24.2 复盘结束汇总一次确认（多候选合并为一次批量请求）
+  const confirmDecisionsMutation = useConfirmFeedbackDecisionsMutation();
   const go = useTabNavigate();
 
   const currentInterview = interviews.find((i) => i.id === interviewId);
@@ -46,6 +49,9 @@ export const InterviewReviewDetailView: React.FC<InterviewReviewDetailViewProps>
   const [selectedQAIndex, setSelectedQAIndex] = useState<number>(0);
   // P10-b-lite 轻闸门：写回经历资产前需用户二次确认（§19.4/§19.6）
   const [pendingConfirmIndex, setPendingConfirmIndex] = useState<number | null>(null);
+  // T-M8-9 遗留 C：汇总确认面板——反选集（默认全选，spec「默认勾选有 related_card_id 的」）
+  const [deselectedRefs, setDeselectedRefs] = useState<Set<string>>(new Set());
+  const [confirmingRejectAll, setConfirmingRejectAll] = useState(false);
   // T-M8-1：闸门决策以服务端台账为准（刷新不丢），applied 标记不再只活在本地 cache
   //（hook 必须在早返回之前，违反 hook 顺序会连带崩掉整页渲染）
   const recordId = review?.recordId ?? currentInterview?.review?.recordId;
@@ -153,6 +159,68 @@ export const InterviewReviewDetailView: React.FC<InterviewReviewDetailViewProps>
     (fb) => fb.experienceId === selectedQA?.relatedExperienceId
   );
 
+  // ---- T-M8-9 遗留 C：汇总一次确认（§24.2）--------------------------------
+  const pendingGateItems = (gateQuery.data?.candidates || []).filter(
+    (c) => c.decision === 'pending'
+  );
+  const selectedPendingItems = pendingGateItems.filter(
+    (c) => !deselectedRefs.has(c.target_ref)
+  );
+
+  const togglePendingRef = (ref: string) => {
+    setDeselectedRefs((prev) => {
+      const next = new Set(prev);
+      if (next.has(ref)) next.delete(ref);
+      else next.add(ref);
+      return next;
+    });
+  };
+
+  const handleBatchConfirm = async () => {
+    if (selectedPendingItems.length === 0) return;
+    try {
+      await confirmDecisionsMutation.mutateAsync({
+        interviewId: currentInterview.id,
+        acceptIds: selectedPendingItems.map((c) => c.target_ref),
+        rejectIds: [],
+      });
+      showToast({
+        type: 'success',
+        title: `已沉淀 ${selectedPendingItems.length} 条建议`,
+        message: '选中的建议已追加为经历新版本（未勾选的仍保留在待确认列表）。',
+      });
+    } catch (e) {
+      showToast({
+        type: 'error',
+        title: '汇总确认失败',
+        message: (e as Error).message || '请稍后重试',
+      });
+    }
+  };
+
+  const handleBatchReject = async () => {
+    if (pendingGateItems.length === 0) return;
+    try {
+      await confirmDecisionsMutation.mutateAsync({
+        interviewId: currentInterview.id,
+        acceptIds: [],
+        rejectIds: pendingGateItems.map((c) => c.target_ref),
+      });
+      setConfirmingRejectAll(false);
+      showToast({
+        type: 'success',
+        title: `已忽略 ${pendingGateItems.length} 条候选`,
+        message: '未写入经历资产库；之后仍可在复盘详情重新确认沉淀。',
+      });
+    } catch (e) {
+      showToast({
+        type: 'error',
+        title: '批量忽略失败',
+        message: (e as Error).message || '请稍后重试',
+      });
+    }
+  };
+
   return (
     <div className="min-h-full bg-page p-4 md:p-6 lg:p-7 space-y-4 max-w-[1440px] mx-auto animate-in fade-in duration-300 text-ink">
       {/* 1. Header Section */}
@@ -216,6 +284,98 @@ export const InterviewReviewDetailView: React.FC<InterviewReviewDetailViewProps>
               </span>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* 2.5 沉淀汇总确认（T-M8-9 遗留 C，§24.2）：有待决策候选时展示 */}
+      {pendingGateItems.length > 0 && (
+        <div
+          data-testid="feedback-batch-panel"
+          className="bg-white rounded-2xl border border-sage/25 p-4 shadow-xs space-y-3"
+        >
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+            <div className="flex items-center gap-2 text-xs">
+              <Database className="w-4 h-4 text-sage" />
+              <span className="font-bold text-ink">复盘沉淀确认</span>
+              <span className="text-muted">
+                本场产生 {pendingGateItems.length} 条沉淀候选，勾选后可汇总确认（也可在下方逐题单独处理）
+              </span>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={handleBatchConfirm}
+                disabled={
+                  selectedPendingItems.length === 0 ||
+                  confirmDecisionsMutation.isPending
+                }
+                className="px-3 py-1.5 bg-sage hover:bg-sage-dim text-white text-xs font-bold rounded-lg transition shadow-xs cursor-pointer shrink-0 disabled:opacity-60"
+              >
+                确认沉淀（{selectedPendingItems.length} 条）
+              </button>
+              {confirmingRejectAll ? (
+                <span className="flex items-center gap-1.5">
+                  <button
+                    onClick={handleBatchReject}
+                    disabled={confirmDecisionsMutation.isPending}
+                    className="px-3 py-1.5 bg-warning hover:opacity-90 text-white text-xs font-bold rounded-lg transition shadow-xs cursor-pointer disabled:opacity-60"
+                  >
+                    确认忽略全部 {pendingGateItems.length} 条？
+                  </button>
+                  <button
+                    onClick={() => setConfirmingRejectAll(false)}
+                    disabled={confirmDecisionsMutation.isPending}
+                    className="px-2.5 py-1.5 bg-page hover:bg-edge text-muted text-xs font-semibold rounded-lg border border-edge transition cursor-pointer disabled:opacity-60"
+                  >
+                    取消
+                  </button>
+                </span>
+              ) : (
+                <button
+                  onClick={() => setConfirmingRejectAll(true)}
+                  disabled={confirmDecisionsMutation.isPending}
+                  className="px-2.5 py-1.5 bg-page hover:bg-edge text-muted text-xs font-semibold rounded-lg border border-edge transition cursor-pointer shrink-0 disabled:opacity-60"
+                >
+                  全部忽略
+                </button>
+              )}
+            </div>
+          </div>
+
+          <ul className="space-y-1.5">
+            {pendingGateItems.map((item) => {
+              const checked = !deselectedRefs.has(item.target_ref);
+              return (
+                <li
+                  key={item.target_ref}
+                  className="flex items-start gap-3 px-3 py-2 rounded-xl border border-edge bg-canvas"
+                >
+                  <input
+                    id={`gate-${item.target_ref}`}
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() => togglePendingRef(item.target_ref)}
+                    className="mt-0.5 h-3.5 w-3.5 accent-sage cursor-pointer"
+                  />
+                  <label
+                    htmlFor={`gate-${item.target_ref}`}
+                    className="flex-1 text-xs leading-relaxed cursor-pointer"
+                  >
+                    <span className="font-semibold text-ink">
+                      {item.experience_title || `经历 ${item.experience_id}`}
+                    </span>
+                    <span className="ml-2 text-faint font-mono">
+                      {item.current_version} → {item.proposed_version}
+                    </span>
+                    {item.discovered_issues.length > 0 && (
+                      <span className="block text-muted">
+                        发现：{item.discovered_issues.join('；')}
+                      </span>
+                    )}
+                  </label>
+                </li>
+              );
+            })}
+          </ul>
         </div>
       )}
 

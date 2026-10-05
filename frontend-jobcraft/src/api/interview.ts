@@ -4,6 +4,8 @@
 
 import { request, requestFormData } from './client'
 import type {
+  FeedbackBatchConfirmPayload,
+  FeedbackBatchConfirmResult,
   FeedbackCandidateItem,
   FeedbackCandidatesResponse,
   FeedbackDecisionPayload,
@@ -18,7 +20,7 @@ import type {
   QuestionBankResponse,
 } from './types'
 
-export type { FeedbackCandidateItem, FeedbackDecisionResult }
+export type { FeedbackCandidateItem, FeedbackDecisionResult, FeedbackBatchConfirmResult }
 
 // ============================================================
 // 面试准备
@@ -213,6 +215,17 @@ export async function rejectFeedbackCandidate(
 ): Promise<FeedbackDecisionResult> {
   return request<FeedbackDecisionResult>(
     `/api/jobcraft/interview-review/${recordId}/feedback-candidates/reject`,
+    { method: 'POST', body: JSON.stringify(payload) }
+  )
+}
+
+/** T-M8-9 遗留 C：§24.2 汇总一次确认——批量决策（服务端整批校验后单事务写入） */
+export async function confirmFeedbackCandidates(
+  recordId: number,
+  payload: FeedbackBatchConfirmPayload
+): Promise<FeedbackBatchConfirmResult> {
+  return request<FeedbackBatchConfirmResult>(
+    `/api/jobcraft/interview-review/${recordId}/feedback-candidates/confirm`,
     { method: 'POST', body: JSON.stringify(payload) }
   )
 }
