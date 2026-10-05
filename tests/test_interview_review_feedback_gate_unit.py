@@ -40,6 +40,7 @@ def gate_client(monkeypatch):
         "card": {"id": 42, "version": 1},
         "update_calls": [],
         "apply_calls": [],
+        "batch_calls": [],
         "advance_calls": [],
     }
 
@@ -134,6 +135,53 @@ def gate_client(monkeypatch):
         state["advance_calls"].append((record_id, target))
         return target
 
+    def apply_batch(record_id, user_id, writes):
+        """批量单事务桩：记录整批并逐条落卡 + 台账（与真库语义一致）。"""
+        state["batch_calls"].append([dict(w) for w in writes])
+        results = []
+        for w in writes:
+            target_type = w.get("target_type", "experience")
+            if w["decision"] == "rejected":
+                row = decide(
+                    record_id=record_id,
+                    user_id=user_id,
+                    target_type=target_type,
+                    target_ref=w["target_ref"],
+                    decision="rejected",
+                    card_version=None,
+                    analysis_run_id=w.get("analysis_run_id", ""),
+                )
+                results.append(
+                    {
+                        "target_type": target_type,
+                        "target_ref": w["target_ref"],
+                        "decision": "rejected",
+                        "card_version": None,
+                        "decided_at": row["decided_at"],
+                    }
+                )
+            else:
+                out = apply_write(
+                    record_id=record_id,
+                    user_id=user_id,
+                    target_type=target_type,
+                    target_ref=w["target_ref"],
+                    card_id=int(w.get("card_id") or w["target_ref"]),
+                    updates=w.get("updates") or {},
+                    analysis_run_id=w.get("analysis_run_id", ""),
+                    decision=w["decision"],
+                )
+                results.append(
+                    {
+                        "target_type": target_type,
+                        "target_ref": w["target_ref"],
+                        "decision": out["ledger"]["decision"],
+                        "card_version": out["card_version"],
+                        "decided_at": out["ledger"]["decided_at"],
+                    }
+                )
+        return results
+
     monkeypatch.setattr(
         "app.api.interview_review.db_tools.get_interview_record", get_record
     )
@@ -150,6 +198,9 @@ def gate_client(monkeypatch):
     monkeypatch.setattr("app.api.interview_review.db_tools.update_card", update_card)
     monkeypatch.setattr(
         "app.api.interview_review.db_tools.apply_feedback_card_write", apply_write
+    )
+    monkeypatch.setattr(
+        "app.api.interview_review.db_tools.apply_feedback_decisions", apply_batch
     )
     monkeypatch.setattr(
         "app.api.interview_review.db_tools.advance_interview_record_status", advance
@@ -427,6 +478,211 @@ class TestFeedbackGateAtomicityAndPhase:
         assert len(state["update_calls"]) == 1
 
 
+class TestFeedbackBatchConfirm:
+    """POST .../feedback-candidates/confirm（§24.2 汇总一次确认，T-M8-9 遗留 C）
+
+    关键语义：整批校验先行、单事务写入、结果与入参同序、幂等短路不重复写卡。
+    """
+
+    URL = "/api/jobcraft/interview-review/7/feedback-candidates/confirm"
+
+    @staticmethod
+    def _ledger_row(ref, decision, card_version=3):
+        return {
+            "id": len(str(ref)),
+            "user_id": 1,
+            "interview_record_id": 7,
+            "target_type": "experience",
+            "target_ref": ref,
+            "analysis_run_id": "",
+            "decision": decision,
+            "card_version": card_version,
+            "decided_at": "2026-10-04 12:00:00",
+        }
+
+    @staticmethod
+    def _two_candidates(state):
+        """独立构造含 42/43 两个候选的记录（不污染模块级 RECORD）。"""
+        import copy
+
+        state["record"] = copy.deepcopy(RECORD)
+        feedbacks = state["record"]["analysis"]["experienceFeedbacks"]
+        feedbacks.append(
+            {
+                "experienceId": "43",
+                "experienceTitle": "第二段经历",
+                "discoveredIssues": ["缺口径"],
+                "suggestions": ["补指标"],
+                "currentVersion": "V1",
+                "proposedVersion": "V2",
+                "proposedChanges": [],
+            }
+        )
+
+    def test_mixed_accept_and_reject_in_one_transaction(self, gate_client):
+        client, state = gate_client
+        self._two_candidates(state)
+        resp = client.post(
+            self.URL,
+            json={
+                "decisions": [
+                    {"target_ref": "42", "decision": "accepted", "results": ["rs"]},
+                    {"target_ref": "43", "decision": "rejected"},
+                ]
+            },
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["decision_count"] == 2
+        # 结果与入参同序
+        assert [r["target_ref"] for r in data["results"]] == ["42", "43"]
+        assert [r["decision"] for r in data["results"]] == ["accepted", "rejected"]
+        assert all(r["idempotent"] is False for r in data["results"])
+        assert data["gate_status"] == "done"
+        # 一次请求 = 一次批量事务调用（非两次单条）
+        assert len(state["batch_calls"]) == 1
+        assert len(state["batch_calls"][0]) == 2
+        # 接受型写卡（四槽位），忽略型不写卡
+        assert state["update_calls"] == [(42, {"results": ["rs"]})]
+        assert [row["target_ref"] for row in state["ledger"]] == ["42", "43"]
+        # 全部决策完成 → 阶段推进 done
+        assert (7, "done") in state["advance_calls"]
+
+    def test_already_decided_items_skip_write_idempotently(self, gate_client):
+        client, state = gate_client
+        self._two_candidates(state)
+        state["ledger"] = [self._ledger_row("42", "accepted")]
+        resp = client.post(
+            self.URL,
+            json={
+                "decisions": [
+                    {"target_ref": "42", "decision": "accepted"},
+                    {"target_ref": "43", "decision": "accepted"},
+                ]
+            },
+        )
+        assert resp.status_code == 200
+        results = resp.json()["results"]
+        assert results[0]["idempotent"] is True
+        assert results[0]["decision"] == "accepted"
+        assert results[1]["idempotent"] is False
+        # 只有 43 进入批量事务；42 不重复写卡
+        assert len(state["batch_calls"]) == 1
+        assert [w["target_ref"] for w in state["batch_calls"][0]] == ["43"]
+        assert len(state["update_calls"]) == 1
+        assert state["update_calls"][0][0] == 43
+
+    def test_conflict_validates_whole_batch_before_any_write(self, gate_client):
+        """合法条目排在前面也不能先写：409 前整批零写入。"""
+        client, state = gate_client
+        self._two_candidates(state)
+        state["ledger"] = [self._ledger_row("42", "accepted")]
+        resp = client.post(
+            self.URL,
+            json={
+                "decisions": [
+                    {"target_ref": "43", "decision": "accepted"},
+                    {"target_ref": "42", "decision": "rejected"},
+                ]
+            },
+        )
+        assert resp.status_code == 409
+        assert state["batch_calls"] == []
+        assert state["update_calls"] == []
+        assert len(state["ledger"]) == 1, "冲突批次不得落任何决策"
+
+    def test_unknown_candidate_404_without_partial_write(self, gate_client):
+        client, state = gate_client
+        resp = client.post(
+            self.URL,
+            json={
+                "decisions": [
+                    {"target_ref": "42", "decision": "accepted"},
+                    {"target_ref": "999", "decision": "accepted"},
+                ]
+            },
+        )
+        assert resp.status_code == 404
+        assert state["batch_calls"] == []
+        assert state["update_calls"] == []
+
+    def test_missing_card_404_without_partial_write(self, gate_client):
+        client, state = gate_client
+        self._two_candidates(state)
+        state["card"] = None
+        resp = client.post(
+            self.URL,
+            json={
+                "decisions": [
+                    {"target_ref": "42", "decision": "accepted"},
+                    {"target_ref": "43", "decision": "accepted"},
+                ]
+            },
+        )
+        assert resp.status_code == 404
+        assert state["batch_calls"] == []
+
+    def test_invalid_payloads_rejected(self, gate_client):
+        client, _ = gate_client
+        cases = [
+            {"decisions": []},  # 空批次
+            {  # 批次内重复
+                "decisions": [
+                    {"target_ref": "42", "decision": "accepted"},
+                    {"target_ref": "42", "decision": "rejected"},
+                ]
+            },
+            {"decisions": [{"target_ref": "42", "decision": "maybe"}]},  # 非法决策
+            {"decisions": [{"target_ref": "  ", "decision": "accepted"}]},  # 空 ref
+        ]
+        for body in cases:
+            resp = client.post(self.URL, json=body)
+            assert resp.status_code == 400, body
+
+    def test_repeated_reject_is_idempotent_flagged(self, gate_client):
+        client, state = gate_client
+        state["ledger"] = [self._ledger_row("42", "rejected", card_version=None)]
+        resp = client.post(
+            self.URL,
+            json={"decisions": [{"target_ref": "42", "decision": "rejected"}]},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["results"][0]["idempotent"] is True
+        assert data["results"][0]["decision"] == "rejected"
+        assert state["batch_calls"] == []
+
+    def test_edited_decision_records_edited_label(self, gate_client):
+        client, state = gate_client
+        resp = client.post(
+            self.URL,
+            json={
+                "decisions": [
+                    {
+                        "target_ref": "42",
+                        "decision": "edited",
+                        "background": "bg2",
+                    }
+                ]
+            },
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["results"][0]["decision"] == "edited"
+        assert data["results"][0]["idempotent"] is False
+        assert state["ledger"][0]["decision"] == "edited"
+        assert state["update_calls"] == [(42, {"background": "bg2"})]
+
+    def test_missing_record_returns_404(self, gate_client):
+        client, state = gate_client
+        state["record"] = None
+        resp = client.post(
+            self.URL,
+            json={"decisions": [{"target_ref": "42", "decision": "accepted"}]},
+        )
+        assert resp.status_code == 404
+
+
 class TestInterviewRecordStatusProgression:
     """T-M8-9：状态推进序（防降级）——替代原 `status != "done"` 字面量判断"""
 
@@ -478,32 +734,75 @@ class TestInterviewRecordStatusProgression:
             db_interview.advance_interview_record_status(7, "not_a_stage")
 
     def test_analysis_without_feedback_marks_analyzed(self, monkeypatch):
-        captured = {}
-
-        def fake_execute(sql, params=None):
-            captured["params"] = params
-
+        cursor = _ScriptedCursor([])
         monkeypatch.setattr(
             db_interview, "_ensure_interview_records_table", lambda: None
         )
-        monkeypatch.setattr(db_interview, "execute", fake_execute)
+        monkeypatch.setattr(
+            db_interview, "_ensure_feedback_candidates_table", lambda: None
+        )
+        monkeypatch.setattr(
+            db_interview,
+            "transaction",
+            lambda: _NullTransaction(_FakeConn(cursor)),
+        )
         db_interview.update_interview_record_analysis(7, {"summary": "x"})
-        assert captured["params"][1] == "analyzed"
+        updates = [p for s, p in cursor.executed if "UPDATE interview_records" in s]
+        assert updates and updates[0][1] == "analyzed"
+        deletes = [
+            p for s, p in cursor.executed if "DELETE FROM feedback_candidates" in s
+        ]
+        assert deletes and deletes[0] == (7,), "无候选时应清空该记录 pending 行"
 
     def test_analysis_with_feedback_marks_awaiting_confirmation(self, monkeypatch):
-        captured = {}
-
-        def fake_execute(sql, params=None):
-            captured["params"] = params
-
+        cursor = _ScriptedCursor([])
         monkeypatch.setattr(
             db_interview, "_ensure_interview_records_table", lambda: None
         )
-        monkeypatch.setattr(db_interview, "execute", fake_execute)
-        db_interview.update_interview_record_analysis(
-            7, {"patch": {"experienceFeedbacks": [{"experienceId": "42"}]}}
+        monkeypatch.setattr(
+            db_interview, "_ensure_feedback_candidates_table", lambda: None
         )
-        assert captured["params"][1] == "awaiting_confirmation"
+        monkeypatch.setattr(
+            db_interview,
+            "transaction",
+            lambda: _NullTransaction(_FakeConn(cursor)),
+        )
+        # 候选形状：顶层 experienceFeedbacks（与 GET /feedback-candidates 及
+        # FE mapper `const patch = analysis` 一致，非嵌套 patch 键）
+        db_interview.update_interview_record_analysis(
+            7, {"experienceFeedbacks": [{"experienceId": "42"}]}, user_id=1
+        )
+        updates = [p for s, p in cursor.executed if "UPDATE interview_records" in s]
+        assert updates and updates[0][1] == "awaiting_confirmation"
+        inserts = [
+            p for s, p in cursor.executed if "INSERT INTO feedback_candidates" in s
+        ]
+        # VALUES 内 analysis_run_id='' 与 decision='pending' 为字面量
+        assert inserts and inserts[0] == (1, 7, "experience", "42")
+        assert any("ON DUPLICATE KEY UPDATE id=id" in s for s, _ in cursor.executed), (
+            "物化必须幂等：唯一键命中只写 id=id，不覆盖已有决策"
+        )
+
+    def test_analysis_without_user_id_reads_owner_from_record(self, monkeypatch):
+        cursor = _ScriptedCursor([(9,)])
+        monkeypatch.setattr(
+            db_interview, "_ensure_interview_records_table", lambda: None
+        )
+        monkeypatch.setattr(
+            db_interview, "_ensure_feedback_candidates_table", lambda: None
+        )
+        monkeypatch.setattr(
+            db_interview,
+            "transaction",
+            lambda: _NullTransaction(_FakeConn(cursor)),
+        )
+        db_interview.update_interview_record_analysis(
+            7, {"experienceFeedbacks": [{"experienceId": "42"}]}
+        )
+        inserts = [
+            p for s, p in cursor.executed if "INSERT INTO feedback_candidates" in s
+        ]
+        assert inserts and inserts[0][0] == 9, "缺省 user_id 时应回读记录归属用户"
 
 
 class TestFeedbackCardWriteTransaction:

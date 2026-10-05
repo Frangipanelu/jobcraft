@@ -463,29 +463,120 @@ def update_interview_record_fill(
     return True
 
 
-def update_interview_record_analysis(record_id: int, analysis: Dict[str, Any]) -> None:
+def update_interview_record_analysis(
+    record_id: int,
+    analysis: Dict[str, Any],
+    user_id: Optional[int] = None,
+) -> None:
     """更新面试记录的分析结果（T-M8-9：状态改走阶段序，落 `analyzed`）
 
     修订历史：原实现直写 `done`，导致 SPEC §5 六态中的 `analyzed` / `awaiting_confirmation`
     永不可达、且「问题表不降级已分析记录」只能靠字面量 `!= "done"` 判断。
     现改为：`analyzed`（无可沉淀候选）或 `awaiting_confirmation`（有候选待用户确认），
     降级保护由 `advance_interview_record_status` 的阶段序统一承担。
+
+    形状说明（T-M8-9 修正）：候选读**顶层** `analysis.experienceFeedbacks`——与
+    `GET /feedback-candidates`（`record["analysis"]["experienceFeedbacks"]`）及 FE
+    mapper（`const patch = analysis` 别名）一致；不存在嵌套 `analysis["patch"]` 键。
+    本函数是 analyze 落点，按刚写入的**内容**派生阶段（不走 rank 防降级）——
+    重跑分析后候选可能重新出现，阶段需回到 awaiting_confirmation。
+
+    DATA_MODEL §31 Complete Review：分析写入与 `create FeedbackCandidates`（物化为
+    pending 台账行）同事务完成；重复分析按唯一键幂等，**不覆盖已有决策**，
+    已不在本次分析中的 pending 行被清理（已决策行保留为历史）。
+
+    Args:
+        record_id: 面试记录 ID。
+        analysis: 分析结果字典（顶层含可选 `experienceFeedbacks`）。
+        user_id: 归属用户；缺省时从记录行回读（仅物化候选时需要）。
     """
     _ensure_interview_records_table()
-    feedbacks = (analysis.get("patch") or {}).get("experienceFeedbacks") or []
+    _ensure_feedback_candidates_table()
+    feedbacks = analysis.get("experienceFeedbacks") or []
     target = "awaiting_confirmation" if feedbacks else "analyzed"
-    execute(
-        """
-        UPDATE interview_records
-        SET analysis_json=%s, status=%s
-        WHERE id=%s
-        """,
-        (
-            json.dumps(analysis, ensure_ascii=False),
-            target,
-            record_id,
-        ),
+    with transaction() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE interview_records
+                SET analysis_json=%s, status=%s
+                WHERE id=%s
+                """,
+                (
+                    json.dumps(analysis, ensure_ascii=False),
+                    target,
+                    record_id,
+                ),
+            )
+            _materialize_feedback_candidates(cur, record_id, analysis, user_id)
+
+
+def _materialize_feedback_candidates(
+    cur: Any,
+    record_id: int,
+    analysis: Dict[str, Any],
+    user_id: Optional[int] = None,
+) -> int:
+    """把本次分析的候选物化为 pending 台账行（§31 `create FeedbackCandidates`，T-M8-9）
+
+    在调用方事务内执行，与分析写入原子提交。幂等：唯一键命中只写 `id=id`（空操作），
+    决策列绝不被覆盖；已不在本次分析中的 pending 行删除（内容源已无此候选）。
+
+    Args:
+        cur: 调用方事务的游标。
+        record_id: 面试记录 ID。
+        analysis: 刚写入的分析字典（读顶层 `experienceFeedbacks`）。
+        user_id: 归属用户；缺省时回读记录行。
+
+    Returns:
+        int: 本次候选对（target_type, target_ref）数量。
+    """
+    feedbacks = analysis.get("experienceFeedbacks") or []
+    pairs: List[tuple] = []
+    for fb in feedbacks:
+        target_type = fb.get("target_type") or "experience"
+        target_ref = str(fb.get("experienceId") or "")
+        if target_ref and (target_type, target_ref) not in pairs:
+            pairs.append((target_type, target_ref))
+
+    if not pairs:
+        # 内容源已无候选：清空该记录的 pending 行（已决策行保留）
+        cur.execute(
+            "DELETE FROM feedback_candidates "
+            "WHERE interview_record_id=%s AND decision='pending'",
+            (record_id,),
+        )
+        return 0
+
+    if user_id is None:
+        cur.execute("SELECT user_id FROM interview_records WHERE id=%s", (record_id,))
+        owner = cur.fetchone()
+        user_id = owner[0] if owner else 1
+
+    for target_type, target_ref in pairs:
+        cur.execute(
+            """
+            INSERT INTO feedback_candidates
+                (user_id, interview_record_id, target_type, target_ref,
+                 analysis_run_id, decision)
+            VALUES (%s, %s, %s, %s, '', 'pending')
+            ON DUPLICATE KEY UPDATE id=id
+            """,
+            (user_id, record_id, target_type, target_ref),
+        )
+
+    # 清理不再被本次分析提出的 pending 行
+    conditions = " OR ".join(["(target_type=%s AND target_ref=%s)"] * len(pairs))
+    params: List[Any] = [record_id]
+    for target_type, target_ref in pairs:
+        params.extend([target_type, target_ref])
+    cur.execute(
+        "DELETE FROM feedback_candidates "
+        "WHERE interview_record_id=%s AND decision='pending' "
+        f"AND NOT ({conditions})",
+        tuple(params),
     )
+    return len(pairs)
 
 
 # SPEC §5 六态的推进序（DB 侧唯一权威，供 advance_interview_record_status 判降级）。
@@ -923,6 +1014,55 @@ def decide_feedback_candidate(
     return row
 
 
+# 台账决策 upsert（accepted/edited/rejected 通用）：唯一键命中只更新决策列。
+_FEEDBACK_UPSERT_SQL = """
+INSERT INTO feedback_candidates
+    (user_id, interview_record_id, target_type, target_ref,
+     analysis_run_id, decision, card_version, decided_at)
+VALUES (%s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
+ON DUPLICATE KEY UPDATE
+    decision=VALUES(decision),
+    card_version=VALUES(card_version),
+    analysis_run_id=VALUES(analysis_run_id),
+    decided_at=CURRENT_TIMESTAMP
+"""
+
+_FEEDBACK_ROW_SELECT_SQL = (
+    "SELECT * FROM feedback_candidates "
+    "WHERE interview_record_id=%s AND target_type=%s AND target_ref=%s"
+)
+
+
+def _upsert_feedback_decision_in_conn(
+    cur: Any,
+    record_id: int,
+    user_id: int,
+    target_type: str,
+    target_ref: str,
+    decision: str,
+    card_version: Optional[int],
+    analysis_run_id: str,
+) -> Dict[str, Any]:
+    """在调用方事务游标上 upsert 决策并读回（供单条/批量共用，T-M8-9）"""
+    cur.execute(
+        _FEEDBACK_UPSERT_SQL,
+        (
+            user_id,
+            record_id,
+            target_type,
+            str(target_ref),
+            analysis_run_id,
+            decision,
+            card_version,
+        ),
+    )
+    cur.execute(_FEEDBACK_ROW_SELECT_SQL, (record_id, target_type, str(target_ref)))
+    row = cur.fetchone()
+    if not row:  # pragma: no cover - ON DUPLICATE 后必然可读
+        raise RuntimeError("反馈候选决策写入后读取失败")
+    return dict(row)
+
+
 def apply_feedback_card_write(
     record_id: int,
     user_id: int,
@@ -938,7 +1078,7 @@ def apply_feedback_card_write(
     规格要求 `status=accepted → formal write-back → create Validation → 更新目标版本`
     为一个原子操作，且「不得依赖前端多次请求顺序」。此前 API 层分两次调用
     `update_card` 与 `decide_feedback_candidate`，两者各走全局连接（autocommit），
-    中途失败会留下「卡已写、台账未记」的中间态；本函数把三条写放在同一事务内。
+    中途失败会留下「卡已写、台账未记」的中间态；本函数把写放在同一事务内。
 
     T-M9-1 的 `create Validation(user_confirmed)` 将追加到同一事务内。
 
@@ -963,54 +1103,128 @@ def apply_feedback_card_write(
     _ensure_interview_records_table()
     _ensure_feedback_candidates_table()
     with transaction() as conn:
+        return _apply_feedback_card_write_in_conn(
+            conn,
+            record_id=record_id,
+            user_id=user_id,
+            target_type=target_type,
+            target_ref=target_ref,
+            card_id=card_id,
+            updates=updates,
+            analysis_run_id=analysis_run_id,
+            decision=decision,
+        )
+
+
+def _apply_feedback_card_write_in_conn(
+    conn: Any,
+    record_id: int,
+    user_id: int,
+    target_type: str,
+    target_ref: str,
+    card_id: int,
+    updates: Dict[str, Any],
+    analysis_run_id: str = "",
+    decision: str = "accepted",
+) -> Dict[str, Any]:
+    """在调用方连接上写卡 + 记台账（不开事务；供单条/批量编排复用，T-M8-9）"""
+    with conn.cursor(dictionary=True) as cur:
+        cur.execute(
+            "SELECT id, version FROM experience_card WHERE id=%s AND user_id=%s",
+            (card_id, user_id),
+        )
+        card = cur.fetchone()
+        if not card:
+            raise ValueError(f"目标经历卡不存在或无权访问: {card_id}")
+        card_changed = update_card_with_conn(conn, card_id, updates, user_id)
+        card_version: Optional[int] = card.get("version")
+        if card_changed:
+            cur.execute("SELECT version FROM experience_card WHERE id=%s", (card_id,))
+            refreshed = cur.fetchone()
+            if refreshed:
+                card_version = refreshed.get("version")
+        ledger_row = _upsert_feedback_decision_in_conn(
+            cur,
+            record_id=record_id,
+            user_id=user_id,
+            target_type=target_type,
+            target_ref=target_ref,
+            decision=decision,
+            card_version=card_version,
+            analysis_run_id=analysis_run_id,
+        )
+    return {"card_version": card_version, "ledger": ledger_row}
+
+
+def apply_feedback_decisions(
+    record_id: int,
+    user_id: int,
+    writes: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    """批量决策单事务落库（T-M8-9 §24.2 汇总确认，DATA_MODEL §31）
+
+    `writes` 必须已由调用方（API 层）完成校验：候选存在、卡片归属、无冲突。
+    事务内逐条执行「写卡 + 版本快照 + 台账 upsert」或「仅台账 upsert」，
+    任一条失败整体回滚——「汇总一次确认」要求整批要么全成要么全不成。
+
+    Args:
+        record_id: 面试记录 ID。
+        user_id: 归属用户。
+        writes: 每项含 ``target_type / target_ref / card_id / updates /
+            analysis_run_id / decision``；``decision='rejected'`` 时不写卡
+            （card_id 可缺省）。
+
+    Returns:
+        List[Dict[str, Any]]: 与 writes 顺序一致的 ``{"target_type",
+        "target_ref", "decision", "card_version", "decided_at"}`` 结果列表。
+
+    Raises:
+        ValueError: 卡片不存在/不属于该用户（触发整体回滚）。
+    """
+    if not writes:
+        raise ValueError("writes 不能为空")
+    _ensure_interview_records_table()
+    _ensure_feedback_candidates_table()
+    results: List[Dict[str, Any]] = []
+    with transaction() as conn:
         with conn.cursor(dictionary=True) as cur:
-            cur.execute(
-                "SELECT id, version FROM experience_card WHERE id=%s AND user_id=%s",
-                (card_id, user_id),
-            )
-            card = cur.fetchone()
-            if not card:
-                raise ValueError(f"目标经历卡不存在或无权访问: {card_id}")
-            card_changed = update_card_with_conn(conn, card_id, updates, user_id)
-            card_version: Optional[int] = card.get("version")
-            if card_changed:
-                cur.execute(
-                    "SELECT version FROM experience_card WHERE id=%s", (card_id,)
+            for w in writes:
+                decision = w["decision"]
+                target_type = w.get("target_type", "experience")
+                if decision == "rejected":
+                    ledger_row = _upsert_feedback_decision_in_conn(
+                        cur,
+                        record_id=record_id,
+                        user_id=user_id,
+                        target_type=target_type,
+                        target_ref=w["target_ref"],
+                        decision=decision,
+                        card_version=None,
+                        analysis_run_id=w.get("analysis_run_id", ""),
+                    )
+                else:
+                    out = _apply_feedback_card_write_in_conn(
+                        conn,
+                        record_id=record_id,
+                        user_id=user_id,
+                        target_type=target_type,
+                        target_ref=w["target_ref"],
+                        card_id=int(w.get("card_id") or w["target_ref"]),
+                        updates=w.get("updates") or {},
+                        analysis_run_id=w.get("analysis_run_id", ""),
+                        decision=decision,
+                    )
+                    ledger_row = out["ledger"]
+                results.append(
+                    {
+                        "target_type": target_type,
+                        "target_ref": w["target_ref"],
+                        "decision": ledger_row.get("decision"),
+                        "card_version": ledger_row.get("card_version"),
+                        "decided_at": ledger_row.get("decided_at"),
+                    }
                 )
-                refreshed = cur.fetchone()
-                if refreshed:
-                    card_version = refreshed.get("version")
-            cur.execute(
-                """
-                INSERT INTO feedback_candidates
-                    (user_id, interview_record_id, target_type, target_ref,
-                     analysis_run_id, decision, card_version, decided_at)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
-                ON DUPLICATE KEY UPDATE
-                    decision=VALUES(decision),
-                    card_version=VALUES(card_version),
-                    analysis_run_id=VALUES(analysis_run_id),
-                    decided_at=CURRENT_TIMESTAMP
-                """,
-                (
-                    user_id,
-                    record_id,
-                    target_type,
-                    str(target_ref),
-                    analysis_run_id,
-                    decision,
-                    card_version,
-                ),
-            )
-            cur.execute(
-                "SELECT * FROM feedback_candidates "
-                "WHERE interview_record_id=%s AND target_type=%s AND target_ref=%s",
-                (record_id, target_type, str(target_ref)),
-            )
-            ledger_row = cur.fetchone()
-    if not ledger_row:  # pragma: no cover - ON DUPLICATE 后必然可读
-        raise RuntimeError("反馈候选决策写入后读取失败")
-    return {"card_version": card_version, "ledger": dict(ledger_row)}
+    return results
 
 
 def delete_interview_record(record_id: int, user_id: Optional[int] = None) -> None:

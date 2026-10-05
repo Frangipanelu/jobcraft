@@ -175,7 +175,7 @@ class TestInterviewReviewFlow:
         # mock DB 写入
         monkeypatch.setattr(
             "app.workflows.interview_review_flow.db_tools.update_interview_record_analysis",
-            lambda rid, data: None,
+            lambda rid, data, **k: None,
         )
         monkeypatch.setattr(
             "app.workflows.interview_review_flow.db_tools.delete_interview_qa_pairs_by_record",
@@ -287,7 +287,7 @@ class TestInterviewReviewFlow:
         )
         monkeypatch.setattr(
             "app.workflows.interview_review_flow.db_tools.update_interview_record_analysis",
-            lambda rid, data: None,
+            lambda rid, data, **k: None,
         )
         monkeypatch.setattr(
             "app.workflows.interview_review_flow.db_tools.delete_interview_qa_pairs_by_record",

@@ -87,6 +87,7 @@ from app.tools.db_submission import (  # noqa: E402, F401
 from app.tools.db_interview import (  # noqa: E402, F401
     advance_interview_record_status,
     apply_feedback_card_write,
+    apply_feedback_decisions,
     decide_feedback_candidate,
     delete_interview_qa_pair,
     delete_interview_qa_pairs_by_record,

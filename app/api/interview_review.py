@@ -3,7 +3,7 @@ import shutil
 import uuid
 from datetime import datetime
 from pathlib import Path
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
@@ -60,6 +60,29 @@ class FeedbackCandidateDecisionPayload(BaseModel):
     results: Optional[List[str]] = None
     analysis_run_id: str = ""
     edited: bool = False
+
+
+class FeedbackBatchDecisionItem(BaseModel):
+    """T-M8-9 遗留 C：§24.2 汇总一次确认——批次内单条决策。
+
+    字段语义与单条 accept/reject 请求体一致；`decision` 显式取
+    accepted / edited / rejected（接受型走写卡，rejected 仅记台账）。
+    """
+
+    target_type: str = "experience"
+    target_ref: str
+    decision: str
+    background: Optional[str] = None
+    problem: Optional[str] = None
+    actions: Optional[List[str]] = None
+    results: Optional[List[str]] = None
+    analysis_run_id: str = ""
+
+
+class FeedbackBatchConfirmPayload(BaseModel):
+    """T-M8-9 遗留 C：复盘结束汇总一次确认请求体。"""
+
+    decisions: List[FeedbackBatchDecisionItem]
 
 
 class InterviewSessionCreatePayload(BaseModel):
@@ -790,6 +813,156 @@ def jobcraft_interview_review_feedback_reject(
     except Exception as e:
         logger.exception("复盘反馈忽略失败")
         raise HTTPException(status_code=500, detail=f"复盘反馈忽略失败: {e}")
+
+
+@router.post("/{record_id}/feedback-candidates/confirm")
+def jobcraft_interview_review_feedback_confirm_batch(
+    record_id: int,
+    payload: FeedbackBatchConfirmPayload,
+    current_user: int = Depends(get_current_user),
+):
+    """T-M8-9 遗留 C：§24.2 复盘结束「汇总一次确认」（批量决策，单事务）。
+
+    校验先行：整批候选存在性（404）、冲突（已确认却要忽略 → 409）、卡片归属
+    （404）、批次内重复（400）全部通过后，才进入**单事务**逐条「写卡 + 台账
+    upsert」（DATA_MODEL §31），任一失败整体回滚——整批要么全成要么全不成。
+
+    幂等：库内已有 accepted/edited 且本次仍为接受型的条目直接跳过（不重复写卡）；
+    库内已 rejected 且本次仍为 rejected 的条目跳过。批次内与库内状态都校验
+    完成后才写库，因此无需回滚已写的条目。
+    """
+    try:
+        record = db_tools.get_interview_record(record_id, current_user)
+        if not record:
+            raise HTTPException(status_code=404, detail="面试记录不存在")
+        if not payload.decisions:
+            raise HTTPException(status_code=400, detail="decisions 不能为空")
+
+        valid_decisions = ("accepted", "edited", "rejected")
+        seen: set = set()
+        for item in payload.decisions:
+            ref = item.target_ref.strip()
+            if not ref:
+                raise HTTPException(status_code=400, detail="target_ref 不能为空")
+            if item.decision not in valid_decisions:
+                raise HTTPException(
+                    status_code=400, detail=f"非法决策值: {item.decision}"
+                )
+            key = (item.target_type, ref)
+            if key in seen:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"批次内重复决策: {item.target_type}/{ref}",
+                )
+            seen.add(key)
+
+        ledger = db_tools.list_feedback_candidates(record_id, current_user)
+        items = _feedback_gate_items(record, ledger)
+        by_key = {(i["target_type"], i["target_ref"]): i for i in items}
+        prev_by_key = {(row["target_type"], row["target_ref"]): row for row in ledger}
+
+        outcome: Dict[tuple, dict] = {}
+        writes: List[dict] = []
+        for item in payload.decisions:
+            ref = item.target_ref.strip()
+            key = (item.target_type, ref)
+            if key not in by_key:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"反馈候选不存在: {item.target_type}/{ref}",
+                )
+            prev = prev_by_key.get(key)
+            prev_decision = (prev or {}).get("decision")
+
+            if item.decision == "rejected":
+                if prev_decision in ("accepted", "edited"):
+                    raise HTTPException(
+                        status_code=409,
+                        detail="该候选已确认沉淀到经历卡，请先在卡片页回滚内容后再忽略",
+                    )
+                if prev_decision == "rejected":
+                    outcome[key] = {
+                        "target_ref": ref,
+                        "decision": "rejected",
+                        "card_version": prev.get("card_version"),
+                        "decided_at": prev.get("decided_at"),
+                        "idempotent": True,
+                    }
+                    continue
+                writes.append(
+                    {
+                        "target_type": item.target_type,
+                        "target_ref": ref,
+                        "decision": "rejected",
+                        "analysis_run_id": item.analysis_run_id,
+                    }
+                )
+                continue
+
+            # 接受型（accepted / edited）
+            if prev_decision in ("accepted", "edited"):
+                outcome[key] = {
+                    "target_ref": ref,
+                    "decision": prev_decision,
+                    "card_version": prev.get("card_version"),
+                    "decided_at": prev.get("decided_at"),
+                    "idempotent": True,
+                }
+                continue
+            card_id = int(ref)
+            card = db_tools.get_card(card_id, current_user)
+            if not card:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"目标经历卡不存在或无权访问: {card_id}",
+                )
+            updates = {
+                k: v
+                for k, v in (
+                    ("background", item.background),
+                    ("problem", item.problem),
+                    ("actions", item.actions),
+                    ("results", item.results),
+                )
+                if v is not None
+            }
+            writes.append(
+                {
+                    "target_type": item.target_type,
+                    "target_ref": ref,
+                    "card_id": card_id,
+                    "decision": item.decision,
+                    "updates": updates,
+                    "analysis_run_id": item.analysis_run_id,
+                }
+            )
+
+        if writes:
+            written = db_tools.apply_feedback_decisions(record_id, current_user, writes)
+            for res in written:
+                key = (res.get("target_type", "experience"), res["target_ref"])
+                if key not in outcome:
+                    outcome[key] = {**res, "idempotent": False}
+
+        results = [
+            outcome[(i.target_type, i.target_ref.strip())] for i in payload.decisions
+        ]
+        ledger = db_tools.list_feedback_candidates(record_id, current_user)
+        items = _feedback_gate_items(record, ledger)
+        _sync_gate_phase(record_id, items, current_user)
+        return {
+            "record_id": record_id,
+            "results": results,
+            "decision_count": len(payload.decisions),
+            "gate_status": _gate_status(items),
+        }
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.exception("复盘反馈汇总确认失败")
+        raise HTTPException(status_code=500, detail=f"复盘反馈汇总确认失败: {e}")
 
 
 @router.get("/{record_id}")

@@ -236,7 +236,7 @@ def _assemble_result(state: Dict[str, Any]) -> Dict[str, Any]:
 
     # 落库
     analysis_dict = result.model_dump(exclude={"record_id", "user_id", "created_at"})
-    db_tools.update_interview_record_analysis(record_id, analysis_dict)
+    db_tools.update_interview_record_analysis(record_id, analysis_dict, user_id=user_id)
     db_tools.delete_interview_qa_pairs_by_record(record_id)
     for q in questions:
         db_tools.insert_interview_qa_pair(
