@@ -92,7 +92,13 @@
   - **SPEC 一致性补齐**：台账决策枚举补 `edited`（用户改后确认，`apply_feedback_card_write` + payload `edited` 双端支持；诚实记录：详情页确认弹层当前无编辑输入，故 FE 暂不传该字段）；`reject` 覆盖已 accepted/edited 的候选返回 **409**（卡已写、再忽略会让台账与卡片矛盾，须先在卡片页回滚）；`reject` 响应补 `idempotent` 字段（对齐 TS 契约）。
   - **V0025 真库已应用**：`migrations/runner.py migrate 25`（注意 `limit` 是目标版本号而非条数），`feedback_candidates` 建表成功、0 行；TODO 台账已认领 V0025。
   - **门禁**：pytest 1174 passed / vitest 299 passed / tsc 0 / build 通过 / ruff + encoding 通过。BE 新增 17 项测试（阶段序 7 + 单事务编排 3 + edited/409/幂等/推进 7）。
-- [ ] **遗留 C（§24.2「复盘结束汇总一次确认」）**：仍未做，当前为逐题确认；方案已定（analyze 完成时物化 pending 台账行 → `POST .../feedback-candidates/confirm` 批量单事务端点 → 复盘中心汇总卡片），待排期。
+- [x] **遗留 C（§24.2「复盘结束汇总一次确认」）**（BE `3bfdfa3` + FE `7149582`，2026-10-05）：方案三段全部落地。
+  - **候选形状修复（我方引入的 bug）**：`update_interview_record_analysis` 原读嵌套 `analysis["patch"]["experienceFeedbacks"]`（键不存在 → 永远落 `analyzed`，且测试照抄同错形状自证循环）。改为读**顶层** `experienceFeedbacks`（与 `GET /feedback-candidates`、FE mapper `const patch = analysis` 别名一致）。
+  - **物化（DATA_MODEL §31 `create FeedbackCandidates`）**：analyze 写入与台账物化**同事务**——唯一键幂等 `id=id`（绝不覆盖已有决策）、已不在本次分析中的 pending 行清理（已决策行保留历史）、`user_id` 缺省回读记录归属；flow 落库时透传 `user_id`。无候选时清 pending 并落 `analyzed`。
+  - **批量端点** `POST /{record_id}/feedback-candidates/confirm`：整批校验先行（空批次/重复/非法值 400、候选不存在 404、卡片归属 404、**已确认却要忽略 409**）→ 全部通过才进 `apply_feedback_decisions()` 单事务逐条「写卡+台账 upsert / 仅台账」，任一失败整体回滚；结果与入参**同序**，库内已有同型决策短路为 `idempotent:true` 不重复写卡；随后 `_sync_gate_phase` 推进阶段。DB 层重构：共享 `_FEEDBACK_UPSERT_SQL` + `_upsert_feedback_decision_in_conn` + `apply_feedback_card_write` 拆出 `_apply_feedback_card_write_in_conn` 供单/批复用。
+  - **FE**：`confirmFeedbackCandidates` API + `useConfirmFeedbackDecisionsMutation`（accept 条目复用单条确认同款槽位合成；成功后 INTERVIEWS `applied` 标记 + EXPERIENCES/闸门 invalidate）+ 详情页「复盘沉淀确认」面板（有待决策候选才渲染、**默认全选**、反选可剔除、「确认沉淀（k 条）」批量接受、「全部忽略」两段确认）。
+  - **门禁**：pytest **1178** passed / vitest **305** passed / tsc 0 / build 通过 / ruff + encoding（416 文件 0 错）通过。BE 新增 14 项（批量 10 + 物化 3 + 形状修正），FE 新增 6 项。
+  - **诚实遗留（待 W12 生产者）**：`experienceFeedbacks` 全库仍**无生产者**（Python/TS 无任何写入方，`feature-alignment-matrix-2026-09-28.md:476` 已载「恒为 `[]`」）——生产中候选恒为 0，本面板/批量端点在候选出现前不渲染/不可达。生产者属 SPEC W12（仅列 target 类型无设计），且 EXPERIENCE_SPEC:807 明载「汇总确认流程待 M8-Q1 形态跑通再评估（M9 后置项）」——需单独排期（LLM 步骤 Prompt 版本化）。另：V0025 迁移 SQL 注释中的「patch.experienceFeedbacks」表述不准（checksum 不可改），以本条与代码为准（顶层键）。
 - [ ] **M8 剩余**：无（M8-2/3/4/5/6/7/8 + M8-1 已闭环）
 - [ ] **他域发现（不在本窗口动）**：`WorkbenchView.tsx:46finishedCount` 死变量（workbench 域）；`components/jobs/JobsListView.tsx` 的 `Filter` 未用 import（jobs 域）；`features/jd/hooks.ts:17readJdAnalyses` 未用导出（jd 域）——建议各归所属窗口或 T-M10-3
 
