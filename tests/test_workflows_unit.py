@@ -172,10 +172,15 @@ class TestInterviewReviewFlow:
             "app.workflows.interview_review_flow.GateAgent.run", fake_gate_run
         )
 
-        # mock DB 写入
+        # mock DB 写入（捕获 analysis_dict，锁 W12 注入点）
+        captured: dict = {}
+
+        def fake_update(rid, data, **k):
+            captured.update(data)
+
         monkeypatch.setattr(
             "app.workflows.interview_review_flow.db_tools.update_interview_record_analysis",
-            lambda rid, data, **k: None,
+            fake_update,
         )
         monkeypatch.setattr(
             "app.workflows.interview_review_flow.db_tools.delete_interview_qa_pairs_by_record",
@@ -193,6 +198,12 @@ class TestInterviewReviewFlow:
         assert "overall_score" in result
         assert result["company"] == "字节跳动"
         assert len(result["questions"]) == 2
+
+        # W12：落库 analysis_dict 必须含顶层 experienceFeedbacks（注入点锁）
+        assert [fb["experienceId"] for fb in captured["experienceFeedbacks"]] == [
+            "1",
+            "2",
+        ]
 
     def test_run_workflow_no_selected_qa_pairs(self, monkeypatch):
         """边界：selected_sequences 不匹配任何 qa_pair"""

@@ -298,6 +298,11 @@ def _assemble_result(state: Dict[str, Any]) -> Dict[str, Any]:
 
     # 落库
     analysis_dict = result.model_dump(exclude={"record_id", "user_id", "created_at"})
+    # W12：experienceFeedbacks 由生产者注入，不在 InterviewReviewResult 模型——
+    # 该模型字段全 snake_case，而此键必须是 camelCase（与 GET /feedback-candidates
+    # 及 FE mapper 契约一致）。键的唯一真相见
+    # docs/design-decisions/design-v2.0/W12_FEEDBACK_PRODUCER_DESIGN.md §5。
+    analysis_dict["experienceFeedbacks"] = _propose_feedback_candidates(state)
     db_tools.update_interview_record_analysis(record_id, analysis_dict, user_id=user_id)
     db_tools.delete_interview_qa_pairs_by_record(record_id)
     for q in questions:
