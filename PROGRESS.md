@@ -2,6 +2,17 @@
 
 > 本文件用于追踪项目整体进度。AI 在每次会话结束或完成子任务时，必须更新本文件的对应板块。
 
+## T-W12-1 experienceFeedbacks 生产者规则版（2026-10-05，C 窗·反哺链第一棒）
+
+> 反哺链首棒：M8-1 汇总确认消费链（遗留 C `3bfdfa3`/`7149582`/`df5bd79`）已建成但候选恒 0（Python/TS 全库无生产者）。按已评审设计 `W12_FEEDBACK_PRODUCER_DESIGN.md`（方案 C 接口固定+规则版先行 / 门槛 a / 来源=用户勾选解析题）点亮生产端，LLM 版留升级位。
+
+- [x] **BE `7a86458` + `f94982e`**：`app/workflows/interview_review_flow.py` 新增纯函数 `_propose_feedback_candidates(state)`（零 LLM 调用、零 I/O）——按 `related_card_id` 分组合并 feedback/suggestions（去重保序）→ 门槛（rid 有效 + 卡内合并建议 ≥1，feedback 单独不够格）→ 截断 issues≤3/suggestions≤5 → 按**截断前**建议数降序、并列卡 id 升序、取前 5 卡 → `_assemble_result` 落库前注入 `analysis_dict["experienceFeedbacks"]`（不进 `InterviewReviewResult`——该模型全 snake_case 而此键须 camelCase 匹配 GET/FE 契约，注入处注释指向设计 §5）。
+- [x] **测试 +8**：`TestProposeFeedbackCandidates` 7 例（同卡合并去重保序 / version Vn→Vn+1 / 门槛（无 rid、仅 feedback 卡剔除）/ 双截断保序 / 截断前计数排序 / 并列 id 升序+cap5 / 零候选空列表）+ `test_run_workflow_normal` DB 桩改捕获模式断言注入点（`experienceId ["1","2"]`，防形状 bug 复发）。
+- **门禁**：encoding 416 文件 0 错；ruff check 绿 + format 162 文件未变；pytest **1185 passed / 13 skipped**（基线 1178 + 新 7，0 failed，76.14s）。
+- **⚠️ 共享工作区**：pathspec 仅 `app/workflows/interview_review_flow.py` + `tests/test_workflows_unit.py` + `PROGRESS.md`。
+- **诚实标注**：候选质量 = 逐题建议聚合（无 LLM 结构化判断）；`proposedChanges: []` 恒空走 FE `applyFeedbackSuggestions` 回退；LLM 版为 W12 升级位（设计 §6：独立 prompt 文件+版本化+experienceId 白名单+失败降级）。
+- **下一步**：T-M9-1（V0026 validations 表，先登记后写 SQL 铁律）。
+
 ## P0 文档回填批 + 下一阶段执行序定稿（2026-10-05）
 
 > 触发：用户要求「重新评估任务优先级与依赖，梳理下一阶段尽快做完」→ 重评估后执行 P0 回填批（纯文档，零代码）。
