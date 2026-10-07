@@ -412,6 +412,20 @@ class TestJobcraftResume:
                 lambda *a, **k: None,
             ),
             patch("app.tools.db_submission.insert_submission", lambda *a, **k: 99),
+            # T-M6-8 评审修复：版本落库链 + 快照写入全 patch，单测不触真实 DB
+            patch(
+                "app.tools.db_job_entity.get_job_id_by_analysis",
+                lambda *a, **k: 15,
+            ),
+            patch(
+                "app.tools.db_resume_version.create_resume_version",
+                lambda **k: {"id": 42},
+            ),
+            patch("app.tools.db_experience.insert_card_version", lambda *a, **k: 1),
+            patch(
+                "app.tools.db_expression.get_active_expression_content",
+                lambda cid, user_id, expr_type="standardized": None,
+            ),
         ):
             mock_db.get_job_analysis.return_value = {
                 "user_id": 7,
@@ -452,6 +466,16 @@ class TestJobcraftResume:
                 "app.tools.db_expression.get_active_expression_content",
                 lambda cid, user_id, expr_type="standardized": None,
             ),
+            # T-M6-8 评审修复：版本落库链 + 快照写入全 patch，单测不触真实 DB
+            patch(
+                "app.tools.db_job_entity.get_job_id_by_analysis",
+                lambda *a, **k: 15,
+            ),
+            patch(
+                "app.tools.db_resume_version.create_resume_version",
+                lambda **k: {"id": 42},
+            ),
+            patch("app.tools.db_experience.insert_card_version", lambda *a, **k: 1),
         ):
             mock_db.get_job_analysis.return_value = {
                 "user_id": 7,
@@ -491,6 +515,16 @@ class TestJobcraftResume:
                 "app.tools.db_expression.get_active_expression_content",
                 lambda cid, user_id, expr_type="standardized": None,
             ),
+            # T-M6-8 评审修复：版本落库链 + 快照写入全 patch，单测不触真实 DB
+            patch(
+                "app.tools.db_job_entity.get_job_id_by_analysis",
+                lambda *a, **k: 15,
+            ),
+            patch(
+                "app.tools.db_resume_version.create_resume_version",
+                lambda **k: {"id": 42},
+            ),
+            patch("app.tools.db_experience.insert_card_version", lambda *a, **k: 1),
         ):
             mock_db.get_job_analysis.return_value = {
                 "user_id": 7,
@@ -676,6 +710,61 @@ class TestJobcraftResume:
 
         assert result["resume_version_id"] is None
         insert_mock.assert_not_called()
+
+    def test_jd_alignment_per_card_failure_does_not_skip_next(self, tmp_path):
+        """T-M6-8 评审修复：第 1 卡写失败只记日志，第 2 卡仍照常写入。"""
+        cards = {
+            1: self._snapshot_card(1, "原始一"),
+            2: self._snapshot_card(2, "原始二"),
+        }
+
+        def flaky_insert(data):
+            if data["card_id"] == 1:
+                raise Exception("第 1 卡写失败")
+            return 1
+
+        result, insert_mock = self._run_generate(
+            tmp_path,
+            cards,
+            lambda **k: {"id": 42},
+            insert_side_effect=flaky_insert,
+        )
+
+        assert result["resume_version_id"] == 42
+        assert insert_mock.call_count == 2
+        assert insert_mock.call_args_list[1][0][0]["card_id"] == 2
+        assert insert_mock.call_args_list[1][0][0]["raw_text"] == "原始二"
+
+    def test_create_resume_version_gets_version_name_suggestion(self, tmp_path):
+        """T-M6-8 评审修复：版本落库带 matrix 建议名 方向-公司-日期，
+        note 复用该名后与 FE 简历列表展示一致。"""
+        import re
+
+        cards = {3: self._snapshot_card(3, "x")}
+        created = {}
+
+        def fake_create(**kwargs):
+            created.update(kwargs)
+            return {"id": 42}
+
+        self._run_generate(tmp_path, cards, fake_create)
+
+        assert re.fullmatch(r"P-C-\d{4}/\d{1,2}/\d{1,2}", created["version_name"])
+
+    def test_jd_alignment_card_without_tags_is_tolerated(self, tmp_path):
+        """T-M6-8：tags 缺省的卡 → 快照 tags=None，写入不炸。"""
+        card = self._snapshot_card(3, "无标签卡")
+        card.pop("tags")
+
+        result, insert_mock = self._run_generate(
+            tmp_path, {3: card}, lambda **k: {"id": 42}
+        )
+
+        assert result["resume_version_id"] == 42
+        payload = insert_mock.call_args[0][0]
+        assert payload["card_id"] == 3
+        assert payload["tags"] is None
+        assert payload["raw_text"] == "无标签卡"
 
 
 # ============================================================

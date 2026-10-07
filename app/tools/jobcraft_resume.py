@@ -148,11 +148,16 @@ def generate_resume(
             )
         if job_id is None:
             raise ValueError("岗位归属缺失（job_id=None）")
+        # matrix :42：resume_version.version_name 默认建议 方向-公司-日期，
+        # 经历版本 note 复用该展示名（简历列表与经历卡历史两侧显示一致）
+        now = datetime.now()
+        name_suggestion = f"{position}-{company}-{now.year}/{now.month}/{now.day}"
         version = create_resume_version(
             user_id=uid,
             job_id=job_id,
             job_analysis_id=job_analysis_id,
             resume_markdown=md,
+            version_name=name_suggestion,
         )
         resume_version_id = version["id"]
 
@@ -164,34 +169,41 @@ def generate_resume(
             from app.tools.card_render import get_card_render_text
             from app.tools.db_experience import insert_card_version
 
-            now = datetime.now()
-            # 展示名复用所属简历版本名；无版本名时按 matrix 命名格式兜底
+            # 展示名复用所属简历版本名；为空时按同格式兜底
             # （方向-公司-年/月/日，例：产品运营-字节-2026/9/29）
-            note = (
-                version.get("version_name")
-                or f"{position}-{company}-{now.year}/{now.month}/{now.day}"
-            )
+            note = version.get("version_name") or name_suggestion
             for c in cards:
-                insert_card_version(
-                    {
-                        "card_id": c["id"],
-                        "version_type": "jd_alignment",
-                        "source_type": "resume_version",
-                        "source_id": resume_version_id,
-                        "title": c.get("title"),
-                        "tags": c.get("tags"),
-                        # 该卡在本次简历中的表述：编辑终稿 → 激活表达 →
-                        # ai_structured STAR → raw_text 全链（card_render 统一入口）
-                        "raw_text": get_card_render_text(
-                            c, versions=card_versions or {}
-                        ),
-                        "note": note,
-                    }
-                )
+                # 逐卡容错（评审修复）：单卡写失败只记日志，不跳过本轮其余卡
+                try:
+                    insert_card_version(
+                        {
+                            "card_id": c["id"],
+                            "version_type": "jd_alignment",
+                            "source_type": "resume_version",
+                            "source_id": resume_version_id,
+                            "title": c.get("title"),
+                            "tags": c.get("tags"),
+                            # 该卡在本次简历中的表述：编辑终稿 → 激活表达 →
+                            # ai_structured STAR → raw_text 全链（card_render 统一入口）
+                            "raw_text": get_card_render_text(
+                                c, versions=card_versions or {}
+                            ),
+                            "note": note,
+                        }
+                    )
+                except Exception:
+                    logger.warning(
+                        "写入 jd_alignment 卡版本快照失败，job_analysis_id=%s "
+                        "resume_version_id=%s card_id=%s",
+                        job_analysis_id,
+                        resume_version_id,
+                        c.get("id"),
+                        exc_info=True,
+                    )
         except Exception:
             logger.warning(
-                "写入 jd_alignment 卡版本快照失败，job_analysis_id=%s "
-                "resume_version_id=%s",
+                "写入 jd_alignment 卡版本快照前置失败（依赖导入/note），"
+                "job_analysis_id=%s resume_version_id=%s",
                 job_analysis_id,
                 resume_version_id,
                 exc_info=True,
