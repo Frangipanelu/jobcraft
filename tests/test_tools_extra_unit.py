@@ -247,6 +247,8 @@ class TestJobcraftResume:
                 "app.tools.db_expression.increment_active_expression_usage",
                 lambda cid, user_id, expr_type="standardized": incremented.append(cid),
             ),
+            # T-M6-8：单测不触真实 DB（jd_alignment 快照写入方）
+            patch("app.tools.db_experience.insert_card_version", lambda *a, **k: 1),
         ):
             mock_db.get_job_analysis.return_value = {
                 "user_id": 7,
@@ -301,6 +303,8 @@ class TestJobcraftResume:
                 lambda *a, **k: 15,
             ),
             patch("app.tools.db_resume_version.create_resume_version", fake_create),
+            # T-M6-8：单测不触真实 DB（jd_alignment 快照写入方）
+            patch("app.tools.db_experience.insert_card_version", lambda *a, **k: 1),
         ):
             mock_db.get_job_analysis.return_value = {
                 "user_id": 7,
@@ -359,6 +363,8 @@ class TestJobcraftResume:
             ),
             patch("app.tools.db_job_entity.find_or_create_job", fake_find),
             patch("app.tools.db_resume_version.create_resume_version", fake_create),
+            # T-M6-8：单测不触真实 DB（jd_alignment 快照写入方）
+            patch("app.tools.db_experience.insert_card_version", lambda *a, **k: 1),
         ):
             mock_db.get_job_analysis.return_value = {
                 "user_id": 7,
@@ -502,6 +508,174 @@ class TestJobcraftResume:
 
         assert "## 核心能力" not in result["resume_markdown"]
         assert result["resume_markdown"]
+
+    # --------------------------------------------------------
+    # T-M6-8：save-resume 写 jd_alignment 卡版本快照（写入方）
+    # --------------------------------------------------------
+
+    @staticmethod
+    def _run_generate(tmp_path, cards, create_version, **kwargs):
+        """搭 generate_resume 的全量 patch 环境并执行（单测不触真实 DB）。
+
+        :param cards: {card_id: 卡 dict}，get_card 按 id 返回副本
+        :param create_version: create_resume_version 替身（可抛异常走失败路径）
+        :param kwargs: card_versions / insert_side_effect / job_id
+        :return: (generate_resume 结果, insert_card_version mock)
+        """
+        from contextlib import ExitStack
+
+        from app.tools.jobcraft_resume import generate_resume
+
+        card_versions = kwargs.get("card_versions")
+        job_id = kwargs.get("job_id", 15)
+        insert_mock = MagicMock(return_value=1)
+        if kwargs.get("insert_side_effect") is not None:
+            insert_mock.side_effect = kwargs["insert_side_effect"]
+
+        def fake_card(cid, user_id=None):
+            return dict(cards[cid])
+
+        with ExitStack() as stack:
+            mock_db = stack.enter_context(patch("app.tools.jobcraft_resume.db_tools"))
+            stack.enter_context(
+                patch(
+                    "app.tools.jobcraft_resume.generate_resume_markdown",
+                    lambda **k: "MD",
+                )
+            )
+            stack.enter_context(
+                patch(
+                    "app.tools.jobcraft_resume.generate_resume_html",
+                    lambda **k: "HTML",
+                )
+            )
+            stack.enter_context(
+                patch("app.tools.jobcraft_resume.OUTPUT_ROOT", tmp_path)
+            )
+            stack.enter_context(
+                patch(
+                    "app.tools.db_submission.get_submission_by_analysis",
+                    lambda *a, **k: None,
+                )
+            )
+            stack.enter_context(
+                patch(
+                    "app.tools.db_job_entity.get_job_id_by_analysis",
+                    lambda *a, **k: job_id,
+                )
+            )
+            stack.enter_context(
+                patch(
+                    "app.tools.db_resume_version.create_resume_version", create_version
+                )
+            )
+            stack.enter_context(
+                patch(
+                    "app.tools.db_expression.get_active_expression_content",
+                    lambda cid, user_id, expr_type="standardized": None,
+                )
+            )
+            stack.enter_context(
+                patch("app.tools.db_experience.insert_card_version", insert_mock)
+            )
+
+            mock_db.get_job_analysis.return_value = {
+                "user_id": 7,
+                "company": "C",
+                "position": "P",
+                "jd_text": "JD",
+            }
+            mock_db.get_card.side_effect = fake_card
+            result = generate_resume(
+                1, list(cards), card_versions=card_versions, user_id=7
+            )
+        return result, insert_mock
+
+    @staticmethod
+    def _snapshot_card(cid, raw_text):
+        """构造一张最小可用的入选经历卡。"""
+        return {
+            "id": cid,
+            "is_active": True,
+            "title": f"卡{cid}",
+            "tags": [f"t{cid}"],
+            "raw_text": raw_text,
+        }
+
+    def test_generate_resume_writes_jd_alignment_snapshots(self, tmp_path):
+        """T-M6-8：每张入选卡写一条 jd_alignment 快照，字段与 FE 消费端对齐。"""
+        cards = {
+            1: self._snapshot_card(1, "原始一"),
+            2: self._snapshot_card(2, "原始二"),
+        }
+
+        result, insert_mock = self._run_generate(
+            tmp_path,
+            cards,
+            lambda **k: {"id": 42},
+            card_versions={1: "编辑终稿"},
+        )
+
+        assert result["resume_version_id"] == 42
+        assert insert_mock.call_count == 2
+
+        first = insert_mock.call_args_list[0][0][0]
+        assert first["card_id"] == 1
+        assert first["version_type"] == "jd_alignment"
+        assert first["source_type"] == "resume_version"
+        assert first["source_id"] == 42
+        assert first["title"] == "卡1"
+        assert first["tags"] == ["t1"]
+        # 命中编辑终稿：card_versions 优先于渲染链
+        assert first["raw_text"] == "编辑终稿"
+
+        second = insert_mock.call_args_list[1][0][0]
+        assert second["card_id"] == 2
+        assert second["source_id"] == 42
+        assert second["version_type"] == "jd_alignment"
+        # 未编辑：走 card_render 渲染链回退到 raw_text
+        assert second["raw_text"] == "原始二"
+
+    def test_jd_alignment_note_reuses_version_name_or_fallback(self, tmp_path):
+        """T-M6-8：note 复用简历版本名；无版本名按 matrix 兜底 方向-公司-年/月/日。"""
+        import re
+
+        cards = {3: self._snapshot_card(3, "x")}
+
+        _, insert_fallback = self._run_generate(tmp_path, cards, lambda **k: {"id": 1})
+        note = insert_fallback.call_args[0][0]["note"]
+        assert re.fullmatch(r"P-C-\d{4}/\d{1,2}/\d{1,2}", note), note
+
+        _, insert_named = self._run_generate(
+            tmp_path, cards, lambda **k: {"id": 2, "version_name": "我的命名"}
+        )
+        assert insert_named.call_args[0][0]["note"] == "我的命名"
+
+    def test_jd_alignment_snapshot_failure_is_tolerated(self, tmp_path):
+        """T-M6-8：快照写失败只记日志，版本 id 仍返回、generate_resume 不抛。"""
+        cards = {3: self._snapshot_card(3, "x")}
+
+        result, insert_mock = self._run_generate(
+            tmp_path,
+            cards,
+            lambda **k: {"id": 42},
+            insert_side_effect=Exception("DB 写入失败"),
+        )
+
+        assert insert_mock.call_count == 1
+        assert result["resume_version_id"] == 42
+
+    def test_jd_alignment_skipped_when_version_create_fails(self, tmp_path):
+        """T-M6-8：resume_version 落库失败 → resume_version_id=None → 不写快照。"""
+        cards = {3: self._snapshot_card(3, "x")}
+
+        def fail_create(**kwargs):
+            raise RuntimeError("版本落库失败")
+
+        result, insert_mock = self._run_generate(tmp_path, cards, fail_create)
+
+        assert result["resume_version_id"] is None
+        insert_mock.assert_not_called()
 
 
 # ============================================================

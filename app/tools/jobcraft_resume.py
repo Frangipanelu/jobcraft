@@ -38,6 +38,9 @@ def generate_resume(
     """
     生成定制简历
 
+    T-M6-8：版本落库成功后，为每张入选经历卡写一条 jd_alignment 快照
+    （该卡在本份 JD 定制简历中的表述），供 FE「经历卡历史」按 card_id 消费。
+
     :param card_versions: {card_id: edited_text}，前端保存后的版本 map
     :param personal_info: {name/phone/email/city/github/education/years}
     :param user_id: 按用户过滤所有权（越权时 404）
@@ -152,6 +155,47 @@ def generate_resume(
             resume_markdown=md,
         )
         resume_version_id = version["id"]
+
+        # T-M6-8：经历版本（jd_alignment）写入方——为每张入选经历卡记一条
+        # 「该卡在本次 JD 定制简历中的表述」快照，source_id 挂本次简历版本 id
+        # （多版本各存一份互不覆盖），FE「经历卡历史」按 card_id 消费该标签。
+        # 快照写入失败只记日志：版本已落库，接口返回 resume_version_id 不受影响。
+        try:
+            from app.tools.card_render import get_card_render_text
+            from app.tools.db_experience import insert_card_version
+
+            now = datetime.now()
+            # 展示名复用所属简历版本名；无版本名时按 matrix 命名格式兜底
+            # （方向-公司-年/月/日，例：产品运营-字节-2026/9/29）
+            note = (
+                version.get("version_name")
+                or f"{position}-{company}-{now.year}/{now.month}/{now.day}"
+            )
+            for c in cards:
+                insert_card_version(
+                    {
+                        "card_id": c["id"],
+                        "version_type": "jd_alignment",
+                        "source_type": "resume_version",
+                        "source_id": resume_version_id,
+                        "title": c.get("title"),
+                        "tags": c.get("tags"),
+                        # 该卡在本次简历中的表述：编辑终稿 → 激活表达 →
+                        # ai_structured STAR → raw_text 全链（card_render 统一入口）
+                        "raw_text": get_card_render_text(
+                            c, versions=card_versions or {}
+                        ),
+                        "note": note,
+                    }
+                )
+        except Exception:
+            logger.warning(
+                "写入 jd_alignment 卡版本快照失败，job_analysis_id=%s "
+                "resume_version_id=%s",
+                job_analysis_id,
+                resume_version_id,
+                exc_info=True,
+            )
     except Exception:
         logger.warning(
             "保存简历到 resume_version 失败，job_analysis_id=%s",
