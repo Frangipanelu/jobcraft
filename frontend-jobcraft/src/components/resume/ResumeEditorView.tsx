@@ -23,6 +23,7 @@ import { resumeToMarkdown } from '../../utils/resumeParser';
 import { triggerBlobDownload } from '../../utils/download';
 import { ResumePrintPreview } from './ResumePrintPreview';
 import { ResumeSectionsEditor } from './ResumeSectionsEditor';
+import { ResumeVersionSwitcher } from './ResumeVersionSwitcher';
 import type { CapabilityGap } from '../../types/jobcraft';
 import {
   Sparkles,
@@ -456,6 +457,7 @@ export const ResumeEditorView: React.FC<ResumeEditorViewProps> = ({
           <div>
             <div className="flex items-center gap-2.5">
               <h1 className="text-lg font-bold text-ink">{resume.versionName}</h1>
+              <ResumeVersionSwitcher resumeId={rid} />
               <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-sage-soft text-sage border border-sage-soft">
                 针对 {resume.company} · {resume.jobTitle} 定制
               </span>
@@ -504,6 +506,7 @@ export const ResumeEditorView: React.FC<ResumeEditorViewProps> = ({
         <div className="bg-white rounded-xl border border-edge px-5 py-2.5 flex items-center justify-between gap-4 shadow-2xs">
           <div className="flex items-center gap-3">
             <span className="text-xs font-bold text-ink">{resume.versionName}</span>
+            <ResumeVersionSwitcher resumeId={rid} />
             <span className="text-xs text-muted">·</span>
             <span className="text-xs text-sage font-medium bg-sage-soft px-2 py-0.5 rounded">
               100% 单页自适应布局

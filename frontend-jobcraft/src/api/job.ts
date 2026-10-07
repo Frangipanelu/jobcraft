@@ -276,6 +276,11 @@ export async function updateResumeVersion(
   })
 }
 
+/** T-M6-7：设为当前投递版本（同岗单选 selected_for_application，返回更新后的版本 wire）。 */
+export async function setCurrentResumeVersion(id: number): Promise<ResumeVersionWire> {
+  return request<ResumeVersionWire>(`/api/jobcraft/resume-version/${id}/current`, { method: 'POST' })
+}
+
 /** T-M6-3：按能力缺口 AI 改写选中要点（1 次 LLM；只算不写，落库走 PATCH）。 */
 export interface RewriteResumeBulletPayload {
   original_text: string

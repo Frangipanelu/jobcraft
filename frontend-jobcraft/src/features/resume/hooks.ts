@@ -1,9 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as jobApi from '../../api/job';
-import type { ResumePersonalInfo } from '../../api/types';
+import type { ResumePersonalInfo, ResumeVersionWire } from '../../api/types';
 import { ResumeVersion } from '../../types/jobcraft';
 import { markdownToResume, resumeToMarkdown, normalizeStructuredSections } from '../../utils/resumeParser';
-import { RESUMES_QUERY_KEY } from './mappers';
+import { RESUMES_QUERY_KEY, RESUME_VERSIONS_QUERY_KEY } from './mappers';
 import { JOBS_QUERY_KEY } from '../jobs/mappers';
 
 /**
@@ -109,6 +109,44 @@ export function useResumesQuery() {
         }
       }
       return next;
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// T-M6-7：版本列表与「设为当前」（FE 半边）
+// ---------------------------------------------------------------------------
+
+/**
+ * 读取简历版本全量 wire 列表（T-M6-7：版本下拉列表数据源）。
+ * - `GET /api/jobcraft/resume-version` 全量 `ResumeVersionWire[]`（后端已按 version_no DESC 排序）；
+ * - **不归组折叠**：归组在组件内做——编辑器侧只有版本 id（缺 job_id 原始值），
+ *   必须从 wire 反查组键 `String(v.job_analysis_id ?? v.job_id ?? v.id)`（与 useResumesQuery 一致）；
+ * - 与 RESUMES cache 分离，互不覆盖。
+ * @returns 全量版本 wire 数组（加载中/失败由调用方静默降级）
+ */
+export function useResumeVersionsQuery() {
+  return useQuery({
+    queryKey: [...RESUME_VERSIONS_QUERY_KEY],
+    queryFn: () => jobApi.listResumeVersions(),
+  });
+}
+
+/**
+ * T-M6-7：设为当前投递版本（POST /resume-version/{id}/current，同岗单选）。
+ * 成功后失效三键：RESUMES（编辑 map 归组取最新）、JOBS（投递站镜像）、
+ * RESUME_VERSIONS（本列表刷新徽标）；错误上抛（调用方 error toast）。
+ * @param mutationFn 入参 versionId（数字版本 id），返回更新后的版本 wire
+ */
+export function useSetCurrentVersionMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation<ResumeVersionWire, unknown, number>({
+    mutationFn: (versionId) => jobApi.setCurrentResumeVersion(versionId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [...RESUMES_QUERY_KEY] });
+      queryClient.invalidateQueries({ queryKey: [...JOBS_QUERY_KEY] });
+      queryClient.invalidateQueries({ queryKey: [...RESUME_VERSIONS_QUERY_KEY] });
     },
   });
 }
