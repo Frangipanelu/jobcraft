@@ -79,6 +79,9 @@ docs/
 # opencode config
 .opencode/
 
+# local session notes (workspace-local, never commit)
+.workbuddy/
+
 # eval-generated predictions (re-creatable, report is the record)
 evaluation/predictions/
 
