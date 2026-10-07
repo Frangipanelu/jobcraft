@@ -36,6 +36,10 @@ def _ensure_resume_submission_table() -> None:
     应用层已隔离：写路径 ``insert_submission`` 恒显式 normalize 并传 status
     （DEFAULT 永不参与），读路径统一 ``effective_status`` 投影（见
     ``app/schemas/submission_status.py``）。统一 DEFAULT 需独立迁移决策。
+
+    T-M6-7：``resume_version_id`` 归档列（V0027）——建表语句直接声明，
+    存量表由建表后的 SHOW COLUMNS 守卫补列（同款守卫见
+    ``db_interview._ensure_interview_preps_table``），两路径幂等。
     """
     if is_schema_ready():
         return
@@ -54,6 +58,7 @@ def _ensure_resume_submission_table() -> None:
                     resume_file_path VARCHAR(500),
                     card_version_ids JSON,
                     resume_suggestions JSON,
+                    resume_version_id INT NULL,
                     status           VARCHAR(32) DEFAULT 'PREPARED',
                     notes            TEXT,
                     is_manual        TINYINT(1) DEFAULT 0,
@@ -62,10 +67,19 @@ def _ensure_resume_submission_table() -> None:
                     created_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                     KEY idx_user_status (user_id, status),
-                    KEY idx_job_analysis (job_analysis_id)
+                    KEY idx_job_analysis (job_analysis_id),
+                    KEY idx_resume_version (resume_version_id)
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
                 """
             )
+            # T-M6-7：存量表缺归档列时守卫补列（V0027 未迁移环境的运行时兜底）
+            cur.execute("SHOW COLUMNS FROM resume_submission LIKE 'resume_version_id'")
+            if not cur.fetchall():
+                cur.execute(
+                    "ALTER TABLE resume_submission "
+                    "ADD COLUMN resume_version_id INT NULL, "
+                    "ADD KEY idx_resume_version (resume_version_id)"
+                )
 
 
 def _ensure_interview_submission_columns() -> None:

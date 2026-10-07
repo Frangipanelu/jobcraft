@@ -1395,3 +1395,143 @@ def test_v0022_migrate_is_applied_via_runner(fake_conn):
         if e[0].strip().startswith("INSERT INTO schema_migrations")
     ]
     assert "0022" in inserted
+
+
+def test_v0027_submission_resume_version_only_additive():
+    """T-M6-7：V0027 只加 resume_version_id 列 + idx_resume_version 索引，
+    走 information_schema 探测幂等，遵守 SPLIT 约定。"""
+    v0027 = os.path.join(runner.MIGRATIONS_DIR, "V0027__submission_resume_version.sql")
+    assert os.path.exists(v0027)
+    with open(v0027, encoding="utf-8") as fh:
+        sql = fh.read()
+
+    assert (
+        "ALTER TABLE resume_submission ADD COLUMN resume_version_id INT NULL, "
+        "ADD KEY idx_resume_version (resume_version_id)"
+    ) in sql, "V0027 缺列+索引合并 ALTER"
+    assert (
+        "ALTER TABLE resume_submission ADD KEY idx_resume_version (resume_version_id)"
+        in sql
+    ), "V0027 缺索引单独回补 ALTER"
+    assert "information_schema.COLUMNS" in sql, "V0027 加列应走探测幂等"
+    assert "information_schema.STATISTICS" in sql, "V0027 加索引应走探测幂等"
+    assert sql.count("\nPREPARE _mig_stmt_") == 2, "列/索引各需一次 PREPARE"
+    upper = sql.upper()
+    for token in ("DROP", "MODIFY", "CHANGE", "RENAME"):
+        assert token not in upper, f"前向兼容（AGENTS §4.4）：V0027 不得出现 {token}"
+
+    stmts = [s.strip() for s in sql.split(";--SPLIT--") if s.strip()]
+    assert len(stmts) == 10, (
+        f"V0027 应含 10 条语句块（列探测 5 + 索引探测 5），实际 {len(stmts)}"
+    )
+    for stmt in stmts:
+        assert not stmt.endswith(";"), f"V0027 语句块含尾分号: {stmt[:60]}"
+
+
+def test_v0027_matched_in_runtime_ddl_and_baseline():
+    """T-M6-7：V0027 列/索引在迁移 / 运行时
+    _ensure_resume_submission_table 建表 / docker 基线三处收敛一致。"""
+    v0027 = os.path.join(runner.MIGRATIONS_DIR, "V0027__submission_resume_version.sql")
+    with open(v0027, encoding="utf-8") as fh:
+        migration_sql = fh.read()
+
+    from app.tools.db_submission import _ensure_resume_submission_table
+    import app.tools.db_submission as mod
+
+    runtime_ddl = _normalize_ddl(
+        _runtime_create_sql(_ensure_resume_submission_table, mod=mod)
+    )
+
+    repo_root = os.path.dirname(os.path.dirname(runner.MIGRATIONS_DIR))
+    with open(
+        os.path.join(repo_root, "docker", "mysql", "jobcraft.sql"), encoding="utf-8"
+    ) as fh:
+        seed = fh.read()
+    # 只取 resume_submission 建表块（resume_version_id 亦出现在 interview_records）
+    start = seed.index("CREATE TABLE IF NOT EXISTS resume_submission")
+    submission_block = seed[start : seed.index(";", start)]
+
+    for fragment in (
+        "resume_version_id INT NULL",
+        "KEY idx_resume_version (resume_version_id)",
+    ):
+        assert fragment in migration_sql, f"V0027 缺 {fragment}"
+        assert fragment in runtime_ddl, f"运行时建表缺 {fragment}"
+        assert fragment in submission_block, (
+            f"docker 基线 resume_submission 缺 {fragment}"
+        )
+
+
+def test_v0027_runtime_guard_alters_when_column_missing():
+    """T-M6-7：存量表缺 resume_version_id 时守卫触发 ALTER（未迁移环境兜底），
+    列已存在时不重复执行。"""
+    from app.tools import db_submission as mod
+
+    executed: list[str] = []
+    column_missing = True
+
+    class _Cursor:
+        def execute(self, sql, params=None):
+            executed.append(sql.strip())
+
+        def fetchall(self):
+            # SHOW COLUMNS 探测结果由 column_missing 开关驱动
+            return [] if column_missing else [("resume_version_id",)]
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    class _Conn:
+        def cursor(self, *a, **k):
+            return _Cursor()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    original_ready = mod.is_schema_ready
+    original_conn = mod.connection
+    try:
+        mod.is_schema_ready = lambda: False
+        mod.connection = lambda: _Conn()
+
+        # 缺列：守卫触发 ALTER（存量表路径；建表语句同时含列与索引）
+        mod._ensure_resume_submission_table()
+        creates = [s for s in executed if s.startswith("CREATE TABLE IF NOT EXISTS")]
+        assert creates, "未捕获到 CREATE TABLE 语句"
+        normalized = _normalize_ddl(creates[0])
+        assert "resume_version_id INT NULL" in normalized, "运行时建表缺归档列"
+        assert "KEY idx_resume_version (resume_version_id)" in normalized, (
+            "运行时建表缺归档索引"
+        )
+        alters = [s for s in executed if s.startswith("ALTER TABLE resume_submission")]
+        assert alters, "缺列时守卫应触发 ALTER"
+        assert "ADD COLUMN resume_version_id INT NULL" in alters[0]
+        assert "ADD KEY idx_resume_version (resume_version_id)" in alters[0]
+
+        # 列已存在：守卫不得重复 ALTER
+        executed.clear()
+        column_missing = False
+        mod._ensure_resume_submission_table()
+        assert not [
+            s for s in executed if s.startswith("ALTER TABLE resume_submission")
+        ], "列已存在时不应重复 ALTER"
+    finally:
+        mod.is_schema_ready = original_ready
+        mod.connection = original_conn
+
+
+def test_v0027_migrate_is_applied_via_runner(fake_conn):
+    """T-M6-7：V0027 与既有迁移共存，runner.migrate() 不抛错且入库。"""
+    runner.migrate()
+    inserted = [
+        e[1][0]
+        for e in fake_conn.cursor_obj.executed
+        if e[0].strip().startswith("INSERT INTO schema_migrations")
+    ]
+    assert "0027" in inserted

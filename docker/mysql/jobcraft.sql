@@ -110,13 +110,15 @@ CREATE TABLE IF NOT EXISTS resume_submission (
     resume_file_path VARCHAR(500),
     card_version_ids JSON,
     resume_suggestions JSON,
+    resume_version_id INT NULL,
     status           VARCHAR(32) DEFAULT '已投递',
     notes            TEXT,
     is_manual        TINYINT(1) DEFAULT 0,
     created_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     KEY idx_user_status (user_id, status),
-    KEY idx_job_analysis (job_analysis_id)
+    KEY idx_job_analysis (job_analysis_id),
+    KEY idx_resume_version (resume_version_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- 7. 面试记录表 (Interview Records)
