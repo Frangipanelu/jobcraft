@@ -8,6 +8,7 @@
 
 - [x] **BE `7a86458` + `f94982e`**：`app/workflows/interview_review_flow.py` 新增纯函数 `_propose_feedback_candidates(state)`（零 LLM 调用、零 I/O）——按 `related_card_id` 分组合并 feedback/suggestions（去重保序）→ 门槛（rid 有效 + 卡内合并建议 ≥1，feedback 单独不够格）→ 截断 issues≤3/suggestions≤5 → 按**截断前**建议数降序、并列卡 id 升序、取前 5 卡 → `_assemble_result` 落库前注入 `analysis_dict["experienceFeedbacks"]`（不进 `InterviewReviewResult`——该模型全 snake_case 而此键须 camelCase 匹配 GET/FE 契约，注入处注释指向设计 §5）。
 - [x] **测试改动 8 处（新增 7 + 增强 1）**：`TestProposeFeedbackCandidates` 新增 7 例（同卡合并去重保序 / version Vn→Vn+1 / 门槛（无 rid、仅 feedback 卡剔除）/ 双截断保序 / 截断前计数排序 / 并列 id 升序+cap5 / 零候选空列表）+ `test_run_workflow_normal` DB 桩改捕获模式断言注入点（`experienceId ["1","2"]`，防形状 bug 复发）。
+- [x] **终审修复（2026-10-07，`cfe0759` `21204c7` `c30d842`）**：整体终审发现 FE 确认按钮实时数据源缺陷（Critical）——批量/单条确认从 INTERVIEWS 缓存 `review.experienceFeedbacks` 取正文，该字段无实时写入方（mapper 恒 `[]`），真实数据下必抛；FE 测试以夹具注入缓存字段掩盖（305 全绿照不出）。已修：候选正文显式传参（批量=闸门条目、单条=详情 memo review）、recordId 显式传参、EXPERIENCES 未挂载时 `ensureExperiencesLoaded` fetchQuery 兜底、`buildReviewFromRecord` 直读 `analysis.experienceFeedbacks`（徽章实时渲染）；新增 3 个真实数据流回归测试（缓存正文为空仍可徽章/批量确认/单条沉淀），vitest 305→308 全绿。
 - **门禁**：encoding 416 文件 0 错；ruff check 绿 + format 162 文件未变；pytest **1185 passed / 13 skipped**（基线 1178 + 新 7，0 failed，76.14s）。
 - **⚠️ 共享工作区**：pathspec 仅 `app/workflows/interview_review_flow.py` + `tests/test_workflows_unit.py` + `PROGRESS.md`。
 - **诚实标注**：候选质量 = 逐题建议聚合（无 LLM 结构化判断）；`proposedChanges: []` 恒空走 FE `applyFeedbackSuggestions` 回退；LLM 版为 W12 升级位（设计 §6：独立 prompt 文件+版本化+experienceId 白名单+失败降级）。
