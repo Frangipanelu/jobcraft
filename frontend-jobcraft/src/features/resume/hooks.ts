@@ -3,7 +3,7 @@ import * as jobApi from '../../api/job';
 import type { ResumePersonalInfo, ResumeVersionWire } from '../../api/types';
 import { ResumeVersion } from '../../types/jobcraft';
 import { markdownToResume, resumeToMarkdown, normalizeStructuredSections } from '../../utils/resumeParser';
-import { RESUMES_QUERY_KEY, RESUME_VERSIONS_QUERY_KEY } from './mappers';
+import { RESUMES_QUERY_KEY, RESUME_VERSIONS_QUERY_KEY, resumeVersionGroupKey } from './mappers';
 import { JOBS_QUERY_KEY } from '../jobs/mappers';
 
 /**
@@ -64,7 +64,7 @@ export function useResumesQuery() {
       const versions = await jobApi.listResumeVersions();
       const latestByJob = new Map<string, (typeof versions)[number]>();
       for (const v of versions) {
-        const group = String(v.job_analysis_id ?? v.job_id ?? v.id);
+        const group = resumeVersionGroupKey(v);
         if (!latestByJob.has(group)) latestByJob.set(group, v);
       }
       const next: Record<string, ResumeVersion> = {};
@@ -121,7 +121,7 @@ export function useResumesQuery() {
  * 读取简历版本全量 wire 列表（T-M6-7：版本下拉列表数据源）。
  * - `GET /api/jobcraft/resume-version` 全量 `ResumeVersionWire[]`（后端已按 version_no DESC 排序）；
  * - **不归组折叠**：归组在组件内做——编辑器侧只有版本 id（缺 job_id 原始值），
- *   必须从 wire 反查组键 `String(v.job_analysis_id ?? v.job_id ?? v.id)`（与 useResumesQuery 一致）；
+ *   必须从 wire 反查组键 `resumeVersionGroupKey`（与 useResumesQuery 同源）；
  * - 与 RESUMES cache 分离，互不覆盖。
  * @returns 全量版本 wire 数组（加载中/失败由调用方静默降级）
  */
@@ -134,8 +134,11 @@ export function useResumeVersionsQuery() {
 
 /**
  * T-M6-7：设为当前投递版本（POST /resume-version/{id}/current，同岗单选）。
- * 成功后失效三键：RESUMES（编辑 map 归组取最新）、JOBS（投递站镜像）、
- * RESUME_VERSIONS（本列表刷新徽标）；错误上抛（调用方 error toast）。
+ * - 端点只改 `selected_for_application` 单选标记，不碰正文与归组字段；
+ *   RESUMES（编辑器权威源）与 JOBS 均不消费该字段，失效它们只是编辑中的
+ *   无收益 refetch（RESUMES 还是首个失效点，与在途 persistResumePatch 竞态有回灌风险）；
+ * - 因此只失效 RESUME_VERSIONS：本列表重取后「当前」徽标即刷新；
+ * - 错误上抛（调用方 error toast）。
  * @param mutationFn 入参 versionId（数字版本 id），返回更新后的版本 wire
  */
 export function useSetCurrentVersionMutation() {
@@ -144,8 +147,6 @@ export function useSetCurrentVersionMutation() {
   return useMutation<ResumeVersionWire, unknown, number>({
     mutationFn: (versionId) => jobApi.setCurrentResumeVersion(versionId),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [...RESUMES_QUERY_KEY] });
-      queryClient.invalidateQueries({ queryKey: [...JOBS_QUERY_KEY] });
       queryClient.invalidateQueries({ queryKey: [...RESUME_VERSIONS_QUERY_KEY] });
     },
   });

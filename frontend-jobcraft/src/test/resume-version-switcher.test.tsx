@@ -5,6 +5,7 @@ import { renderWithProviders, createTestQueryClient } from './test-utils';
 import { ToastContainer } from '../components/common/Toast';
 import { ResumeVersionSwitcher } from '../components/resume/ResumeVersionSwitcher';
 import { useResumeVersionsQuery, useSetCurrentVersionMutation } from '../features/resume/hooks';
+import { resumeVersionGroupKey } from '../features/resume/mappers';
 import type { ResumeVersionWire } from '../api/types';
 
 const auth = vi.hoisted(() => ({
@@ -25,6 +26,11 @@ const job = vi.hoisted(() => ({
 
 vi.mock('../api/auth', async () => ({ ...(await vi.importActual('../api/auth')), ...auth }));
 vi.mock('../api/job', async () => ({ ...(await vi.importActual('../api/job')), ...job }));
+// 包一层 spy：证明组件同组过滤确实经由 resumeVersionGroupKey（而非内联表达式漂移）
+vi.mock('../features/resume/mappers', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../features/resume/mappers')>();
+  return { ...actual, resumeVersionGroupKey: vi.fn(actual.resumeVersionGroupKey) };
+});
 
 const AUTH_USER = {
   id: 1,
@@ -95,7 +101,7 @@ beforeEach(() => {
 const VersionsHarness: React.FC = () => {
   const { data, isError } = useResumeVersionsQuery();
   const wires = data ?? [];
-  const groups = [...new Set(wires.map((w) => String(w.job_analysis_id ?? w.job_id ?? w.id)))];
+  const groups = [...new Set(wires.map(resumeVersionGroupKey))];
   return (
     <div>
       <span data-testid="wire-count">{wires.length}</span>
@@ -122,7 +128,7 @@ describe('T-M6-7 简历版本 hooks', () => {
     expect(screen.getByTestId('query-state').textContent).toBe('ok');
   });
 
-  it('useSetCurrentVersionMutation：以正确 id 调 API，成功后失效 resumes/jobs/resume-versions 各一次', async () => {
+  it('useSetCurrentVersionMutation：以正确 id 调 API，成功后仅失效 resume-versions 一次', async () => {
     const qc = createTestQueryClient();
     const invalidateSpy = vi.spyOn(qc, 'invalidateQueries');
 
@@ -132,17 +138,13 @@ describe('T-M6-7 简历版本 hooks', () => {
 
     await waitFor(() => expect(job.setCurrentResumeVersion).toHaveBeenCalledWith(101));
 
-    const keyCallCount = (key: readonly unknown[]) =>
-      invalidateSpy.mock.calls.filter(
-        (call) =>
-          JSON.stringify((call[0] as { queryKey?: unknown }).queryKey) === JSON.stringify(key),
-      ).length;
-    await waitFor(() => {
-      expect(keyCallCount(['resumes'])).toBe(1);
-      expect(keyCallCount(['jobs'])).toBe(1);
-      expect(keyCallCount(['resume-versions'])).toBe(1);
-    });
-    expect(invalidateSpy.mock.calls).toHaveLength(3);
+    // set_current 只改 selected_for_application：RESUMES/JOBS 不消费该字段，不得失效
+    await waitFor(() =>
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['resume-versions'] }),
+    );
+    expect(invalidateSpy.mock.calls).toHaveLength(1);
+    expect(invalidateSpy).not.toHaveBeenCalledWith({ queryKey: ['resumes'] });
+    expect(invalidateSpy).not.toHaveBeenCalledWith({ queryKey: ['jobs'] });
   });
 
   it('列表加载失败：静默降级（无版本切换器、不崩）', async () => {
@@ -193,16 +195,33 @@ describe('ResumeVersionSwitcher', () => {
 
     const otherRow = within(list).getByText('v1 初稿').closest('div');
     expect(
-      within(otherRow as HTMLElement).getByRole('button', { name: '设为当前' }),
+      within(otherRow as HTMLElement).getByRole('menuitem', {
+        name: '设为 v1 初稿 为当前版本',
+      }),
     ).toBeInTheDocument();
-    expect(within(selectedRow as HTMLElement).queryByRole('button')).toBeNull();
+    expect(within(selectedRow as HTMLElement).queryByRole('menuitem')).toBeNull();
+  });
+
+  it('同组过滤经由 resumeVersionGroupKey（与 useResumesQuery 归组锁步）', async () => {
+    renderSwitcher('102');
+    const list = await openList();
+
+    // 组键函数对三个 wire 都被真实调用（非内联表达式旁路）
+    expect(vi.mocked(resumeVersionGroupKey)).toHaveBeenCalledWith(SAME_GROUP_SELECTED);
+    expect(vi.mocked(resumeVersionGroupKey)).toHaveBeenCalledWith(SAME_GROUP_OTHER);
+    expect(vi.mocked(resumeVersionGroupKey)).toHaveBeenCalledWith(OTHER_GROUP);
+    // 且过滤结果正确：同组两行在、跨组行不在
+    expect(within(list).getByText('v1 初稿')).toBeInTheDocument();
+    expect(within(list).queryByText('腾讯版')).toBeNull();
   });
 
   it('点击另一版本「设为当前」→ setCurrentResumeVersion 以该行 id 调用并成功提示', async () => {
     renderSwitcher('102');
     const list = await openList();
 
-    fireEvent.click(within(list).getByRole('button', { name: '设为当前' }));
+    fireEvent.click(
+      within(list).getByRole('menuitem', { name: '设为 v1 初稿 为当前版本' }),
+    );
 
     await waitFor(() => expect(job.setCurrentResumeVersion).toHaveBeenCalledWith(101));
     expect(await screen.findByText('已设为当前版本')).toBeInTheDocument();
@@ -213,10 +232,34 @@ describe('ResumeVersionSwitcher', () => {
     renderSwitcher('102');
     const list = await openList();
 
-    fireEvent.click(within(list).getByRole('button', { name: '设为当前' }));
+    fireEvent.click(
+      within(list).getByRole('menuitem', { name: '设为 v1 初稿 为当前版本' }),
+    );
 
     expect(await screen.findByText('设置失败')).toBeInTheDocument();
     expect(screen.queryByText('已设为当前版本')).toBeNull();
+  });
+
+  it('面板打开时点击容器外部 → 下拉关闭，aria-expanded 复位且可再次打开', async () => {
+    renderWithProviders(
+      <>
+        <button type="button">编辑器正文</button>
+        <ResumeVersionSwitcher resumeId="102" />
+        <ToastContainer />
+      </>,
+    );
+    await openList();
+
+    const trigger = within(screen.getByTestId('resume-version-switcher')).getByRole('button');
+    expect(trigger).toHaveAttribute('aria-haspopup', 'menu');
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+
+    fireEvent.mouseDown(screen.getByRole('button', { name: '编辑器正文' }));
+    await waitFor(() => expect(screen.queryByTestId('resume-version-list')).toBeNull());
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+
+    fireEvent.click(trigger);
+    expect(await screen.findByTestId('resume-version-list')).toBeInTheDocument();
   });
 
   it('resumeId 不在 wires（未知 id / 非数字本地示例）→ 不渲染', async () => {
