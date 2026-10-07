@@ -368,13 +368,20 @@ const CreateHarness = ({
 const ApplyHarness = ({ interviews }: { interviews: Interview[] }) => {
   const applyFeedback = useApplyReviewFeedbackMutation();
   const [error, setError] = useState('');
+  // W12 终审：参数从 props 夹具显式取（生产代码同款显式传参，不读 INTERVIEWS 缓存）
+  const review = interviews.find((i) => i.id === 'prep-7')?.review;
   return (
     <div>
       <button
         onClick={() => {
           setError('');
+          const feedback = review?.experienceFeedbacks?.[0];
+          if (!feedback) {
+            setError('测试夹具缺少 experienceFeedbacks[0]');
+            return;
+          }
           applyFeedback
-            .mutateAsync({ interviewId: 'prep-7', feedbackIndex: 0 })
+            .mutateAsync({ interviewId: 'prep-7', recordId: review?.recordId, feedback })
             .catch((e: unknown) => setError((e as Error).message));
         }}
       >
@@ -1621,6 +1628,35 @@ describe('W12 终审：确认链实时数据源（候选正文不读 INTERVIEWS 
     );
     expect(await screen.findByText('已沉淀 1 条建议')).toBeInTheDocument();
     expect(screen.queryByText('汇总确认失败')).not.toBeInTheDocument();
+  });
+
+  it('缓存 review 无候选正文时单条沉淀仍可用（正文 = memo review/detail analysis）', async () => {
+    renderWithProviders(
+      <>
+        <Seeder
+          interviews={[buildInt(RECORD_YUAN, { ...REVIEW, recordId: 55, experienceFeedbacks: [] })]}
+          experiences={[EXP_V1]}
+          jobs={[JOB_12]}
+        />
+        <InterviewReviewDetailView interviewId="prep-7" />
+        <ToastContainer />
+      </>,
+    );
+
+    fireEvent.click(await screen.findByText('沉淀至经历库'));
+    fireEvent.click(await screen.findByText('确认写入'));
+
+    await waitFor(() =>
+      expect(interview.acceptFeedbackCandidate).toHaveBeenCalledWith(
+        55,
+        expect.objectContaining({
+          target_ref: '7',
+          problem: '新职责（含选型对比）',
+          actions: ['旧动作A', '旧动作B'],
+        }),
+      ),
+    );
+    expect(await screen.findByText('经历资产已升级')).toBeInTheDocument();
   });
 });
 

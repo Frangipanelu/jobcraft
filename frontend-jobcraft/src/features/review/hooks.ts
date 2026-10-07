@@ -19,6 +19,7 @@ import {
   Interview,
   InterviewReview,
   Job,
+  ReviewExperienceFeedback,
 } from '../../types/jobcraft';
 import { ensureExperiencesLoaded } from '../experiences/hooks';
 import { EXPERIENCES_QUERY_KEY, versionsToHistory } from '../experiences/mappers';
@@ -258,7 +259,10 @@ export interface ApplyReviewFeedbackResult {
 
 export interface ApplyReviewFeedbackArgs {
   interviewId: string;
-  feedbackIndex: number;
+  /** W12 终审：recordId 显式传参（详情页 review），不再回查 INTERVIEWS 缓存 */
+  recordId?: number | null;
+  /** W12 终审：候选正文显式传参（memo review = 服务端 analysis_json 唯一真相） */
+  feedback: ReviewExperienceFeedback;
 }
 
 /**
@@ -278,27 +282,12 @@ export function useApplyReviewFeedbackMutation() {
 
 
   return useMutation<ApplyReviewFeedbackResult, unknown, ApplyReviewFeedbackArgs>({
-    mutationFn: async ({ interviewId, feedbackIndex }) => {
-      const interviews =
-        queryClient.getQueryData<Interview[]>([...INTERVIEWS_QUERY_KEY]) || [];
-      const interview = interviews.find((i) => i.id === interviewId);
-      if (!interview?.review) {
-        throw new Error('未找到对应的复盘报告');
-      }
-
-      const feedbacks = interview.review.experienceFeedbacks || [];
-      const feedback = feedbacks[feedbackIndex];
-      if (!feedback) {
-        throw new Error('未找到该条复盘反馈');
-      }
+    mutationFn: async ({ recordId, feedback }) => {
       // T-M8-1：闸门以 interview_records.id 为定位键（T-M8-2 起随复盘写入）
-      const recordId = interview.review.recordId;
       if (recordId === undefined || recordId === null) {
         throw new Error('该复盘缺少记录 ID，无法确认沉淀（请重新创建复盘）');
       }
-
-      const experiences =
-        queryClient.getQueryData<Experience[]>([...EXPERIENCES_QUERY_KEY]) || [];
+      const experiences = await ensureExperiencesLoaded(queryClient);
       const exp = experiences.find((e) => e.id === feedback.experienceId);
       if (!exp) {
         throw new Error('未找到对应的经历资产');
@@ -348,7 +337,7 @@ export function useApplyReviewFeedbackMutation() {
 
       return { experienceId: feedback.experienceId, finalExp };
     },
-    onSuccess: ({ experienceId, finalExp }, { interviewId, feedbackIndex }) => {
+    onSuccess: ({ experienceId, finalExp }, { interviewId, recordId }) => {
       // EXPERIENCES cache + mirror
       const prevExp =
         queryClient.getQueryData<Experience[]>([...EXPERIENCES_QUERY_KEY]) || [];
@@ -359,16 +348,13 @@ export function useApplyReviewFeedbackMutation() {
       // FE-CACHE-01：服务端 updateCard 已写入（usage/tags 派生字段以后端为准）
       queryClient.invalidateQueries({ queryKey: [...EXPERIENCES_QUERY_KEY] });
 
-
-      // INTERVIEWS cache + mirror
+      // INTERVIEWS cache + mirror（applied 标记按 experienceId 匹配，不再按 index）
       const prevInt =
         queryClient.getQueryData<Interview[]>([...INTERVIEWS_QUERY_KEY]) || [];
       const nextInt = prevInt.map((int): Interview => {
         if (int.id !== interviewId || !int.review) return int;
-        const updatedFeedbacks = (
-          int.review.experienceFeedbacks || []
-        ).map((fb, idx) =>
-          idx === feedbackIndex ? { ...fb, applied: true } : fb,
+        const updatedFeedbacks = (int.review.experienceFeedbacks || []).map((fb) =>
+          fb.experienceId === experienceId ? { ...fb, applied: true } : fb,
         );
         return {
           ...int,
@@ -376,10 +362,7 @@ export function useApplyReviewFeedbackMutation() {
         };
       });
       queryClient.setQueryData([...INTERVIEWS_QUERY_KEY], nextInt);
-      // T-M8-1：决策已落台账，刷新闸门查询让「已确认/已忽略」以后端为准
-      const recordId = (
-        queryClient.getQueryData<Interview[]>([...INTERVIEWS_QUERY_KEY]) || []
-      ).find((i) => i.id === interviewId)?.review?.recordId;
+      // T-M8-1：决策已落台账，刷新闸门查询（recordId 显式传参，不回查缓存）
       if (recordId !== undefined && recordId !== null) {
         queryClient.invalidateQueries({ queryKey: feedbackGateKey(recordId) });
       }

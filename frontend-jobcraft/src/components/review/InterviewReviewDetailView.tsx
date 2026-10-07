@@ -100,11 +100,13 @@ export const InterviewReviewDetailView: React.FC<InterviewReviewDetailViewProps>
     }
   };
 
-  const handleApplyFeedback = async (feedbackIndex: number) => {
+  const handleApplyFeedback = async () => {
+    if (!relatedFeedback) return;
     try {
       await applyFeedbackMutation.mutateAsync({
         interviewId: currentInterview.id,
-        feedbackIndex
+        recordId,
+        feedback: relatedFeedback,
       });
       setPendingConfirmIndex(null);
       showToast({
@@ -565,8 +567,8 @@ export const InterviewReviewDetailView: React.FC<InterviewReviewDetailViewProps>
               ) : gateDecisionFor(relatedFeedback.experienceId) === 'rejected' ? (
                 /* T-M8-1：已忽略（服务端台账），允许反悔重新确认 */
                 <button
-                  onClick={() => handleApplyFeedback(feedbackIndex ?? -1)}
-                  disabled={applyFeedbackMutation.isPending || feedbackIndex === undefined}
+                  onClick={() => handleApplyFeedback()}
+                  disabled={applyFeedbackMutation.isPending}
                   className="flex items-center gap-1 px-3 py-1.5 bg-page hover:bg-edge text-muted text-xs font-bold rounded-lg border border-edge transition cursor-pointer shrink-0 disabled:opacity-60"
                 >
                   <span>已忽略 · 重新确认</span>
@@ -578,7 +580,7 @@ export const InterviewReviewDetailView: React.FC<InterviewReviewDetailViewProps>
                     将把本次建议追加为「{relatedFeedback.proposedVersion}」新版本（保留历史，可回溯），确认写入？
                   </span>
                   <button
-                    onClick={() => handleApplyFeedback(feedbackIndex)}
+                    onClick={() => handleApplyFeedback()}
                     disabled={applyFeedbackMutation.isPending}
                     className="flex items-center gap-1 px-3 py-1.5 bg-sage hover:bg-sage-dim text-white text-xs font-bold rounded-lg transition shadow-xs cursor-pointer shrink-0 disabled:opacity-60"
                   >
