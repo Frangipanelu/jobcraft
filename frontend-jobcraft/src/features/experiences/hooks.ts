@@ -81,19 +81,11 @@ function toUpdateCardPayload(
 }
 
 /**
- * 查询当前用户的经历卡列表（listCards → cardToExperience）。
- * 数据源：experienceApi.listCards；userId 取自已认证用户的 auth profile。
- *
- * T-M1-2：版本/表达摘要由 GET /cards 内嵌（current_version/version_count/
- * expression_summary），首屏单请求（原逐卡 listCardVersions 的 N+1 已移除）；
- * 版本历史明细改由 useCardVersionsQuery 在面板打开时懒加载。
- */
-/**
  * 经历卡列表查询函数（W12：抽出让 useExperiencesQuery 与复盘反哺 mutation 复用，
  * 详情页可能未挂 useExperiencesQuery，写路径不得假设缓存已存在）。
  */
 export function makeExperiencesQueryFn(queryClient: QueryClient) {
-  return async () => {
+  return async (): Promise<Experience[]> => {
     const user = await authApi.getCurrentUser();
     const cards = await experienceApi.listCards(user.id);
     // 列表响应不含版本明细（N+1→1 后明细只走 useCardVersionsQuery）；
@@ -112,6 +104,14 @@ export function makeExperiencesQueryFn(queryClient: QueryClient) {
   };
 }
 
+/**
+ * 查询当前用户的经历卡列表（listCards → cardToExperience）。
+ * 数据源：experienceApi.listCards；userId 取自已认证用户的 auth profile。
+ *
+ * T-M1-2：版本/表达摘要由 GET /cards 内嵌（current_version/version_count/
+ * expression_summary），首屏单请求（原逐卡 listCardVersions 的 N+1 已移除）；
+ * 版本历史明细改由 useCardVersionsQuery 在面板打开时懒加载。
+ */
 export function useExperiencesQuery() {
   const queryClient = useQueryClient();
 

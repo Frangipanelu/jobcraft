@@ -197,7 +197,7 @@ const toCandidate = (fb: ReviewExperienceFeedback): FeedbackCandidateItem => ({
   suggestions: fb.suggestions,
   current_version: fb.currentVersion,
   proposed_version: fb.proposedVersion,
-  proposed_changes: fb.proposedChanges as unknown as Array<Record<string, string>>,
+  proposed_changes: fb.proposedChanges,
   decision: 'pending',
   card_version: null,
   decided_at: null,
@@ -1657,6 +1657,74 @@ describe('W12 终审：确认链实时数据源（候选正文不读 INTERVIEWS 
       ),
     );
     expect(await screen.findByText('经历资产已升级')).toBeInTheDocument();
+  });
+
+  it('EXPERIENCES 缓存未挂载时 ensureExperiencesLoaded 经 fetchQuery 兜底，单条沉淀仍成功', async () => {
+    serverCards = [{ ...CARD_A }];
+
+    const ExpFallbackSeeder = () => {
+      const queryClient = useQueryClient();
+      const { data: ivData } = useInterviewsQuery();
+      const { data: jobData } = useJobsQuery();
+      const onceRef = useRef(false);
+      const resolved = ivData !== undefined && jobData !== undefined;
+      useEffect(() => {
+        if (onceRef.current || !resolved) return;
+        const t = setTimeout(() => {
+          onceRef.current = true;
+          queryClient.setQueryData([...INTERVIEWS_QUERY_KEY], [
+            buildInt(RECORD_YUAN, { ...REVIEW, recordId: 55, experienceFeedbacks: [] }),
+          ]);
+          queryClient.setQueryData([...JOBS_QUERY_KEY], [JOB_12]);
+        }, 0);
+        return () => clearTimeout(t);
+      }, [resolved, queryClient]);
+      return null;
+    };
+
+    const ExpFallbackHarness = () => {
+      const applyFeedback = useApplyReviewFeedbackMutation();
+      const [error, setError] = useState('');
+      return (
+        <div>
+          <button
+            onClick={() => {
+              setError('');
+              applyFeedback
+                .mutateAsync({
+                  interviewId: 'prep-7',
+                  recordId: 55,
+                  feedback: REVIEW.experienceFeedbacks![0],
+                })
+                .catch((e: unknown) => setError((e as Error).message));
+            }}
+          >
+            兜底应用反馈
+          </button>
+          <span data-testid="apply-error">{error}</span>
+        </div>
+      );
+    };
+
+    renderWithProviders(
+      <>
+        <ExpFallbackSeeder />
+        <ExpFallbackHarness />
+      </>,
+    );
+
+    await waitFor(() => expect(screen.getByText('兜底应用反馈')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('兜底应用反馈'));
+
+    // 关键：EXPERIENCES 查询从未挂载 → mutation 必须经 fetchQuery 拉到卡片后落 accept
+    await waitFor(() =>
+      expect(interview.acceptFeedbackCandidate).toHaveBeenCalledWith(
+        55,
+        expect.objectContaining({ target_ref: '7' }),
+      ),
+    );
+    expect(experience.listCards).toHaveBeenCalled();
+    expect(screen.getByTestId('apply-error').textContent).toBe('');
   });
 });
 

@@ -1,4 +1,5 @@
-import type { InterviewPrepRecord } from '../api/types';
+import type { InterviewPrepRecord, ReviewExperienceFeedback } from '../api/types';
+export type { ReviewExperienceFeedback };
 
 export type NavigationTab = 
   | 'workbench'
@@ -296,17 +297,6 @@ export interface ExperienceProposedChange {
   field: string;
   from: string;
   to: string;
-}
-
-export interface ReviewExperienceFeedback {
-  experienceId: string;
-  experienceTitle: string;
-  discoveredIssues: string[];
-  suggestions: string[];
-  currentVersion: string;
-  proposedVersion: string;
-  proposedChanges: ExperienceProposedChange[];
-  applied: boolean;
 }
 
 export interface InterviewReview {

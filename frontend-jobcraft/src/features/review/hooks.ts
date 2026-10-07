@@ -15,7 +15,6 @@ import type {
 } from '../../api/types';
 import {
   Experience,
-  ExperienceProposedChange,
   Interview,
   InterviewReview,
   Job,
@@ -479,7 +478,11 @@ export function useConfirmFeedbackDecisionsMutation() {
       if (recordId === undefined || recordId === null) {
         throw new Error('该复盘缺少记录 ID，无法确认沉淀（请重新创建复盘）');
       }
-      const experiences = await ensureExperiencesLoaded(queryClient);
+      if (acceptIds.length === 0 && rejectIds.length === 0) {
+        throw new Error('未选择任何候选决策');
+      }
+      const experiences =
+        acceptIds.length > 0 ? await ensureExperiencesLoaded(queryClient) : [];
 
       const decisions: FeedbackBatchDecisionItem[] = [];
       for (const experienceId of acceptIds) {
@@ -496,8 +499,7 @@ export function useConfirmFeedbackDecisionsMutation() {
         if (isNaN(parseInt(experienceId, 10))) {
           throw new Error('复盘反馈未关联有效的经历卡 ID，无法沉淀');
         }
-        const proposedChanges = (candidate.proposed_changes ??
-          []) as unknown as ExperienceProposedChange[];
+        const proposedChanges = candidate.proposed_changes ?? [];
         const base =
           proposedChanges.length > 0
             ? applyProposedChanges(exp, proposedChanges)
@@ -518,9 +520,6 @@ export function useConfirmFeedbackDecisionsMutation() {
           target_ref: experienceId,
           decision: 'rejected',
         });
-      }
-      if (decisions.length === 0) {
-        throw new Error('未选择任何候选决策');
       }
 
       const result = await interviewApi.confirmFeedbackCandidates(recordId, {

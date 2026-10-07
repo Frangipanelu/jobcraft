@@ -10,8 +10,6 @@
  * 由此隔离「后端契约」与「前端领域模型」，避免组件直接耦合后端字段命名。
  */
 
-import type { ReviewExperienceFeedback } from '../types/jobcraft'
-
 // ============================================================
 // 通用
 // ============================================================
@@ -301,9 +299,27 @@ export interface InterviewReviewResult {
   weaknesses: string[]
   action_items: string[]
   questions: ReviewedQuestion[]
-  /** W12：候选正文随 analysis_json 落库（camelCase，与 GET detail 契约一致）；FE 直读进 review */
+  /** W12：候选正文随 analysis_json 落库（camelCase，与 GET detail 契约一致）；FE 直读进 review
+   * ；仅 record.analysis(=analysis_json) 含此键，POST analyze 响应不含 */
   experienceFeedbacks?: ReviewExperienceFeedback[]
   created_at: string | null
+}
+
+/**
+ * 复盘候选正文（camelCase，随 analysis_json 落库；与 jobcraft 领域模型同构）。
+ * 定义放 api 层以保持本文件零依赖（原在 types/jobcraft.ts，jobcraft 侧重导出，
+ * 全部既有消费者导入路径不变）。
+ */
+export interface ReviewExperienceFeedback {
+  experienceId: string
+  experienceTitle: string
+  discoveredIssues: string[]
+  suggestions: string[]
+  currentVersion: string
+  proposedVersion: string
+  /** wire 形状 = {field, from, to}（与 ExperienceProposedChange 结构等价） */
+  proposedChanges: Array<{ field: string; from: string; to: string }>
+  applied: boolean
 }
 
 export interface InterviewReviewRecord {
@@ -453,7 +469,8 @@ export interface FeedbackCandidateItem {
   suggestions: string[]
   current_version: string
   proposed_version: string
-  proposed_changes: Array<Record<string, string>>
+  /** 收窄为 {field,from,to}（= ExperienceProposedChange 结构等价），消费方 applyProposedChanges 只读三字段 */
+  proposed_changes: Array<{ field: string; from: string; to: string }>
   decision: FeedbackDecisionStatus
   card_version: number | null
   decided_at: string | null

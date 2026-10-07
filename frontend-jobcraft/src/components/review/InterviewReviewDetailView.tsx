@@ -101,7 +101,7 @@ export const InterviewReviewDetailView: React.FC<InterviewReviewDetailViewProps>
   };
 
   const handleApplyFeedback = async () => {
-    if (!relatedFeedback) return;
+    if (!relatedFeedback) return; // 结构上不可达（按钮在 relatedFeedback && 块内）；防御未来改动吞错
     try {
       await applyFeedbackMutation.mutateAsync({
         interviewId: currentInterview.id,
