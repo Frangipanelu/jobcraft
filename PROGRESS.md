@@ -2,6 +2,20 @@
 
 > 本文件用于追踪项目整体进度。AI 在每次会话结束或完成子任务时，必须更新本文件的对应板块。
 
+## T-M6-7 + T-M6-8 投递归档咬合 + jd_alignment 写入方（2026-10-07，A 窗·Subagent-Driven 批次）
+
+> 按 `docs/feature-alignment-matrix-2026-09-28.md:352-353` 执行 M6 收尾两任务：T-M6-7（标记已投递→选中版本快照进 submission）+ T-M6-8（save-resume 同步写 `card_versions.jd_alignment`）。执行方式 = subagent-driven-development：每任务 fresh implementer → spec reviewer → code quality reviewer → issue 回派原实现者修复 → 原审查者复审，批次末整体终审。用户拍板两点：① `source_type='resume_version'`、`source_id=<新版本 id>`、`note=version_name`；② save-resume 内同步写、失败容忍不阻断生成。
+
+- [x] **T-M6-7 迁移与守卫 `b92afa1`**：`migrations/versions/V0027__submission_resume_version.sql`（双探测 PREPARE/EXECUTE 幂等，只加列+索引）；`db_submission._ensure_resume_submission_table` CREATE 列声明 + SHOW COLUMNS 运行时守卫；`docker/mysql/jobcraft.sql` 基线同步；runner/三处收敛测试。状态 DONE_WITH_CONCERN → 顾虑证伪。
+- [x] **T-M6-7 归档链 `ced2451` + 评审修复 `342a266`**：`db_resume_version.get_selected_resume_version`（单选优先→latest 兜底→None，越权收口 user_id）；`db_submission.archive_selected_version`（越权/幂等/无 analysis/无版本跳过、原子 `AND resume_version_id IS NULL` + rowcount 回读、markdown truthy 才写不清空既有正文）；`get_submission`/`get_submission_by_analysis` 响应 additive `resume_version_id`（.get 容缺列，旧库不炸）；`app/api/submission.py` POST delivered 即归档 + PATCH 翻转归档（update 成功后、try/except 日志不阻断、404/非翻转不归档、P11-a 语义不动）；+23 测试。修复项：原子幂等、None-markdown 覆写、组合载荷/INVITED 400/rowcount 测试、int() 与死代码清理、日志上下文。
+- [x] **T-M6-7 FE 版本列表半边 `1c7b6da` + 评审修复 `993b555`**：`api/job.ts:279 setCurrentResumeVersion`（POST /resume-version/{id}/current）；`features/resume/mappers.ts` 导出 `RESUME_VERSIONS_QUERY_KEY`+`resumeVersionGroupKey`（唯一组键源，hooks 与组件共用 + spy 锁步测试）；`useResumeVersionsQuery`（不折叠）+ `useSetCurrentVersionMutation`（**只失效 resume-versions**，评审收窄）；新组件 `components/resume/ResumeVersionSwitcher.tsx`（双 header 接入、当前徽标、设为当前+toast、外部 mousedown 关闭+aria、本地示例不渲染）。vitest 317→320 绿。
+- [x] **T-M6-8 `1896286` + 评审修复 `c228362`**：`jobcraft_resume.generate_resume` 在 resume_version_id 落库成功后逐卡 `insert_card_version`（`version_type='jd_alignment'`、`source_type='resume_version'`、`source_id=版本 id`、`raw_text=get_card_render_text(c, versions=card_versions or {})`、title/tags、note=version_name 或 方向-公司-年/月/日 兜底），per-card try 容错带 card_id 上下文、任一失败不阻断生成；`create_resume_version` 传 `version_name=name_suggestion`（matrix:42 语义生效）；ats_profile 3 测试补 DB 隔离 patch（文件耗时 14.7s→6.9s）；+7 测试（188）。零 FE 改动（FE `mappers.ts:105/120`、`ExperiencesView.tsx:47` 消费端早已就位）。
+- [x] **双审 + 终审**：4 任务均过 spec+质量双审（issue 回派修复后原审查者复审 ✅）；批次终审红线扫描 7 commit 全净、门禁实跑全绿、**Ready to push = Yes（文档回填后）**，Critical 0 / Important 1（展示层跟进）/ Minor 5（备注跟进）。
+- **门禁（我方全量复跑确认）**：encoding **420 文件 0 错**；ruff check ✓ + ruff format --check 162 文件 ✓；pytest **1219 passed / 13 skipped**（0 failed，79.44s）；tsc exit 0；vitest **320 passed / 37 files**（20.8s）；build ✓（4.29s，既有 CSS @import 顺序警告与 chunk>500kB 警告为存量）。
+- **⚠️ 共享工作区**：pathspec 精确提交，7 个功能 commit + 文档/chore 回填；未碰他窗在途文件；首 4 commit 已由他窗推送，本批 push 携带 `993b555`/`1896286`/`c228362` + 回填 commit。
+- **终审跟进（7 项，TODO H 节已登记，均不阻塞）**：① **FE-JDVER-01（Important）** jd 行参与 `versionsToHistory` 索引倒推编号 → jd 行抢走「当前激活」徽标、历史行 V 编号下漂、`version_count` 膨胀（回滚内容安全，修法=按 version_type 分流 + COUNT 排除 jd_alignment）；② generate/upsert 后未失效 `resume-versions`；③ `resumes`/`resume-versions` 双 key 同端点双请求（并入三键合并候选）；④ manual 投递端点 delivered=1 无归档钩（当前 no-op，关联 analysis 后需补）；⑤ ResumeEditorView 双源版本名（spec 已批不改）；⑥ mappers.ts 尾换行下次触碰补；⑦ T-M9-2 动手时核对本批已改的 `jobcraft_resume.py`。
+- **下一步**：P1 关键路径 T-M9-1（V0026 validations，先登记后写 SQL）→ T-M9-2（**已解锁**，等 A 窗条件满足）→ T-M9-3。
+
 ## T-W12-1 experienceFeedbacks 生产者规则版（2026-10-05，C 窗·反哺链第一棒）
 
 > 反哺链首棒：M8-1 遗留 C（§24.2 汇总确认，T-M8-9 落地 `3bfdfa3`/`7149582`/`df5bd79`）消费链已建成但候选恒 0（Python/TS 全库无生产者）。按已评审设计 `W12_FEEDBACK_PRODUCER_DESIGN.md`（方案 C 接口固定+规则版先行 / 门槛 a / 来源=用户勾选解析题）点亮生产端，LLM 版留升级位。
