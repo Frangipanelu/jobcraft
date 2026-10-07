@@ -20,8 +20,19 @@ import {
   useConfirmFeedbackDecisionsMutation,
   useCreateInterviewReviewMutation,
 } from '../features/review/hooks';
-import type { InterviewPrepRecord, InterviewReviewResult, ExperienceCard } from '../api/types';
-import type { Experience, Interview, InterviewReview, Job } from '../types/jobcraft';
+import type {
+  ExperienceCard,
+  FeedbackCandidateItem,
+  InterviewPrepRecord,
+  InterviewReviewResult,
+} from '../api/types';
+import type {
+  Experience,
+  Interview,
+  InterviewReview,
+  Job,
+  ReviewExperienceFeedback,
+} from '../types/jobcraft';
 
 const auth = vi.hoisted(() => ({
   autoLogin: vi.fn(),
@@ -175,6 +186,25 @@ const REVIEW_SUGG: InterviewReview = {
     },
   ],
 };
+
+/** W12 终审：候选正文显式传参——夹具 review 正文转闸门同构条目 */
+const toCandidate = (fb: ReviewExperienceFeedback): FeedbackCandidateItem => ({
+  target_type: 'experience',
+  target_ref: fb.experienceId,
+  experience_id: fb.experienceId,
+  experience_title: fb.experienceTitle,
+  discovered_issues: fb.discoveredIssues,
+  suggestions: fb.suggestions,
+  current_version: fb.currentVersion,
+  proposed_version: fb.proposedVersion,
+  proposed_changes: fb.proposedChanges as unknown as Array<Record<string, string>>,
+  decision: 'pending',
+  card_version: null,
+  decided_at: null,
+});
+const REVIEW_CANDIDATES: FeedbackCandidateItem[] = (REVIEW.experienceFeedbacks ?? []).map(
+  toCandidate,
+);
 
 const buildInt = (record: InterviewPrepRecord, review?: InterviewReview): Interview => ({
   ...prepRecordToInterview(record),
@@ -359,8 +389,12 @@ const ApplyHarness = ({ interviews }: { interviews: Interview[] }) => {
 /** T-M8-9 遗留 C：§24.2 汇总一次确认 harness（accept + reject 合并为一次请求） */
 const ConfirmHarness = ({
   ids = { acceptIds: ['7'], rejectIds: ['8'] },
+  recordId = 55,
+  candidates = REVIEW_CANDIDATES,
 }: {
   ids?: { acceptIds: string[]; rejectIds: string[] };
+  recordId?: number;
+  candidates?: FeedbackCandidateItem[];
 }) => {
   const confirmDecisions = useConfirmFeedbackDecisionsMutation();
   const [error, setError] = useState('');
@@ -370,7 +404,7 @@ const ConfirmHarness = ({
         onClick={() => {
           setError('');
           confirmDecisions
-            .mutateAsync({ interviewId: 'prep-7', ...ids })
+            .mutateAsync({ interviewId: 'prep-7', recordId, candidates, ...ids })
             .catch((e: unknown) => setError((e as Error).message));
         }}
       >
@@ -1562,6 +1596,31 @@ describe('W12 终审：确认链实时数据源（候选正文不读 INTERVIEWS 
     );
 
     expect(await screen.findByText('已关联经历资产：端侧大模型量化评测')).toBeInTheDocument();
+  });
+
+  it('缓存 review 无候选正文时批量确认仍可用（正文 = 闸门条目）', async () => {
+    renderWithProviders(
+      <>
+        <Seeder
+          interviews={[buildInt(RECORD_YUAN, { ...REVIEW, recordId: 55, experienceFeedbacks: [] })]}
+          experiences={[EXP_V1]}
+          jobs={[JOB_12]}
+        />
+        <InterviewReviewDetailView interviewId="prep-7" />
+        <ToastContainer />
+      </>,
+    );
+
+    expect(await screen.findByTestId('feedback-batch-panel')).toBeInTheDocument();
+    fireEvent.click(await screen.findByText('确认沉淀（1 条）'));
+
+    await waitFor(() =>
+      expect(interview.confirmFeedbackCandidates).toHaveBeenCalledWith(55, {
+        decisions: [expect.objectContaining({ target_ref: '7', decision: 'accepted' })],
+      }),
+    );
+    expect(await screen.findByText('已沉淀 1 条建议')).toBeInTheDocument();
+    expect(screen.queryByText('汇总确认失败')).not.toBeInTheDocument();
   });
 });
 

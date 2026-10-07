@@ -181,8 +181,10 @@ export const InterviewReviewDetailView: React.FC<InterviewReviewDetailViewProps>
     try {
       await confirmDecisionsMutation.mutateAsync({
         interviewId: currentInterview.id,
+        recordId,
         acceptIds: selectedPendingItems.map((c) => c.target_ref),
         rejectIds: [],
+        candidates: gateQuery.data?.candidates ?? [],
       });
       showToast({
         type: 'success',
@@ -203,8 +205,10 @@ export const InterviewReviewDetailView: React.FC<InterviewReviewDetailViewProps>
     try {
       await confirmDecisionsMutation.mutateAsync({
         interviewId: currentInterview.id,
+        recordId,
         acceptIds: [],
         rejectIds: pendingGateItems.map((c) => c.target_ref),
+        candidates: gateQuery.data?.candidates ?? [],
       });
       setConfirmingRejectAll(false);
       showToast({

@@ -6,13 +6,21 @@ import * as tasksApi from '../../api/tasks';
 import type {
   FeedbackBatchDecisionItem,
   FeedbackBatchItemResult,
+  FeedbackCandidateItem,
   InterviewReviewCreateResult,
   InterviewReviewDetailResponse,
   InterviewReviewRecord,
   InterviewReviewResult,
   QuestionBankResponse,
 } from '../../api/types';
-import { Experience, Interview, InterviewReview, Job } from '../../types/jobcraft';
+import {
+  Experience,
+  ExperienceProposedChange,
+  Interview,
+  InterviewReview,
+  Job,
+} from '../../types/jobcraft';
+import { ensureExperiencesLoaded } from '../experiences/hooks';
 import { EXPERIENCES_QUERY_KEY, versionsToHistory } from '../experiences/mappers';
 import { JOBS_QUERY_KEY } from '../jobs/mappers';
 import { INTERVIEWS_QUERY_KEY } from '../interview/mappers';
@@ -450,10 +458,14 @@ export function useRejectFeedbackCandidateMutation() {
 
 export interface ConfirmFeedbackDecisionsArgs {
   interviewId: string;
+  /** W12 终审：recordId 显式传参（详情页 review），不再回查 INTERVIEWS 缓存 */
+  recordId?: number | null;
   /** 需要沉淀的经历卡 ID（experienceId 字符串）；四槽位由前端按单条确认的同款逻辑合成 */
   acceptIds: string[];
   /** 需要忽略的经历卡 ID */
   rejectIds: string[];
+  /** W12 终审：候选正文显式传参（= 闸门条目，与面板同源，analysis_json 唯一真相） */
+  candidates: FeedbackCandidateItem[];
 }
 
 export interface ConfirmFeedbackDecisionsResult {
@@ -479,25 +491,19 @@ export function useConfirmFeedbackDecisionsMutation() {
     unknown,
     ConfirmFeedbackDecisionsArgs
   >({
-    mutationFn: async ({ interviewId, acceptIds, rejectIds }) => {
-      const interviews =
-        queryClient.getQueryData<Interview[]>([...INTERVIEWS_QUERY_KEY]) || [];
-      const interview = interviews.find((i) => i.id === interviewId);
-      if (!interview?.review) {
-        throw new Error('未找到对应的复盘报告');
-      }
-      const recordId = interview.review.recordId;
+    mutationFn: async ({ recordId, acceptIds, rejectIds, candidates }) => {
+      // T-M8-1：闸门以 interview_records.id 为定位键（T-M8-2 起随复盘写入）
       if (recordId === undefined || recordId === null) {
         throw new Error('该复盘缺少记录 ID，无法确认沉淀（请重新创建复盘）');
       }
-      const feedbacks = interview.review.experienceFeedbacks || [];
-      const experiences =
-        queryClient.getQueryData<Experience[]>([...EXPERIENCES_QUERY_KEY]) || [];
+      const experiences = await ensureExperiencesLoaded(queryClient);
 
       const decisions: FeedbackBatchDecisionItem[] = [];
       for (const experienceId of acceptIds) {
-        const feedback = feedbacks.find((f) => f.experienceId === experienceId);
-        if (!feedback) {
+        const candidate = candidates.find(
+          (c) => c.target_ref === experienceId || c.experience_id === experienceId,
+        );
+        if (!candidate) {
           throw new Error(`未找到该条复盘反馈: ${experienceId}`);
         }
         const exp = experiences.find((e) => e.id === experienceId);
@@ -507,11 +513,12 @@ export function useConfirmFeedbackDecisionsMutation() {
         if (isNaN(parseInt(experienceId, 10))) {
           throw new Error('复盘反馈未关联有效的经历卡 ID，无法沉淀');
         }
-        const proposedChanges = feedback.proposedChanges || [];
+        const proposedChanges = (candidate.proposed_changes ??
+          []) as unknown as ExperienceProposedChange[];
         const base =
           proposedChanges.length > 0
             ? applyProposedChanges(exp, proposedChanges)
-            : applyFeedbackSuggestions(exp, feedback.suggestions || []);
+            : applyFeedbackSuggestions(exp, candidate.suggestions || []);
         decisions.push({
           target_type: 'experience',
           target_ref: experienceId,

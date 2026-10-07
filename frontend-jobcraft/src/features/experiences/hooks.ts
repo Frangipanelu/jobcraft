@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import * as authApi from '../../api/auth';
 import * as experienceApi from '../../api/experience';
 import * as jobApi from '../../api/job';
@@ -88,30 +88,49 @@ function toUpdateCardPayload(
  * expression_summary），首屏单请求（原逐卡 listCardVersions 的 N+1 已移除）；
  * 版本历史明细改由 useCardVersionsQuery 在面板打开时懒加载。
  */
+/**
+ * 经历卡列表查询函数（W12：抽出让 useExperiencesQuery 与复盘反哺 mutation 复用，
+ * 详情页可能未挂 useExperiencesQuery，写路径不得假设缓存已存在）。
+ */
+export function makeExperiencesQueryFn(queryClient: QueryClient) {
+  return async () => {
+    const user = await authApi.getCurrentUser();
+    const cards = await experienceApi.listCards(user.id);
+    // 列表响应不含版本明细（N+1→1 后明细只走 useCardVersionsQuery）；
+    // refetch 时保留写路径（加版本/复盘反哺）已回流的 versionHistory，
+    // 避免 invalidate 后明细被空数组抹掉。currentVersion 始终以后端列为准。
+    const cached = queryClient.getQueryData<Experience[]>([...EXPERIENCES_QUERY_KEY]);
+    const cachedById = new Map((cached ?? []).map((e) => [e.id, e]));
+    return cards.map((card) => {
+      const exp = cardToExperience(card);
+      const prev = cachedById.get(exp.id);
+      if (prev && (prev.versionHistory?.length ?? 0) > 0) {
+        exp.versionHistory = prev.versionHistory;
+      }
+      return exp;
+    });
+  };
+}
+
 export function useExperiencesQuery() {
   const queryClient = useQueryClient();
 
   return useQuery({
     queryKey: [...EXPERIENCES_QUERY_KEY],
-    queryFn: async () => {
-      const user = await authApi.getCurrentUser();
-      const cards = await experienceApi.listCards(user.id);
-      // 列表响应不含版本明细（N+1→1 后明细只走 useCardVersionsQuery）；
-      // refetch 时保留写路径（加版本/复盘反哺）已回流的 versionHistory，
-      // 避免 invalidate 后明细被空数组抹掉。currentVersion 始终以后端列为准。
-      const cached = queryClient.getQueryData<Experience[]>([
-        ...EXPERIENCES_QUERY_KEY,
-      ]);
-      const cachedById = new Map((cached ?? []).map((e) => [e.id, e]));
-      return cards.map((card) => {
-        const exp = cardToExperience(card);
-        const prev = cachedById.get(exp.id);
-        if (prev && (prev.versionHistory?.length ?? 0) > 0) {
-          exp.versionHistory = prev.versionHistory;
-        }
-        return exp;
-      });
-    },
+    queryFn: makeExperiencesQueryFn(queryClient),
+  });
+}
+
+/**
+ * W12 终审：读经历卡列表（复盘反哺 mutation 专用）。
+ * 缓存已定义（含空数组——用户真无卡）直接返回；未挂载/从未加载时 fetchQuery 拉取。
+ */
+export async function ensureExperiencesLoaded(queryClient: QueryClient): Promise<Experience[]> {
+  const cached = queryClient.getQueryData<Experience[]>([...EXPERIENCES_QUERY_KEY]);
+  if (cached !== undefined) return cached;
+  return queryClient.fetchQuery({
+    queryKey: [...EXPERIENCES_QUERY_KEY],
+    queryFn: makeExperiencesQueryFn(queryClient),
   });
 }
 
