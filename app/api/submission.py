@@ -80,7 +80,9 @@ def jobcraft_submission_create(
             try:
                 db_tools.archive_selected_version(sid, current_user)
             except Exception:
-                logger.exception("投递归档失败")
+                logger.exception(
+                    "投递归档失败（submission_id=%s, user_id=%s）", sid, current_user
+                )
         return db_tools.get_submission(sid, current_user)
     except HTTPException:
         raise
@@ -151,10 +153,10 @@ def jobcraft_submission_update(
                 and normalize_status(current.get("status")) is SubmissionStatus.PREPARED
             ):
                 updates["status"] = SubmissionStatus.APPLIED.value
-        # T-M6-7：翻转检测需投递旧值（delivered false→true 才归档），未取则取一次
+        # T-M6-7：翻转归档仅 delivered false→true。current 在 delivered=True 时必已被
+        # 取过——status 分支取一次、delivered-only 分支取一次（评审修复：删冗余重取）；
+        # 取到 None 仅当记录不存在，下方 update 返回 False → 404，到不了归档判断。
         flip_to_delivered = updates.get("delivered") is True
-        if flip_to_delivered and current is None:
-            current = db_tools.get_submission(submission_id, current_user)
         ok = db_tools.update_submission(submission_id, updates, current_user)
         if not ok:
             raise HTTPException(status_code=404, detail="投递记录不存在或无变化")
@@ -163,7 +165,11 @@ def jobcraft_submission_update(
             try:
                 db_tools.archive_selected_version(submission_id, current_user)
             except Exception:
-                logger.exception("投递归档失败")
+                logger.exception(
+                    "投递归档失败（submission_id=%s, user_id=%s）",
+                    submission_id,
+                    current_user,
+                )
         return db_tools.get_submission(submission_id, current_user)
     except HTTPException:
         raise

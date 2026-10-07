@@ -2359,6 +2359,61 @@ class TestSubmissionUpdate:
         assert resp.status_code == 404
         assert called == []
 
+    def test_update_combined_status_and_delivered_archives_after_update(
+        self, monkeypatch
+    ):
+        """T-M6-7 评审：status+delivered 合并载荷（current 走 status 分支）→ 更新成功后归档一次。"""
+        events: list = []
+
+        def fake_update(sid, updates, uid=None):
+            events.append(("update", dict(updates)))
+            return True
+
+        monkeypatch.setattr(
+            "app.api.submission.db_tools.update_submission", fake_update
+        )
+        monkeypatch.setattr(
+            "app.api.submission.db_tools.archive_selected_version",
+            lambda sid, uid: events.append(("archive", sid, uid)),
+        )
+        monkeypatch.setattr(
+            "app.api.submission.db_tools.get_submission",
+            lambda *a: {"id": 1, "status": "PREPARED", "delivered": False},
+        )
+        resp = client.patch(
+            "/api/jobcraft/submission/1",
+            json={"status": "APPLIED", "delivered": True},
+        )
+        assert resp.status_code == 200
+        assert [e[0] for e in events] == ["update", "archive"]
+        assert events[1] == ("archive", 1, 1)
+
+    def test_update_requires_delivered_status_without_flag_skips_archive(
+        self, monkeypatch
+    ):
+        """T-M6-7 评审：requires_delivered 状态（INVITED）但未确认投递 → 400，不归档。
+
+        （INTERVIEW 非合法 SubmissionStatus，会在归一化处 400；用 INVITED
+        专门走 requires_delivered 分支。）
+        """
+        called: list = []
+        monkeypatch.setattr(
+            "app.api.submission.db_tools.update_submission",
+            lambda *a: called.append("update") or True,
+        )
+        monkeypatch.setattr(
+            "app.api.submission.db_tools.archive_selected_version",
+            lambda *a: called.append("archive"),
+        )
+        monkeypatch.setattr(
+            "app.api.submission.db_tools.get_submission",
+            lambda *a: {"id": 1, "status": "PREPARED", "delivered": False},
+        )
+        resp = client.patch("/api/jobcraft/submission/1", json={"status": "INVITED"})
+        assert resp.status_code == 400
+        assert "确认已投递" in resp.json()["error"]["message"]
+        assert called == []
+
 
 class TestSubmissionDelete:
     """DELETE /api/jobcraft/submission/{submission_id}"""

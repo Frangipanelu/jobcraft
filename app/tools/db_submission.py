@@ -309,7 +309,12 @@ def archive_selected_version(submission_id: int, user_id: int) -> Optional[int]:
     - ``job_analysis_id`` 为空 → 经 job 实体回查（手工投递等场景），仍无 →
       logger.info 后 None（无分析无从选版本）；
     - 该分析下无任何简历版本 → logger.info 后 None；
-    - 成功 → 单条 UPDATE 拷贝 ``resume_markdown`` 并写入 ``resume_version_id``。
+    - 成功 → 单条 UPDATE：始终写 ``resume_version_id``，仅当版本
+      ``resume_markdown`` 非空才一并拷贝（空/NULL 快照不清空投递既有正文）。
+      WHERE 携带 ``resume_version_id IS NULL``——原子防并发覆写
+      （评审修复：check-then-act 改为条件写，首次投递优先）；
+      rowcount=0（并发下已被抢先归档 / 行已失效）→ 回读返回既有版本 id，
+      回读无值则 logger.info 后 None（顺带消除 0 行被忽略的问题）。
 
     :param submission_id: 投递记录 id
     :param user_id: 归属校验（越权返回 None）
@@ -328,7 +333,7 @@ def archive_selected_version(submission_id: int, user_id: int) -> Optional[int]:
         return None
     existing = submission.get("resume_version_id")
     if existing is not None:
-        return int(existing)
+        return existing
     analysis_id = submission.get("job_analysis_id")
     if not analysis_id:
         job = db_job_entity.get_job_by_submission(submission_id, user_id)
@@ -346,12 +351,34 @@ def archive_selected_version(submission_id: int, user_id: int) -> Optional[int]:
             analysis_id,
         )
         return None
-    execute(
-        "UPDATE resume_submission SET resume_markdown=%s, resume_version_id=%s "
-        "WHERE id=%s AND user_id=%s AND is_active=1",
-        (version.get("resume_markdown"), version["id"], submission_id, user_id),
+    sets: List[str] = []
+    params: List[Any] = []
+    markdown = version.get("resume_markdown")
+    if markdown:
+        sets.append("resume_markdown=%s")
+        params.append(markdown)
+    sets.append("resume_version_id=%s")
+    params.append(version["id"])
+    params.extend([submission_id, user_id])
+    affected = execute(
+        "UPDATE resume_submission SET "
+        + ", ".join(sets)
+        + " WHERE id=%s AND user_id=%s AND is_active=1 AND resume_version_id IS NULL",
+        tuple(params),
     )
-    return version["id"]
+    if affected > 0:
+        return version["id"]
+    # rowcount=0：并发请求已抢先归档（首次投递优先，绝不覆写）或行已失效 → 回读现值
+    reread = get_submission(submission_id, user_id)
+    reread_id = reread.get("resume_version_id") if reread else None
+    if reread_id is not None:
+        return reread_id
+    logger.info(
+        "投递归档未落库：行未命中或无既有版本 id（submission_id=%s, user_id=%s）",
+        submission_id,
+        user_id,
+    )
+    return None
 
 
 def update_submission(

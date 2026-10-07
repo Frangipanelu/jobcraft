@@ -2040,7 +2040,73 @@ class TestDbSubmission:
         assert "resume_markdown=%s" in sql
         assert "resume_version_id=%s" in sql
         assert "is_active=1" in sql
+        # 评审修复：原子幂等守卫——条件写，首次投递优先，绝不覆写
+        assert "resume_version_id IS NULL" in sql
         assert params == ("# 快照", 77, 1, 1)
+
+    def test_archive_rowcount_zero_rereads_existing_version(self):
+        """T-M6-7 评审：UPDATE rowcount=0（并发已抢先归档）→ 回读返回既有版本 id。"""
+        from app.tools import db_submission
+
+        first = {"id": 1, "job_analysis_id": 10, "resume_version_id": None}
+        winner = {"id": 1, "job_analysis_id": 10, "resume_version_id": 55}
+        with (
+            patch(
+                "app.tools.db_submission.get_submission",
+                side_effect=[first, winner],
+            ),
+            patch(
+                "app.tools.db_resume_version.get_selected_resume_version",
+                return_value={"id": 77, "resume_markdown": "# 新"},
+            ),
+            patch("app.tools.db_submission.execute", return_value=0) as mock_exec,
+        ):
+            assert db_submission.archive_selected_version(1, 1) == 55
+        sql, _ = mock_exec.call_args[0]
+        assert "resume_version_id IS NULL" in sql
+
+    def test_archive_rowcount_zero_and_row_gone_returns_none(self):
+        """T-M6-7 评审：rowcount=0 且回读无行 → logger.info 后返回 None。"""
+        from app.tools import db_submission
+
+        first = {"id": 1, "job_analysis_id": 10, "resume_version_id": None}
+        with (
+            patch(
+                "app.tools.db_submission.get_submission",
+                side_effect=[first, None],
+            ),
+            patch(
+                "app.tools.db_resume_version.get_selected_resume_version",
+                return_value={"id": 77, "resume_markdown": "# 新"},
+            ),
+            patch("app.tools.db_submission.execute", return_value=0),
+        ):
+            assert db_submission.archive_selected_version(1, 1) is None
+
+    def test_archive_skips_empty_markdown_write(self):
+        """T-M6-7 评审：版本正文为 NULL/空 → 不写 resume_markdown（不清空投递既有正文），仍写版本 id。"""
+        from app.tools import db_submission
+
+        with (
+            patch(
+                "app.tools.db_submission.get_submission",
+                return_value={
+                    "id": 1,
+                    "job_analysis_id": 10,
+                    "resume_version_id": None,
+                },
+            ),
+            patch(
+                "app.tools.db_resume_version.get_selected_resume_version",
+                return_value={"id": 77, "resume_markdown": None},
+            ),
+            patch("app.tools.db_submission.execute", return_value=1) as mock_exec,
+        ):
+            assert db_submission.archive_selected_version(1, 1) == 77
+        sql, params = mock_exec.call_args[0]
+        assert "resume_version_id=%s" in sql
+        assert "resume_markdown" not in sql
+        assert params == (77, 1, 1)
 
     def test_archive_selected_version_resolves_analysis_via_job(self):
         """T-M6-7：submission 无 analysis → 经 job 实体回查后归档。"""
