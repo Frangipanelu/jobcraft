@@ -1476,6 +1476,95 @@ describe('T-M8-9 遗留 C：§24.2 汇总一次确认', () => {
   });
 });
 
+describe('W12 终审：确认链实时数据源（候选正文不读 INTERVIEWS 缓存）', () => {
+  const RECORD_YUAN_ROW = {
+    id: 55,
+    user_id: 1,
+    title: '字节跳动 AI 产品经理技术面复盘',
+    company: '字节跳动',
+    position: 'AI 产品经理',
+    round_type: 'tech',
+    job_analysis_id: 12,
+    status: 'done',
+    created_at: '2026-10-01T09:00:00',
+  };
+
+  const buildDetail = (experienceFeedbacks: InterviewReview['experienceFeedbacks']) => ({
+    record: {
+      ...RECORD_YUAN_ROW,
+      analysis: { ...ANALYSIS, record_id: 55, experienceFeedbacks },
+    },
+    qa_pairs: [
+      {
+        id: 41,
+        record_id: 55,
+        sequence: 1,
+        speaker: '面试官',
+        start_time: '0.1',
+        content: '介绍端侧量化方案',
+        is_question: true,
+        question_text: '介绍端侧量化方案',
+        dimension: '技术深度',
+        level: '深挖',
+        intent: '考察量化落地',
+        expected_answer: '量化指标拆解',
+        my_answer: '端侧量化评测方案与指标',
+        feedback: ['缺选型对比'],
+        suggestions: ['补充量化对比'],
+        score: 70,
+        related_card_id: 7,
+        related_card_title: '端侧大模型量化评测',
+      },
+    ],
+  });
+
+  const GATE_PENDING = {
+    record_id: 55,
+    candidates: [
+      {
+        target_type: 'experience',
+        target_ref: '7',
+        experience_id: '7',
+        experience_title: '端侧大模型量化评测',
+        discovered_issues: ['缺选型对比'],
+        suggestions: ['补充量化对比'],
+        current_version: 'V1',
+        proposed_version: 'V2',
+        proposed_changes: [],
+        decision: 'pending',
+        card_version: null,
+        decided_at: null,
+      },
+    ],
+    candidate_count: 1,
+    pending_count: 1,
+    gate_status: 'awaiting_confirmation',
+  };
+
+  beforeEach(() => {
+    serverCards = [{ ...CARD_A }];
+    interview.listInterviewReviewRecords.mockResolvedValue({ records: [{ ...RECORD_YUAN_ROW }] });
+    interview.getInterviewReviewDetail.mockResolvedValue(buildDetail(REVIEW.experienceFeedbacks));
+    interview.listFeedbackCandidates.mockResolvedValue(GATE_PENDING);
+  });
+
+  it('详情 analysis.experienceFeedbacks 直读进 review（徽章实时渲染；缓存 review 候选正文为空）', async () => {
+    renderWithProviders(
+      <>
+        <Seeder
+          interviews={[buildInt(RECORD_YUAN, { ...REVIEW, recordId: 55, experienceFeedbacks: [] })]}
+          experiences={[EXP_V1]}
+          jobs={[JOB_12]}
+        />
+        <InterviewReviewDetailView interviewId="prep-7" />
+        <ToastContainer />
+      </>,
+    );
+
+    expect(await screen.findByText('已关联经历资产：端侧大模型量化评测')).toBeInTheDocument();
+  });
+});
+
 describe('T-M8-2 详情页直读 interview_qa_pairs', () => {
   const RECORD_TX_ROW = {
     id: 55,

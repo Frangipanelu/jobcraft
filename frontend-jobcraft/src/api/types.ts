@@ -10,6 +10,8 @@
  * 由此隔离「后端契约」与「前端领域模型」，避免组件直接耦合后端字段命名。
  */
 
+import type { ReviewExperienceFeedback } from '../types/jobcraft'
+
 // ============================================================
 // 通用
 // ============================================================
@@ -299,6 +301,8 @@ export interface InterviewReviewResult {
   weaknesses: string[]
   action_items: string[]
   questions: ReviewedQuestion[]
+  /** W12：候选正文随 analysis_json 落库（camelCase，与 GET detail 契约一致）；FE 直读进 review */
+  experienceFeedbacks?: ReviewExperienceFeedback[]
   created_at: string | null
 }
 

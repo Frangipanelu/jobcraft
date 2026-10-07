@@ -166,7 +166,10 @@ export function buildReviewFromRecord(
     ...patch,
     overallScore: patch.overallScore ?? fallbackScore,
     totalQACount: qa_pairs.length || patch.totalQACount || 0,
-    qaList: qaList.length ? qaList : patch.qaList
+    qaList: qaList.length ? qaList : patch.qaList,
+    // W12 终审：候选正文以 record.analysis.experienceFeedbacks 为唯一实时源
+    //（INTERVIEWS 缓存该字段无写入方，恒空——读缓存即死链，见设计文档 §1 终审补订）
+    experienceFeedbacks: analysis?.experienceFeedbacks ?? [],
   });
   return {
     ...review,
