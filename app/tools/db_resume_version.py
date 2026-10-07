@@ -184,6 +184,36 @@ def get_latest_resume_version(
     return _row_to_version(row)
 
 
+def get_selected_resume_version(
+    user_id: int, job_analysis_id: int
+) -> Optional[Dict[str, Any]]:
+    """取该分析下用户确认投递的版本（T-M6-7 投递归档依据）。
+
+    语义「单选优先、无单选取最新」：
+    - 单选优先：取 ``selected_for_application=1`` 的行。单选作用域是
+      (user, job)（见 ``set_current_resume_version``），同一 analysis 下
+      可能存在多条选中行，按 ``version_no DESC, id DESC`` 取最新一条；
+    - 无单选：回落 ``get_latest_resume_version``（该分析下最新版本）；
+    - 均无版本：返回 None。
+
+    归属收口在 WHERE（v.user_id=%s），他用户行不可见。
+
+    :param user_id: 归属用户
+    :param job_analysis_id: 岗位分析 id
+    :return: 版本 dict；该分析下无任何版本返回 None
+    """
+    _ensure_resume_version_table()
+    row = query_one(
+        _LIST_JOIN + "WHERE v.user_id=%s AND v.job_analysis_id=%s "
+        "AND v.selected_for_application=1 "
+        "ORDER BY v.version_no DESC, v.id DESC LIMIT 1",
+        (user_id, job_analysis_id),
+    )
+    if row:
+        return _row_to_version(row)
+    return get_latest_resume_version(user_id, job_analysis_id)
+
+
 def create_resume_version(
     user_id: int,
     job_id: int,

@@ -39,7 +39,8 @@ def _ensure_resume_submission_table() -> None:
 
     T-M6-7：``resume_version_id`` 归档列（V0027）——建表语句直接声明，
     存量表由建表后的 SHOW COLUMNS 守卫补列（同款守卫见
-    ``db_interview._ensure_interview_preps_table``），两路径幂等。
+    ``db_resume_version._ensure_resume_version_table`` 的 LIKE-probe +
+    合并 ALTER），两路径幂等。
     """
     if is_schema_ready():
         return
@@ -217,6 +218,8 @@ def get_submission(
         "card_version_ids": _parse_json(row["card_version_ids"]) or [],
         # FE-RESUME-02：AI 优化建议列表（列缺失/为空时回退 []，旧库行兼容）
         "resume_suggestions": _parse_json(row.get("resume_suggestions")) or [],
+        # T-M6-7：归档的简历版本 id（旧库未迁移缺列时为 None，不炸）
+        "resume_version_id": row.get("resume_version_id"),
         "status": effective_status(row["status"], bool(row.get("delivered"))),
         # P4-4a：岗位实体 id（前端创建岗位后缓存用）
         "job_id": row.get("job_id"),
@@ -283,6 +286,8 @@ def get_submission_by_analysis(
         "resume_file_path": row["resume_file_path"] or "",
         "card_version_ids": json.loads(row["card_version_ids"] or "[]"),
         "resume_suggestions": _parse_json(row.get("resume_suggestions")) or [],
+        # T-M6-7：归档的简历版本 id（旧库未迁移缺列时为 None，不炸）
+        "resume_version_id": row.get("resume_version_id"),
         # BE-DRIFT-01：与 get_submission/list_submissions 一致，按 delivered
         # 事实投影（存量 APPLIED+delivered=0 → PREPARED），不透传裸存量值
         "status": effective_status(row["status"], bool(row.get("delivered"))),
@@ -292,6 +297,61 @@ def get_submission_by_analysis(
         "created_at": row["created_at"].isoformat() if row.get("created_at") else None,
         "updated_at": row["updated_at"].isoformat() if row.get("updated_at") else None,
     }
+
+
+def archive_selected_version(submission_id: int, user_id: int) -> Optional[int]:
+    """T-M6-7：把用户当前选中的简历版本快照归档进投递记录（标记投递时）。
+
+    分支（跳过类分支均返回 None 不炸，DB 异常向上抛由 API 钩子容忍）：
+
+    - 投递不存在 / 无归属（``get_submission`` 为 None）→ None（越权）；
+    - 行已有 ``resume_version_id`` → 幂等返回现值，不覆写（首次投递已归档）；
+    - ``job_analysis_id`` 为空 → 经 job 实体回查（手工投递等场景），仍无 →
+      logger.info 后 None（无分析无从选版本）；
+    - 该分析下无任何简历版本 → logger.info 后 None；
+    - 成功 → 单条 UPDATE 拷贝 ``resume_markdown`` 并写入 ``resume_version_id``。
+
+    :param submission_id: 投递记录 id
+    :param user_id: 归属校验（越权返回 None）
+    :return: 归档的简历版本 id；已归档时为既有版本 id；跳过时 None
+    """
+    # 函数内局部导入：避免 db_submission ↔ db_resume_version/db_job_entity 循环依赖
+    from app.tools import db_job_entity, db_resume_version
+
+    submission = get_submission(submission_id, user_id)
+    if not submission:
+        logger.info(
+            "投递归档跳过：投递记录不存在或无归属（submission_id=%s, user_id=%s）",
+            submission_id,
+            user_id,
+        )
+        return None
+    existing = submission.get("resume_version_id")
+    if existing is not None:
+        return int(existing)
+    analysis_id = submission.get("job_analysis_id")
+    if not analysis_id:
+        job = db_job_entity.get_job_by_submission(submission_id, user_id)
+        analysis_id = job.get("job_analysis_id") if job else None
+    if not analysis_id:
+        logger.info(
+            "投递归档跳过：投递无岗位分析归属（submission_id=%s）", submission_id
+        )
+        return None
+    version = db_resume_version.get_selected_resume_version(user_id, analysis_id)
+    if not version:
+        logger.info(
+            "投递归档跳过：该分析下无可归档简历版本（submission_id=%s, analysis_id=%s）",
+            submission_id,
+            analysis_id,
+        )
+        return None
+    execute(
+        "UPDATE resume_submission SET resume_markdown=%s, resume_version_id=%s "
+        "WHERE id=%s AND user_id=%s AND is_active=1",
+        (version.get("resume_markdown"), version["id"], submission_id, user_id),
+    )
+    return version["id"]
 
 
 def update_submission(

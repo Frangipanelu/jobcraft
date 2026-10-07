@@ -75,6 +75,12 @@ def jobcraft_submission_create(
                 detail=f"无效的投递状态: {data.get('status')}",
             )
         sid = db_tools.insert_submission(data)
+        if payload.delivered:
+            # T-M6-7：创建即已投递 → 归档选中简历版本（失败仅记日志，不阻断创建）
+            try:
+                db_tools.archive_selected_version(sid, current_user)
+            except Exception:
+                logger.exception("投递归档失败")
         return db_tools.get_submission(sid, current_user)
     except HTTPException:
         raise
@@ -145,9 +151,19 @@ def jobcraft_submission_update(
                 and normalize_status(current.get("status")) is SubmissionStatus.PREPARED
             ):
                 updates["status"] = SubmissionStatus.APPLIED.value
+        # T-M6-7：翻转检测需投递旧值（delivered false→true 才归档），未取则取一次
+        flip_to_delivered = updates.get("delivered") is True
+        if flip_to_delivered and current is None:
+            current = db_tools.get_submission(submission_id, current_user)
         ok = db_tools.update_submission(submission_id, updates, current_user)
         if not ok:
             raise HTTPException(status_code=404, detail="投递记录不存在或无变化")
+        if flip_to_delivered and current is not None and not current.get("delivered"):
+            # T-M6-7：首次确认投递 → 归档选中简历版本（失败仅记日志，不阻断更新）
+            try:
+                db_tools.archive_selected_version(submission_id, current_user)
+            except Exception:
+                logger.exception("投递归档失败")
         return db_tools.get_submission(submission_id, current_user)
     except HTTPException:
         raise

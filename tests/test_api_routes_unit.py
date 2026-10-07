@@ -1979,6 +1979,9 @@ class TestSubmissionCreate:
             "app.api.submission.db_tools.insert_submission", fake_insert
         )
         monkeypatch.setattr(
+            "app.api.submission.db_tools.archive_selected_version", lambda *a: None
+        )
+        monkeypatch.setattr(
             "app.api.submission.db_tools.get_submission",
             lambda *a: {"id": 9, "delivered": captured.get("delivered")},
         )
@@ -2012,6 +2015,67 @@ class TestSubmissionCreate:
         resp = client.post("/api/jobcraft/submission", json={"position": "SWE"})
         assert resp.status_code == 200
         assert captured["delivered"] is False
+
+    def test_create_delivered_true_triggers_archive(self, monkeypatch):
+        """T-M6-7：创建即投递（delivered=true）触发选中简历版本归档。"""
+        calls: list = []
+        monkeypatch.setattr(
+            "app.api.submission.db_tools.insert_submission", lambda *a: 7
+        )
+        monkeypatch.setattr(
+            "app.api.submission.db_tools.archive_selected_version",
+            lambda sid, uid: (calls.append((sid, uid)), 33)[1],
+        )
+        monkeypatch.setattr(
+            "app.api.submission.db_tools.get_submission",
+            lambda *a: {"id": 7, "delivered": True, "resume_version_id": 33},
+        )
+        resp = client.post(
+            "/api/jobcraft/submission",
+            json={"position": "SWE", "delivered": True},
+        )
+        assert resp.status_code == 200
+        assert calls == [(7, 1)]
+        assert resp.json()["resume_version_id"] == 33
+
+    def test_create_not_delivered_skips_archive(self, monkeypatch):
+        """T-M6-7：创建未投递（delivered=false）不触发归档。"""
+        called: list = []
+        monkeypatch.setattr(
+            "app.api.submission.db_tools.insert_submission", lambda *a: 1
+        )
+        monkeypatch.setattr(
+            "app.api.submission.db_tools.archive_selected_version",
+            lambda *a: called.append(a),
+        )
+        monkeypatch.setattr(
+            "app.api.submission.db_tools.get_submission", lambda *a: {"id": 1}
+        )
+        resp = client.post("/api/jobcraft/submission", json={"position": "SWE"})
+        assert resp.status_code == 200
+        assert called == []
+
+    def test_create_archive_failure_does_not_block(self, monkeypatch):
+        """T-M6-7：归档异常仅记日志，创建照常返回（绝不阻断）。"""
+
+        def boom(*a, **kw):
+            raise RuntimeError("归档挂了")
+
+        monkeypatch.setattr(
+            "app.api.submission.db_tools.insert_submission", lambda *a: 5
+        )
+        monkeypatch.setattr(
+            "app.api.submission.db_tools.archive_selected_version", boom
+        )
+        monkeypatch.setattr(
+            "app.api.submission.db_tools.get_submission", lambda *a: {"id": 5}
+        )
+        resp = client.post(
+            "/api/jobcraft/submission",
+            json={"position": "SWE", "delivered": True},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["id"] == 5
 
 
 class TestSubmissionGet:
@@ -2213,6 +2277,87 @@ class TestSubmissionUpdate:
         assert resp.status_code == 200
         assert updates_captured["updates"]["delivered"] is False
         assert resp.json()["delivered"] is False
+
+    def test_update_delivered_flip_false_to_true_archives(self, monkeypatch):
+        """T-M6-7：delivered false→true 翻转在 update 成功后触发一次归档。"""
+        events: list = []
+
+        def fake_update(sid, updates, uid=None):
+            events.append(("update", sid, uid))
+            return True
+
+        def fake_archive(sid, uid):
+            events.append(("archive", sid, uid))
+
+        monkeypatch.setattr(
+            "app.api.submission.db_tools.update_submission", fake_update
+        )
+        monkeypatch.setattr(
+            "app.api.submission.db_tools.archive_selected_version", fake_archive
+        )
+        monkeypatch.setattr(
+            "app.api.submission.db_tools.get_submission",
+            lambda *a: {"id": 1, "status": "PREPARED", "delivered": False},
+        )
+        resp = client.patch("/api/jobcraft/submission/1", json={"delivered": True})
+        assert resp.status_code == 200
+        assert [e[0] for e in events] == ["update", "archive"]
+        assert events[1] == ("archive", 1, 1)
+
+    def test_update_delivered_true_no_flip_skips_archive(self, monkeypatch):
+        """T-M6-7：本就 delivered=true（非翻转）不重复归档。"""
+        called: list = []
+        monkeypatch.setattr(
+            "app.api.submission.db_tools.update_submission", lambda *a: True
+        )
+        monkeypatch.setattr(
+            "app.api.submission.db_tools.archive_selected_version",
+            lambda *a: called.append(a),
+        )
+        monkeypatch.setattr(
+            "app.api.submission.db_tools.get_submission",
+            lambda *a: {"id": 1, "status": "APPLIED", "delivered": True},
+        )
+        resp = client.patch("/api/jobcraft/submission/1", json={"delivered": True})
+        assert resp.status_code == 200
+        assert called == []
+
+    def test_update_archive_failure_does_not_block(self, monkeypatch):
+        """T-M6-7：归档异常仅记日志，PATCH 照常 200（不阻断更新）。"""
+
+        def boom(*a, **kw):
+            raise RuntimeError("归档挂了")
+
+        monkeypatch.setattr(
+            "app.api.submission.db_tools.update_submission", lambda *a: True
+        )
+        monkeypatch.setattr(
+            "app.api.submission.db_tools.archive_selected_version", boom
+        )
+        monkeypatch.setattr(
+            "app.api.submission.db_tools.get_submission",
+            lambda *a: {"id": 1, "status": "PREPARED", "delivered": False},
+        )
+        resp = client.patch("/api/jobcraft/submission/1", json={"delivered": True})
+        assert resp.status_code == 200
+
+    def test_update_404_skips_archive(self, monkeypatch):
+        """T-M6-7：update 失败（404）不触发归档。"""
+        called: list = []
+        monkeypatch.setattr(
+            "app.api.submission.db_tools.update_submission", lambda *a: False
+        )
+        monkeypatch.setattr(
+            "app.api.submission.db_tools.archive_selected_version",
+            lambda *a: called.append(a),
+        )
+        monkeypatch.setattr(
+            "app.api.submission.db_tools.get_submission",
+            lambda *a: {"id": 1, "status": "PREPARED", "delivered": False},
+        )
+        resp = client.patch("/api/jobcraft/submission/1", json={"delivered": True})
+        assert resp.status_code == 404
+        assert called == []
 
 
 class TestSubmissionDelete:

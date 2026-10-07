@@ -1904,6 +1904,186 @@ class TestDbSubmission:
         assert result["job_id"] is None
         assert len(calls) == 2
 
+    def test_get_submission_exposes_resume_version_id(self):
+        """T-M6-7：读取投递带出归档版本 id；旧库缺列行为 None 不炸。"""
+        from app.tools.db_submission import get_submission, get_submission_by_analysis
+
+        base = {
+            "id": 1,
+            "user_id": 1,
+            "job_analysis_id": 7,
+            "position": "PM",
+            "company": "X",
+            "jd_text": "",
+            "resume_markdown": "",
+            "resume_file_path": None,
+            "card_version_ids": "[]",
+            "status": "PREPARED",
+            "notes": "",
+            "is_manual": 0,
+            "delivered": 0,
+            "created_at": SimpleNamespace(isoformat=lambda: "2024-01-01"),
+            "updated_at": SimpleNamespace(isoformat=lambda: "2024-01-02"),
+        }
+        # 有归档 → 透出版本 id
+        row = dict(base, resume_version_id=33)
+        mock_cursor = MagicMock()
+        mock_cursor.fetchone.return_value = row
+        mock_cursor.fetchall.return_value = []
+        with patch(
+            "app.tools.db_conn.connect", return_value=_make_mock_conn(mock_cursor)
+        ):
+            assert get_submission(1)["resume_version_id"] == 33
+
+        # 未迁移旧行缺列 → None 不炸（单条读取）
+        with patch(
+            "app.tools.db_conn.connect", return_value=_make_mock_conn(mock_cursor)
+        ):
+            mock_cursor.fetchone.return_value = dict(base)
+            assert get_submission(1)["resume_version_id"] is None
+
+        # 未迁移旧行缺列 → None 不炸（按分析读取）
+        with (
+            patch("app.tools.db_submission.is_schema_ready", return_value=True),
+            patch("app.tools.db_submission.query_one", return_value=dict(base)),
+        ):
+            out = get_submission_by_analysis(7, user_id=1)
+        assert out is not None
+        assert out["resume_version_id"] is None
+
+    def test_archive_selected_version_idempotent_when_archived(self):
+        """T-M6-7：已归档幂等——返回现值，不发起 UPDATE（不覆写）。"""
+        from app.tools import db_submission
+
+        with (
+            patch(
+                "app.tools.db_submission.get_submission",
+                return_value={
+                    "id": 1,
+                    "job_analysis_id": 10,
+                    "resume_version_id": 42,
+                },
+            ),
+            patch("app.tools.db_submission.execute") as mock_exec,
+        ):
+            assert db_submission.archive_selected_version(1, 1) == 42
+        mock_exec.assert_not_called()
+
+    def test_archive_selected_version_skips_without_analysis(self):
+        """T-M6-7：无分析归属（job 实体回查也无）→ 跳过返回 None。"""
+        from app.tools import db_submission
+
+        with (
+            patch(
+                "app.tools.db_submission.get_submission",
+                return_value={
+                    "id": 1,
+                    "job_analysis_id": None,
+                    "resume_version_id": None,
+                },
+            ),
+            patch(
+                "app.tools.db_job_entity.get_job_by_submission", return_value=None
+            ) as mock_job,
+            patch("app.tools.db_submission.execute") as mock_exec,
+        ):
+            assert db_submission.archive_selected_version(1, 1) is None
+        mock_job.assert_called_once_with(1, 1)
+        mock_exec.assert_not_called()
+
+    def test_archive_selected_version_skips_without_version(self):
+        """T-M6-7：该分析下无可归档版本 → 跳过返回 None，不 UPDATE。"""
+        from app.tools import db_submission
+
+        with (
+            patch(
+                "app.tools.db_submission.get_submission",
+                return_value={
+                    "id": 1,
+                    "job_analysis_id": 10,
+                    "resume_version_id": None,
+                },
+            ),
+            patch(
+                "app.tools.db_resume_version.get_selected_resume_version",
+                return_value=None,
+            ) as mock_sel,
+            patch("app.tools.db_submission.execute") as mock_exec,
+        ):
+            assert db_submission.archive_selected_version(1, 1) is None
+        mock_sel.assert_called_once_with(1, 10)
+        mock_exec.assert_not_called()
+
+    def test_archive_selected_version_writes_snapshot(self):
+        """T-M6-7：成功路径——单条 UPDATE 拷贝正文并写版本 id，返回版本 id。"""
+        from app.tools import db_submission
+
+        with (
+            patch(
+                "app.tools.db_submission.get_submission",
+                return_value={
+                    "id": 1,
+                    "job_analysis_id": 10,
+                    "resume_version_id": None,
+                },
+            ),
+            patch(
+                "app.tools.db_resume_version.get_selected_resume_version",
+                return_value={"id": 77, "resume_markdown": "# 快照"},
+            ) as mock_sel,
+            patch("app.tools.db_submission.execute", return_value=1) as mock_exec,
+        ):
+            assert db_submission.archive_selected_version(1, 1) == 77
+        mock_sel.assert_called_once_with(1, 10)
+        sql, params = mock_exec.call_args[0]
+        assert "UPDATE resume_submission" in sql
+        assert "resume_markdown=%s" in sql
+        assert "resume_version_id=%s" in sql
+        assert "is_active=1" in sql
+        assert params == ("# 快照", 77, 1, 1)
+
+    def test_archive_selected_version_resolves_analysis_via_job(self):
+        """T-M6-7：submission 无 analysis → 经 job 实体回查后归档。"""
+        from app.tools import db_submission
+
+        with (
+            patch(
+                "app.tools.db_submission.get_submission",
+                return_value={
+                    "id": 1,
+                    "job_analysis_id": None,
+                    "resume_version_id": None,
+                },
+            ),
+            patch(
+                "app.tools.db_job_entity.get_job_by_submission",
+                return_value={"id": 3, "job_analysis_id": 55},
+            ) as mock_job,
+            patch(
+                "app.tools.db_resume_version.get_selected_resume_version",
+                return_value={"id": 9, "resume_markdown": "# V"},
+            ) as mock_sel,
+            patch("app.tools.db_submission.execute", return_value=1),
+        ):
+            assert db_submission.archive_selected_version(1, 1) == 9
+        mock_job.assert_called_once_with(1, 1)
+        mock_sel.assert_called_once_with(1, 55)
+
+    def test_archive_selected_version_denied_for_other_user(self):
+        """T-M6-7：越权（get_submission None）→ 返回 None，不查版本不 UPDATE。"""
+        from app.tools import db_submission
+
+        with (
+            patch("app.tools.db_submission.get_submission", return_value=None),
+            patch(
+                "app.tools.db_resume_version.get_selected_resume_version"
+            ) as mock_sel,
+            patch("app.tools.db_submission.execute") as mock_exec,
+        ):
+            assert db_submission.archive_selected_version(404, 2) is None
+        mock_sel.assert_not_called()
+        mock_exec.assert_not_called()
+
 
 # ============================================================
 # 9. db_interview.py — mock DB
@@ -3005,6 +3185,83 @@ class TestDbResumeVersion:
             patch("app.tools.db_resume_version.query_one", return_value=None),
         ):
             assert db_resume_version.get_latest_resume_version(1, 10) is None
+
+    def test_get_selected_resume_version_prefers_single_select(self):
+        """T-M6-7：单选优先——selected_for_application=1 按 version_no DESC 取最新。"""
+        from app.tools import db_resume_version
+
+        row = {
+            "id": 8,
+            "user_id": 1,
+            "job_analysis_id": 10,
+            "version_no": 3,
+            "resume_markdown": "# 已选",
+            "selected_for_application": 1,
+        }
+        with (
+            patch("app.tools.db_resume_version._ensure_resume_version_table"),
+            patch("app.tools.db_resume_version.query_one", return_value=row) as mock_q,
+            patch(
+                "app.tools.db_resume_version.get_latest_resume_version"
+            ) as mock_latest,
+        ):
+            got = db_resume_version.get_selected_resume_version(1, 10)
+        sql, params = mock_q.call_args[0]
+        assert "v.user_id=%s" in sql
+        assert "v.job_analysis_id=%s" in sql
+        assert "selected_for_application=1" in sql
+        assert "ORDER BY v.version_no DESC, v.id DESC LIMIT 1" in sql
+        assert params == (1, 10)
+        assert got["id"] == 8
+        assert got["resume_markdown"] == "# 已选"
+        mock_latest.assert_not_called()
+
+    def test_get_selected_resume_version_falls_back_to_latest(self):
+        """T-M6-7：无单选 → 回落 get_latest_resume_version（单选优先、无单选取最新）。"""
+        from app.tools import db_resume_version
+
+        with (
+            patch("app.tools.db_resume_version._ensure_resume_version_table"),
+            patch("app.tools.db_resume_version.query_one", return_value=None),
+            patch(
+                "app.tools.db_resume_version.get_latest_resume_version",
+                return_value={"id": 5, "version_no": 1},
+            ) as mock_latest,
+        ):
+            got = db_resume_version.get_selected_resume_version(1, 10)
+        assert got["id"] == 5
+        mock_latest.assert_called_once_with(1, 10)
+
+    def test_get_selected_resume_version_none_when_no_versions(self):
+        """T-M6-7：单选与最新均无 → None。"""
+        from app.tools import db_resume_version
+
+        with (
+            patch("app.tools.db_resume_version._ensure_resume_version_table"),
+            patch("app.tools.db_resume_version.query_one", return_value=None),
+            patch(
+                "app.tools.db_resume_version.get_latest_resume_version",
+                return_value=None,
+            ),
+        ):
+            assert db_resume_version.get_selected_resume_version(1, 10) is None
+
+    def test_get_selected_resume_version_scoped_to_owner(self):
+        """T-M6-7：越权——WHERE 收口 user_id，他用户选中行不可见 → None。"""
+        from app.tools import db_resume_version
+
+        with (
+            patch("app.tools.db_resume_version._ensure_resume_version_table"),
+            patch("app.tools.db_resume_version.query_one", return_value=None) as mock_q,
+            patch(
+                "app.tools.db_resume_version.get_latest_resume_version",
+                return_value=None,
+            ),
+        ):
+            assert db_resume_version.get_selected_resume_version(2, 10) is None
+        sql, params = mock_q.call_args[0]
+        assert "v.user_id=%s" in sql
+        assert params == (2, 10)
 
     def test_update_only_provided_fields(self):
         from app.tools import db_resume_version

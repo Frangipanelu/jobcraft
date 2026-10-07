@@ -73,6 +73,7 @@ from app.tools.db_capability_gap import (  # noqa: E402, F401
 )
 
 from app.tools.db_submission import (  # noqa: E402, F401
+    archive_selected_version,
     delete_submission,
     get_dashboard,
     get_submission,
