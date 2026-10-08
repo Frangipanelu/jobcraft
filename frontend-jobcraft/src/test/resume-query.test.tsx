@@ -396,6 +396,17 @@ describe('T-M6-7/8 终审跟进② 生成简历失效 resume-versions', () => {
     return invalidateSpy;
   }
 
+  /**
+   * 全量 key 纪律：每一次 invalidateQueries 都必须只打 resume-versions——
+   * 首元素不是 resume-versions（含无 queryKey 的全量失效）即失败，锁死「禁双 key 合并」。
+   * 配合 toHaveBeenCalledWith 保证至少发生一次，避免空数组空真。
+   */
+  function expectOnlyResumeVersionsInvalidated(spy: ReturnType<typeof renderGenerate>) {
+    expect(
+      spy.mock.calls.every(([filters]) => filters?.queryKey?.[0] === 'resume-versions'),
+    ).toBe(true);
+  }
+
   it('生成成功（返回 {resumeId, resume}）→ invalidateQueries 含 resume-versions key', async () => {
     const invalidateSpy = renderGenerate();
 
@@ -408,6 +419,7 @@ describe('T-M6-7/8 终审跟进② 生成简历失效 resume-versions', () => {
       expect.objectContaining({ job_analysis_id: 12 }),
     );
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['resume-versions'] });
+    expectOnlyResumeVersionsInvalidated(invalidateSpy);
   });
 
   it('API 成功但解析失败返回 null（缺 resume_markdown）→ 同样失效', async () => {
@@ -426,6 +438,7 @@ describe('T-M6-7/8 终审跟进② 生成简历失效 resume-versions', () => {
       expect(screen.getByTestId('gen-status').textContent).toBe('success'),
     );
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['resume-versions'] });
+    expectOnlyResumeVersionsInvalidated(invalidateSpy);
   });
 
   it('saveResume 抛错 → 不失效 resume-versions', async () => {
@@ -438,5 +451,33 @@ describe('T-M6-7/8 终审跟进② 生成简历失效 resume-versions', () => {
       expect(screen.getByTestId('gen-status').textContent).toBe('error'),
     );
     expect(invalidateSpy).not.toHaveBeenCalledWith({ queryKey: ['resume-versions'] });
+  });
+
+  it('时序：saveResume 未 resolve 之前不失效，resolve 后才失效', async () => {
+    let release: (value: typeof SAVE_OK) => void = () => undefined;
+    job.saveResume.mockImplementation(
+      () =>
+        new Promise<typeof SAVE_OK>((resolve) => {
+          release = resolve;
+        }),
+    );
+    const invalidateSpy = renderGenerate();
+    const saveCallsBefore = job.saveResume.mock.calls.length;
+
+    fireEvent.click(screen.getByRole('button', { name: '生成简历' }));
+
+    // 本文件 beforeEach 不清 mock 记录，用增量而非总次数判断本次调用
+    await vi.waitFor(() =>
+      expect(job.saveResume.mock.calls.length).toBe(saveCallsBefore + 1),
+    );
+    expect(screen.getByTestId('gen-status').textContent).toBe('pending');
+    expect(invalidateSpy).not.toHaveBeenCalled();
+
+    release(SAVE_OK);
+    await vi.waitFor(() =>
+      expect(screen.getByTestId('gen-status').textContent).toBe('success'),
+    );
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['resume-versions'] });
+    expectOnlyResumeVersionsInvalidated(invalidateSpy);
   });
 });
