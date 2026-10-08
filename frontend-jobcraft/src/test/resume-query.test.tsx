@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { fireEvent, screen } from '@testing-library/react';
-import { renderWithProviders } from './test-utils';
+import { renderWithProviders, createTestQueryClient } from './test-utils';
 import { ToastContainer } from '../components/common/Toast';
 import { ResumeEditorView } from '../components/resume/ResumeEditorView';
-import { useResumesQuery, useUpsertResumeMutation } from '../features/resume/hooks';
+import { useGenerateResumeFromJdMutation, useResumesQuery, useUpsertResumeMutation } from '../features/resume/hooks';
 import { markdownToResume, resumeToMarkdown } from '../utils/resumeParser';
 import type { DashboardItem, ResumeVersionWire, Submission } from '../api/types';
 import type { ResumeVersion } from '../types/jobcraft';
@@ -27,6 +27,7 @@ const job = vi.hoisted(() => ({
   listJobAnalyses: vi.fn(),
   listResumeVersions: vi.fn(),
   updateResumeVersion: vi.fn(),
+  saveResume: vi.fn(),
 }));
 
 const experience = vi.hoisted(() => ({
@@ -124,6 +125,16 @@ const VERSION_WIRE: ResumeVersionWire = {
   updated_at: '2026-09-18T08:00:00',
 };
 
+/** save-resume 正常产物：含 resume_markdown + resume_version_id（可解析出 ResumeVersion）。 */
+const SAVE_OK = {
+  file_path: 'resumes/zhang.md',
+  file_name: 'zhang.md',
+  size_bytes: 1024,
+  selected_count: 1,
+  resume_version_id: 300,
+  resume_markdown: SUBMISSION_DETAIL.resume_markdown,
+};
+
 beforeEach(() => {
   auth.autoLogin.mockResolvedValue(1);
   auth.getCurrentUser.mockResolvedValue(AUTH_USER);
@@ -133,6 +144,7 @@ beforeEach(() => {
   job.updateSubmission.mockResolvedValue({ ok: true });
   job.listResumeVersions.mockResolvedValue([VERSION_WIRE]);
   job.updateResumeVersion.mockResolvedValue(VERSION_WIRE);
+  job.saveResume.mockResolvedValue(SAVE_OK);
   job.listBaseResumes.mockResolvedValue([]);
   job.listJobAnalyses.mockResolvedValue([]);
   experience.listCards.mockResolvedValue([]);
@@ -159,6 +171,25 @@ const UpsertHarness = () => {
         并入生成简历
       </button>
       <span data-testid="upsert-count">{Object.keys(data).length}</span>
+    </div>
+  );
+};
+
+const GENERATE_ARGS = {
+  jobAnalysisId: 12,
+  selectedCardIds: [1, 2],
+  position: 'AI 产品经理',
+  company: '字节跳动',
+};
+
+const GenerateHarness = () => {
+  const generate = useGenerateResumeFromJdMutation();
+  return (
+    <div>
+      <button type="button" onClick={() => generate.mutate(GENERATE_ARGS)}>
+        生成简历
+      </button>
+      <span data-testid="gen-status">{generate.status}</span>
     </div>
   );
 };
@@ -350,5 +381,62 @@ describe('FE-RESUME-03 github 解析 / 序列化往返', () => {
     expect(resumeToMarkdown(r as ResumeVersion)).toContain(
       'GitHub/作品：https://github.com/zhang',
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// T-M6-7/8 终审跟进②：生成简历成功后失效 resume-versions 版本列表
+// ---------------------------------------------------------------------------
+
+describe('T-M6-7/8 终审跟进② 生成简历失效 resume-versions', () => {
+  function renderGenerate() {
+    const qc = createTestQueryClient();
+    const invalidateSpy = vi.spyOn(qc, 'invalidateQueries');
+    renderWithProviders(<GenerateHarness />, { queryClient: qc });
+    return invalidateSpy;
+  }
+
+  it('生成成功（返回 {resumeId, resume}）→ invalidateQueries 含 resume-versions key', async () => {
+    const invalidateSpy = renderGenerate();
+
+    fireEvent.click(screen.getByRole('button', { name: '生成简历' }));
+
+    await vi.waitFor(() =>
+      expect(screen.getByTestId('gen-status').textContent).toBe('success'),
+    );
+    expect(job.saveResume).toHaveBeenCalledWith(
+      expect.objectContaining({ job_analysis_id: 12 }),
+    );
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['resume-versions'] });
+  });
+
+  it('API 成功但解析失败返回 null（缺 resume_markdown）→ 同样失效', async () => {
+    job.saveResume.mockResolvedValue({
+      file_path: 'resumes/zhang.md',
+      file_name: 'zhang.md',
+      size_bytes: 1024,
+      selected_count: 1,
+      resume_version_id: 300,
+    });
+    const invalidateSpy = renderGenerate();
+
+    fireEvent.click(screen.getByRole('button', { name: '生成简历' }));
+
+    await vi.waitFor(() =>
+      expect(screen.getByTestId('gen-status').textContent).toBe('success'),
+    );
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['resume-versions'] });
+  });
+
+  it('saveResume 抛错 → 不失效 resume-versions', async () => {
+    job.saveResume.mockRejectedValue(new Error('生成失败'));
+    const invalidateSpy = renderGenerate();
+
+    fireEvent.click(screen.getByRole('button', { name: '生成简历' }));
+
+    await vi.waitFor(() =>
+      expect(screen.getByTestId('gen-status').textContent).toBe('error'),
+    );
+    expect(invalidateSpy).not.toHaveBeenCalledWith({ queryKey: ['resume-versions'] });
   });
 });

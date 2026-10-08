@@ -420,8 +420,12 @@ export interface GenerateResumeFromJdArgs {
  * 返回 { resumeId, resume }（T-M6-2：resumeId = resume_version id 字符串），由调用方接
  * useUpsertResumeMutation 并入 RESUMES cache；端点未回 markdown/id 或解析失败
  * 返回 null（不视为错误，调用方跳过缓存写入）；失败上抛（调用方 error toast）。
+ * 生成成功即失效 resume-versions 版本列表——服务端已新建 resume_version 行，
+ * 解析失败返回 null 也失效（版本下拉需立即可见新版本）；API 抛错则不失效。
  */
 export function useGenerateResumeFromJdMutation() {
+  const queryClient = useQueryClient();
+
   return useMutation<
     { resumeId: string; resume: ResumeVersion } | null,
     unknown,
@@ -444,6 +448,9 @@ export function useGenerateResumeFromJdMutation() {
         resumeId: String(result.resume_version_id),
         resume: { ...resume, jobAnalysisId: String(jobAnalysisId) },
       };
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [...RESUME_VERSIONS_QUERY_KEY] });
     },
   });
 }
