@@ -1,8 +1,8 @@
 """jd_classification 表查询模块（T-M3-2：JD 六维分类提案/确认）。
 
-**迁移依赖**：本表由 V0019 创建，模块零运行时 DDL——缺表（errno 1146）读写均
+**迁移依赖**：本表由 V0019 创建，模块零运行时 DDL——缺表（errno 1146）写侧
 翻译为「请先执行 ``python -m migrations.runner migrate``」的 ValueError 提示，
-API 层捕获 ValueError 返回 400。
+API 层捕获 ValueError 返回 400；读侧 grouped（T-M4-4）缺表降级为空映射。
 
 模型（Q7=c 两级分离 · 2026-10-01 裁决）：
 - 一行 = 一个 job_analysis 的六维分类，``UNIQUE(job_analysis_id)``，POST 全量
@@ -13,14 +13,16 @@ API 层捕获 ValueError 返回 400。
 - source = manual|rule|ai（AI 建议链路留位）；status = proposed|confirmed；
 - direction_id 可空：T-M3-3 提交期 find-or-create 的指向，
   ``db_direction.count_direction_references`` 删除守卫同步计数。
+- 读侧两条：``get_jd_classification``（单条）与 ``list_jd_classifications_grouped``
+  （T-M4-4 批量，附 direction_name/direction_code，缺表降级空映射）。
 """
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Sequence
 
 from mysql.connector import Error as MySQLError
 
-from app.tools.db_conn import execute, query_one
+from app.tools.db_conn import execute, query_all, query_one
 
 logger = logging.getLogger("jobcraft.db.jd_classification")
 
@@ -175,3 +177,78 @@ def get_jd_classification(
         _translate_error(exc)
         raise
     return _row_to_classification(row) if row else None
+
+
+def _attach_direction_labels(classifications: Dict[int, Dict[str, Any]]) -> None:
+    """为批量分类行解析关联方向的 name/code（原地填充，缺省先置 None）。
+
+    direction_id 为 null/0 或 direction 行已缺失 → 保 None 不抛；direction 表
+    缺表（errno 1146，未迁移环境）→ 同样降级为 None（读侧降级，不阻断列表）。
+
+    :param classifications: {job_analysis_id: 分类结构}（由调用方构造）。
+    """
+    for cls in classifications.values():
+        cls["direction_name"] = None
+        cls["direction_code"] = None
+    direction_ids = sorted(
+        {c["direction_id"] for c in classifications.values() if c.get("direction_id")}
+    )
+    if not direction_ids:
+        return
+    try:
+        rows = query_all(
+            "SELECT id, name, code FROM direction "
+            f"WHERE id IN ({','.join(['%s'] * len(direction_ids))})",
+            tuple(direction_ids),
+        )
+    except MySQLError as exc:
+        if getattr(exc, "errno", None) == _TABLE_MISSING_ERRNO:
+            logger.debug("direction 表不存在，方向名降级为 None: %s", exc)
+            return
+        raise
+    labels = {r["id"]: r for r in rows}
+    for cls in classifications.values():
+        label = labels.get(cls.get("direction_id"))
+        if label:
+            cls["direction_name"] = label.get("name")
+            cls["direction_code"] = label.get("code")
+
+
+def list_jd_classifications_grouped(
+    job_analysis_ids: Sequence[int],
+    user_id: Optional[int] = None,
+) -> Dict[int, Dict[str, Any]]:
+    """按多个岗位分析 id 批量读取六维分类（列表页单查询，消除 N+1，T-M4-4）。
+
+    命中行附 ``direction_name`` / ``direction_code``（direction 表二次查询，
+    direction_id 为 null/0 或方向缺行 → None）；jd_classification 缺表（errno
+    1146）降级为空映射（DB-02 读降级惯例，参照
+    ``db_capability_gap.list_capability_gaps_grouped``）。
+
+    :param job_analysis_ids: 岗位分析 id 列表（空列表直接返回空映射）。
+    :param user_id: 归属用户；提供时只取该用户的分类行（越权视同不存在）。
+    :return: {job_analysis_id: 分类结构（含 direction_name/direction_code）}。
+    """
+    ids = [i for i in job_analysis_ids if i is not None]
+    if not ids:
+        return {}
+    sql = (
+        "SELECT * FROM jd_classification "
+        f"WHERE job_analysis_id IN ({','.join(['%s'] * len(ids))})"
+    )
+    params: List[Any] = list(ids)
+    if user_id is not None:
+        sql += " AND user_id=%s"
+        params.append(user_id)
+    try:
+        rows = query_all(sql, tuple(params))
+    except MySQLError as exc:
+        if getattr(exc, "errno", None) == _TABLE_MISSING_ERRNO:
+            logger.debug("jd_classification 表不存在，方向分类降级为空: %s", exc)
+            return {}
+        raise
+    grouped: Dict[int, Dict[str, Any]] = {
+        r["job_analysis_id"]: _row_to_classification(r) for r in rows
+    }
+    _attach_direction_labels(grouped)
+    return grouped

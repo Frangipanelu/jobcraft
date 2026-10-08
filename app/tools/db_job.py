@@ -139,6 +139,12 @@ def get_job_analysis(
     from app.tools import db_capability_gap
 
     result["capability_gaps"] = db_capability_gap.list_capability_gaps(job_id)
+    # T-M4-4：附方向分类（无分类 / jd_classification 缺表 → None，不炸）
+    from app.tools import db_jd_classification
+
+    result["jd_classification"] = db_jd_classification.list_jd_classifications_grouped(
+        [job_id], user_id=user_id
+    ).get(job_id)
     return result
 
 
@@ -175,8 +181,9 @@ def _job_analysis_to_dict(row: Dict[str, Any]) -> Dict[str, Any]:
 def list_job_analyses(user_id: int, limit: int = 20) -> List[Dict[str, Any]]:
     """列出用户历史岗位分析，按时间倒序。
 
-    返回完整详情字段（列表 1 条 SQL + 任务清单批量 1 条 SQL，消除 N+1）。
-    capability_gaps 为 T-M4-2 改写任务清单，批量读取缺表时降级为空列表。
+    返回完整详情字段（列表 1 条 SQL + 任务清单/方向分类各批量 1 条 SQL，
+    消除 N+1）。capability_gaps 为 T-M4-2 改写任务清单，批量读取缺表时降级为
+    空列表；jd_classification 为 T-M4-4 方向分类，缺表/无分类降级为 None。
     """
     _ensure_job_analysis_columns()
     rows = query_all(
@@ -188,13 +195,17 @@ def list_job_analyses(user_id: int, limit: int = 20) -> List[Dict[str, Any]]:
         "ORDER BY created_at DESC LIMIT %s",
         (user_id, limit),
     )
-    from app.tools import db_capability_gap
+    from app.tools import db_capability_gap, db_jd_classification
 
     grouped = db_capability_gap.list_capability_gaps_grouped([r["id"] for r in rows])
+    classifications = db_jd_classification.list_jd_classifications_grouped(
+        [r["id"] for r in rows], user_id=user_id
+    )
     results = []
     for r in rows:
         d = _job_analysis_to_dict(r)
         d["capability_gaps"] = grouped.get(r["id"], [])
+        d["jd_classification"] = classifications.get(r["id"])
         results.append(d)
     return results
 

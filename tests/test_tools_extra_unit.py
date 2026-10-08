@@ -1643,6 +1643,141 @@ class TestDbJob:
         ):
             assert _attach_job_entity({"user_id": 1, "position": "Eng"}, 5) is None
 
+    def test_get_job_analysis_attaches_jd_classification(self):
+        """T-M4-4：详情附方向分类（grouped 命中 → dict，携带方向名）。"""
+        from app.tools.db_job import get_job_analysis
+
+        classification = {
+            "id": 9,
+            "job_analysis_id": 1,
+            "direction_id": 3,
+            "direction_name": "电商零售",
+            "direction_code": "DIR-1",
+            "industry": "电商",
+        }
+        mock_cursor = MagicMock()
+        mock_cursor.fetchone.return_value = {
+            "id": 1,
+            "user_id": 7,
+            "company": "TestCo",
+            "position": "Engineer",
+            "jd_text": "JD text",
+            "jd_requirements": "{}",
+            "match_score": 85.5,
+            "gap_analysis": "[]",
+            "dimension_requirements": "[]",
+            "created_at": SimpleNamespace(isoformat=lambda: "2024-01-01T00:00:00"),
+        }
+        mock_cursor.fetchall.return_value = []
+        mock_conn = _make_mock_conn(mock_cursor)
+
+        with (
+            patch("app.tools.db_conn.connect", return_value=mock_conn),
+            patch(
+                "app.tools.db_jd_classification.list_jd_classifications_grouped",
+                return_value={1: classification},
+            ) as mock_grouped,
+        ):
+            result = get_job_analysis(1, user_id=7)
+        assert result is not None
+        assert result["jd_classification"] == classification
+        mock_grouped.assert_called_once_with([1], user_id=7)
+
+    def test_get_job_analysis_missing_classification_is_none(self):
+        """T-M4-4：无分类行 / 缺表（grouped 降级空映射）→ jd_classification=None。"""
+        from app.tools.db_job import get_job_analysis
+
+        mock_cursor = MagicMock()
+        mock_cursor.fetchone.return_value = {
+            "id": 1,
+            "user_id": 7,
+            "company": "TestCo",
+            "position": "Engineer",
+            "jd_text": "JD text",
+            "jd_requirements": "{}",
+            "match_score": 85.5,
+            "gap_analysis": "[]",
+            "dimension_requirements": "[]",
+            "created_at": SimpleNamespace(isoformat=lambda: "2024-01-01T00:00:00"),
+        }
+        mock_cursor.fetchall.return_value = []
+        mock_conn = _make_mock_conn(mock_cursor)
+
+        with (
+            patch("app.tools.db_conn.connect", return_value=mock_conn),
+            patch(
+                "app.tools.db_jd_classification.list_jd_classifications_grouped",
+                return_value={},
+            ),
+        ):
+            result = get_job_analysis(1, user_id=7)
+        assert result is not None
+        assert result["jd_classification"] is None
+
+    @staticmethod
+    def _analysis_row():
+        """list_job_analyses 单行（列名与 SELECT 一致）。"""
+        return {
+            "id": 55,
+            "user_id": 7,
+            "company": "Co",
+            "position": "Eng",
+            "jd_text": "JD",
+            "jd_requirements": "{}",
+            "match_score": 80,
+            "match_level": None,
+            "analysis_version": None,
+            "job_id": None,
+            "ats_profile": None,
+            "suggestions": None,
+            "per_card_scores": None,
+            "gap_analysis": "[]",
+            "dimension_requirements": "[]",
+            "created_at": SimpleNamespace(isoformat=lambda: "2026-01-01T00:00:00"),
+        }
+
+    def test_list_job_analyses_attaches_jd_classification(self):
+        """T-M4-4：列表批量附方向分类（按行 id 命中，user_id 透传 DAO）。"""
+        from app.tools import db_job
+
+        classification = {"id": 9, "job_analysis_id": 55, "direction_name": "电商零售"}
+        with (
+            patch("app.tools.db_job._ensure_job_analysis_columns"),
+            patch("app.tools.db_job.query_all", return_value=[self._analysis_row()]),
+            patch(
+                "app.tools.db_capability_gap.list_capability_gaps_grouped",
+                return_value={},
+            ),
+            patch(
+                "app.tools.db_jd_classification.list_jd_classifications_grouped",
+                return_value={55: classification},
+            ) as mock_grouped,
+        ):
+            out = db_job.list_job_analyses(7, limit=100)
+        assert len(out) == 1
+        assert out[0]["capability_gaps"] == []
+        assert out[0]["jd_classification"] == classification
+        mock_grouped.assert_called_once_with([55], user_id=7)
+
+    def test_list_job_analyses_missing_classification_degrades_none(self):
+        """T-M4-4：分类缺表/未命中 → 每行 jd_classification=None，不抛错。"""
+        from app.tools import db_job
+
+        with (
+            patch("app.tools.db_job._ensure_job_analysis_columns"),
+            patch("app.tools.db_job.query_all", return_value=[self._analysis_row()]),
+            patch(
+                "app.tools.db_capability_gap.list_capability_gaps_grouped",
+                return_value={},
+            ),
+            patch(
+                "app.tools.db_jd_classification.list_jd_classifications_grouped",
+                return_value={},
+            ),
+        ):
+            out = db_job.list_job_analyses(7)
+        assert out[0]["jd_classification"] is None
+
 
 # ============================================================
 # 7b. db_capability_gap.py — T-M4-2 改写任务清单落库

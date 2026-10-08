@@ -1,4 +1,4 @@
-"""jd_classification 表 upsert/查询单元测试（T-M3-2 / Q7=c）。
+"""jd_classification 表 upsert/查询/批量 grouped 单元测试（T-M3-2 / Q7=c / T-M4-4）。
 
 不依赖真实 DB——monkeypatch app.tools.db_jd_classification 的 db_conn
 封装函数，用假实现捕获 SQL/参数并返回可控行。
@@ -68,8 +68,21 @@ def fake_db(monkeypatch):
             raise cur.select_errors.pop(0)
         return cur._row
 
+    def _query_all(sql, params=None):
+        cur.executed.append((sql, params))
+        if "FROM direction" in sql:
+            if holder.get("dir_error"):
+                raise holder["dir_error"]
+            return holder.get("dir_rows", [])
+        if holder.get("cls_error"):
+            raise holder["cls_error"]
+        return holder.get("cls_rows", [])
+
     monkeypatch.setattr(mod, "execute", _execute)
     monkeypatch.setattr(mod, "query_one", _query_one)
+    monkeypatch.setattr(mod, "query_all", _query_all)
+    holder.setdefault("cls_rows", [])
+    holder.setdefault("dir_rows", [])
     return holder
 
 
@@ -223,3 +236,76 @@ class TestGet:
         fake_db["cursor"].select_errors = [_table_missing()]
         with pytest.raises(ValueError, match="migrations.runner migrate"):
             mod.get_jd_classification(55, user_id=7)
+
+
+class TestListGrouped:
+    """T-M4-4：按 job_analysis_ids 批量读分类 + 方向名解析（历史表格/报告详情）。"""
+
+    @staticmethod
+    def _selects(fake_db, table: str) -> list:
+        return [
+            (sql, params)
+            for sql, params in fake_db["cursor"].executed
+            if f"FROM {table}" in sql
+        ]
+
+    def test_empty_ids_skips_query(self, fake_db):
+        assert mod.list_jd_classifications_grouped([]) == {}
+        assert fake_db["cursor"].executed == []
+
+    def test_hits_map_rows_with_direction_labels(self, fake_db):
+        fake_db["cls_rows"] = [
+            _fake_classification_row(id=1, job_analysis_id=55, direction_id=3),
+            _fake_classification_row(id=2, job_analysis_id=56, direction_id=None),
+        ]
+        fake_db["dir_rows"] = [{"id": 3, "name": "电商零售", "code": "DIR-1"}]
+
+        out = mod.list_jd_classifications_grouped([55, 56], user_id=7)
+
+        assert sorted(out) == [55, 56]
+        assert out[55]["direction_name"] == "电商零售"
+        assert out[55]["direction_code"] == "DIR-1"
+        assert out[55]["industry"] == "电商"
+        # 无 direction_id 的行同样带键（None），前端读取不判空
+        assert out[56]["direction_name"] is None
+        assert out[56]["direction_code"] is None
+        # user 隔离：分类查询带 user_id 绑定
+        cls_sql, cls_params = self._selects(fake_db, "jd_classification")[0]
+        assert "AND user_id=%s" in cls_sql
+        assert cls_params == (55, 56, 7)
+
+    def test_missed_ids_absent_from_mapping(self, fake_db):
+        fake_db["cls_rows"] = [_fake_classification_row(job_analysis_id=55)]
+        out = mod.list_jd_classifications_grouped([55, 999])
+        assert list(out) == [55]
+
+    def test_direction_id_zero_skips_direction_query(self, fake_db):
+        fake_db["cls_rows"] = [_fake_classification_row(direction_id=0)]
+        out = mod.list_jd_classifications_grouped([55])
+        assert out[55]["direction_name"] is None
+        assert out[55]["direction_code"] is None
+        assert self._selects(fake_db, "direction") == []
+
+    def test_direction_row_missing_keeps_none(self, fake_db):
+        fake_db["cls_rows"] = [_fake_classification_row(direction_id=3)]
+        fake_db["dir_rows"] = []
+        out = mod.list_jd_classifications_grouped([55])
+        assert out[55]["direction_id"] == 3
+        assert out[55]["direction_name"] is None
+
+    def test_missing_classification_table_degrades_to_empty(self, fake_db):
+        fake_db["cls_error"] = _table_missing()
+        assert mod.list_jd_classifications_grouped([55]) == {}
+
+    def test_missing_direction_table_keeps_classifications(self, fake_db):
+        fake_db["cls_rows"] = [_fake_classification_row(direction_id=3)]
+        fake_db["dir_error"] = _table_missing()
+        out = mod.list_jd_classifications_grouped([55])
+        assert out[55]["industry"] == "电商"
+        assert out[55]["direction_name"] is None
+
+    def test_other_error_reraises(self, fake_db):
+        err = MySQLError(msg="Lost connection", errno=2003)
+        fake_db["cls_error"] = err
+        with pytest.raises(MySQLError):
+            mod.list_jd_classifications_grouped([55])
