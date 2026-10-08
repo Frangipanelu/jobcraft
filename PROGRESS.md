@@ -2,6 +2,20 @@
 
 > 本文件用于追踪项目整体进度。AI 在每次会话结束或完成子任务时，必须更新本文件的对应板块。
 
+## T-M9-2 回流读取改造：validation_level/usage 降序 + deprecated 语义锁定（2026-10-08，C 窗·P1 反哺链第三棒）
+
+> 计划：`docs/superpowers/plans/2026-10-07-p1-feedback-chain-m9.md` Task 2（动前实测核验收窄改动面）。执行方式 = subagent-driven：fresh implementer → 主窗口双审（spec 逐项吻合 + 质量无阻断，无 Critical/Important）→ 门禁抽查 → 提交。裁决依据 = feature-alignment M9 Q2-A + PRD:161/431。
+
+- [x] **实现 `e7640d9`（3 文件，+35/-14）**：
+  - `app/tools/db_expression.py` `get_active_expression_content`：`ORDER BY version DESC` → **`validation_level DESC, usage_count DESC, version DESC, id DESC`**（前两级=Q2-A 字面裁决，后两级=确定性 tiebreak）；WHERE/params 不动；docstring 写明排序语义、deprecated 不检索（拒绝≠删除）、`validation_level` 列本期恒 0（读时派生投影见 validation-summary，L2-L4 后置，实际生效信号 = usage_count）。**三生产链（prep:156/analysis:85/resume:63）共用此一处读取 → 排序一点落地即四消费点同步**；`query_group_max_version_id`（链内版本定位）与 `increment_active_expression_usage`（BE-EXPR-01 误报锚点）零改动。
+  - `app/tools/card_render.py` `get_card_render_text`：仅 `active_expression` param docstring 补来源注记（上游降序选取后 attach，本函数不查库）——第四消费点零行为改动。
+  - `tests/test_expression_db_unit.py`：回流读取用例断言改四段 ORDER + `status='active'` + `params==(10,7,'standardized')`；**新增**默认不传 status 时 SQL 无 `status=` 过滤（deprecated 保留行可见=保留≠删除）断言；BE-EXPR-01 三个 increment 断言（:485-510）原样未动。
+- **动前核验（收窄依据）**：BE-EXPR-01 已复核误报关闭（单表 UPDATE ORDER BY+LIMIT 合法，MySQL 8.4.9 实测）→ 本期零修复；deprecated 消费侧本就 `status='active'` 过滤、list 默认不过滤 → 行为不变以测试锁定；`expression.validation_level/usage_count` 列 V0009 已存在（:47-48）。跟进项⑦同步核对：T-M6-8 jd_alignment 写入与 expression 消费零交集，`jobcraft_resume.py` 只读未改。
+- **门禁（实测）**：pytest **1271 passed / 13 skipped / 0 failed**（基线 1270 + 新 1）；expression 单测 39（+1）；workflows+tools_extra 246；ruff check/format 绿（本批仅 3 文件定向跑，避免碰他窗在途）；encoding **426 文件 0 错**（+2 = 他窗新增 jd 测试文件）。
+- **⚠️ 共享工作区**：pathspec 仅 3 文件；他窗在途（JD 分类域 10 M + 2 ??，含 `tests/test_tools_extra_unit.py`）零提交零触碰（该文件仅打桩 patch 函数名，不改亦过）；`e7640d9` 与他窗 `a2bead0` 文档提交线性交错。
+- **双审遗留（记录不阻塞）**：`db_expression.py` docstring 改 Google 风格与文件内存量 `:param` 风格双轨（AGENTS 3.1 强制 Google，以规范为准）；SQL 字面量按 ruff 拆两段（运行时连续，测试已断言）。
+- **下一步**：T-M9-3 prep 手动「沉淀为表达」按钮（复用 U2b 链，0.5d）→ 顺手 T-M7-5 残 → 批次门禁终局 + 文档回填 + push。
+
 ## T-M6-7/8 终审跟进小修批：FE-JDVER-01 + generate 失效 resume-versions（2026-10-08，A 窗·Subagent-Driven 小批）
 
 > 用户拍板：先清小修批（跟进项① FE-JDVER-01 + ② invalidate 补齐），再接后续批次。执行方式 = subagent-driven：每任务 fresh implementer → spec 审查 → 质量审查 → issue 回派原实现者修复 → 原审查者复审；批次末整体终审（跨 commit 一致性 + 红线扫描 + 门禁实跑）。
