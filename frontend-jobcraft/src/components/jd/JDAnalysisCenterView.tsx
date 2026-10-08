@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useJobCraft, useToastActions } from '../../context/JobCraftContext';
 import {
   FileSearch,
@@ -17,6 +18,7 @@ import {
   useJdAnalysesQuery,
   useSplitJdMutation,
 } from '../../features/jd/hooks';
+import { JD_ANALYSES_QUERY_KEY } from '../../features/jd/mappers';
 import { JDClassificationSection } from './JDClassificationSection';
 import { JDClassificationEditModal } from './JDClassificationEditModal';
 import {
@@ -34,6 +36,7 @@ export const HISTORY_PAGE_SIZE = 10;
 export const JDAnalysisCenterView: React.FC = () => {
   const { navigateTo } = useJobCraft();
   const { showToast } = useToastActions();
+  const queryClient = useQueryClient();
 
   const { data: jdAnalyses = [] } = useJdAnalysesQuery();
   const deleteAnalysis = useDeleteJdAnalysisMutation();
@@ -178,6 +181,10 @@ export const JDAnalysisCenterView: React.FC = () => {
           );
           if (clsResult.status === 'saved') {
             classificationSaved = true;
+            // T-M4-4 评审修复 #1：新建链落库后失效历史缓存，触发回源取回分类。
+            // 否则 setQueryData 前插的行在 staleTime 内一直显示 `—`，
+            // 与成功 toast「已保存方向分类」直接矛盾。
+            queryClient.invalidateQueries({ queryKey: [...JD_ANALYSES_QUERY_KEY] });
           } else if (clsResult.reason) {
             showToast({ type: 'warning', title: '方向分类', message: clsResult.reason });
           }
@@ -237,6 +244,11 @@ export const JDAnalysisCenterView: React.FC = () => {
   }, [searchQuery]);
 
   const totalPages = Math.max(1, Math.ceil(filteredAnalyses.length / HISTORY_PAGE_SIZE));
+  // T-M4-4 评审修复 #3：越界不只 clamp 展示，还要写回 page —— 否则列表重新变长时
+  // 会突跳回之前停留在的旧页码（clamp 只影响单次渲染，page 状态仍是旧值）。
+  useEffect(() => {
+    setPage((p) => Math.min(p, totalPages));
+  }, [totalPages]);
   // 当前页越界（过滤/删除后行数变少）→ 自动回退到最后一页
   const currentPage = Math.min(page, totalPages);
   const pagedAnalyses = filteredAnalyses.slice(

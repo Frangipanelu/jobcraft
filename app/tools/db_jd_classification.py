@@ -179,13 +179,19 @@ def get_jd_classification(
     return _row_to_classification(row) if row else None
 
 
-def _attach_direction_labels(classifications: Dict[int, Dict[str, Any]]) -> None:
+def _attach_direction_labels(
+    classifications: Dict[int, Dict[str, Any]],
+    user_id: Optional[int] = None,
+) -> None:
     """为批量分类行解析关联方向的 name/code（原地填充，缺省先置 None）。
 
     direction_id 为 null/0 或 direction 行已缺失 → 保 None 不抛；direction 表
     缺表（errno 1146，未迁移环境）→ 同样降级为 None（读侧降级，不阻断列表）。
+    ``user_id`` 提供时方向查询同样按 user_id 过滤（与 ``db_direction.get_direction``
+    的可选用户隔离约定一致）。
 
     :param classifications: {job_analysis_id: 分类结构}（由调用方构造）。
+    :param user_id: 归属用户；提供时方向查询追加 ``AND user_id=%s``。
     """
     for cls in classifications.values():
         cls["direction_name"] = None
@@ -195,12 +201,16 @@ def _attach_direction_labels(classifications: Dict[int, Dict[str, Any]]) -> None
     )
     if not direction_ids:
         return
+    sql = (
+        "SELECT id, name, code FROM direction "
+        f"WHERE id IN ({','.join(['%s'] * len(direction_ids))})"
+    )
+    params: List[Any] = list(direction_ids)
+    if user_id is not None:
+        sql += " AND user_id=%s"
+        params.append(user_id)
     try:
-        rows = query_all(
-            "SELECT id, name, code FROM direction "
-            f"WHERE id IN ({','.join(['%s'] * len(direction_ids))})",
-            tuple(direction_ids),
-        )
+        rows = query_all(sql, tuple(params))
     except MySQLError as exc:
         if getattr(exc, "errno", None) == _TABLE_MISSING_ERRNO:
             logger.debug("direction 表不存在，方向名降级为 None: %s", exc)
@@ -221,9 +231,9 @@ def list_jd_classifications_grouped(
     """按多个岗位分析 id 批量读取六维分类（列表页单查询，消除 N+1，T-M4-4）。
 
     命中行附 ``direction_name`` / ``direction_code``（direction 表二次查询，
-    direction_id 为 null/0 或方向缺行 → None）；jd_classification 缺表（errno
-    1146）降级为空映射（DB-02 读降级惯例，参照
-    ``db_capability_gap.list_capability_gaps_grouped``）。
+    direction_id 为 null/0 或方向缺行 → None）；``user_id`` 提供时分类与方向
+    两条查询都按 user_id 过滤。jd_classification 缺表（errno 1146）降级为空映射
+    （DB-02 读降级惯例，参照 ``db_capability_gap.list_capability_gaps_grouped``）。
 
     :param job_analysis_ids: 岗位分析 id 列表（空列表直接返回空映射）。
     :param user_id: 归属用户；提供时只取该用户的分类行（越权视同不存在）。
@@ -250,5 +260,5 @@ def list_jd_classifications_grouped(
     grouped: Dict[int, Dict[str, Any]] = {
         r["job_analysis_id"]: _row_to_classification(r) for r in rows
     }
-    _attach_direction_labels(grouped)
+    _attach_direction_labels(grouped, user_id)
     return grouped

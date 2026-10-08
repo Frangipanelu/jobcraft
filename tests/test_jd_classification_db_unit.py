@@ -273,6 +273,12 @@ class TestListGrouped:
         cls_sql, cls_params = self._selects(fake_db, "jd_classification")[0]
         assert "AND user_id=%s" in cls_sql
         assert cls_params == (55, 56, 7)
+        # T-M4-4 评审修复 #5/#6：方向解析查询同样带 user_id，且整批只查 1 次（N+1 守卫）
+        dir_selects = self._selects(fake_db, "direction")
+        assert len(dir_selects) == 1
+        dir_sql, dir_params = dir_selects[0]
+        assert "AND user_id=%s" in dir_sql
+        assert dir_params == (3, 7)
 
     def test_missed_ids_absent_from_mapping(self, fake_db):
         fake_db["cls_rows"] = [_fake_classification_row(job_analysis_id=55)]
@@ -292,6 +298,10 @@ class TestListGrouped:
         out = mod.list_jd_classifications_grouped([55])
         assert out[55]["direction_id"] == 3
         assert out[55]["direction_name"] is None
+        # 未提供 user_id → 方向查询不加用户过滤（可选隔离约定，T-M4-4 评审修复 #5）
+        dir_sql, dir_params = self._selects(fake_db, "direction")[0]
+        assert "user_id" not in dir_sql
+        assert dir_params == (3,)
 
     def test_missing_classification_table_degrades_to_empty(self, fake_db):
         fake_db["cls_error"] = _table_missing()

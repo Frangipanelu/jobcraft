@@ -1,12 +1,13 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { fireEvent, screen, waitFor } from '@testing-library/react';
-import { renderWithProviders } from './test-utils';
+import { createTestQueryClient, renderWithProviders } from './test-utils';
 import { ToastContainer } from '../components/common/Toast';
 import {
   HISTORY_PAGE_SIZE,
   JDAnalysisCenterView,
 } from '../components/jd/JDAnalysisCenterView';
 import { JDReportDetailView } from '../components/jd/JDReportDetailView';
+import { JD_ANALYSES_QUERY_KEY } from '../features/jd/mappers';
 import type { WireJdClassification } from '../api/types';
 
 const auth = vi.hoisted(() => ({
@@ -45,9 +46,14 @@ const direction = vi.hoisted(() => ({
   listDirections: vi.fn(),
 }));
 
+const tasks = vi.hoisted(() => ({
+  runTaskOrSync: vi.fn(),
+}));
+
 vi.mock('../api/auth', () => ({ ...auth }));
 vi.mock('../api/job', () => ({ ...job }));
 vi.mock('../api/direction', () => ({ ...direction }));
+vi.mock('../api/tasks', () => ({ ...tasks }));
 
 const AUTH_USER = {
   id: 1,
@@ -149,6 +155,10 @@ beforeEach(() => {
     skills: '数据分析',
   });
   direction.listDirections.mockResolvedValue([]);
+  // 结构化创建链：同步降级走 fallback（analyzeStructuredJd mock）
+  tasks.runTaskOrSync.mockImplementation(
+    async (_taskId: string, _payload: unknown, fallback: () => unknown) => fallback(),
+  );
 });
 
 afterEach(() => {
@@ -282,6 +292,32 @@ describe('历史表格 · 客户端分页（T-M4-4）', () => {
     expect(await screen.findByText('公司01')).toBeInTheDocument();
     expect(screen.queryByText('公司12')).not.toBeInTheDocument();
     expect(screen.getByTestId('jd-history-page-info').textContent).toBe('第 1/1 页');
+  });
+
+  it('越界页码写回 page 状态：列表变短回退、变长不突跳回旧页码（T-M4-4 评审修复 #3）', async () => {
+    const qc = createTestQueryClient();
+    let serverCount = 25;
+    job.listJobAnalyses.mockImplementation(async () => buildAnalyses(serverCount));
+    renderWithProviders(<JDAnalysisCenterView />, { queryClient: qc });
+    openHistory();
+
+    expect(await screen.findByText('公司01')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('jd-history-next'));
+    fireEvent.click(screen.getByTestId('jd-history-next'));
+    expect(await screen.findByText('公司21')).toBeInTheDocument();
+    expect(screen.getByTestId('jd-history-page-info').textContent).toBe('第 3/3 页');
+
+    // 列表变短 → 回源后只剩 1 页：展示回退且 page 状态被写回
+    serverCount = 10;
+    await qc.invalidateQueries({ queryKey: [...JD_ANALYSES_QUERY_KEY] });
+    expect(await screen.findByText('共 10 条')).toBeInTheDocument();
+    expect(screen.getByTestId('jd-history-page-info').textContent).toBe('第 1/1 页');
+
+    // 列表恢复 3 页：page 已写回 1 → 停在第 1 页（未写回则突跳回第 3 页）
+    serverCount = 25;
+    await qc.invalidateQueries({ queryKey: [...JD_ANALYSES_QUERY_KEY] });
+    expect(await screen.findByText('共 25 条')).toBeInTheDocument();
+    expect(screen.getByTestId('jd-history-page-info').textContent).toBe('第 1/3 页');
   });
 });
 
@@ -453,5 +489,61 @@ describe('JDReportDetailView · 方向分类区段（T-M4-4）', () => {
     const section = await screen.findByTestId('direction-classification');
     expect(section.textContent).toContain('未录入方向分类');
     expect(section.textContent).not.toContain('电商零售');
+  });
+});
+
+// ============================================================
+// ⑤ 新建分析链路分类落库后缓存回写（T-M4-4 评审修复 #1）
+// ============================================================
+
+describe('新建分析链 · 分类落库后缓存回写（T-M4-4 评审修复 #1）', () => {
+  it('create + 分类保存成功 → 失效 jdAnalyses 缓存回源，历史行渲染方向名而非 —', async () => {
+    // 后端在 upsert 响应前已持久化分类 → 之后任意回源都能取到带分类的行
+    let serverRows: unknown[] = [];
+    job.listJobAnalyses.mockImplementation(async () => ({ analyses: serverRows }));
+    job.analyzeStructuredJd.mockResolvedValue({
+      job_analysis_id: 88,
+      user_id: 1,
+      company: '字节跳动',
+      position: 'AI 产品经理',
+      jd_text: '1. 负责策略制定',
+      jd_requirements: null,
+      match_score: 60,
+      gap_analysis: '结构化分析完成',
+      dimension_requirements: [],
+      capability_gaps: [],
+      created_at: '2026-10-08',
+    });
+    job.upsertJdClassification.mockImplementation(async () => {
+      serverRows = [buildDetail(88, '字节跳动', 'AI 产品经理', { jd_classification: CLS_WIRE })];
+      return {};
+    });
+
+    renderHistory();
+
+    fireEvent.change(screen.getByPlaceholderText('例如：字节跳动、腾讯、某独角兽'), {
+      target: { value: '字节跳动' },
+    });
+    fireEvent.change(screen.getByPlaceholderText('例如：AI 产品经理、算法专家'), {
+      target: { value: 'AI 产品经理' },
+    });
+    fireEvent.change(screen.getByPlaceholderText(/每行一条职责/), {
+      target: { value: '负责策略制定' },
+    });
+    fireEvent.change(screen.getByTestId('cf-direction-name'), { target: { value: '电商零售' } });
+    fireEvent.change(screen.getByTestId('cf-industry'), { target: { value: '电商与零售' } });
+
+    fireEvent.click(screen.getByText('开始结构化深度研判 →'));
+
+    expect(await screen.findByText('结构化 JD 分析完成')).toBeInTheDocument();
+    expect(await screen.findByText(/已保存方向分类/)).toBeInTheDocument();
+    await waitFor(() => expect(job.upsertJdClassification).toHaveBeenCalledTimes(1));
+    // 修复点：落库成功必须触发回源（否则 staleTime 内 setQueryData 前插的行恒为 —）
+    await waitFor(() => expect(job.listJobAnalyses.mock.calls.length).toBeGreaterThan(1));
+
+    fireEvent.click(screen.getByText(/历史研判报告/));
+    const cell = await screen.findByTestId('row-direction');
+    expect(cell.textContent).toContain('电商零售');
+    expect(cell.textContent).not.toBe('—');
   });
 });
