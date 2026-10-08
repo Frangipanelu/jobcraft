@@ -8,6 +8,7 @@ import type {
   JDRequirements,
   DimensionRequirement,
   CapabilityGapWire,
+  WireJdClassification,
   Submission,
   DashboardItem,
   SaveResumeResult,
@@ -78,14 +79,26 @@ export interface JobAnalysisDetail {
   dimension_requirements: DimensionRequirement[];
   /** 改写任务清单（T-M4-2 additive；旧分析缺省 → 报告页回退能力匹配表） */
   capability_gaps?: CapabilityGapWire[];
+  /** 六维方向分类（T-M4-4 additive；无分类/缺表 → null，历史表格显示诚实空态） */
+  jd_classification?: WireJdClassification | null;
   created_at: string | null;
 }
 
+/**
+ * 拉取历史分析列表。
+ *
+ * @param userId 归属用户（缺省不带 user_id，交后端取当前登录用户）
+ * @param limit 返回条数上限（后端 GET /analyses 默认 20；历史表格客户端分页需传更大值）
+ */
 export async function listJobAnalyses(
-  userId?: number
+  userId?: number,
+  limit?: number
 ): Promise<{ analyses: JobAnalysisDetail[] }> {
-  const qs = userId !== undefined ? `?user_id=${userId}` : ''
-  return request(`/api/jobcraft/job/analyses${qs}`)
+  const params = new URLSearchParams();
+  if (userId !== undefined) params.set('user_id', String(userId));
+  if (limit !== undefined) params.set('limit', String(limit));
+  const qs = params.toString();
+  return request(`/api/jobcraft/job/analyses${qs ? `?${qs}` : ''}`)
 }
 
 // ============================================================

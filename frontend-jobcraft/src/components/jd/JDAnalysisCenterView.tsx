@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useJobCraft, useToastActions } from '../../context/JobCraftContext';
 import {
   FileSearch,
@@ -8,6 +8,7 @@ import {
   Search,
   CheckCircle2,
   Clock,
+  Pencil,
   Wand2
 } from 'lucide-react';
 import {
@@ -17,6 +18,7 @@ import {
   useSplitJdMutation,
 } from '../../features/jd/hooks';
 import { JDClassificationSection } from './JDClassificationSection';
+import { JDClassificationEditModal } from './JDClassificationEditModal';
 import {
   EMPTY_CLASSIFICATION,
   hasClassificationInput,
@@ -24,6 +26,10 @@ import {
 } from '../../features/jd/classification';
 import type { ClassificationSource, ClassificationValue } from '../../features/jd/classification';
 import { suggestDirection } from '../../api/direction';
+import type { JDAnalysis } from '../../types/jobcraft';
+
+/** 历史表格客户端分页页大小（T-M4-4；导出供测试断言切片边界）。 */
+export const HISTORY_PAGE_SIZE = 10;
 
 export const JDAnalysisCenterView: React.FC = () => {
   const { navigateTo } = useJobCraft();
@@ -41,6 +47,9 @@ export const JDAnalysisCenterView: React.FC = () => {
   const [requirements, setRequirements] = useState<{ text: string; tag: 'hard' | 'required' | 'preferred' }[]>([]);
   const [pastedRaw, setPastedRaw] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+  // T-M4-4 历史表格客户端分页 + 编辑分类弹窗
+  const [page, setPage] = useState(1);
+  const [editingAnalysis, setEditingAnalysis] = useState<JDAnalysis | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   // T-M4-3 方向分类（选填）：六维 + 方向名，零 LLM 词典建议
   const [classification, setClassification] = useState<ClassificationValue>(EMPTY_CLASSIFICATION);
@@ -220,6 +229,19 @@ export const JDAnalysisCenterView: React.FC = () => {
     (a) =>
       a.company.toLowerCase().includes(searchQuery.toLowerCase()) ||
       a.role.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  // 搜索词变化 → 重置到第 1 页（避免停留在已过滤掉的页码）
+  useEffect(() => {
+    setPage(1);
+  }, [searchQuery]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredAnalyses.length / HISTORY_PAGE_SIZE));
+  // 当前页越界（过滤/删除后行数变少）→ 自动回退到最后一页
+  const currentPage = Math.min(page, totalPages);
+  const pagedAnalyses = filteredAnalyses.slice(
+    (currentPage - 1) * HISTORY_PAGE_SIZE,
+    currentPage * HISTORY_PAGE_SIZE
   );
 
   return (
@@ -522,20 +544,21 @@ export const JDAnalysisCenterView: React.FC = () => {
                   <th className="p-3.5 w-60">目标公司与岗位</th>
                   <th className="p-3.5 w-28">匹配得分</th>
                   <th className="p-3.5 w-28">推荐指数</th>
+                  <th className="p-3.5 w-32">方向分类</th>
                   <th className="p-3.5">核心研判结论摘要</th>
                   <th className="p-3.5 w-28">分析日期</th>
-                  <th className="p-3.5 w-60 text-right whitespace-nowrap">操作</th>
+                  <th className="p-3.5 w-72 text-right whitespace-nowrap">操作</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-edge">
                 {filteredAnalyses.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="p-8 text-center text-faint">
+                    <td colSpan={7} className="p-8 text-center text-faint">
                       未找到符合条件的研判记录
                     </td>
                   </tr>
                 ) : (
-                  filteredAnalyses.map((analysis) => (
+                  pagedAnalyses.map((analysis) => (
                     <tr key={analysis.id} className="hover:bg-page/40 transition">
                       <td className="p-3.5 align-top font-bold text-ink">
                         <div className="text-sm font-bold text-ink">{analysis.company}</div>
@@ -556,6 +579,31 @@ export const JDAnalysisCenterView: React.FC = () => {
                         <span className="text-warning tracking-wider font-bold">
                           {'★'.repeat(analysis.recommendationStars || 0)}
                         </span>
+                      </td>
+                      {/* T-M4-4 方向分类列：有方向名渲染 + 来源小徽标；无分类诚实空态 */}
+                      <td className="p-3.5 align-top" data-testid="row-direction">
+                        {analysis.jdClassification?.directionName ? (
+                          <span className="flex flex-wrap items-center gap-1.5">
+                            <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-sage-soft text-sage border border-sage/20">
+                              {analysis.jdClassification.directionName}
+                            </span>
+                            <span
+                              className={`text-[10px] font-semibold px-1.5 py-0.5 rounded border ${
+                                analysis.jdClassification.source === 'rule'
+                                  ? 'bg-info/10 text-info border-info/30'
+                                  : 'bg-white text-muted border-edge'
+                              }`}
+                            >
+                              {analysis.jdClassification.source === 'rule'
+                                ? '词典'
+                                : analysis.jdClassification.source === 'ai'
+                                  ? 'AI'
+                                  : '手动'}
+                            </span>
+                          </span>
+                        ) : (
+                          <span className="text-faint">—</span>
+                        )}
                       </td>
                       <td className="p-3.5 align-top text-ink leading-relaxed max-w-md">
                         <div className="line-clamp-2">{analysis.verdictSummary}</div>
@@ -578,6 +626,14 @@ export const JDAnalysisCenterView: React.FC = () => {
                             定制简历
                           </button>
                           <button
+                            onClick={() => setEditingAnalysis(analysis)}
+                            data-testid="edit-classification"
+                            className="px-3 py-1.5 rounded-lg bg-white hover:bg-page text-ink border border-edge text-xs font-medium transition cursor-pointer shadow-2xs flex items-center gap-1"
+                          >
+                            <Pencil className="w-3 h-3" />
+                            <span>编辑分类</span>
+                          </button>
+                          <button
                             onClick={() => {
                               deleteAnalysis.mutate(analysis.id, {
                                 onSuccess: () => showToast({ type: 'info', title: 'JD 分析已删除' }),
@@ -596,7 +652,48 @@ export const JDAnalysisCenterView: React.FC = () => {
               </tbody>
             </table>
           </div>
+
+          {/* T-M4-4 客户端分页控件（数据源仍是 useJdAnalysesQuery 缓存，query key 不变） */}
+          {filteredAnalyses.length > 0 && (
+            <div
+              className="flex flex-wrap items-center justify-between gap-3 px-6 py-3 border-t border-edge bg-canvas/40"
+              data-testid="jd-history-pagination"
+            >
+              <span className="text-[11px] text-muted">共 {filteredAnalyses.length} 条</span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPage(Math.max(1, currentPage - 1))}
+                  disabled={currentPage <= 1}
+                  data-testid="jd-history-prev"
+                  className="px-3 py-1.5 rounded-lg border border-edge bg-white text-ink text-xs font-medium hover:bg-page transition cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  上一页
+                </button>
+                <span className="text-[11px] text-muted tabular-nums" data-testid="jd-history-page-info">
+                  第 {currentPage}/{totalPages} 页
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setPage(Math.min(totalPages, currentPage + 1))}
+                  disabled={currentPage >= totalPages}
+                  data-testid="jd-history-next"
+                  className="px-3 py-1.5 rounded-lg border border-edge bg-white text-ink text-xs font-medium hover:bg-page transition cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  下一页
+                </button>
+              </div>
+            </div>
+          )}
         </div>
+      )}
+
+      {/* T-M4-4 编辑方向分类弹窗（成功失效 jdAnalyses 缓存，表格与报告详情同步刷新） */}
+      {editingAnalysis && (
+        <JDClassificationEditModal
+          analysis={editingAnalysis}
+          onClose={() => setEditingAnalysis(null)}
+        />
       )}
     </div>
   );

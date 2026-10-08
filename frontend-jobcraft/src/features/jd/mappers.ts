@@ -1,6 +1,6 @@
-import type { JobAnalysisResult, CapabilityGapWire } from '../../api/types';
+import type { JobAnalysisResult, CapabilityGapWire, WireJdClassification } from '../../api/types';
 import type { JobAnalysisDetail } from '../../api/job';
-import type { CapabilityGap, JDAnalysis } from '../../types/jobcraft';
+import type { CapabilityGap, JDAnalysis, JDClassificationInfo } from '../../types/jobcraft';
 
 /** analysisDetailToJD 的输入结构：JobAnalysisResult（创建路径）与 JobAnalysisDetail（列表路径）均满足。 */
 type JDDetailInput = Pick<
@@ -15,6 +15,7 @@ type JDDetailInput = Pick<
   | 'gap_analysis'
   | 'dimension_requirements'
   | 'capability_gaps'
+  | 'jd_classification'
   | 'created_at'
 >;
 
@@ -33,6 +34,28 @@ function wireToCapabilityGaps(list: CapabilityGapWire[] | undefined): Capability
     cardId: g.card_id != null ? String(g.card_id) : null,
     note: g.note || '',
   }));
+}
+
+/** wire 六维方向分类 → 领域模型（T-M4-4；缺省/非对象一律 undefined，渲染侧走空态）。 */
+function wireToClassification(
+  wire: WireJdClassification | null | undefined,
+): JDClassificationInfo | undefined {
+  if (!wire || typeof wire !== 'object') return undefined;
+  return {
+    id: wire.id,
+    directionId: wire.direction_id ?? null,
+    directionName: wire.direction_name ?? null,
+    directionCode: wire.direction_code ?? null,
+    jobFunction: wire.job_function || '',
+    primaryRole: wire.primary_role || '',
+    industry: wire.industry || '',
+    product: wire.product || '',
+    scenario: wire.scenario || '',
+    skills: wire.skills || '',
+    confidence: wire.confidence || '',
+    source: wire.source || 'manual',
+    status: wire.status || 'proposed',
+  };
 }
 
 /** JD 分析查询缓存 key（react-query 唯读源）。 */
@@ -176,6 +199,8 @@ export function analysisDetailToJD(detail: JDDetailInput): JDAnalysis {
     subtextAnalysis: [],
     skillGaps,
     capabilityGaps: wireToCapabilityGaps(detail.capability_gaps),
+    // T-M4-4：方向分类 additive 透传（无分类 → undefined，表格/详情走诚实空态）
+    jdClassification: wireToClassification(detail.jd_classification),
     goal: goalText,
     recommendedExperiences: [],
     createdAt: detail.created_at || '',

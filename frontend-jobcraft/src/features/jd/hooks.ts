@@ -234,6 +234,12 @@ export function useCreateStructuredJdAnalysisMutation() {
 }
 
 /**
+ * 历史列表拉取上限（T-M4-4）：后端 GET /analyses 默认只回 20 条，历史表格
+ * 客户端分页需要完整数据 → 一次拉 100（query key 不变，报告详情 find-by-id 同缓存）。
+ */
+export const JD_ANALYSES_FETCH_LIMIT = 100;
+
+/**
  * 查询当前用户的 JD 分析历史（单次 listJobAnalyses 返回完整详情，消除逐条 GET 的 N+1）。
  *
  * 与 legacy `JobCraftContext.loadJdAnalyses` 语义保持一致；单条映射失败时跳过该条（不外抛）。
@@ -243,7 +249,7 @@ export function useJdAnalysesQuery() {
     queryKey: [...JD_ANALYSES_QUERY_KEY],
     queryFn: async () => {
       const user = await authApi.getCurrentUser();
-      const data = await jobApi.listJobAnalyses(user.id);
+      const data = await jobApi.listJobAnalyses(user.id, JD_ANALYSES_FETCH_LIMIT);
       const entries = data.analyses || [];
       const mapped: JDAnalysis[] = [];
       for (const s of entries) {

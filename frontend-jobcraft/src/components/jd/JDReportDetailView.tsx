@@ -26,6 +26,36 @@ interface JDReportDetailViewProps {
   embedded?: boolean;
 }
 
+/** T-M4-4 方向分类展示：六维标签与来源/状态/置信文案。 */
+const CLASS_DIM_LABELS: Array<{
+  key: 'jobFunction' | 'primaryRole' | 'industry' | 'product' | 'scenario' | 'skills';
+  label: string;
+}> = [
+  { key: 'jobFunction', label: '职能' },
+  { key: 'primaryRole', label: '主角色' },
+  { key: 'industry', label: '行业' },
+  { key: 'product', label: '产品' },
+  { key: 'scenario', label: '场景' },
+  { key: 'skills', label: '技能' },
+];
+
+const CLASS_SOURCE_LABELS: Record<string, string> = {
+  rule: '词典建议',
+  manual: '手动填写',
+  ai: 'AI 生成',
+};
+
+const CLASS_STATUS_LABELS: Record<string, string> = {
+  proposed: '待确认',
+  confirmed: '已确认',
+};
+
+const CLASS_CONFIDENCE_LABELS: Record<string, string> = {
+  high: '高置信',
+  medium: '中置信',
+  low: '低置信',
+};
+
 // Section Header matching Image 1: 01 岗位理解  这个岗位需要解决什么问题
 function SectionHeaderImageStyle({
   num,
@@ -115,6 +145,9 @@ export const JDReportDetailView: React.FC<JDReportDetailViewProps> = ({
   // T-M4-2 / Q3：改写任务清单（旧分析缺省 → 回退 skillGaps 能力匹配渲染）
   const capabilityGaps = currentAnalysis?.capabilityGaps || [];
   const hasCapabilityGaps = capabilityGaps.length > 0;
+
+  // T-M4-4：方向分类（无分类 → null，展示区段走诚实空态；仅展示不提供编辑）
+  const classification = currentAnalysis?.jdClassification || null;
 
   const competencyMatch = (currentAnalysis?.skillGaps || []).map((g) => ({
     ability: g.capability,
@@ -453,6 +486,59 @@ export const JDReportDetailView: React.FC<JDReportDetailViewProps> = ({
               </div>
             </div>
 
+          </div>
+        </div>
+
+        {/* ── 方向分类（T-M4-4：仅展示；编辑入口在历史表格） ── */}
+        <div className="mb-8" data-testid="direction-classification">
+          <div className="bg-[#FAFBF9] border border-[#E2E6E2] rounded-2xl p-5 sm:p-6 shadow-2xs">
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+              <span className="text-[13px] font-bold text-[#111814]">方向分类</span>
+              {classification && (
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-[11px] font-bold px-2 py-0.5 rounded bg-[#EEF2EE] text-[#526058]">
+                    {CLASS_SOURCE_LABELS[classification.source] || classification.source}
+                  </span>
+                  <span
+                    className={`text-[11px] font-bold px-2 py-0.5 rounded ${
+                      classification.status === 'confirmed'
+                        ? 'bg-sage-soft text-sage'
+                        : 'bg-warning-bg text-warning'
+                    }`}
+                  >
+                    {CLASS_STATUS_LABELS[classification.status] || classification.status}
+                  </span>
+                  {CLASS_CONFIDENCE_LABELS[classification.confidence] && (
+                    <span className="text-[11px] font-bold px-2 py-0.5 rounded bg-white text-muted border border-edge">
+                      {CLASS_CONFIDENCE_LABELS[classification.confidence]}
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {classification ? (
+              <div className="space-y-3">
+                <div className="text-[19px] font-black text-[#111814] tracking-tight">
+                  {classification.directionName || '未关联方向'}
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {CLASS_DIM_LABELS.filter(({ key }) => classification[key]).map(({ key, label }) => (
+                    <span
+                      key={key}
+                      className="text-xs px-2.5 py-1 bg-white border border-[#E2E6E2] text-[#526058] rounded-md font-medium"
+                    >
+                      <span className="font-bold text-[#737873] mr-1.5">{label}</span>
+                      {classification[key]}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <p className="text-xs text-[#737873] leading-relaxed m-0">
+                未录入方向分类。可在「JD 分析中心 → 历史研判」的编辑入口补录岗位方向与六维标签。
+              </p>
+            )}
           </div>
         </div>
 

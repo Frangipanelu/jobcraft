@@ -240,6 +240,31 @@ export interface CapabilityGapWire {
 // 岗位分析结果
 // ============================================================
 
+/** 六维方向分类读模型（T-M4-4 additive，wire snake_case，camel 转换在 mapper）。 */
+export interface WireJdClassification {
+  id: number
+  job_analysis_id?: number
+  /** 关联方向 id（无方向为 null/0） */
+  direction_id: number | null
+  /** 关联方向展示名（grouped 查询联 direction 表解析，缺方向为 null） */
+  direction_name?: string | null
+  direction_code?: string | null
+  job_function: string
+  primary_role: string
+  industry: string
+  product: string
+  scenario: string
+  skills: string
+  /** high|medium|low（空串 = manual 直填未评置信） */
+  confidence: string
+  /** manual|rule|ai */
+  source: string
+  /** proposed|confirmed */
+  status: string
+  created_at?: string | null
+  updated_at?: string | null
+}
+
 export interface JobAnalysisResult {
   job_analysis_id: number
   /** 归属岗位实体 id（job 表，T-M5-5 jd-byte-1：FE 据此对齐 jobId，缺省=旧分析无归属） */

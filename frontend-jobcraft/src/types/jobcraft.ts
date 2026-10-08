@@ -112,6 +112,28 @@ export interface CapabilityGap {
   note: string;
 }
 
+/** 六维方向分类视图模型（T-M4-4，camelCase；wire → mapper 转换）。 */
+export interface JDClassificationInfo {
+  id?: number;
+  /** 关联方向 id（无方向为 null/0） */
+  directionId?: number | null;
+  /** 方向展示名（无方向/方向已删为 null，表格/详情渲染诚实空态） */
+  directionName?: string | null;
+  directionCode?: string | null;
+  jobFunction: string;
+  primaryRole: string;
+  industry: string;
+  product: string;
+  scenario: string;
+  skills: string;
+  /** high|medium|low（空串 = 未评估） */
+  confidence: string;
+  /** manual|rule|ai */
+  source: string;
+  /** proposed|confirmed */
+  status: string;
+}
+
 export interface JDAnalysis {
   id: string;
   jobId?: string;
@@ -152,6 +174,8 @@ export interface JDAnalysis {
   }[];
   /** 改写任务清单（T-M4-2；旧分析缺省 → 报告页回退 skillGaps 能力匹配表） */
   capabilityGaps?: CapabilityGap[];
+  /** 六维方向分类（T-M4-4；无分类为 null/undefined → 表格与详情显示空态） */
+  jdClassification?: JDClassificationInfo | null;
   goal?: string;
   recommendedExperiences: {
     experienceId: string;

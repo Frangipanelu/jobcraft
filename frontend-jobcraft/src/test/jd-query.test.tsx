@@ -272,7 +272,8 @@ describe('useJdAnalysesQuery 迁移视图', () => {
     expect(await screen.findByText('字节跳动')).toBeInTheDocument();
     expect(screen.getByText('腾讯')).toBeInTheDocument();
     expect(screen.getByText('历史研判报告 (2)')).toBeInTheDocument();
-    expect(job.listJobAnalyses).toHaveBeenCalledWith(1);
+    // T-M4-4：历史表格客户端分页 → 一次拉 100 条（后端默认 20 会截断）
+    expect(job.listJobAnalyses).toHaveBeenCalledWith(1, 100);
 
     fireEvent.change(screen.getByPlaceholderText('搜索公司或岗位名称...'), {
       target: { value: '腾讯' },
