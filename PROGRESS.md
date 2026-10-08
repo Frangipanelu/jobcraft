@@ -2,6 +2,18 @@
 
 > 本文件用于追踪项目整体进度。AI 在每次会话结束或完成子任务时，必须更新本文件的对应板块。
 
+## T-M6-7/8 终审跟进小修批：FE-JDVER-01 + generate 失效 resume-versions（2026-10-08，A 窗·Subagent-Driven 小批）
+
+> 用户拍板：先清小修批（跟进项① FE-JDVER-01 + ② invalidate 补齐），再接后续批次。执行方式 = subagent-driven：每任务 fresh implementer → spec 审查 → 质量审查 → issue 回派原实现者修复 → 原审查者复审；批次末整体终审（跨 commit 一致性 + 红线扫描 + 门禁实跑）。
+
+- [x] **T1 FE-JDVER-01 `2187bff` + 规格修复 `fb9d453` + 质量收敛 `927cbb8`**：jd_alignment 快照不参与 V 编号与版本计数——`versionsToHistory` jd 行标 'JD'（不抢「当前激活」徽标）、非 jd 子序列从 `current_version` 倒计时；`countContentVersions` 谓词抽取为计数唯一实现（卡头 fallback + 时间轴两处消费）；restore 遗留分支抽纯函数 `buildRestoreUpdates` 守卫（jd 行 `updates:{}` 不发 currentVersion）；BE `get_cards_summary` COUNT 以 `IS NULL OR <> 'jd_alignment'` 排除（保 NULL 行）；契约注释四处同步（experience.py / db_experience.py / api/types.ts / types/jobcraft.ts）；测试 FE+5（mappers 4 + 组件 2，含 jd 居中/全 jd/纯函数 3 例）/ BE+1（NULL 类型照算）/ 面板+1。
+- [x] **T2 generate 失效 `58b56e4` + 质量收敛 `17938f4`**：`useGenerateResumeMutation` onSuccess 失效 `resume-versions`（解析失败返回 null 也失效、API 抛错不失效——失效只挂 saveResume 成功点，grep 实证唯一服务端写入方）；范围裁决=仅 generate（upsert 为纯 cache 写无 API 落库）；测试 3+2（成功/失败/抛错三分支 + 全量 key 断言 + saveResume resolve 前不失效时序用例），反向验证过 guard（临时加 JOBS 失效→3 failed 后还原）。
+- [x] **审查链**：T1 spec（READY WITH FIXES→修复复审 ✅）→ T1 质量（Yes + Minor）→ T2 spec ✅ → T2 质量（Yes：Important 2 条为文档回填/登记，归控制器）→ **批次终审（跨 commit 5 diff 逐一 + 红线零违规 + 门禁实跑）Ready to push = Yes**，Critical 0 / Important 0 / Minor 1（types.ts:73 注释旧口径——他窗在途未碰，登记 TODO 顺手项 ⑨）。
+- **门禁（我方终局复跑确认）**：encoding **424 文件 0 错**；ruff check ✓ + format 165 文件 ✓；pytest **1270 passed / 13 skipped**（0 failed；基线 1219 + 本批 T1 BE +1，超额部分为 C 窗 T-M9-1 交错提交）；tsc exit 0；vitest **346 passed / 38 files**（本批后 333/37，+13/+1 为他窗新增 jd-history-table）；build ✓（既有 CSS @import 与 chunk 告警为存量）。
+- **⚠️ 共享工作区**：pathspec 精确提交 5 commit（experiences 域 / resume hooks+测试各归各）；未碰他窗在途文件（终审 Minor 因 `types.ts` 被他窗未提交改动占位而改登记不改码）；推送携带他窗已自审提交 `e360379`/`7110a5c`/`fedea6a`（线性交错，无耦合）。
+- **终审跟进登记（TODO H 节 ⑧⑨⑩）**：⑧ generate 后 JOBS 镜像（steps.customResume）未失效（动 ⑧ 须连带演进 `17938f4` 断言）；⑨ `types.ts:73` 注释尾巴旧口径下次顺手改；⑩ resume hooks.ts 753 行拆分建议。
+- **下一步**：A 窗 P4 **T-P7 批**（TODO:113 认领在册）；C 窗 T-M9-1 已闭环（`e360379`+`7110a5c`），T-M9-2 解锁条件不变。
+
 ## T-M9-1 validations 表 + validation-summary 投影 + accept 写 user_confirmed（2026-10-07，C 窗·第五轮 P1 反哺链第二棒）
 
 > 计划：`docs/superpowers/plans/2026-10-07-p1-feedback-chain-m9.md` Task 1（9 条设计判断点，先方案后实现）。执行方式 = subagent-driven：fresh implementer → spec 审查（**PASS with nits**，无 Critical/Major）→ 质量审查（**APPROVE with comments**，无 Critical/Major）→ issue 收敛回派。裁决依据 = feature-alignment M9 Q1-A + DATA_MODEL §24/§30/§31 + API_SPEC §17.4 + PRD:292。
