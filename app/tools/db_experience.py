@@ -334,7 +334,8 @@ def get_cards_summary(user_id: int, card_ids: List[int]) -> Dict[int, Dict[str, 
 
     为 ``GET /cards`` 单页结果一次性内嵌两组派生字段的来源：
 
-    - ``version_count``：``card_versions`` 行数（按 card_id GROUP BY，
+    - ``version_count``：内容版本快照数（``card_versions`` 排除
+      ``jd_alignment`` 简历对齐快照；NULL 类型照算；按 card_id GROUP BY，
       JOIN ``experience_card`` 断言所有权）；
     - ``expression_summary``：``expression`` 行数与其中 ``status='active'``
       条数（按 experience_id GROUP BY，始终带 user_id 过滤）。
@@ -362,6 +363,8 @@ def get_cards_summary(user_id: int, card_ids: List[int]) -> Dict[int, Dict[str, 
         "SELECT v.card_id, COUNT(*) FROM card_versions v "
         "JOIN experience_card c ON c.id = v.card_id AND c.user_id = %s "
         f"WHERE v.card_id IN ({placeholders}) "
+        # FE-JDVER-01：只排除显式 jd_alignment 快照；<> 会误伤 NULL 行，故写成 OR 形式
+        "AND (v.version_type IS NULL OR v.version_type <> 'jd_alignment') "
         "GROUP BY v.card_id",
         (user_id, *card_ids),
     )

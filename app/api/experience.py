@@ -332,7 +332,8 @@ def _attach_cards_summary(user_id: int, cards: List[Dict[str, Any]]) -> None:
 
     每张卡补三个字段：
     - ``current_version``：既有 ``version`` 列别名（零迁移，语义与版本端点一致）；
-    - ``version_count``：``card_versions`` 快照数；
+    - ``version_count``：内容版本快照数（排除 ``jd_alignment`` 简历对齐
+      快照，与版本时间轴『迭代』口径一致）；
     - ``expression_summary``：``{active, total}``（表达状态计数）。
 
     摘要查询属增值字段：失败时降级为 ``null`` 并记 warning（列表仍可用），

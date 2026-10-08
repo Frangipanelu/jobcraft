@@ -354,6 +354,60 @@ describe('T-M1-2 版本明细懒加载（N+1→1）', () => {
     await waitFor(() => expect(experience.listCardVersions).toHaveBeenCalledWith(7));
     expect(await screen.findByText('V1 哨兵基线（确认定稿）')).toBeInTheDocument();
   });
+
+  it('FE-JDVER-01：jd 快照标 JD 不抢「当前激活版本」徽标，「累计迭代」只数非 jd 版本', async () => {
+    experience.listCardVersions.mockResolvedValue({
+      card_id: 7,
+      current_version: 3,
+      versions: [
+        {
+          id: 4, card_id: 7, version_type: 'jd_alignment', source_type: 'jd_alignment',
+          source_id: 0, title: '端侧大模型量化评测', raw_text: 'JD 对齐后的原文。',
+          tags: ['端侧大模型'], note: null, created_at: '2026-09-24T10:00:00',
+        },
+        {
+          id: 3, card_id: 7, version_type: 'user_edit', source_type: 'card_edit',
+          source_id: 0, title: '端侧大模型量化评测', raw_text: 'V3 原文。',
+          tags: ['端侧大模型'], note: null, created_at: '2026-09-23T10:00:00',
+        },
+        {
+          id: 2, card_id: 7, version_type: 'user_edit', source_type: 'card_edit',
+          source_id: 0, title: '端侧大模型量化评测', raw_text: 'V2 原文。',
+          tags: ['端侧大模型'], note: null, created_at: '2026-09-22T10:00:00',
+        },
+        {
+          id: 1, card_id: 7, version_type: 'original', source_type: 'original',
+          source_id: 0, title: '端侧大模型量化评测', raw_text: 'V1 原文。',
+          tags: ['端侧大模型'], note: 'V1 哨兵基线（确认定稿）', created_at: '2026-09-20T10:00:00',
+        },
+      ],
+    });
+
+    renderWithProviders(<ExperiencesView />);
+
+    expect(await screen.findByText('端侧大模型量化评测')).toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole('button', { name: /版本演进/ })[0]);
+
+    // 4 行快照含 1 条 jd → 迭代口径只数 3 条内容版本
+    expect(
+      await screen.findByText('版本演进时间轴（累计迭代 3 个版本）'),
+    ).toBeInTheDocument();
+    // jd 行标 'JD'，永不匹配 V{n} → 不抢当前徽标；真正当前行（V3）持徽标
+    expect(screen.getAllByText('当前激活版本')).toHaveLength(1);
+    const jdRow = screen.getByText('JD').parentElement?.parentElement;
+    expect(jdRow).toBeDefined();
+    expect(jdRow?.textContent).not.toContain('当前激活版本');
+    // 列表卡头徽标也渲染 'V3'，须在面板行内定位持「当前激活版本」的行
+    const currentRow = screen
+      .getAllByText('V3')
+      .map((el) => el.parentElement?.parentElement)
+      .find((row) => row?.textContent?.includes('当前激活版本'));
+    expect(currentRow).toBeDefined();
+    // 当前行持徽标并隐藏「激活此版本」按钮（既有行为）
+    expect(currentRow?.textContent).not.toContain('激活此版本');
+    // jd 快照正文可被激活（期望行为）
+    expect(jdRow?.textContent).toContain('激活此版本');
+  });
 });
 
 describe('T-M1-1 structure 失败重试入口', () => {

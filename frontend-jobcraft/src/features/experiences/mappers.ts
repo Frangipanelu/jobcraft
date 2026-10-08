@@ -74,21 +74,31 @@ export function cardToExperience(card: ExperienceCard): Experience {
  *
  * 后端只存 title/raw_text/tags（表结构固定），无逐字段 diff；
  * 前端据此展示 V 编号、日期、原因与来源，并以 rawText 支持原文回滚。
- * 标签规则：最新快照 = 当前版本 V{current_version}，依序递减到 V1（哨兵基线）。
+ * 标签规则（FE-JDVER-01）：jd_alignment 快照标固定字符串 'JD'，不参与
+ * V 编号倒计时（'JD' 不匹配 /^V\d+$/，永不抢走「当前激活版本」徽标）；
+ * 内容行在剔除 jd 行后的子序列上自 currentVersion 依序递减到 V1（哨兵基线）。
  */
 export function versionsToHistory(
   versions: ExperienceCardVersion[],
   currentVersion: number
 ): ExperienceVersionRecord[] {
-  return versions.map((v, idx) => ({
-    version: `V${Math.max(1, currentVersion - idx)}`,
-    date: (v.created_at || '').slice(0, 10),
-    reason: v.note || versionTypeReason(v.version_type),
-    source: versionTypeSource(v.version_type),
-    changes: [],
-    title: v.title || undefined,
-    rawText: v.raw_text,
-  }));
+  let contentIdx = 0;
+  return versions.map((v) => {
+    const isJdAlignment = v.version_type === 'jd_alignment';
+    const version = isJdAlignment
+      ? 'JD'
+      : `V${Math.max(1, currentVersion - contentIdx)}`;
+    if (!isJdAlignment) contentIdx += 1;
+    return {
+      version,
+      date: (v.created_at || '').slice(0, 10),
+      reason: v.note || versionTypeReason(v.version_type),
+      source: versionTypeSource(v.version_type),
+      changes: [],
+      title: v.title || undefined,
+      rawText: v.raw_text,
+    };
+  });
 }
 
 function versionTypeReason(version_type: string): string {

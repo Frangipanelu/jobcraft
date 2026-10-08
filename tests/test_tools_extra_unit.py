@@ -1301,6 +1301,16 @@ class TestGetCardsSummary:
         assert "c.user_id = %s" in sql
         assert params[0] == 9
 
+    def test_version_query_excludes_jd_alignment(self, exp_db):
+        """FE-JDVER-01：version_count 只排除显式 jd_alignment，NULL 类型照算"""
+        from app.tools.db_experience import get_cards_summary
+
+        get_cards_summary(1, [7])
+        sql, _ = exp_db["calls"][0]
+        # <> 会误伤 NULL 行，必须写成 OR 形式（IS NULL OR <> 'jd_alignment'）
+        assert "(v.version_type IS NULL OR v.version_type <> 'jd_alignment')" in sql
+        assert "GROUP BY v.card_id" in sql
+
     def test_expression_table_missing_degrades_to_zero(self, exp_db):
         """expression 表缺失（未迁移库 errno 1146）→ 按 0 计，不抛错"""
         from app.tools.db_experience import get_cards_summary

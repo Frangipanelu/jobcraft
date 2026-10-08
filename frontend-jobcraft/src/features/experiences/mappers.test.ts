@@ -181,4 +181,51 @@ describe('versionsToHistory（EXP-P1-06b 后端版本回流）', () => {
     const history = versionsToHistory(SNAPSHOTS, 1);
     expect(history.map((v) => v.version)).toEqual(['V1', 'V1', 'V1']);
   });
+
+  it('FE-JDVER-01：jd 行标 JD 不参与递减，内容行在非 jd 子序列上倒计时', () => {
+    const history = versionsToHistory(
+      [
+        { ...SNAPSHOTS[0], id: 6, version_type: 'jd_alignment', note: null, created_at: '2026-09-24T10:00:00' },
+        { ...SNAPSHOTS[0], id: 5, version_type: 'user_edit', note: null, created_at: '2026-09-23T10:00:00' },
+        { ...SNAPSHOTS[0], id: 4, version_type: 'original', note: null, created_at: '2026-09-18T09:00:00' },
+      ],
+      2,
+    );
+    expect(history.map((v) => v.version)).toEqual(['JD', 'V2', 'V1']);
+    // 'JD' 必须不可能被 isCurrent（/^V\d+$/ 语义）命中
+    expect(history[0].version).not.toMatch(/^V\d+$/);
+    expect(history[0].source).toBe('jd_alignment');
+    expect(history[0].rawText).toBe('V3 原文');
+    expect(history[1].source).toBe('manual');
+    expect(history[2].version).toBe('V1');
+  });
+
+  it('FE-JDVER-01：jd 行夹在中间时，非 jd 子序列仍连续倒计时', () => {
+    const history = versionsToHistory(
+      [
+        { ...SNAPSHOTS[0], id: 6, version_type: 'user_edit', note: null, created_at: '2026-09-24T10:00:00' },
+        { ...SNAPSHOTS[0], id: 5, version_type: 'jd_alignment', note: null, created_at: '2026-09-23T10:00:00' },
+        { ...SNAPSHOTS[0], id: 4, version_type: 'original', note: null, created_at: '2026-09-18T09:00:00' },
+      ],
+      3,
+    );
+    expect(history.map((v) => v.version)).toEqual(['V3', 'JD', 'V2']);
+    expect(history[1].source).toBe('jd_alignment');
+    expect(history[2].source).toBe('manual');
+  });
+
+  it('FE-JDVER-01：全 jd 行全标 JD，不产生任何 V{n} 标签', () => {
+    const history = versionsToHistory(
+      [
+        { ...SNAPSHOTS[0], id: 6, version_type: 'jd_alignment', note: null, created_at: '2026-09-24T10:00:00' },
+        { ...SNAPSHOTS[0], id: 5, version_type: 'jd_alignment', note: null, created_at: '2026-09-23T10:00:00' },
+      ],
+      3,
+    );
+    expect(history.map((v) => v.version)).toEqual(['JD', 'JD']);
+    history.forEach((v) => {
+      expect(v.version).not.toMatch(/^V\d+$/);
+      expect(v.source).toBe('jd_alignment');
+    });
+  });
 });

@@ -195,9 +195,12 @@ export const ExperiencesView: React.FC<ExperiencesViewProps> = ({ initialSelecte
   const handleRestoreVersion = (exp: Experience, versionRecord: ExperienceVersionRecord) => {
     // EXP-P1-06b：后端快照仅存原文，回滚 = PATCH raw_text（服务端自动版本化）；
     // 兼容历史 cache 内的逐字段 changes 记录（旧假数据）。
+    // FE-JDVER-01：无正文的遗留分支只回写 V{n} 版本标签，'JD' 等非版本标签保持 exp.currentVersion。
     const updated: Partial<Experience> & { raw_text?: string } = versionRecord.rawText
       ? { title: versionRecord.title || exp.title, raw_text: versionRecord.rawText }
-      : { currentVersion: versionRecord.version };
+      : /^V\d+$/.test(versionRecord.version)
+        ? { currentVersion: versionRecord.version }
+        : {};
     if (!versionRecord.rawText) {
       versionRecord.changes.forEach((c) => {
         if (c.field === 'actions') {
@@ -329,7 +332,9 @@ export const ExperiencesView: React.FC<ExperiencesViewProps> = ({ initialSelecte
           const isExpressionExpanded = !!expandedExpressionExpIds[exp.id];
           const historyList = exp.versionHistory || [];
           // T-M1-2：首屏计数走 GET /cards 内嵌摘要（懒加载明细前的展示口径）
-          const versionCount = exp.versionCount ?? historyList.length ?? 1;
+          // FE-JDVER-01：fallback 与「累计迭代」同口径，只数非 jd 内容版本，0 时兜底 1
+          const versionCount =
+            exp.versionCount ?? (historyList.filter((r) => r.source !== 'jd_alignment').length || 1);
           const exprSummary = exp.expressionSummary;
 
           return (
@@ -637,7 +642,7 @@ const VersionHistoryPanel: React.FC<VersionHistoryPanelProps> = ({
         <div className="flex items-center gap-2">
           <History className="w-4 h-4 text-warning" />
           <span className="text-xs font-bold text-warning">
-            版本演进时间轴（累计迭代 {historyList.length || 1} 个版本）
+            版本演进时间轴（累计迭代 {historyList.filter((r) => r.source !== 'jd_alignment').length || 1} 个版本）
           </span>
         </div>
         <span className="text-[11px] text-faint">
@@ -655,6 +660,7 @@ const VersionHistoryPanel: React.FC<VersionHistoryPanelProps> = ({
         ) : (
           historyList.map((ver, idx) => {
             const badge = getSourceBadge(ver.source);
+            // FE-JDVER-01：jd 快照标签恒为 'JD'，不可能匹配 /^V\d+$/，永不等于当前版本 V{n}
             const isCurrent = currentVersion === ver.version;
 
             return (
