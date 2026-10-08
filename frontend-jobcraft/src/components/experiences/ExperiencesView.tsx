@@ -32,6 +32,7 @@ import {
   useCardVersionsQuery,
   useCardSearchQuery
 } from '../../features/experiences/hooks';
+import { countContentVersions } from '../../features/experiences/mappers';
 import { NewExperienceModal } from './NewExperienceModal';
 import { ExpressionPanel } from './ExpressionPanel';
 
@@ -52,6 +53,29 @@ const getSourceBadge = (source: ExperienceVersionRecord['source']) => {
       return { label: '经历维护更新', color: 'bg-page text-muted border-edge' };
   }
 };
+
+/**
+ * 版本激活的 updates 决策（FE-JDVER-01 守卫抽为纯函数，便于单测）。
+ *
+ * 有 rawText → 正常回滚路径，PATCH {title, raw_text}（服务端自动版本化）；
+ * 无 rawText（历史遗留分支）→ 仅当版本标签匹配 /^V\d+$/ 才回写 currentVersion，
+ * 'JD' 等非版本标签返回空对象，保持 cache 内 exp.currentVersion 不被污染。
+ *
+ * @param versionRecord 待激活的版本记录
+ * @param fallbackTitle 快照无标题时回退的经历标题
+ * @return 传给 useUpdateExperienceMutation 的 updates
+ */
+export function buildRestoreUpdates(
+  versionRecord: ExperienceVersionRecord,
+  fallbackTitle: string
+): Partial<Experience> & { raw_text?: string } {
+  if (versionRecord.rawText) {
+    return { title: versionRecord.title || fallbackTitle, raw_text: versionRecord.rawText };
+  }
+  return /^V\d+$/.test(versionRecord.version)
+    ? { currentVersion: versionRecord.version }
+    : {};
+}
 
 export const ExperiencesView: React.FC<ExperiencesViewProps> = ({ initialSelectedExpId }) => {
   const { showToast } = useToastActions();
@@ -195,12 +219,8 @@ export const ExperiencesView: React.FC<ExperiencesViewProps> = ({ initialSelecte
   const handleRestoreVersion = (exp: Experience, versionRecord: ExperienceVersionRecord) => {
     // EXP-P1-06b：后端快照仅存原文，回滚 = PATCH raw_text（服务端自动版本化）；
     // 兼容历史 cache 内的逐字段 changes 记录（旧假数据）。
-    // FE-JDVER-01：无正文的遗留分支只回写 V{n} 版本标签，'JD' 等非版本标签保持 exp.currentVersion。
-    const updated: Partial<Experience> & { raw_text?: string } = versionRecord.rawText
-      ? { title: versionRecord.title || exp.title, raw_text: versionRecord.rawText }
-      : /^V\d+$/.test(versionRecord.version)
-        ? { currentVersion: versionRecord.version }
-        : {};
+    // FE-JDVER-01：无正文遗留分支的 /V\d+/ 守卫在 buildRestoreUpdates（纯函数）内。
+    const updated = buildRestoreUpdates(versionRecord, exp.title);
     if (!versionRecord.rawText) {
       versionRecord.changes.forEach((c) => {
         if (c.field === 'actions') {
@@ -332,9 +352,9 @@ export const ExperiencesView: React.FC<ExperiencesViewProps> = ({ initialSelecte
           const isExpressionExpanded = !!expandedExpressionExpIds[exp.id];
           const historyList = exp.versionHistory || [];
           // T-M1-2：首屏计数走 GET /cards 内嵌摘要（懒加载明细前的展示口径）
-          // FE-JDVER-01：fallback 与「累计迭代」同口径，只数非 jd 内容版本，0 时兜底 1
+          // FE-JDVER-01：fallback 与「累计迭代」同口径，只数非 jd 内容版本（countContentVersions），0 时兜底 1
           const versionCount =
-            exp.versionCount ?? (historyList.filter((r) => r.source !== 'jd_alignment').length || 1);
+            exp.versionCount ?? (countContentVersions(historyList) || 1);
           const exprSummary = exp.expressionSummary;
 
           return (
@@ -642,7 +662,7 @@ const VersionHistoryPanel: React.FC<VersionHistoryPanelProps> = ({
         <div className="flex items-center gap-2">
           <History className="w-4 h-4 text-warning" />
           <span className="text-xs font-bold text-warning">
-            版本演进时间轴（累计迭代 {historyList.filter((r) => r.source !== 'jd_alignment').length || 1} 个版本）
+            版本演进时间轴（累计迭代 {countContentVersions(historyList) || 1} 个版本）
           </span>
         </div>
         <span className="text-[11px] text-faint">

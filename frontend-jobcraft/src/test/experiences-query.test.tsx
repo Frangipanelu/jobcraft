@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { renderWithProviders } from './test-utils';
 import { ToastContainer } from '../components/common/Toast';
-import { ExperiencesView } from '../components/experiences/ExperiencesView';
+import { ExperiencesView, buildRestoreUpdates } from '../components/experiences/ExperiencesView';
 import { NewExperienceModal } from '../components/experiences/NewExperienceModal';
 import {
   useExperiencesQuery,
@@ -361,7 +361,7 @@ describe('T-M1-2 版本明细懒加载（N+1→1）', () => {
       current_version: 3,
       versions: [
         {
-          id: 4, card_id: 7, version_type: 'jd_alignment', source_type: 'jd_alignment',
+          id: 4, card_id: 7, version_type: 'jd_alignment', source_type: 'resume_version',
           source_id: 0, title: '端侧大模型量化评测', raw_text: 'JD 对齐后的原文。',
           tags: ['端侧大模型'], note: null, created_at: '2026-09-24T10:00:00',
         },
@@ -407,6 +407,90 @@ describe('T-M1-2 版本明细懒加载（N+1→1）', () => {
     expect(currentRow?.textContent).not.toContain('激活此版本');
     // jd 快照正文可被激活（期望行为）
     expect(jdRow?.textContent).toContain('激活此版本');
+  });
+
+  it('FE-JDVER-01：无 rawText 的 jd 快照激活 → updateCard payload 不含 currentVersion', async () => {
+    experience.listCardVersions.mockResolvedValue({
+      card_id: 7,
+      current_version: 3,
+      versions: [
+        {
+          // 遗留分支：jd 快照无正文（raw_text 空串为 falsy）→ 走 /^V\d+$/ 守卫
+          id: 4, card_id: 7, version_type: 'jd_alignment', source_type: 'resume_version',
+          source_id: 0, title: '端侧大模型量化评测', raw_text: '',
+          tags: ['端侧大模型'], note: null, created_at: '2026-09-24T10:00:00',
+        },
+        {
+          id: 3, card_id: 7, version_type: 'user_edit', source_type: 'card_edit',
+          source_id: 0, title: '端侧大模型量化评测', raw_text: 'V3 原文。',
+          tags: ['端侧大模型'], note: null, created_at: '2026-09-23T10:00:00',
+        },
+        {
+          id: 1, card_id: 7, version_type: 'original', source_type: 'original',
+          source_id: 0, title: '端侧大模型量化评测', raw_text: 'V1 原文。',
+          tags: ['端侧大模型'], note: 'V1 哨兵基线（确认定稿）', created_at: '2026-09-20T10:00:00',
+        },
+      ],
+    });
+
+    renderWithProviders(
+      <>
+        <ExperiencesView />
+        <ToastContainer />
+      </>,
+    );
+
+    expect(await screen.findByText('端侧大模型量化评测')).toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole('button', { name: /版本演进/ })[0]);
+    // 3 行快照含 1 条 jd → 迭代口径只数 2 条内容版本
+    expect(
+      await screen.findByText('版本演进时间轴（累计迭代 2 个版本）'),
+    ).toBeInTheDocument();
+
+    // 面板首行 = jd 快照（标签 'JD' 非当前行）→ 其「激活此版本」走遗留分支
+    const restoreButtons = screen.getAllByRole('button', { name: /激活此版本/ });
+    fireEvent.click(restoreButtons[0]);
+
+    await waitFor(() => expect(experience.updateCard).toHaveBeenCalled());
+    const calls = experience.updateCard.mock.calls;
+    const payload = calls[calls.length - 1][1] as Record<string, unknown>;
+    // FE-JDVER-01 守卫：'JD' 不匹配 /^V\d+$/ → updates 不含 currentVersion
+    expect(payload).not.toHaveProperty('currentVersion');
+  });
+});
+
+describe('FE-JDVER-01 restore 遗留分支守卫（buildRestoreUpdates 纯函数）', () => {
+  const baseRecord = {
+    date: '2026-09-24',
+    reason: 'JD 深度对齐',
+    source: 'jd_alignment' as const,
+    changes: [],
+  };
+
+  it('无 rawText + JD 标签 → 空 updates，不写 currentVersion（防 cache 污染）', () => {
+    const updates = buildRestoreUpdates(
+      { ...baseRecord, version: 'JD' },
+      '端侧大模型量化评测',
+    );
+    expect(updates).toEqual({});
+    expect(updates).not.toHaveProperty('currentVersion');
+  });
+
+  it('无 rawText + V{n} 标签 → 回写 currentVersion', () => {
+    const updates = buildRestoreUpdates(
+      { ...baseRecord, version: 'V2' },
+      '端侧大模型量化评测',
+    );
+    expect(updates).toEqual({ currentVersion: 'V2' });
+  });
+
+  it('有 rawText → 原文回滚 {title, raw_text}，不写 currentVersion', () => {
+    const updates = buildRestoreUpdates(
+      { ...baseRecord, version: 'V3', title: '快照标题', rawText: '快照原文' },
+      '端侧大模型量化评测',
+    );
+    expect(updates).toEqual({ title: '快照标题', raw_text: '快照原文' });
+    expect(updates).not.toHaveProperty('currentVersion');
   });
 });
 

@@ -80,7 +80,7 @@ export interface Experience {
   currentVersion: string;
   versionHistory: ExperienceVersionRecord[];
   // T-M1-2：GET /cards 内嵌摘要（首屏不再逐卡拉版本），缺失为 null/undefined
-  /** card_versions 快照数 */
+  /** 内容版本快照数（排除 jd_alignment 简历对齐快照） */
   versionCount?: number | null;
   /** 标准化表达计数 {active, total} */
   expressionSummary?: { active: number; total: number } | null;

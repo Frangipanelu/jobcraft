@@ -3,6 +3,7 @@ import type { ExperienceCard, ExperienceCardVersion } from '../../api/types';
 import {
   cardToExperience,
   cardTypeToCategory,
+  countContentVersions,
   EXPERIENCES_QUERY_KEY,
   versionsToHistory,
 } from './mappers';
@@ -228,5 +229,24 @@ describe('versionsToHistory（EXP-P1-06b 后端版本回流）', () => {
       expect(v.version).not.toMatch(/^V\d+$/);
       expect(v.source).toBe('jd_alignment');
     });
+  });
+
+  it('countContentVersions（FE-JDVER-01 迭代口径唯一实现）：剔除 jd_alignment，空/全 jd 为 0', () => {
+    const mixed = versionsToHistory(
+      [
+        { ...SNAPSHOTS[0], id: 6, version_type: 'jd_alignment', note: null, created_at: '2026-09-24' },
+        { ...SNAPSHOTS[0], id: 5, version_type: 'user_edit', note: null, created_at: '2026-09-23' },
+        { ...SNAPSHOTS[1], id: 4, version_type: 'review_refined', note: null, created_at: '2026-09-21' },
+      ],
+      3,
+    );
+    expect(countContentVersions(mixed)).toBe(2);
+
+    const allJd = versionsToHistory(
+      [{ ...SNAPSHOTS[0], id: 3, version_type: 'jd_alignment', note: null, created_at: '2026-09-24' }],
+      3,
+    );
+    expect(countContentVersions(allJd)).toBe(0);
+    expect(countContentVersions([])).toBe(0);
   });
 });

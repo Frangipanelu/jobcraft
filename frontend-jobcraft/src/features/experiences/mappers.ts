@@ -101,6 +101,20 @@ export function versionsToHistory(
   });
 }
 
+/**
+ * 内容版本计数（FE-JDVER-01 迭代口径唯一实现）：剔除 jd_alignment 快照。
+ *
+ * 谓词依据：`ExperienceVersionRecord` 不携带 `version_type`，仅有 `source`；
+ * `source` 由 `versionTypeSource(version_type)` 在 `versionsToHistory` 内派生
+ * （jd_alignment → 'jd_alignment'），是该类型上的唯一判定点。
+ *
+ * @param list 版本记录列表（时间轴顺序）
+ * @return 非 jd 内容版本数（可能为 0，调用方自行兜底）
+ */
+export function countContentVersions(list: ExperienceVersionRecord[]): number {
+  return list.filter((r) => r.source !== 'jd_alignment').length;
+}
+
 function versionTypeReason(version_type: string): string {
   switch (version_type) {
     case 'original':

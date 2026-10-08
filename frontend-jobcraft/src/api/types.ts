@@ -70,7 +70,7 @@ export interface ExperienceCard {
   // T-M1-2（GET /cards 内嵌，首屏 N+1→1）：以下三项为列表摘要字段
   /** 当前版本号（既有 version 列别名，零迁移） */
   current_version?: number | null
-  /** card_versions 快照数（摘要查询失败为 null，前端回退本地历史长度） */
+  /** 内容版本快照数（排除 jd_alignment 简历对齐快照；摘要查询失败为 null，前端回退本地历史长度） */
   version_count?: number | null
   /** 标准化表达计数 active/total（同上，失败为 null） */
   expression_summary?: { active: number; total: number } | null
