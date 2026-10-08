@@ -350,6 +350,13 @@ class TestListUserExpressions:
             mod.list_user_expressions(7, status="frozen")
         assert fake_db["cursor"].executed == []
 
+    def test_default_no_status_filter_keeps_deprecated_visible(self, fake_db):
+        """不传 status 时 SQL 不含 status= 过滤（deprecated 保留行可见，保留≠删除）。"""
+        fake_db["cursor"]._rows = []
+        mod.list_user_expressions(7)
+        sql, _ = fake_db["cursor"].executed[-1]
+        assert "status=" not in sql
+
 
 class TestCountUserExpressions:
     """T-M3-4 list 同条件计数（分页 total）。"""
@@ -458,14 +465,17 @@ class TestDelete:
 
 class TestActiveExpressionContent:
     def test_returns_latest_active_content(self, fake_db):
-        """get_active_expression_content 取 active 链中最新 version 的 content。"""
+        """回流读取按 validation_level/usage_count 降序选取（M9-Q2-A），version/id 兜底。"""
         fake_db["cursor"]._row = {"content": "激活表达 v2"}
         out = mod.get_active_expression_content(10, user_id=7)
         assert out == "激活表达 v2"
-        assert any(
-            "status='active'" in s and "ORDER BY version DESC" in s
-            for s, _ in fake_db["cursor"].executed
-        )
+        sql, params = fake_db["cursor"].executed[-1]
+        assert "status='active'" in sql
+        assert "validation_level DESC" in sql
+        assert "usage_count DESC" in sql
+        assert "version DESC" in sql
+        assert "id DESC" in sql
+        assert params == (10, 7, "standardized")
 
     def test_returns_none_when_no_active(self, fake_db):
         fake_db["cursor"]._row = None

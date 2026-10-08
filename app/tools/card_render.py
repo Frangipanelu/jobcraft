@@ -72,7 +72,9 @@ def get_card_render_text(
     :param markdown: True 时结构化 STAR 渲染为 markdown（简历用）；False 纯文本
     :param include_tags: 结果末尾拼接扁平标签（关键词匹配 / LLM 提示词用）
     :param active_expression: 该卡的激活表达文本（type=standardized 的 active
-        版本 content，EXP-P2-07）；有则优先于结构化 STAR，无则回退现有链
+        版本 content，EXP-P2-07）；有则优先于结构化 STAR，无则回退现有链。
+        该值由上游 get_active_expression_content 按 validation_level/usage_count
+        降序选取后 attach，本函数不直接查库。
     :return: 渲染文本
     """
     if versions and card.get("id") in versions:
