@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useToastActions } from '../../context/JobCraftContext';
 import { useTabNavigate } from '../../router/tabPaths';
 import {
@@ -6,8 +7,12 @@ import {
   useRefreshCompanyResearchMutation,
   useSavePrepDraftsMutation
 } from '../../features/interview/hooks';
+import { useCreateExpressionMutation } from '../../features/experiences/expressionHooks';
+import { makeExperiencesQueryFn } from '../../features/experiences/hooks';
+import { EXPERIENCES_QUERY_KEY } from '../../features/experiences/mappers';
 import { DIMENSION_LABELS } from '../../utils/dimensions';
 import { CompanyResearchShape } from '../../api/types';
+import type { Experience } from '../../types/jobcraft';
 import {
   ArrowLeft,
   Sparkles,
@@ -108,6 +113,20 @@ export const InterviewPrepWorkspaceView: React.FC<InterviewPrepWorkspaceViewProp
   const saveDrafts = useSavePrepDraftsMutation();
   const syncedPrepIdRef = useRef<number | null>(null);
 
+  // T-M9-3「沉淀为表达」弹层（Q4-A：复用 POST /expressions，source_refs=interview_prep）
+  const [sedimentOpen, setSedimentOpen] = useState(false);
+  const [sedimentCardId, setSedimentCardId] = useState('');
+  const [sedimentContent, setSedimentContent] = useState('');
+  const createExpression = useCreateExpressionMutation();
+  const queryClient = useQueryClient();
+  // 经历卡懒加载：弹层打开才挂载 EXPERIENCES 查询（复用 W12 缓存 key；
+  // 后端 GET /cards 默认 include_inactive=false → 只列启用卡）
+  const { data: sedimentCards = [] } = useQuery<Experience[]>({
+    queryKey: [...EXPERIENCES_QUERY_KEY],
+    enabled: sedimentOpen,
+    queryFn: makeExperiencesQueryFn(queryClient),
+  });
+
   // 服务端已落库草稿 -> 本地编辑态（每份准备稿只灌入一次；
   // 保存成功后的 cache 回写不冲掉用户尚未保存的编辑）
   useEffect(() => {
@@ -185,6 +204,66 @@ export const InterviewPrepWorkspaceView: React.FC<InterviewPrepWorkspaceViewProp
   };
 
   const currentQObj = questions.find((q) => q.id === selectedQIdForAnswer) || questions[0];
+
+  /** 切换当前题：沉淀弹层按题预填，切题即收起，避免 content 与溯源题号错位。 */
+  const handleSelectQuestion = (qid: string) => {
+    setSelectedQIdForAnswer(qid);
+    setSedimentOpen(false);
+  };
+
+  /** 展开/收起「沉淀为表达」弹层，打开时以当前题草稿预填内容并清空卡选择。 */
+  const handleToggleSediment = () => {
+    if (sedimentOpen) {
+      setSedimentOpen(false);
+      return;
+    }
+    const draft = currentQObj ? answerDrafts[currentQObj.id] || '' : '';
+    if (!draft.trim()) return;
+    setSedimentContent(draft);
+    setSedimentCardId('');
+    setSedimentOpen(true);
+  };
+
+  /** 确认沉淀：把当前题草稿存为目标经历卡的 candidate 表达（溯源 interview_prep）。 */
+  const handleConfirmSediment = async () => {
+    if (!currentQObj) return;
+    const prepId = src?.id;
+    const cardId = parseInt(sedimentCardId, 10);
+    if (prepId === undefined || prepId <= 0 || !Number.isFinite(cardId)) {
+      showToast({
+        type: 'error',
+        title: '无法沉淀为表达',
+        message: '请先选择经历卡，并确认本场准备稿已落库。'
+      });
+      return;
+    }
+    try {
+      await createExpression.mutateAsync({
+        cardId,
+        content: sedimentContent,
+        source_refs: [
+          {
+            id: `interview_prep:${prepId}:${currentQObj.id}`,
+            source_type: 'interview_prep',
+            source_id: String(prepId),
+            locator: String(currentQObj.id)
+          }
+        ]
+      });
+      showToast({
+        type: 'success',
+        title: '已沉淀为表达',
+        message: '候选态，可在经历库表达面板激活。'
+      });
+      setSedimentOpen(false);
+    } catch {
+      showToast({
+        type: 'error',
+        title: '沉淀失败',
+        message: '网络或服务异常，请稍后重试。'
+      });
+    }
+  };
 
   // T-M7-6：公司调研「重新调研」（force 绕 7 天缓存）
   const refreshResearch = useRefreshCompanyResearchMutation();
@@ -471,11 +550,11 @@ export const InterviewPrepWorkspaceView: React.FC<InterviewPrepWorkspaceViewProp
                   key={q.id}
                   role="button"
                   tabIndex={0}
-                  onClick={() => setSelectedQIdForAnswer(q.id)}
+                  onClick={() => handleSelectQuestion(q.id)}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' || e.key === ' ') {
                       e.preventDefault();
-                      setSelectedQIdForAnswer(q.id);
+                      handleSelectQuestion(q.id);
                     }
                   }}
                   className={`w-full text-left p-3.5 rounded-2xl border-2 transition cursor-pointer flex items-start gap-3 ${
@@ -516,15 +595,26 @@ export const InterviewPrepWorkspaceView: React.FC<InterviewPrepWorkspaceViewProp
                 <div className="bg-white border-2 border-[#CCD8D1] rounded-2xl p-5 shadow-2xs">
                   <div className="flex justify-between items-center mb-2.5">
                     <span className="text-xs font-bold text-[#111814]">我的应答草稿 (STAR)</span>
-                    <button
-                      type="button"
-                      onClick={handleSaveAnswer}
-                      disabled={saveDrafts.isPending}
-                      className="px-3.5 py-1.5 bg-[#204E3F] hover:bg-[#16382D] disabled:opacity-60 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-xs transition"
-                    >
-                      <Save className="w-3.5 h-3.5" />
-                      <span>{saveDrafts.isPending ? '保存中…' : '保存草稿'}</span>
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={handleToggleSediment}
+                        disabled={!(answerDrafts[currentQObj.id] || '').trim()}
+                        className="px-3.5 py-1.5 bg-white border border-[#A2CAB8] hover:bg-[#DCEDE4] disabled:opacity-60 disabled:cursor-not-allowed text-[#134D3A] rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-xs transition"
+                      >
+                        <Sparkles className="w-3.5 h-3.5" />
+                        <span>沉淀为表达</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleSaveAnswer}
+                        disabled={saveDrafts.isPending}
+                        className="px-3.5 py-1.5 bg-[#204E3F] hover:bg-[#16382D] disabled:opacity-60 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-xs transition"
+                      >
+                        <Save className="w-3.5 h-3.5" />
+                        <span>{saveDrafts.isPending ? '保存中…' : '保存草稿'}</span>
+                      </button>
+                    </div>
                   </div>
                   <textarea
                     rows={7}
@@ -535,6 +625,79 @@ export const InterviewPrepWorkspaceView: React.FC<InterviewPrepWorkspaceViewProp
                     placeholder="按 STAR 结构列出你的作答提纲（Situation 背景 / Task 任务 / Action 行动 / Result 结果）..."
                     className="w-full p-4 bg-[#F8FAF9] border border-[#CCDCD4] focus:border-[#204E3F] focus:bg-white rounded-xl text-xs sm:text-[13.5px] text-[#111814] placeholder:text-[#8D9A92] outline-none resize-y leading-relaxed font-sans shadow-inner transition"
                   />
+
+                  {/* T-M9-3 沉淀为表达弹层（Q4-A：candidate 表达，source_refs=interview_prep） */}
+                  {sedimentOpen && (
+                    <div className="mt-3 p-4 bg-[#F2F8F5] border-2 border-[#A2CAB8] rounded-2xl space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-black text-[#1A5340] uppercase tracking-wider">
+                          沉淀为标准化表达（候选态）
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setSedimentOpen(false)}
+                          className="text-xs font-bold text-[#526058] hover:text-[#111814] transition cursor-pointer"
+                        >
+                          取消
+                        </button>
+                      </div>
+
+                      <div>
+                        <label
+                          htmlFor="sediment-experience-card"
+                          className="block text-xs font-semibold text-[#334239] mb-1"
+                        >
+                          目标经历卡（必选，仅启用卡）
+                        </label>
+                        <select
+                          id="sediment-experience-card"
+                          value={sedimentCardId}
+                          onChange={(e) => setSedimentCardId(e.target.value)}
+                          className="w-full px-3 py-2 text-xs rounded-lg border border-[#CCDCD4] bg-white text-[#111814] focus:border-[#204E3F] focus:outline-none"
+                        >
+                          <option value="">
+                            {sedimentCards.length ? '请选择经历卡' : '加载中 / 暂无启用的经历卡'}
+                          </option>
+                          {sedimentCards.map((card) => (
+                            <option key={card.id} value={card.id}>
+                              {card.title}
+                              {card.company ? `（${card.company}${card.role ? ` · ${card.role}` : ''}）` : ''}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label
+                          htmlFor="sediment-expression-content"
+                          className="block text-xs font-semibold text-[#334239] mb-1"
+                        >
+                          表达内容（预填当前草稿，可编辑）
+                        </label>
+                        <textarea
+                          id="sediment-expression-content"
+                          rows={4}
+                          value={sedimentContent}
+                          onChange={(e) => setSedimentContent(e.target.value)}
+                          className="w-full p-3 bg-white border border-[#CCDCD4] focus:border-[#204E3F] rounded-xl text-xs sm:text-[13px] text-[#111814] outline-none resize-y leading-relaxed font-sans transition"
+                        />
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={handleConfirmSediment}
+                        disabled={
+                          createExpression.isPending ||
+                          !sedimentCardId ||
+                          !sedimentContent.trim()
+                        }
+                        className="px-3.5 py-1.5 bg-[#204E3F] hover:bg-[#16382D] disabled:opacity-60 disabled:cursor-not-allowed text-white rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-xs transition"
+                      >
+                        <Save className="w-3.5 h-3.5" />
+                        <span>{createExpression.isPending ? '沉淀中…' : '确认沉淀'}</span>
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 <div className="bg-[#FAFBF9] border-2 border-[#CCD8D1] rounded-2xl p-5 shadow-2xs">

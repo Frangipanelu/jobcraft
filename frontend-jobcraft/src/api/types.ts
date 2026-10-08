@@ -129,6 +129,7 @@ export interface SourceRef {
     | 'jd'
     | 'jd_analysis'
     | 'interview'
+    | 'interview_prep'
     | 'transcript'
     | 'review'
     | 'external_source'

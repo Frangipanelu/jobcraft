@@ -41,6 +41,7 @@ const tasks = vi.hoisted(() => ({
 
 const experience = vi.hoisted(() => ({
   listCards: vi.fn(),
+  createExpression: vi.fn(),
 }));
 
 vi.mock('../api/auth', () => ({ ...auth }));
@@ -288,6 +289,124 @@ describe('T-M7-6 公司调研重新调研按钮', () => {
     await screen.findByText('重新调研失败');
     expect(interview.refreshInterviewPrepResearch).toHaveBeenCalledWith(7);
     expect(screen.queryByText('公司调研已更新')).not.toBeInTheDocument();
+  });
+});
+
+describe('T-M9-3 演练草稿「沉淀为表达」', () => {
+  /** 启用态经历卡（后端 GET /cards 默认 is_active=1 才返回）。 */
+  const ACTIVE_CARD = {
+    id: 5,
+    user_id: 1,
+    title: 'RAG 评测体系搭建',
+    raw_text: '负责搭建 RAG 离线与在线评测体系',
+    tags: ['RAG', '评测'],
+    ai_structured: null,
+    company: '字节跳动',
+    role: 'AI 产品经理',
+    period: '2024.06-2025.02',
+    source: 'manual',
+    card_type: 'project',
+    version: 1,
+    current_version: 1,
+    is_active: true,
+    is_confirmed: true,
+  };
+
+  /** 进入「02 演练」（服务端草稿已有一条 STAR 文本）并展开沉淀弹层。 */
+  async function openSedimentPanel() {
+    interview.listInterviewPreps.mockResolvedValue({
+      records: [{ ...PREP_RECORD, drafts: { 'q-0': 'STAR：背景→行动→结果' } }],
+    });
+    renderWithProviders(
+      <>
+        <InterviewPrepWorkspaceView interviewId="prep-7" />
+        <ToastContainer />
+      </>
+    );
+    await openQuestionSection();
+    const trigger = await screen.findByRole('button', { name: '沉淀为表达' });
+    await waitFor(() => expect(trigger).toBeEnabled());
+    fireEvent.click(trigger);
+    return trigger;
+  }
+
+  it('草稿为空时按钮 disabled，输入草稿后可用', async () => {
+    renderWithProviders(
+      <>
+        <InterviewPrepWorkspaceView interviewId="prep-7" />
+        <ToastContainer />
+      </>
+    );
+
+    const textarea = await openQuestionSection();
+    const trigger = await screen.findByRole('button', { name: '沉淀为表达' });
+    expect(trigger).toBeDisabled();
+
+    fireEvent.change(textarea, { target: { value: '刚写下的草稿' } });
+    await waitFor(() => expect(trigger).toBeEnabled());
+  });
+
+  it('点击展开弹层：内容预填当前草稿，并懒加载列出启用经历卡', async () => {
+    experience.listCards.mockResolvedValue([ACTIVE_CARD]);
+
+    await openSedimentPanel();
+
+    const content = (await screen.findByLabelText(/表达内容/)) as HTMLTextAreaElement;
+    expect(content.value).toBe('STAR：背景→行动→结果');
+
+    expect(
+      await screen.findByRole('option', { name: /RAG 评测体系搭建/ })
+    ).toBeInTheDocument();
+    // 未选卡时确认按钮不可提交
+    expect(screen.getByRole('button', { name: '确认沉淀' })).toBeDisabled();
+  });
+
+  it('选择卡并确认 → createExpression 收到 interview_prep 载荷，成功后 toast 并关闭弹层', async () => {
+    experience.listCards.mockResolvedValue([ACTIVE_CARD]);
+    experience.createExpression.mockResolvedValue({ id: 11, status: 'candidate' });
+
+    await openSedimentPanel();
+
+    // 等懒加载的经历卡选项就绪后再选卡（否则 select 上没有可选 value）
+    await screen.findByRole('option', { name: /RAG 评测体系搭建/ });
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: '5' } });
+    fireEvent.click(screen.getByRole('button', { name: '确认沉淀' }));
+
+    await waitFor(() =>
+      expect(experience.createExpression).toHaveBeenCalledWith({
+        experience_id: 5,
+        type: 'standardized',
+        content: 'STAR：背景→行动→结果',
+        source_refs: [
+          {
+            id: 'interview_prep:7:q-0',
+            source_type: 'interview_prep',
+            source_id: '7',
+            locator: 'q-0',
+          },
+        ],
+      })
+    );
+    await screen.findByText('已沉淀为表达');
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: '确认沉淀' })).not.toBeInTheDocument()
+    );
+  });
+
+  it('沉淀失败弹错误 toast 且弹层不关（禁止失败报成功）', async () => {
+    experience.listCards.mockResolvedValue([ACTIVE_CARD]);
+    experience.createExpression.mockRejectedValue(new Error('network down'));
+
+    await openSedimentPanel();
+
+    await screen.findByRole('option', { name: /RAG 评测体系搭建/ });
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: '5' } });
+    fireEvent.click(screen.getByRole('button', { name: '确认沉淀' }));
+
+    await screen.findByText('沉淀失败');
+    expect(experience.createExpression).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText('已沉淀为表达')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '确认沉淀' })).toBeInTheDocument();
   });
 });
 

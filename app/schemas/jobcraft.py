@@ -267,6 +267,7 @@ class SourceRef(BaseModel):
         "jd",
         "jd_analysis",
         "interview",
+        "interview_prep",
         "transcript",
         "review",
         "external_source",

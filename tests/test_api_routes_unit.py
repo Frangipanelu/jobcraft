@@ -1271,6 +1271,92 @@ class TestExpressionCreate:
         )
         assert resp.status_code == 422
 
+    def test_create_interview_prep_source_ref_accepted(self, monkeypatch):
+        """T-M9-3：interview_prep 溯源（prep 演练草稿沉淀）应通过 SourceRef 校验并入库。"""
+        captured = {}
+        monkeypatch.setattr(
+            "app.api.experience.db_tools.get_card", lambda *a, **k: {"id": 10}
+        )
+
+        def fake_create(data):
+            captured["source_refs"] = data["source_refs"]
+            return 5
+
+        monkeypatch.setattr("app.tools.db_expression.create_expression", fake_create)
+        monkeypatch.setattr(
+            "app.tools.db_expression.get_expression",
+            lambda *a, **k: {
+                "id": 5,
+                "user_id": 7,
+                "experience_id": 10,
+                "direction_id": None,
+                "job_id": None,
+                "type": "standardized",
+                "content": "沉淀的表达",
+                "version": 1,
+                "validation_level": 0,
+                "usage_count": 0,
+                "source_refs": [
+                    {
+                        "id": "interview_prep:7:q-0",
+                        "source_type": "interview_prep",
+                        "source_id": "7",
+                        "locator": "q-0",
+                    }
+                ],
+                "status": "candidate",
+                "created_at": None,
+                "updated_at": None,
+            },
+        )
+        resp = client.post(
+            "/api/jobcraft/experience/expressions",
+            json={
+                "experience_id": 10,
+                "type": "standardized",
+                "content": "沉淀的表达",
+                "source_refs": [
+                    {
+                        "id": "interview_prep:7:q-0",
+                        "source_type": "interview_prep",
+                        "source_id": "7",
+                        "locator": "q-0",
+                    }
+                ],
+            },
+        )
+        assert resp.status_code == 200
+        assert captured["source_refs"] == [
+            {
+                "id": "interview_prep:7:q-0",
+                "source_type": "interview_prep",
+                "source_id": "7",
+                "locator": "q-0",
+            }
+        ]
+
+    def test_create_unknown_source_type_returns_422(self, monkeypatch):
+        """闭合 Literal 仍拒绝未知 source_type（interview_prep 扩展不放松校验）。"""
+        monkeypatch.setattr(
+            "app.api.experience.db_tools.get_card", lambda *a, **k: {"id": 10}
+        )
+        resp = client.post(
+            "/api/jobcraft/experience/expressions",
+            json={
+                "experience_id": 10,
+                "type": "standardized",
+                "content": "新表达",
+                "source_refs": [
+                    {
+                        "id": "bogus:1",
+                        "source_type": "interview_prep_v2",
+                        "source_id": "1",
+                    }
+                ],
+            },
+        )
+        assert resp.status_code == 422
+
     def test_create_owned_direction_passes(self, monkeypatch):
         """direction_id 归属当前用户时应正常入库（P2C-07）。"""
         captured = {}
