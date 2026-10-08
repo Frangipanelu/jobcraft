@@ -2,6 +2,23 @@
 
 > 本文件用于追踪项目整体进度。AI 在每次会话结束或完成子任务时，必须更新本文件的对应板块。
 
+## T-M9-1 validations 表 + validation-summary 投影 + accept 写 user_confirmed（2026-10-07，C 窗·第五轮 P1 反哺链第二棒）
+
+> 计划：`docs/superpowers/plans/2026-10-07-p1-feedback-chain-m9.md` Task 1（9 条设计判断点，先方案后实现）。执行方式 = subagent-driven：fresh implementer → spec 审查（**PASS with nits**，无 Critical/Major）→ 质量审查（**APPROVE with comments**，无 Critical/Major）→ issue 收敛回派。裁决依据 = feature-alignment M9 Q1-A + DATA_MODEL §24/§30/§31 + API_SPEC §17.4 + PRD:292。
+
+- [x] **实现 `e360379`（8 文件）**：
+  - `migrations/versions/V0026__validations.sql`：§24.1 十字段 + user_id，append-only（无 updated_at、无 FK、`CREATE TABLE IF NOT EXISTS`），`uk_validation(source_type,source_id,target_type,target_id,signal_type)` + target/user/source 三索引；头注释含 Q1 裁决出处与 **target_type 扩展 experience 注记**（§24.1 枚举未含 experience，但 W12 反哺候选当前唯一落地类型即 experience，accept 第 4 步必须落点于此——判断点 1）。
+  - `app/tools/db_validation.py`（新）：四白名单元组、`map_validation_target_type`（3 类 expression→expression / experience·self_introduction·answer_drill·direction_knowledge 直通 / experience_story·expression_strategy·未知→None=not applicable 不写，对应 §31 "when applicable"）、`insert_user_confirmation_in_conn`（`INSERT…SELECT…FROM DUAL WHERE NOT EXISTS` 幂等 + strength=**moderate**——strong 预留 L2+ 跨场信号）、`get_validation_summary`（读时派生：**L1 = expression.usage_count≥1 或 user_confirmed 行存在，否则 L0**；L2-L4 后置；strength 分组计数；中文确定性 explanation；不写 `expression.validation_level` 列——架构评审「读时派生，落库即技术债」）、`ensure_validations_table`（仿 V0025 `is_schema_ready` 短路，不入 bootstrap steps）。
+  - `db_interview`：两个 `apply_*` 补 ensure（**均在 `transaction()` 之外**，不破原子性）；`_apply_feedback_card_write_in_conn` 在 `decision∈{accepted,edited}` 同游标写 validation（evidence_refs=`[fc:<ledger_id>, user_confirmation, record_id]`）；reject 单条/批量双路不写；docstring「T-M9-1 预留→已实现」。
+  - `app/api/validation.py` + server 注册：`GET /api/jobcraft/validation-summary?target_type=&target_id=`（PRD:292 形态、query 参数 snake_case；API_SPEC §17.4 的 /api/v1 形态不适用本仓前缀），422 缺参 / 400 非法类型·空 id / 500；不做目标存在性检查（投影为派生视图，未知 target 返回 L0）。
+  - 测试 +30：insert 幂等 SQL/参数序/映射/不适用不执行/JSON 序列化、summary L0/L1/explanation/strength 计数/expression 专属查询、API 三档、gate accepted·edited·rejected·批量混写。
+- [x] **双审收敛 `7110a5c`（6 文件）**：expression 1146 缺表降级（照 `db_experience.get_cards_summary` 先例 usage=0+warning；validations 1146 **不降级**=部署序问题应响亮失败）；并发撞 uk 1062 吞错（MySQL 重复键只回滚该语句 → accept 跨事务真幂等）；空 target_id 防御；uk 不含 user_id 不变量注记（DAO docstring + V0026 头，依赖 source_id=record_id 全局自增唯一）；DDL parity 测试（迁移文件 vs `_VALIDATIONS_DDL` 归一化比对）；API 500 分支 / edited 参数化 / expr 行缺失+params 断言 / auth 401 列表四组测试补齐；target_type strip + 返回类型标注。
+- **门禁（收敛后实测）**：pytest **1270 passed / 13 skipped / 0 failed**（基线 1212 只增不减）；ruff check/format 绿；encoding **424 文件 0 错**。
+- **⚠️ 共享工作区**：pathspec 仅 8+6 文件；他窗在途（JD 分类域 10 个 M 文件、`db_job.py` 等）零提交零触碰；`ruff format .` 曾把他窗新写文件纯格式化（功能代码未动，随其自然提交带走）；`e360379`/`7110a5c` 与他窗 `fb9d453`/`927cbb8`/`58b56e4`/`17938f4` 线性交错，无 index.lock 冲突。
+- **双审遗留（记录不阻塞）**：db_tools 多导出 `insert_user_confirmation_in_conn`/`map_validation_target_type` 两符号（超计划 2 符号，无害）；`idx_validation_source` 为 uk 前缀冗余（计划明文要求四索引）；docstring Google 与仓内 `:param` 双轨（存量）；V0026 列断言未入 `test_migrations_runner_unit`（parity 测试已覆盖 DDL 主体）；`_ScriptedCursor.rowcount≡1`/`_FakeConn` 忽略 dictionary 标志等替身保真度 nit（存量替身，未动）。
+- **部署序跟进（审查指出，上线时执行）**：**先 `python -m migrations.runner migrate` 应用 V0026、再发代码**——schema-ready 短路后 ensure 不建表，顺序颠倒会让 accept/summary 报 1146→500；V0026 真库应用时**单窗口跑 docker**（TODO H 节规则，先 `docker ps` 确认无他人）。
+- **下一步**：T-M9-2 回流读取改造（四消费点排序 + deprecated 语义；**动手前先读 `app/tools/jobcraft_resume.py` 当前版**——A 窗 T-M6-7/8 刚改过，跟进项 ⑦）。
+
 ## T-M6-7 + T-M6-8 投递归档咬合 + jd_alignment 写入方（2026-10-07，A 窗·Subagent-Driven 批次）
 
 > 按 `docs/feature-alignment-matrix-2026-09-28.md:352-353` 执行 M6 收尾两任务：T-M6-7（标记已投递→选中版本快照进 submission）+ T-M6-8（save-resume 同步写 `card_versions.jd_alignment`）。执行方式 = subagent-driven-development：每任务 fresh implementer → spec reviewer → code quality reviewer → issue 回派原实现者修复 → 原审查者复审，批次末整体终审。用户拍板两点：① `source_type='resume_version'`、`source_id=<新版本 id>`、`note=version_name`；② save-resume 内同步写、失败容忍不阻断生成。
