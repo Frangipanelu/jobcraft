@@ -827,6 +827,7 @@ class TestFeedbackCardWriteTransaction:
         monkeypatch.setattr(
             db_interview, "_ensure_feedback_candidates_table", lambda: None
         )
+        monkeypatch.setattr(db_interview, "_ensure_validations_table", lambda: None)
         monkeypatch.setattr(
             db_interview,
             "transaction",
@@ -865,6 +866,7 @@ class TestFeedbackCardWriteTransaction:
         monkeypatch.setattr(
             db_interview, "_ensure_feedback_candidates_table", lambda: None
         )
+        monkeypatch.setattr(db_interview, "_ensure_validations_table", lambda: None)
         monkeypatch.setattr(db_interview, "update_card_with_conn", lambda *a, **k: True)
         monkeypatch.setattr(db_interview, "transaction", lambda: _NullTransaction(conn))
         result = db_interview.apply_feedback_card_write(
@@ -881,6 +883,124 @@ class TestFeedbackCardWriteTransaction:
         assert calls == {"commit": 0, "rollback": 0}, "替身事务不自行提交"
         sqls = [sql for sql, _ in cursor.executed]
         assert any("INSERT INTO feedback_candidates" in s for s in sqls)
+
+    @staticmethod
+    def _patch_env(monkeypatch, cursor):
+        """把真实事务编排接到脚本游标上（ensure 全部短路，不连真库）。"""
+        monkeypatch.setattr(
+            db_interview, "_ensure_interview_records_table", lambda: None
+        )
+        monkeypatch.setattr(
+            db_interview, "_ensure_feedback_candidates_table", lambda: None
+        )
+        monkeypatch.setattr(db_interview, "_ensure_validations_table", lambda: None)
+        monkeypatch.setattr(
+            db_interview, "update_card_with_conn", lambda *a, **k: False
+        )
+        monkeypatch.setattr(
+            db_interview, "transaction", lambda: _NullTransaction(_FakeConn(cursor))
+        )
+
+    @staticmethod
+    def _ledger_row(decision, row_id=1):
+        return {
+            "id": row_id,
+            "decision": decision,
+            "card_version": 3,
+            "decided_at": "2026-10-07 12:00:00",
+        }
+
+    def test_accepted_path_writes_user_confirmation_validation(self, monkeypatch):
+        """T-M9-1：accepted 与写卡/台账同事务追加 user_confirmed Validation。"""
+        cursor = _ScriptedCursor(
+            [{"id": 42, "version": 3}, self._ledger_row("accepted")]
+        )
+        self._patch_env(monkeypatch, cursor)
+        db_interview.apply_feedback_card_write(
+            record_id=7,
+            user_id=1,
+            target_type="experience",
+            target_ref="42",
+            card_id=42,
+            updates={"results": ["rs"]},
+            decision="accepted",
+        )
+        inserts = [
+            (sql, params)
+            for sql, params in cursor.executed
+            if "INSERT INTO validations" in sql
+        ]
+        assert len(inserts) == 1, "accepted 必须恰好写一条 Validation"
+        sql, params = inserts[0]
+        assert "WHERE NOT EXISTS" in sql
+        assert params[0] == 1  # user_id
+        assert params[1] == "experience"  # target_type 直通
+        assert params[2] == "42"  # target_id = target_ref
+        assert params[3] == "user_confirmation"  # source_type
+        assert params[4] == "7"  # source_id = interview_record_id
+        assert params[5] == "user_confirmed"
+        assert params[6] == "moderate"
+        # evidence_refs 回指台账行：fc:<ledger_row_id>
+        assert "fc:1" in params[7]
+
+    def test_rejected_path_skips_validation_insert(self, monkeypatch):
+        """T-M9-1：rejected 只记台账，不产生 Validation 插入。"""
+        cursor = _ScriptedCursor(
+            [{"id": 42, "version": 3}, self._ledger_row("rejected", row_id=9)]
+        )
+        self._patch_env(monkeypatch, cursor)
+        db_interview.apply_feedback_card_write(
+            record_id=7,
+            user_id=1,
+            target_type="experience",
+            target_ref="42",
+            card_id=42,
+            updates={"results": ["rs"]},
+            decision="rejected",
+        )
+        sqls = [sql for sql, _ in cursor.executed]
+        assert any("INSERT INTO feedback_candidates" in s for s in sqls)
+        assert not any("INSERT INTO validations" in s for s in sqls), (
+            "rejected 不得写 Validation"
+        )
+
+    def test_batch_mixed_writes_validation_only_for_accepted(self, monkeypatch):
+        """T-M9-1 混批：accepted 条写 Validation，rejected 条不写（真实函数+脚本游标）。"""
+        cursor = _ScriptedCursor(
+            [
+                {"id": 42, "version": 3},  # accepted：卡片查询
+                self._ledger_row("accepted"),  # accepted：台账回读
+                self._ledger_row("rejected", row_id=2),  # rejected：台账回读
+            ]
+        )
+        self._patch_env(monkeypatch, cursor)
+        results = db_interview.apply_feedback_decisions(
+            7,
+            1,
+            [
+                {
+                    "target_type": "experience",
+                    "target_ref": "42",
+                    "card_id": 42,
+                    "updates": {"results": ["rs"]},
+                    "decision": "accepted",
+                },
+                {
+                    "target_type": "experience",
+                    "target_ref": "43",
+                    "decision": "rejected",
+                },
+            ],
+        )
+        assert [r["decision"] for r in results] == ["accepted", "rejected"]
+        val_inserts = [
+            (sql, params)
+            for sql, params in cursor.executed
+            if "INSERT INTO validations" in sql
+        ]
+        assert len(val_inserts) == 1, "整批只应写 accepted 条的 Validation"
+        assert val_inserts[0][1][2] == "42", "写入的 target 必须是 accepted 的 ref"
+        assert val_inserts[0][1][4] == "7"
 
 
 class _NullTransaction:

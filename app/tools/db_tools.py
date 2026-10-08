@@ -113,3 +113,10 @@ from app.tools.db_interview import (  # noqa: E402, F401
     update_interview_record_fill,
     update_interview_record_status,
 )
+
+from app.tools.db_validation import (  # noqa: E402, F401
+    ensure_validations_table,
+    get_validation_summary,
+    insert_user_confirmation_in_conn,
+    map_validation_target_type,
+)

@@ -15,6 +15,10 @@ from app.tools.db_conn import (
 )
 from app.tools.db_conn import _parse_json
 from app.tools.db_experience import update_card_with_conn
+from app.tools.db_validation import (
+    ensure_validations_table as _ensure_validations_table,
+    insert_user_confirmation_in_conn,
+)
 
 logger = logging.getLogger("jobcraft.db.interview")
 
@@ -1080,7 +1084,10 @@ def apply_feedback_card_write(
     `update_card` 与 `decide_feedback_candidate`，两者各走全局连接（autocommit），
     中途失败会留下「卡已写、台账未记」的中间态；本函数把写放在同一事务内。
 
-    T-M9-1 的 `create Validation(user_confirmed)` 将追加到同一事务内。
+    T-M9-1 已实现（本函数内同事务写入）：decision 为 accepted / edited 时，
+    台账 upsert 后在同一游标上追加一条 user_confirmed Validation
+    （DATA_MODEL §31「create Validation when applicable」）；候选类型映射为
+    not applicable（如 experience_story）时由 DAO 跳过不写，rejected 不写。
 
     Args:
         record_id: 面试记录 ID。
@@ -1102,6 +1109,7 @@ def apply_feedback_card_write(
         raise ValueError(f"非法决策值: {decision}")
     _ensure_interview_records_table()
     _ensure_feedback_candidates_table()
+    _ensure_validations_table()
     with transaction() as conn:
         return _apply_feedback_card_write_in_conn(
             conn,
@@ -1127,7 +1135,7 @@ def _apply_feedback_card_write_in_conn(
     analysis_run_id: str = "",
     decision: str = "accepted",
 ) -> Dict[str, Any]:
-    """在调用方连接上写卡 + 记台账（不开事务；供单条/批量编排复用，T-M8-9）"""
+    """在调用方连接上写卡 + 记台账 + 追加 user_confirmed Validation（不开事务；供单条/批量编排复用，T-M8-9 / T-M9-1）"""
     with conn.cursor(dictionary=True) as cur:
         cur.execute(
             "SELECT id, version FROM experience_card WHERE id=%s AND user_id=%s",
@@ -1153,6 +1161,24 @@ def _apply_feedback_card_write_in_conn(
             card_version=card_version,
             analysis_run_id=analysis_run_id,
         )
+        # T-M9-1：§31 create Validation（user_confirmed）与写卡/台账同事务；
+        # 仅 accepted/edited 追加，rejected 不写；not applicable 的候选类型
+        # （experience_story / expression_strategy / 未知值）由 DAO 返回 False 跳过。
+        if decision in ("accepted", "edited"):
+            insert_user_confirmation_in_conn(
+                cur,
+                user_id=user_id,
+                feedback_target_type=target_type,
+                target_id=str(target_ref),
+                source_id=str(record_id),
+                evidence_refs=[
+                    {
+                        "id": f"fc:{ledger_row['id']}",
+                        "source_type": "user_confirmation",
+                        "source_id": str(record_id),
+                    }
+                ],
+            )
     return {"card_version": card_version, "ledger": ledger_row}
 
 
@@ -1166,6 +1192,8 @@ def apply_feedback_decisions(
     `writes` 必须已由调用方（API 层）完成校验：候选存在、卡片归属、无冲突。
     事务内逐条执行「写卡 + 版本快照 + 台账 upsert」或「仅台账 upsert」，
     任一条失败整体回滚——「汇总一次确认」要求整批要么全成要么全不成。
+    T-M9-1：接受型条目（accepted/edited）经同一函数同事务追加 user_confirmed
+    Validation；rejected 分支只记台账，不写 Validation。
 
     Args:
         record_id: 面试记录 ID。
@@ -1185,6 +1213,7 @@ def apply_feedback_decisions(
         raise ValueError("writes 不能为空")
     _ensure_interview_records_table()
     _ensure_feedback_candidates_table()
+    _ensure_validations_table()
     results: List[Dict[str, Any]] = []
     with transaction() as conn:
         with conn.cursor(dictionary=True) as cur:
