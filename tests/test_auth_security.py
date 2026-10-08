@@ -121,6 +121,11 @@ _BUSINESS_ENDPOINTS = [
         "/api/jobcraft/interview-review/session",
         {"company": "字节跳动", "position": "AI 产品经理"},
     ),
+    (
+        "GET",
+        "/api/jobcraft/validation-summary?target_type=experience&target_id=1",
+        None,
+    ),
     # tasks
     (
         "POST",

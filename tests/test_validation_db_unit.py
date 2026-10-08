@@ -11,6 +11,7 @@
 """
 
 import json
+import os
 
 import pytest
 
@@ -219,7 +220,19 @@ class TestGetValidationSummary:
     def test_expression_target_reads_usage_count(self, fake_db):
         fake_db["expr_usage"] = 1
         mod.get_validation_summary(1, "expression", "42")
-        assert any("FROM expression" in s for s, _ in fake_db["sqls"])
+        expr_sqls = [(s, p) for s, p in fake_db["sqls"] if "FROM expression" in s]
+        assert expr_sqls, "expression 目标应查询 expression.usage_count"
+        sql, params = expr_sqls[0]
+        assert "user_id=%s" in sql, "usage_count 查询必须带 user_id 归属过滤"
+        assert params == ("42", 1)  # (id=%s, user_id=%s)
+
+    def test_expression_row_missing_returns_level_zero(self, fake_db):
+        """expression 行缺失（query_one 返回 None）→ 覆盖 `if expr_row:` False 分支。"""
+        assert fake_db["expr_usage"] is None  # 默认桩：expression 查询返回 None
+        out = mod.get_validation_summary(1, "expression", "42")
+        assert out["level"] == 0
+        assert out["usage_count"] == 0
+        assert out["explanation"] == "尚无验证信号（L0 未验证）"
 
     def test_non_expression_target_never_touches_expression(self, fake_db):
         mod.get_validation_summary(1, "experience", "42")
@@ -227,6 +240,22 @@ class TestGetValidationSummary:
         val_sqls = [x for x in fake_db["sqls"] if "FROM validations" in x[0]]
         assert val_sqls, "应按 target 查询 validations"
         assert val_sqls[0][1] == (1, "experience", "42")
+
+
+def test_v0026_ddl_matches_runtime_validations_ddl():
+    """DDL parity（DB-01）：V0026 迁移建表块与运行时 _VALIDATIONS_DDL 一致，防漂移。"""
+    import migrations.runner as runner
+
+    path = os.path.join(runner.MIGRATIONS_DIR, "V0026__validations.sql")
+    assert os.path.exists(path), "缺 V0026__validations.sql"
+    with open(path, encoding="utf-8") as fh:
+        sql = fh.read()
+    marker = "CREATE TABLE IF NOT EXISTS validations"
+    start = sql.index(marker)
+    end = sql.index("utf8mb4", start) + len("utf8mb4")
+    migration_ddl = " ".join(sql[start:end].split())
+    runtime_ddl = " ".join(mod._VALIDATIONS_DDL.split())
+    assert migration_ddl == runtime_ddl, "V0026 与 db_validation._VALIDATIONS_DDL 漂移"
 
 
 class TestValidationSummaryApi:
@@ -254,6 +283,16 @@ class TestValidationSummaryApi:
     def test_blank_target_id_returns_400(self, client):
         resp = client.get(f"{self.URL}?target_type=expression&target_id=%20%20")
         assert resp.status_code == 400
+
+    def test_summary_failure_returns_500(self, client, monkeypatch):
+        """底层查询抛非预期异常 → 端点兜底 500（不裸抛进 TestClient）。"""
+
+        def _boom(user_id, target_type, target_id):
+            raise RuntimeError("db down")
+
+        monkeypatch.setattr("app.api.validation.db_tools.get_validation_summary", _boom)
+        resp = client.get(f"{self.URL}?target_type=expression&target_id=42")
+        assert resp.status_code == 500
 
     def test_valid_target_returns_200_with_eight_fields(self, client, monkeypatch):
         captured = {}

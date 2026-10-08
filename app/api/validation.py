@@ -12,6 +12,7 @@
 """
 
 import logging
+from typing import Any, Dict
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
@@ -28,28 +29,29 @@ def jobcraft_validation_summary(
     target_type: str = Query(...),
     target_id: str = Query(...),
     current_user: int = Depends(get_current_user),
-):
+) -> Dict[str, Any]:
     """T-M9-1：某对象的 Validation Level 投影（本期只落 L0/L1 信号，Q1-A）。
 
     Args:
-        target_type: 被验证对象类型（白名单 §24.1 + experience），非法值 400。
+        target_type: 被验证对象类型（白名单 §24.1 + experience），strip 后非法值 400。
         target_id: 被验证对象 ID，strip 后为空 400。
         current_user: JWT 解析出的用户 ID。
 
     Returns:
-        dict: ``{target_type, target_id, level, usage_count, strong_signals,
-        moderate_signals, weak_signals, explanation}``（API_SPEC §17.4，
-        snake_case wire 符合 ADR-A4）。
+        Dict[str, Any]: ``{target_type, target_id, level, usage_count,
+        strong_signals, moderate_signals, weak_signals, explanation}``
+        （API_SPEC §17.4，snake_case wire 符合 ADR-A4）。
 
     Raises:
         HTTPException: 400 参数非法 / 422 缺参 / 500 内部错误。
     """
     try:
+        trimmed_target_type = target_type.strip()
         trimmed_target_id = target_id.strip()
         if not trimmed_target_id:
             raise HTTPException(status_code=400, detail="target_id 不能为空")
         return db_tools.get_validation_summary(
-            current_user, target_type, trimmed_target_id
+            current_user, trimmed_target_type, trimmed_target_id
         )
     except HTTPException:
         raise

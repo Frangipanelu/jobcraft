@@ -910,11 +910,13 @@ class TestFeedbackCardWriteTransaction:
             "decided_at": "2026-10-07 12:00:00",
         }
 
-    def test_accepted_path_writes_user_confirmation_validation(self, monkeypatch):
-        """T-M9-1：accepted 与写卡/台账同事务追加 user_confirmed Validation。"""
-        cursor = _ScriptedCursor(
-            [{"id": 42, "version": 3}, self._ledger_row("accepted")]
-        )
+    @pytest.mark.parametrize("decision", ["accepted", "edited"])
+    def test_accepted_path_writes_user_confirmation_validation(
+        self, monkeypatch, decision
+    ):
+        """T-M9-1：accepted/edited 与写卡/台账同事务追加 user_confirmed Validation
+        （锁定 `decision in ("accepted", "edited")` 两分支）。"""
+        cursor = _ScriptedCursor([{"id": 42, "version": 3}, self._ledger_row(decision)])
         self._patch_env(monkeypatch, cursor)
         db_interview.apply_feedback_card_write(
             record_id=7,
@@ -923,14 +925,14 @@ class TestFeedbackCardWriteTransaction:
             target_ref="42",
             card_id=42,
             updates={"results": ["rs"]},
-            decision="accepted",
+            decision=decision,
         )
         inserts = [
             (sql, params)
             for sql, params in cursor.executed
             if "INSERT INTO validations" in sql
         ]
-        assert len(inserts) == 1, "accepted 必须恰好写一条 Validation"
+        assert len(inserts) == 1, f"{decision} 必须恰好写一条 Validation"
         sql, params = inserts[0]
         assert "WHERE NOT EXISTS" in sql
         assert params[0] == 1  # user_id

@@ -13,12 +13,17 @@ db_bootstrap._BOOTSTRAP_STEPS，不碰共享引导文件）。
   本期只落 L0/L1 信号（Q1-A 裁决），不写 ``expression.validation_level``
   （架构评审：投影读时计算，落库即技术债）。
 
+不变量：validations append-only 永久保留，``delete_interview_record`` 清台账后
+evidence_refs 的 ``fc:`` 回指可能悬空（设计如此）。
+
 导入约束：只依赖 app.tools.db_conn，**不 import db_interview / db_tools（防环）**。
 """
 
 import json
 import logging
 from typing import Any, Dict, List, Optional
+
+from mysql.connector import Error as MySQLError
 
 from app.tools.db_conn import connection, is_schema_ready, query_all, query_one
 
@@ -134,6 +139,9 @@ def ensure_validations_table() -> None:
             cur.execute(_VALIDATIONS_DDL)
 
 
+_DUPLICATE_KEY_ERRNO = 1062
+
+
 def insert_user_confirmation_in_conn(
     cur: Any,
     *,
@@ -149,19 +157,37 @@ def insert_user_confirmation_in_conn(
     Feedback Accept 单条与批量确认共用本函数：写卡、台账 upsert 与本插入
     在同一事务内，任一失败整体回滚（DATA_MODEL §31 Accept Feedback）。
 
+    不变量：``uk_validation`` 不含 user_id，依赖 ``source_id``
+    （interview_record_id 全局自增 PK）天然用户内唯一；未来换 source 形态需重评。
+
+    并发语义：NOT EXISTS 段是第一道幂等保险；并发竞态下唯一键冲突（errno 1062）
+    由本函数吞掉返回 False——MySQL 重复键只回滚该语句，事务可继续，不致整笔
+    accept 事务回滚。
+
     Args:
         cur: 调用方事务游标（不自开事务、不提交）。
         user_id: 归属用户。
         feedback_target_type: 候选 target_type，经
             :func:`map_validation_target_type` 映射；不适用时直接返回。
-        target_id: 被验证对象 ID（本期即候选 target_ref）。
+        target_id: 被验证对象 ID（本期即候选 target_ref）；strip 后为空直接
+            返回 False（纵深防御，不抛异常）。
         source_id: 证据来源 ID（本期即 interview_record_id）。
         evidence_refs: SourceRef[]（§3.2），JSON 序列化 ``ensure_ascii=False``。
         notes: 备注，可空。
 
     Returns:
-        bool: 是否真正插入；not applicable（映射为 None）或证据已存在时为 False。
+        bool: 是否真正插入；not applicable（映射为 None）、target_id 为空、
+        证据已存在或并发重复键（errno 1062）时为 False。
+
+    Raises:
+        MySQLError: 除 errno 1062 之外的数据库错误原样上抛（事务由调用方回滚）。
     """
+    if not str(target_id).strip():
+        logger.debug(
+            "target_id 为空，跳过 user_confirmed 写入: %r",
+            target_id,
+        )
+        return False
     target_type = map_validation_target_type(feedback_target_type)
     if target_type is None:
         logger.debug(
@@ -169,26 +195,42 @@ def insert_user_confirmation_in_conn(
             feedback_target_type,
         )
         return False
-    cur.execute(
-        _INSERT_USER_CONFIRMATION_SQL,
-        (
-            user_id,
+    try:
+        cur.execute(
+            _INSERT_USER_CONFIRMATION_SQL,
+            (
+                user_id,
+                target_type,
+                str(target_id),
+                "user_confirmation",
+                str(source_id),
+                "user_confirmed",
+                USER_CONFIRMATION_STRENGTH,
+                json.dumps(evidence_refs, ensure_ascii=False)
+                if evidence_refs
+                else None,
+                notes,
+                # WHERE NOT EXISTS 段：与 uk_validation 列同序
+                "user_confirmation",
+                str(source_id),
+                target_type,
+                str(target_id),
+                "user_confirmed",
+            ),
+        )
+    except MySQLError as e:
+        if getattr(e, "errno", None) != _DUPLICATE_KEY_ERRNO:
+            raise
+        # uk_validation 并发重复键：NOT EXISTS 与竞态插入同时通过时兜底，
+        # 重复键只回滚该语句，事务可继续。
+        logger.debug(
+            "user_confirmed validation 并发重复（errno 1062），跳过: "
+            "target=%s/%s source=%s",
             target_type,
-            str(target_id),
-            "user_confirmation",
-            str(source_id),
-            "user_confirmed",
-            USER_CONFIRMATION_STRENGTH,
-            json.dumps(evidence_refs, ensure_ascii=False) if evidence_refs else None,
-            notes,
-            # WHERE NOT EXISTS 段：与 uk_validation 列同序
-            "user_confirmation",
-            str(source_id),
-            target_type,
-            str(target_id),
-            "user_confirmed",
-        ),
-    )
+            target_id,
+            source_id,
+        )
+        return False
     inserted = int(getattr(cur, "rowcount", 0) or 0) > 0
     logger.debug(
         "user_confirmed validation 写入: target=%s/%s source=%s inserted=%s",
@@ -200,6 +242,9 @@ def insert_user_confirmation_in_conn(
     return inserted
 
 
+_TABLE_MISSING_ERRNO = 1146
+
+
 def get_validation_summary(
     user_id: int, target_type: str, target_id: str
 ) -> Dict[str, Any]:
@@ -209,6 +254,8 @@ def get_validation_summary(
 
     - ``usage_count``：仅 ``target_type='expression'`` 时读
       ``expression.usage_count``（user_id 归属过滤），其余类型恒 0；
+      ``expression`` 表缺失（errno 1146，未迁移库）降级为 0 并记 warning
+      （照 db_experience.get_cards_summary 先例，该场景下语义必为 0）；
     - ``level``：usage_count ≥ 1 或存在 user_confirmed 行 → 1，否则 0
       （§24.2 L0 未验证 / L1 已使用）；
     - ``strong/moderate/weak_signals``：该 target 全部 validation 行按
@@ -225,10 +272,14 @@ def get_validation_summary(
 
     Returns:
         Dict[str, Any]: ``{target_type, target_id, level, usage_count,
-        strong_signals, moderate_signals, weak_signals, explanation}``。
+        strong_signals, moderate_signals, weak_signals, explanation}``；
+        expression 表缺失时 ``usage_count=0``、``level`` 按 0/1 规则推导。
 
     Raises:
         ValueError: target_type 不在白名单。
+        MySQLError: validations 查询失败原样上抛——含 errno 1146（表缺失 =
+            部署序问题，应响亮失败，不降级，与 expression usage 查询的降级
+            相区别）；expression usage 查询仅对 errno 1146 降级，其余原样上抛。
     """
     if target_type not in VALIDATION_TARGET_TYPES:
         raise ValueError(f"target_type 仅允许: {', '.join(VALIDATION_TARGET_TYPES)}")
@@ -240,10 +291,19 @@ def get_validation_summary(
     )
     usage_count = 0
     if target_type == "expression":
-        expr_row = query_one(
-            "SELECT usage_count FROM expression WHERE id=%s AND user_id=%s",
-            (target_id, user_id),
-        )
+        try:
+            expr_row = query_one(
+                "SELECT usage_count FROM expression WHERE id=%s AND user_id=%s",
+                (target_id, user_id),
+            )
+        except MySQLError as e:
+            if getattr(e, "errno", None) != _TABLE_MISSING_ERRNO:
+                raise
+            logger.warning(
+                "expression 表缺失（未迁移），usage_count 按 0 计: target=%s",
+                target_id,
+            )
+            expr_row = None
         if expr_row:
             usage_count = int(expr_row.get("usage_count") or 0)
 

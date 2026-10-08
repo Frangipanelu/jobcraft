@@ -41,6 +41,8 @@
 -- 幂等（DB-02）：CREATE TABLE IF NOT EXISTS，重复执行安全；写入侧另以
 --   uk_validation 唯一键 + DAO 的 INSERT ... WHERE NOT EXISTS 双保险，
 --   保证「同一证据不重复追加」而「不同 source 仍可各自追加一行」。
+--   不变量：uk_validation 不含 user_id，依赖 source_id（interview_record_id
+--   全局自增 PK）天然用户内唯一；未来换 source 形态需重评。
 --
 -- 前向兼容（AGENTS §4.4）：只新增表，不改/删既有表与列；旧代码不读该表，
 --   回滚代码即可，不动 DB。
