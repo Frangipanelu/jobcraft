@@ -210,6 +210,7 @@ describe('versionsToHistory（EXP-P1-06b 后端版本回流）', () => {
       3,
     );
     expect(history.map((v) => v.version)).toEqual(['V3', 'JD', 'V2']);
+    expect(history[1].version).not.toMatch(/^V\d+$/);
     expect(history[1].source).toBe('jd_alignment');
     expect(history[2].source).toBe('manual');
   });
