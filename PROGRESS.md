@@ -2,6 +2,18 @@
 
 > 本文件用于追踪项目整体进度。AI 在每次会话结束或完成子任务时，必须更新本文件的对应板块。
 
+## B 窗 P3 批收口：T-M4-4 + T-M10-4 + T-M10 残量（2026-10-09，B 窗·Subagent-Driven 三任务串行）
+
+> TODO:72 认领（2026-10-07 第六轮）。执行方式 = 每任务 fresh implementer → spec 审 → 质量审 → issue 回派原实现者 → 原审查者复审；批次末整体终审（跨任务契约咬合 + 红线扫描 + 门禁实跑）。零迁移、零 LLM、全程 mock、pathspec 提交。
+
+- [x] **T-M4-4 历史表格+方向字段（`cd3518b` BE + `d1de6f1` FE + `c1e02c5` 评审修复）**：BE `list_job_analyses` 分组批量查询附 `jd_classification`（消 N+1）+ detail 附分类；FE 客户端分页 `HISTORY_PAGE_SIZE=10`（页码越界写回）+ 分类列（方向名+来源徽标）+ `JDClassificationEditModal` 编辑链（成功失效 jdAnalyses 缓存，新建分析链同步失效）+ 报告详情「方向分类」只读区段；方向解析查询带 user_id（可选隔离）。
+- [x] **T-M10-4 认证隐患（`c96fb00` BE + `332bec7` FE + `2fc77e4` 评审修复）**：`POST /tasks/submit` 从 JWT 注入 `{**raw_params, "user_id": current_user}`（客户端塞入的 task_id 源头剥离、params 非对象 400）；worker 分发层删 fallback 1——user_id 缺失 → ValueError → 重试 1 次 → failed+DLQ；7 个 handler 全改 `_require_user_id`（红线 workflows/tools/schemas 的 `user_id=1` 签名默认值未动，登记跟进）；FE `currentUserId: number|null`（初值 null、登出清空、`normalizeUserId` 仅收正有限数、导出文件名 anonymous 兜底）；API_SPEC §24.1 四段注记（docs 不入库）。
+- [x] **T-M10 残量三小项（`f6a1e39` + `ac67e97` + `607d2c0` + `95fb63b` 评审修复）**：① T-M10-2 残② `runTaskOrSync` 分级降级——`ApiError`（additive 带 status）+ 4xx/503 两阶段不降级上抛、超时/5xx 非503/无 status 降级 + `[task_fallback]` 单点结构化打点（占位，PRD §8.1 缺口如实注明）+16 例测试；② T-M10-3 残 盘点表 `docs/dead-code-inventory-2026-10-07.md` 落盘（已闭环回链/本批删除/待裁决 9 条零消费端点 + recommend-tags）+ 删 3 死导出；③ T-M10-7 残 SYSTEM_SPEC §37 枚举分期注（queued↔pending/succeeded↔completed 漂移，实现为权威，同族注 API_SPEC:429/:1112 与 §44.3 词表）。
+- **审查链**：三任务 spec ✅ + 质量 ✅（含各 1 轮 issue 回派修复复审）→ **批次终审 Ready to push = Yes**（Critical 0；跨任务核验：server 全部 400/404/503 分支均被 `shouldRethrow` 捕获、5 个真实调用点 4 个有 toast 接管，唯一吞错 `review/hooks.ts:120` 属 C 窗域登记跟进）。
+- **门禁（终审实跑）**：encoding **433 文件 0 错**；ruff check/format ✓；pytest **1345 passed / 13 skipped**；tsc exit 0；vitest **391→392 passed / 41 files**（波动为他窗在途瞬态）；build ✓。数字漂移已归因（基线 1333/375 + 本批新测试 + 他窗 P7-1/2、M7-8 并行提交）。
+- **⚠️ 共享工作区**：10 笔 commit pathspec 精确，`context/JobCraftContext.tsx` 触碰为 T-M10-4 规格例外；他窗在途 interview/resume-step 域 6+ 文件零卷入；终审复核时本批 commit 已随并行窗口整分支 push 落在 origin/main（发布后复核 = 无需回滚）。
+- **跟进项**：见 TODO H 节「B 窗 P3 批跟进项」（①删除链复活 ②FETCH_LIMIT 100 截断 ③归属探针开销 ④source=ai provenance ⑤JD 域文件膨胀 ⑥hex/令牌 ⑦T-M10-4 Minor 8-13 ⑧任务归属校验+params 剥离 ⑨review 吞错（C 窗域）⑩打点 schema 对齐 PRD §8.1 ⑪D-1 注记移位 ⑫终审 Minor（job.ts userId JSDoc/console.error/180s 漂移）⑬盘点表待裁决段）。
+
 ## T-M7-8 向导「关联简历」切投递版本——H⑪ 方案 1 闭环（2026-10-08，C 窗·顺手任务）
 
 > 背景：T-M7-5 残（`1d0d4f0`）实现时发现向导选的底座简历（`hr-<serverId>`）与 `resume_version` 域不同源且选择无下游消费（登记 H 节 ⑪）。三方案比选（1 切版本数据源 / 2 补列 / 3 仅改文案）后用户裁决**方案 1**：零 DDL、零 BE。任务号 T-M7-8，subagent-driven 实现 + 主窗口规格/质量双审。
