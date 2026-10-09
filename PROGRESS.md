@@ -2,6 +2,16 @@
 
 > 本文件用于追踪项目整体进度。AI 在每次会话结束或完成子任务时，必须更新本文件的对应板块。
 
+## T-M7-8 向导「关联简历」切投递版本——H⑪ 方案 1 闭环（2026-10-08，C 窗·顺手任务）
+
+> 背景：T-M7-5 残（`1d0d4f0`）实现时发现向导选的底座简历（`hr-<serverId>`）与 `resume_version` 域不同源且选择无下游消费（登记 H 节 ⑪）。三方案比选（1 切版本数据源 / 2 补列 / 3 仅改文案）后用户裁决**方案 1**：零 DDL、零 BE。任务号 T-M7-8，subagent-driven 实现 + 主窗口规格/质量双审。
+
+- [x] **实现 `576c053`（6 文件，+368/-126）**：`ResumeStep` 数据源换 `useResumeVersionsQuery`（共享简历工作台缓存、key 不变）按 `job_analysis_id` 客户端过滤 + `version_no` 降序，模式按钮改「选择简历版本」，空列表纯文案「可先到简历工作台生成」，预览卡（版本名/v·时间/「当前投递版」徽标），**上传成功删回填选中**（底座 `hr-` id 不入版本字段，域隔离，FE-UPLOAD-01 上传链不变）；`NewInterviewModal` state/draft 改 `selectedVersionId` + 解析 `jobAnalysisId` + finish 传 `resumeVersionId`（仅 existing 且已选）；`hooks.ts` `CreateInterviewArgs.resumeVersionId?`，派生块包进 `if (resumeVersionId == null)` fallback（**内部一字未改**），显式优先/`none`/`upload`/未选走派生；`types/jobcraft.ts` 字段改名（旧草稿读 `undefined` 安全）。
+- [x] **主窗口规格审查补 1 修复**：跨岗位切换/草稿残留的旧 `selectedVersionId` 不在本岗位列表时——select 显示空但显式 id 仍透传（**他岗版本泄漏进场次**）→ `ResumeStep` 加自愈 effect（`!isPending` 且 id 不在过滤列表 → 自动清空），+2 测试（旧选中自愈清空 / 有效选中不误清）。
+- **门禁（本批实跑）**：tsc exit 0；定向 vitest **19/19**；全量 vitest **386/386（41 文件，0 failed）**；build ✓；ruff ✓；pytest **1310 passed / 13 skipped**；encoding **429 文件 0 错**。全量曾见 1 failed 复跑即绿——他窗在途测试文件瞬态（两次跑间其新增 2 个测试文件），与本改动无关。
+- **他窗并发**：本批他窗在途 company_research（py）+ 曾同域 FE（`api/types`/`interview/mappers`）交错，pathspec 6 文件零越界。
+- **遗留（登记 H 节 ⑪，非本任务范围）**：空列表「去简历工作台生成」跳转 CTA；方案 2 底座 `base_resume_id` 落列（等真实消费方）。
+
 ## T-P7-1 公司调研 wire 统一包 aspects 层 + 规格审查修复收口（2026-10-09，A 窗·P7 批首任务）
 
 > 首轮实现 `0d890a9`（BE schema+prompt v2）+ `2e580b3`（FE 双形映射）经规格审查 **FAIL**（1 Critical + 1 Major + 5 Minor）；本节为审查修复收口，两个修复 commit 精确 pathspec、未推送。
