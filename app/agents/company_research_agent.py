@@ -22,6 +22,7 @@ def _build_company_prompt(company: str, search_data: Dict[str, Any]) -> str:
     return load_prompt(
         "interview",
         "company_research",
+        version=2,
         company=company,
         search_data=json.dumps(search_data, ensure_ascii=False, default=str)[:8000],
     )
@@ -47,7 +48,7 @@ class CompanyResearchAgent(BaseAgent):
             CompanyResearchInfo,
             prompt,
             debug_label="company_research",
-            prompt_version="1",
+            prompt_version="2",
         )
         return {"info": info.model_dump()}
 

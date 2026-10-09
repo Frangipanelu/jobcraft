@@ -517,38 +517,78 @@ def test_question_intent_agent_with_mock_llm(monkeypatch):
 def test_company_research_agent_empty_input(monkeypatch):
     from app.agents.company_research_agent import CompanyResearchAgent
 
+    captured = {}
+
     def _fake_invoke(model, schema, prompt, **kwargs):
-        return schema(
-            basic={}, business={}, funding={}, team={}, industry={}, news=[], sources=[]
-        )
+        captured.update(kwargs)
+        captured["prompt"] = prompt
+        return schema()
 
     monkeypatch.setattr(
         "app.agents.company_research_agent.invoke_structured", _fake_invoke
     )
     out = CompanyResearchAgent().run({"company": "", "search_data": {}})
-    assert out["info"]["basic"] == {}
-    assert out["info"]["business"] == {}
+    # T-P7-1：六维 aspect 默认空列表（无据维=空，不编造）
+    assert out["info"]["overview"] == []
+    assert out["info"]["business"] == []
+    assert out["info"]["reputation"] == []
+    # 版本化：prompt v2 + prompt_version 记账
+    assert captured["prompt_version"] == "2"
+    assert "reputation" in captured["prompt"]
 
 
 def test_company_research_agent_with_mock_llm(monkeypatch):
     from app.agents.company_research_agent import CompanyResearchAgent
 
     fake = {
-        "basic": {
-            "name": "字节跳动",
-            "founded": "2012",
-            "headquarters": "北京",
-            "size": "10万+",
-        },
-        "business": {
-            "main_products": ["抖音", "今日头条"],
-            "business_model": "广告+电商",
-        },
-        "funding": {"latest_round": "Pre-IPO", "valuation": "1000亿美元"},
-        "team": {"founders": "张一鸣"},
-        "industry": {"sector": "互联网", "trends": ["AI", "短视频"]},
-        "news": [{"title": "字节跳动发布新AI产品", "date": "2026-01-15"}],
-        "sources": ["https://example.com"],
+        "overview": [
+            {
+                "content": "字节跳动 2012 年成立于北京，团队 10 万+",
+                "source_url": "https://example.com/about",
+                "source_type": "官方",
+                "sufficiency": "full",
+            }
+        ],
+        "business": [
+            {
+                "content": "主营抖音/今日头条，广告+电商盈利（自研）",
+                "source_url": "https://example.com/biz",
+                "source_type": "官方",
+                "sufficiency": "full",
+            }
+        ],
+        "ecosystem": [
+            {
+                "content": "短视频赛道头部（推断）",
+                "source_type": "AI推断",
+                "sufficiency": "partial",
+            }
+        ],
+        "team": [
+            {
+                "content": "创始人张一鸣",
+                "source_url": "https://example.com/team",
+                "source_type": "官方",
+                "sufficiency": "full",
+            }
+        ],
+        "recent": [
+            {
+                "content": "发布新 AI 产品",
+                "source_url": "https://news.example.com/a",
+                "date": "2026-01-15",
+                "source_type": "新闻",
+                "sufficiency": "partial",
+            }
+        ],
+        "reputation": [
+            {
+                "content": "牛客面经：三轮技术面重项目深挖",
+                "source_url": "https://nowcoder.com/m/xxx",
+                "source_type": "社交",
+                "sufficiency": "partial",
+            }
+        ],
     }
 
     def _fake_invoke(model, schema, prompt, **kwargs):
@@ -563,5 +603,8 @@ def test_company_research_agent_with_mock_llm(monkeypatch):
             "search_data": {"search_results": [{"query": "字节跳动", "result": {}}]},
         }
     )
-    assert out["info"]["basic"]["name"] == "字节跳动"
-    assert out["info"]["business"]["main_products"] == ["抖音", "今日头条"]
+    assert out["info"]["overview"][0]["content"].startswith("字节跳动")
+    assert out["info"]["business"][0]["source_type"] == "官方"
+    assert out["info"]["recent"][0]["date"] == "2026-01-15"
+    assert out["info"]["reputation"][0]["source_type"] == "社交"
+    assert "basic" not in out["info"]

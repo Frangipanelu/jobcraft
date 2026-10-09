@@ -868,16 +868,66 @@ class InterviewPrepLLMOutput(InterviewPrepResult):
 # ============================================================
 
 
-class CompanyResearchInfo(BaseModel):
-    """公司背调信息结构"""
+class ResearchItem(BaseModel):
+    """公司调研单条条目：内容与来源绑定（D3 Evidence 契约）。
 
-    basic: Dict[str, Any] = Field(default_factory=dict)
-    business: Dict[str, Any] = Field(default_factory=dict)
-    funding: Dict[str, Any] = Field(default_factory=dict)
-    team: Dict[str, Any] = Field(default_factory=dict)
-    industry: Dict[str, Any] = Field(default_factory=dict)
-    news: List[Dict[str, Any]] = Field(default_factory=list)
-    sources: List[str] = Field(default_factory=list)
+    每条信息必须能追溯来源强度：source_url/source_type 绑定来源，
+    sufficiency 标注条目级证据强度。纯推断条目 source_type=AI推断
+    且 source_url 可为空——任何降级路径不产出无来源内容（铁律）。
+    """
+
+    content: str = Field(
+        ..., min_length=1, description="面试桌上直接用得上的一句话（禁止空串）"
+    )
+    source_url: str = Field("", description="来源 URL；AI推断条目可为空")
+    date: str = Field("", description="信息日期 YYYY-MM-DD，近期动态尽量提供")
+    source_type: Literal["官方", "新闻", "社交", "AI推断"] = Field(
+        "AI推断",
+        description="来源类型：官网域→官方，权威媒体→新闻，牛客/脉脉/知乎 UGC→社交，无直接来源→AI推断",
+    )
+    sufficiency: Literal["full", "partial", "insufficient"] = Field(
+        "partial",
+        description="条目级证据强度：full=来源明确，partial=部分佐证，insufficient=存疑待核",
+    )
+
+
+class CompanyResearchInfo(BaseModel):
+    """公司背调 6 维结构（P7 维度终稿，D3：schema 内层结构化）。
+
+    唯一目的=拿下面试；评估类信息（薪资/吐槽/去不去判断）不进本期。
+    每维 ≤5 条，只留面试桌上用得上的句子；维级缺证据=空列表
+    （消费方视空为不足），禁止编造占位条目。
+    旧自由字段 basic/business/funding/team/industry/news/sources 已删除；
+    旧缓存读兼容由 FE 双形消费完成（mappers.buildInterviewFromPrep）。
+
+    :param overview: ①概况卡（成立/规模/阶段一句话），服务开场闲聊，官网顺带
+    :param business: ②业务与产品（含盈利方式+是否自研），服务「你对我们业务的理解」，必产
+    :param ecosystem: ③生态位与上升空间，服务「怎么看行业/公司发展」，尽力且条目全标 AI推断
+    :param team: ④创始团队与文化信号，服务 HR 面文化匹配，官网顺带（1-2 条）
+    :param recent: ⑤近期动态，服务「最近关注我们什么」，必产
+    :param reputation: ⑥口碑与面经（牛客/脉脉/知乎面试经验），服务「面试官会问什么怎么答」，必产
+    """
+
+    overview: List[ResearchItem] = Field(
+        default_factory=list, max_length=5, description="①概况卡（成立/规模/阶段）"
+    )
+    business: List[ResearchItem] = Field(
+        default_factory=list, max_length=5, description="②业务与产品（必产）"
+    )
+    ecosystem: List[ResearchItem] = Field(
+        default_factory=list,
+        max_length=5,
+        description="③生态位与上升空间（条目全标 AI推断）",
+    )
+    team: List[ResearchItem] = Field(
+        default_factory=list, max_length=5, description="④创始团队与文化信号"
+    )
+    recent: List[ResearchItem] = Field(
+        default_factory=list, max_length=5, description="⑤近期动态（必产）"
+    )
+    reputation: List[ResearchItem] = Field(
+        default_factory=list, max_length=5, description="⑥口碑与面经（必产）"
+    )
 
 
 class CompanyResearchResult(BaseModel):
