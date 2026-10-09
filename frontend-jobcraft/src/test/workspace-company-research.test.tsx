@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { fireEvent, screen } from '@testing-library/react';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { renderWithProviders } from './test-utils';
 import { InterviewPrepWorkspaceView } from '../components/interview/InterviewPrepWorkspaceView';
 import type { CompanyResearchShape, InterviewPrepRecord } from '../api/types';
@@ -214,7 +214,7 @@ describe('T-P7-1 工作区公司调研双形渲染', () => {
     expect(screen.queryByText('公司概况')).not.toBeInTheDocument();
   });
 
-  it('两者皆缺（company_research 为 null）时不崩，落到既有空态文案', async () => {
+  it('两者皆缺（company_research 为 null）→ 显式降级态，不渲染空壳 InfoRow（T-P7-3 行5）', async () => {
     interview.listInterviewPreps.mockResolvedValue({
       records: [buildRecord({ company_research: null })],
     });
@@ -222,9 +222,86 @@ describe('T-P7-1 工作区公司调研双形渲染', () => {
     renderWithProviders(<InterviewPrepWorkspaceView interviewId="prep-7" />);
     await openOverview();
 
-    expect(await screen.findByText('暂无可展示的新闻素材。')).toBeInTheDocument();
-    expect(screen.getAllByText('待补充').length).toBeGreaterThan(0);
+    // 降级态：显式文案 + 重试入口（重新调研按钮）
+    expect(await screen.findByText('调研暂不可用')).toBeInTheDocument();
+    expect(screen.getAllByText('重新调研').length).toBeGreaterThan(0);
+
+    // 不渲染「待补充」式空壳区块（P7-1 旧空态断言被降级态取代）
+    expect(screen.queryByText('暂无可展示的新闻素材。')).not.toBeInTheDocument();
+    expect(screen.queryByText('待补充')).not.toBeInTheDocument();
     expect(screen.queryByText('公司概况')).not.toBeInTheDocument();
     expect(screen.queryByText('成立时间')).not.toBeInTheDocument();
+    expect(screen.queryByText('近期重大业务动态 (面试破冰与行业思考素材)')).not.toBeInTheDocument();
+  });
+
+  it('内容全空（aspects 六维全空数组）同样走降级态，不渲染空壳', async () => {
+    const emptyAspects = {
+      overview: [],
+      business: [],
+      ecosystem: [],
+      team: [],
+      recent: [],
+      reputation: [],
+    };
+    interview.listInterviewPreps.mockResolvedValue({
+      records: [buildRecord({ company_research: { aspects: emptyAspects } })],
+    });
+
+    renderWithProviders(<InterviewPrepWorkspaceView interviewId="prep-7" />);
+    await openOverview();
+
+    expect(await screen.findByText('调研暂不可用')).toBeInTheDocument();
+    expect(screen.queryByText('公司概况')).not.toBeInTheDocument();
+    expect(screen.queryByText('待补充')).not.toBeInTheDocument();
+  });
+});
+
+describe('T-P7-3 降级矩阵前端态（stale 提示 + force 刷新消失）', () => {
+  it('stale: true → 正常渲染数据 + 过时提示 + 重新调研按钮可用', async () => {
+    interview.listInterviewPreps.mockResolvedValue({
+      records: [buildRecord({ company_research: { aspects: NEW_ASPECTS, stale: true } })],
+    });
+
+    renderWithProviders(<InterviewPrepWorkspaceView interviewId="prep-7" />);
+    await openOverview();
+
+    // 数据正常渲染（不因 stale 降级成空态）
+    expect(await screen.findByText('公司概况')).toBeInTheDocument();
+    expect(screen.getAllByText(BIZ_MAIN).length).toBeGreaterThan(0);
+
+    // 低调过时提示
+    expect(await screen.findByText(/调研数据可能过时/)).toBeInTheDocument();
+
+    // 重新调研按钮存在且可点（非 disabled）
+    const btn = screen.getByRole('button', { name: /重新调研/ });
+    expect(btn).toBeEnabled();
+  });
+
+  it('force 重新调研成功 → INTERVIEWS 失效重拉，stale 提示消失（快照被覆盖为非 stale）', async () => {
+    interview.listInterviewPreps
+      .mockResolvedValueOnce({
+        records: [buildRecord({ company_research: { aspects: NEW_ASPECTS, stale: true } })],
+      })
+      .mockResolvedValueOnce({
+        records: [buildRecord({ company_research: { aspects: NEW_ASPECTS } })],
+      });
+    interview.refreshInterviewPrepResearch.mockResolvedValue({ id: 7, company_research: {} });
+
+    renderWithProviders(<InterviewPrepWorkspaceView interviewId="prep-7" />);
+    await openOverview();
+    expect(await screen.findByText(/调研数据可能过时/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /重新调研/ }));
+
+    // mutation 成功 → invalidate INTERVIEWS → 重拉为非 stale 快照 → 提示消失
+    await waitFor(() => {
+      expect(interview.refreshInterviewPrepResearch).toHaveBeenCalledWith(7);
+    });
+    await waitFor(() => {
+      expect(screen.queryByText(/调研数据可能过时/)).not.toBeInTheDocument();
+    });
+    // 非 stale 正常态仍渲染数据 + 按钮（零回归）
+    expect(screen.getAllByText(BIZ_MAIN).length).toBeGreaterThan(0);
+    expect(screen.getByRole('button', { name: /重新调研/ })).toBeEnabled();
   });
 });

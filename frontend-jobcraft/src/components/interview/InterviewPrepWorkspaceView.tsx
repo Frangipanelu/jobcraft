@@ -94,6 +94,34 @@ function InfoRow({ label, value }: { label: string; value?: string }) {
   );
 }
 
+/**
+ * T-P7-3 降级矩阵行5：调研内容是否全空（降级态判定，不渲染空壳）。
+ * - 新结构：六维 aspects 全为空列表 → 空；- legacy：自由字段全缺/空 → 空。
+ */
+function isCompanyResearchContentEmpty(cr: CompanyResearchShape): boolean {
+  if (cr.aspects) {
+    const a = cr.aspects;
+    return (
+      !a.overview?.length &&
+      !a.business?.length &&
+      !a.ecosystem?.length &&
+      !a.team?.length &&
+      !a.recent?.length &&
+      !a.reputation?.length
+    );
+  }
+  return !(
+    cr.basic ||
+    cr.business ||
+    cr.funding ||
+    cr.team ||
+    cr.industry ||
+    cr.news?.length ||
+    cr.ai_hiring ||
+    cr.sources?.length
+  );
+}
+
 export const InterviewPrepWorkspaceView: React.FC<InterviewPrepWorkspaceViewProps> = ({
   interviewId
 }) => {
@@ -293,6 +321,19 @@ export const InterviewPrepWorkspaceView: React.FC<InterviewPrepWorkspaceViewProp
     }
   };
 
+  /** T-M7-6「重新调研」按钮（降级态/stale 态复用同一挂载）。 */
+  const renderRefreshButton = () => (
+    <button
+      type="button"
+      onClick={handleRefreshResearch}
+      disabled={refreshResearch.isPending || !src?.id}
+      className="inline-flex items-center gap-1.5 text-xs font-bold text-[#134D3A] bg-[#F2F8F5] border border-[#A2CAB8] px-3 py-1.5 rounded-lg hover:bg-[#DCEDE4] disabled:opacity-60 disabled:cursor-not-allowed transition shadow-2xs"
+    >
+      <RefreshCw className={`w-3.5 h-3.5 ${refreshResearch.isPending ? 'animate-spin' : ''}`} />
+      {refreshResearch.isPending ? '重新调研中…' : '重新调研'}
+    </button>
+  );
+
   const renderCompanyResearch = () => {
     const basic = cr?.basic || {};
     const business = cr?.business || {};
@@ -303,6 +344,25 @@ export const InterviewPrepWorkspaceView: React.FC<InterviewPrepWorkspaceViewProp
     // 旧缓存（无 aspects）照旧读下方自由字段；读不到的 InfoRow 行自然隐藏。
     const aspects = cr?.aspects;
     const derived = prep?.companyResearch;
+
+    // T-P7-3 降级矩阵行5：None/内容全空 → 显式降级态 + 重试入口，不渲染空壳
+    const researchDegraded =
+      !src?.company_research || isCompanyResearchContentEmpty(cr);
+    if (researchDegraded) {
+      return (
+        <div className="bg-[#F8FAF9] border-2 border-dashed border-[#CCD8D1] rounded-2xl p-6 sm:p-8 text-center shadow-2xs mb-5">
+          <div className="text-xs font-black text-[#526058] uppercase tracking-wider mb-2">
+            公司调研
+          </div>
+          <p className="text-sm font-extrabold text-[#111814] mb-1">调研暂不可用</p>
+          <p className="text-xs text-[#8D9A92] mb-4">
+            本场公司调研未生成或检索失败，可点击「重新调研」获取最新资料。
+          </p>
+          {renderRefreshButton()}
+        </div>
+      );
+    }
+
     const news: NewsItemShape[] = [
       ...(cr?.news || []).map((n) => (typeof n === 'string' ? { title: n } : n)),
       ...((prep?.companyResearch?.recentNews as string[]) || []).map((t) => ({ title: t }))
@@ -324,16 +384,14 @@ export const InterviewPrepWorkspaceView: React.FC<InterviewPrepWorkspaceViewProp
           <div className="text-xs font-black text-[#1A5340] uppercase tracking-wider">
             公司调研（AI 检索，7 天缓存）
           </div>
-          <button
-            type="button"
-            onClick={handleRefreshResearch}
-            disabled={refreshResearch.isPending || !src?.id}
-            className="inline-flex items-center gap-1.5 text-xs font-bold text-[#134D3A] bg-[#F2F8F5] border border-[#A2CAB8] px-3 py-1.5 rounded-lg hover:bg-[#DCEDE4] disabled:opacity-60 disabled:cursor-not-allowed transition shadow-2xs"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${refreshResearch.isPending ? 'animate-spin' : ''}`} />
-            {refreshResearch.isPending ? '重新调研中…' : '重新调研'}
-          </button>
+          {renderRefreshButton()}
         </div>
+        {/* T-P7-3 矩阵行5：stale 回退数据正常渲染 + 低调过时提示（重新调研按钮上方可用） */}
+        {cr?.stale && (
+          <p className="text-xs text-[#8D9A92] bg-[#F8FAF9] border border-[#E0E7E3] rounded-lg px-3 py-2 mb-3">
+            调研数据可能过时（检索失败已回退缓存），建议点击「重新调研」刷新。
+          </p>
+        )}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-5">
           <div className="bg-white border-2 border-[#CCD8D1] rounded-2xl p-5 sm:p-6 shadow-2xs">
             <div className="text-xs font-black text-[#1A5340] uppercase tracking-wider mb-3">

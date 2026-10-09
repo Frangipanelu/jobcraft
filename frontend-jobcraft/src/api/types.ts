@@ -611,6 +611,8 @@ export interface CompanyResearchAspects {
  */
 export interface CompanyResearchShape {
   aspects?: CompanyResearchAspects
+  /** T-P7-3 降级矩阵：后端回退旧缓存时顶层标记（仅回退返回值带，永不落库）。 */
+  stale?: boolean
   basic?: {
     name?: string
     full_name?: string
