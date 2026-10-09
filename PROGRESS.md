@@ -2,6 +2,16 @@
 
 > 本文件用于追踪项目整体进度。AI 在每次会话结束或完成子任务时，必须更新本文件的对应板块。
 
+## T-P7-1 公司调研 wire 统一包 aspects 层 + 规格审查修复收口（2026-10-09，A 窗·P7 批首任务）
+
+> 首轮实现 `0d890a9`（BE schema+prompt v2）+ `2e580b3`（FE 双形映射）经规格审查 **FAIL**（1 Critical + 1 Major + 5 Minor）；本节为审查修复收口，两个修复 commit 精确 pathspec、未推送。
+
+- [x] **Critical-1 wire 统一包 aspects 层（`2250262`，BE 7 文件）**：`CompanyResearchInfo` 改为单字段容器 `aspects: CompanyResearchAspects`（6 维各 `max_length=5`、默认空），wire == `model_dump()` == `{"aspects": {...}}`，顶层键恰 `{"aspects"}`；`get_or_search_company` 顶层元数据合并 `{**info, cached_at, from_cache}` 键无碰撞（单测断言恰为三键）；prompt v2 输出契约原地改嵌套 `{"aspects": ...}`（6 条约束条款不动）；prep/force/缓存链路全 dict 透传零改动。
+- [x] **Major-2 工作区双形渲染（`b788b65`，FE 4 文件）**：`InterviewPrepWorkspaceView` 新结构（`cr.aspects` 在）渲染 mapper 派生句（概况区新增「公司概况」行、所处赛道 fallback `derived.relevantBusiness`），旧缓存原样 InfoRow、读不到的行自然隐藏、不加角标/分层；④team 不进 mapper 六字段子集（裁决 3e 判可接受，team 裸读行对新结构隐藏，不加内部字段——`types/jobcraft.ts` 他窗在途禁碰）；新增组件测试 3 条（新结构/legacy/皆空）。
+- [x] **Minor a~e**：a) `types.ts` `CompanyResearchShape` 注释改如实（旧自由结构 + 新 aspects 子集）；b) `ResearchItem` 铁律 `model_validator`（`source_type != "AI推断"` ⇒ `source_url.strip()` 非空，上抛不吞错，prompt 约束 1 同步措辞）；c) `interview_pre.py` `_slim_company_research` 瘦身投影（每条仅 content/date/source_type，URL 不进 prompt，legacy 原样，仍 `[:3000]`）+ 新单测 10 条；d) 共享契约 fixture `tests/fixtures/company_research_payload.json`（BE `model_dump()==fixture` round-trip；FE `mappers.test.ts` 弃自造 fixture 改 import）；e) 「缺维强制落 insufficient」措辞差异与 D6 子集裁决属 T-P7-3/控制器登记项，零代码。
+- **门禁（修复批终局实跑）**：encoding **429 文件 0 错**；ruff check/format 全绿；pytest **1333 passed / 13 skipped / 0 failed**（基线 1310/13，+23 为本批新测试与他窗 T-M10-4 测试）；tsc exit 0；vitest **375 passed / 40 files**；build ✓（存量 chunk>500kB 与 CSS @import 告警）。
+- **⚠️ 跨批依赖**：共享 fixture 落在 BE 批 `2250262`，FE 批 `b788b65` 的 `mappers.test.ts` import 之——单独回滚 `2250262` 会断 FE 测试，回滚需两批同撤。
+
 ## T-M9-3 沉淀为表达按钮 + T-M7-5 残透传——第五轮 C 窗批次收口（2026-10-08，C 窗·P1 反哺链第四棒）
 
 > 计划：`docs/superpowers/plans/2026-10-07-p1-feedback-chain-m9.md` Task 3/4。T-M9-3 = subagent-driven（fresh implementer → 主窗口双审无阻断）；T-M7-5 残 = 主窗口自实现（0.05d 小改，上下文已完整掌握）。**P1 关键路径（T-W12-1 → M9-1 → M9-2 → M9-3）全清 ✅**。
