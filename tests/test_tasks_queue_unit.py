@@ -310,3 +310,75 @@ class TestRetryAndDeadLetter:
         assert len(dead) == 5
         # 最新在前
         assert dead[0]["payload"]["task_id"] == "t4"
+
+
+class TestDispatchUserIdGuard:
+    """T-M10-4：分发层缺 user_id 不再 fallback 1，走既有失败/死信路径。"""
+
+    def test_missing_user_id_marks_failed_and_dead_letters(self, monkeypatch):
+        manager = _make_manager()
+        invoked = []
+
+        def _forbidden_handler(params):
+            invoked.append(params)
+            raise AssertionError("缺 user_id 不得进入 handler")
+
+        monkeypatch.setattr(
+            "app.tasks.handlers.get_task_handler", lambda _t: _forbidden_handler
+        )
+
+        task_id = manager.submit_task(
+            "resume_generate", {"company": "A", "position": "P"}
+        )
+        payload = json.loads(manager.redis.lpop(manager._queue_key))
+
+        _process_payload(manager, payload)  # 第 1 次失败 → 重试
+        retried = json.loads(manager.redis.lpop(manager._queue_key))
+        _process_payload(manager, retried)  # 第 2 次失败 → failed + 死信
+
+        task = manager.get_task(task_id)
+        assert task is not None
+        assert task.status is TaskStatus.FAILED
+        assert "user_id" in (task.error or "")
+        assert "submit" in (task.error or "")
+        # handler 从未被执行（绝不静默用 1 继续跑）
+        assert invoked == []
+        dead = manager.list_dead_letters()
+        assert len(dead) == 1
+        assert dead[0]["payload"]["task_id"] == task_id
+
+    def test_invalid_user_id_marks_failed(self, monkeypatch):
+        """user_id 非正整数（0/负数）同样视为缺失，不回落。"""
+        manager = _make_manager()
+        monkeypatch.setattr(
+            "app.tasks.handlers.get_task_handler", lambda _t: lambda _p: None
+        )
+
+        task_id = manager.submit_task("resume_generate", {"user_id": 0})
+        payload = json.loads(manager.redis.lpop(manager._queue_key))
+        _process_payload(manager, payload)
+        retried = json.loads(manager.redis.lpop(manager._queue_key))
+        _process_payload(manager, retried)
+
+        task = manager.get_task(task_id)
+        assert task is not None
+        assert task.status is TaskStatus.FAILED
+        assert "user_id" in (task.error or "")
+
+    def test_valid_user_id_passes_through_to_handler(self, monkeypatch):
+        """正常路径：submit 注入的 user_id 原样送达 handler。"""
+        manager = _make_manager()
+        received = {}
+
+        def _handler(params):
+            received.update(params)
+
+        monkeypatch.setattr("app.tasks.handlers.get_task_handler", lambda _t: _handler)
+
+        task_id = manager.submit_task("resume_generate", {"user_id": 42})
+        payload = json.loads(manager.redis.lpop(manager._queue_key))
+        _process_payload(manager, payload)
+
+        assert received["user_id"] == 42
+        assert received["task_id"] == task_id
+        assert manager.list_dead_letters() == []

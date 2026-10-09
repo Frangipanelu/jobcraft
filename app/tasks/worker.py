@@ -457,6 +457,7 @@ def _dispatch_one(task_manager: TaskManager, payload: Dict[str, Any]) -> None:
 
     :param task_manager: 任务管理器实例
     :param payload: 队列消息 `{task_id, task_type, params}`
+    :raises ValueError: params 的 user_id 缺失或非正整数（T-M10-4：不回落固定用户）
     """
     from .handlers import get_task_handler
 
@@ -480,7 +481,16 @@ def _dispatch_one(task_manager: TaskManager, payload: Dict[str, Any]) -> None:
     # 参数中补入 task_id / task_type，供 handler 更新状态
     run_params = dict(params)
     run_params.setdefault("task_id", task_id)
-    run_params.setdefault("user_id", params.get("user_id", 1))
+    # T-M10-4：user_id 必须由 submit 端点从 JWT 注入，分发层不再回落固定用户。
+    # 缺失/非正整数为确定性输入错误，抛出交由 _process_payload 走既有失败/死信路径
+    raw_user_id = run_params.get("user_id")
+    try:
+        user_id = int(raw_user_id)
+    except (TypeError, ValueError):
+        user_id = 0
+    if user_id <= 0:
+        raise ValueError(f"user_id 缺失：submit 未注入（收到 {raw_user_id!r}）")
+    run_params["user_id"] = user_id
     logger.info("消费任务: %s (%s)", task_id, task_type)
     handler(run_params)
 

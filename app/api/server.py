@@ -286,6 +286,9 @@ async def submit_task(
     支持的任务类型：
     - resume_generate: 简历生成
     - interview_prep: 面试准备
+
+    T-M10-4：``params.user_id`` 一律由服务端从 JWT 身份覆盖注入，
+    客户端传值（或不传）均不影响最终归属。
     """
     try:
         from app.tasks import get_task_manager
@@ -301,10 +304,17 @@ async def submit_task(
                 status_code=400, detail=f"不支持的任务类型: {task_type}"
             )
 
+        raw_params = payload.get("params") or {}
+        if not isinstance(raw_params, dict):
+            raise HTTPException(status_code=400, detail="params 必须是 JSON 对象")
+
+        # 服务端权威注入：客户端传的 user_id 一律被 JWT 身份覆盖
+        params = {**raw_params, "user_id": current_user}
+
         manager = get_task_manager()
         task_id = manager.submit_task(
             task_type=task_type,
-            params=payload.get("params", {}),
+            params=params,
         )
 
         return {

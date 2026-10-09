@@ -2,6 +2,7 @@
 
 import pytest
 
+from app.tasks import handlers
 from app.tasks.worker import _dispatch_one
 
 
@@ -160,6 +161,80 @@ def test_jd_analyze_structured_rejects_missing_user_id(monkeypatch):
                 "requirements": [{"text": "熟悉 Python", "tag": "required"}],
             }
         )
+
+
+@pytest.mark.parametrize(
+    "handler,params",
+    [
+        (
+            handlers.execute_resume_generate,
+            {"task_id": "t-rg", "company": "A", "position": "P", "card_ids": [1]},
+        ),
+        (
+            handlers.execute_interview_prep,
+            {"task_id": "t-ip", "job_analysis_id": 10, "card_ids": [1]},
+        ),
+        (
+            handlers.execute_jd_analyze_structured,
+            {
+                "task_id": "t-s",
+                "company": "A",
+                "position": "P",
+                "card_ids": [1],
+                "duties": ["职责"],
+                "requirements": [{"text": "熟悉 Python", "tag": "required"}],
+            },
+        ),
+        (
+            handlers.execute_interview_review_analyze,
+            {"task_id": "t-r", "record_id": 9, "selected_sequences": [1]},
+        ),
+        (handlers.execute_question_table, {"task_id": "t-q", "record_id": 9}),
+        (
+            handlers.execute_parse_preview,
+            {"task_id": "t-p", "text": "【面试官】：你好"},
+        ),
+        (
+            handlers.execute_experience_polish,
+            {"task_id": "t-e", "raw_text": "原始经历文本"},
+        ),
+    ],
+)
+def test_handlers_reject_missing_user_id(handler, params):
+    """T-M10-4：所有 handler 缺 user_id 一律抛错，绝不回落固定用户 1。"""
+    with pytest.raises(ValueError, match="user_id"):
+        handler(params)
+
+
+def test_resume_generate_passes_user_id_to_workflow(monkeypatch):
+    """execute_resume_generate 应把 user_id 显式传给下游 workflow（不依赖其签名默认值）。"""
+    fake_mgr = FakeTaskManager()
+    monkeypatch.setattr("app.tasks.handlers.get_task_manager", lambda: fake_mgr)
+
+    captured = {}
+
+    def fake_workflow(**kwargs):
+        captured.update(kwargs)
+        return {"job_analysis_id": 1}
+
+    monkeypatch.setattr(
+        "app.workflows.job_analysis_flow.run_job_analysis_workflow", fake_workflow
+    )
+
+    result = handlers.execute_resume_generate(
+        {
+            "task_id": "t-rg",
+            "user_id": 6,
+            "company": "A",
+            "position": "P",
+            "jd_text": "JD",
+            "card_ids": [1],
+        }
+    )
+
+    assert result == {"job_analysis_id": 1}
+    assert captured["user_id"] == 6
+    assert any(u["task_id"] == "t-rg" for u in fake_mgr.status_updates)
 
 
 def test_jd_analyze_structured_rejects_missing_cards(monkeypatch):
@@ -322,7 +397,13 @@ def test_experience_polish_calls_tool_with_params(monkeypatch):
     monkeypatch.setattr("app.tools.experience_polish.polish_experience", fake_polish)
 
     result = execute_experience_polish(
-        {"task_id": "t-e", "raw_text": "原始文本", "company": "A", "role": "P"}
+        {
+            "task_id": "t-e",
+            "user_id": 3,
+            "raw_text": "原始文本",
+            "company": "A",
+            "role": "P",
+        }
     )
 
     assert result == {"polished_text": "润色后的文本", "original_text": "原始文本"}
@@ -361,12 +442,13 @@ def test_dispatch_routes_to_known_handler(monkeypatch):
         {
             "task_id": "t-2",
             "task_type": "interview_prep",
-            "params": {"job_analysis_id": 5},
+            "params": {"job_analysis_id": 5, "user_id": 7},
         },
     )
 
     assert called["task_id"] == "t-2"
     assert called["job_analysis_id"] == 5
+    assert called["user_id"] == 7
 
 
 # ============================================================

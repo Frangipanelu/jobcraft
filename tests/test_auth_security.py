@@ -223,6 +223,55 @@ def test_authenticated_create_card_uses_token_user(monkeypatch):
     assert captured["data"]["user_id"] == 42
 
 
+def test_submit_task_injects_token_user_id(monkeypatch):
+    """POST /tasks/submit：params.user_id 由服务端从 token 覆盖，客户端传值不生效"""
+    captured = {}
+
+    class _FakeManager:
+        def submit_task(self, task_type, params, **kwargs):
+            captured["task_type"] = task_type
+            captured["params"] = params
+            return "t-1"
+
+    monkeypatch.setattr("app.tasks.get_task_manager", lambda: _FakeManager())
+
+    token = make_token(42)
+    resp = client.post(
+        "/api/jobcraft/tasks/submit",
+        json={
+            "task_type": "resume_generate",
+            "params": {"user_id": 999, "company": "A", "position": "P"},
+        },
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["task_id"] == "t-1"
+    assert captured["task_type"] == "resume_generate"
+    assert captured["params"]["user_id"] == 42
+    assert captured["params"]["company"] == "A"
+
+
+def test_submit_task_injects_user_id_when_client_omits(monkeypatch):
+    """POST /tasks/submit：客户端未传 user_id 时同样由 token 注入（缺省不影响提交）"""
+    captured = {}
+
+    class _FakeManager:
+        def submit_task(self, task_type, params, **kwargs):
+            captured["params"] = params
+            return "t-2"
+
+    monkeypatch.setattr("app.tasks.get_task_manager", lambda: _FakeManager())
+
+    token = make_token(7)
+    resp = client.post(
+        "/api/jobcraft/tasks/submit",
+        json={"task_type": "resume_generate", "params": {"company": "A"}},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert resp.status_code == 200
+    assert captured["params"]["user_id"] == 7
+
+
 # ============================================================
 # 3. 公开端点无需认证
 # ============================================================

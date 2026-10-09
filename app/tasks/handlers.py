@@ -30,17 +30,38 @@ TASK_TYPE_EXPERIENCE_POLISH = "experience_polish"
 # ============================================================
 
 
+def _require_user_id(params: Dict[str, Any], scene: str) -> int:
+    """严格取得任务归属 user_id（T-M10-4）。
+
+    submit 端点已从 JWT 身份注入；此处为 handler 层兜底校验：
+    缺失或非正整数一律抛错，绝不回落固定用户（多用户下会导致越权写入）。
+
+    :param params: 任务参数
+    :param scene: 任务场景描述（用于错误信息定位）
+    :return: 正整数 user_id
+    :raises ValueError: user_id 缺失或非正整数
+    """
+    try:
+        user_id = int(params.get("user_id") or 0)
+    except (TypeError, ValueError):
+        user_id = 0
+    if user_id <= 0:
+        raise ValueError(f"user_id 缺失，无法执行{scene}")
+    return user_id
+
+
 def execute_resume_generate(params: Dict[str, Any]) -> Dict[str, Any]:
     """
     执行简历生成任务
 
     :param params: 任务参数
     :return: 生成结果
+    :raises ValueError: user_id 缺失或非正整数
     """
     from app.workflows.job_analysis_flow import run_job_analysis_workflow
 
     task_id = params.get("task_id")
-    user_id = params.get("user_id", 1)
+    user_id = _require_user_id(params, "简历生成")
     company = params.get("company", "")
     position = params.get("position", "")
     jd_text = params.get("jd_text", "")
@@ -80,11 +101,12 @@ def execute_interview_prep(params: Dict[str, Any]) -> Dict[str, Any]:
 
     :param params: 任务参数
     :return: 生成结果
+    :raises ValueError: user_id 缺失或非正整数、job_analysis_id 缺失
     """
     from app.workflows.interview_prep_flow import run_interview_prep_workflow
 
     task_id = params.get("task_id")
-    user_id = params.get("user_id", 1)
+    user_id = _require_user_id(params, "面试准备")
     job_analysis_id = params.get("job_analysis_id")
     round_type = params.get("round_type", "技术面")
     card_ids = params.get("card_ids", [])
@@ -163,9 +185,7 @@ def execute_jd_analyze_structured(params: Dict[str, Any]) -> Dict[str, Any]:
         params.get("duties", []),
         params.get("requirements", []),
     )
-    user_id = int(params.get("user_id") or 0)
-    if user_id <= 0:
-        raise ValueError("user_id 缺失，无法执行结构化分析")
+    user_id = _require_user_id(params, "结构化分析")
     if not card_ids:
         raise ValueError("请至少选择 1 张经历卡")
 
@@ -199,13 +219,14 @@ def execute_interview_review_analyze(params: Dict[str, Any]) -> Dict[str, Any]:
 
     :param params: 任务参数（record_id/selected_sequences/user_id）
     :return: InterviewReviewResult dict
+    :raises ValueError: user_id 缺失或 record_id 缺失
     """
     from app.workflows.interview_review_flow import run_interview_review_workflow
 
     task_id = params.get("task_id")
     record_id = params.get("record_id")
     selected_sequences = params.get("selected_sequences", [])
-    user_id = params.get("user_id", 1)
+    user_id = _require_user_id(params, "复盘分析")
 
     if not record_id:
         raise ValueError("record_id 缺失，无法执行复盘分析")
@@ -237,12 +258,13 @@ def execute_question_table(params: Dict[str, Any]) -> Dict[str, Any]:
 
     :param params: 任务参数（record_id/user_id）
     :return: {record_id, status, questions}
+    :raises ValueError: user_id 缺失或 record_id 缺失
     """
     from app.workflows.question_table_flow import run_question_table_workflow
 
     task_id = params.get("task_id")
     record_id = params.get("record_id")
-    user_id = params.get("user_id", 1)
+    user_id = _require_user_id(params, "问题表生成")
 
     if not record_id:
         raise ValueError("record_id 缺失，无法生成问题表")
@@ -275,11 +297,12 @@ def execute_parse_preview(params: Dict[str, Any]) -> Dict[str, Any]:
 
     :param params: 任务参数（text/with_intent/company/position/round_type/job_analysis_id）
     :return: {dialogue, qa_pairs, qa_pair_count, speaker_count, role_counts}
+    :raises ValueError: user_id 缺失或文本为空
     """
     from app.tools import db_tools, interview_review
 
     task_id = params.get("task_id")
-    user_id = params.get("user_id", 1)
+    user_id = _require_user_id(params, "解析预览")
     text = params.get("text", "")
     with_intent = bool(params.get("with_intent", False))
     company = params.get("company", "")
@@ -345,12 +368,18 @@ def execute_parse_preview(params: Dict[str, Any]) -> Dict[str, Any]:
 def execute_experience_polish(params: Dict[str, Any]) -> Dict[str, Any]:
     """执行经历卡 AI 润色任务。
 
-    :param params: 任务参数（raw_text/company/role）
+    T-M10-4：仍严格校验 user_id 以保持「所有任务必有归属身份」的契约；
+    下游 ``polish_experience`` 为纯 LLM 调用、无按用户写库动作，
+    故此处取参校验后不透传（无越权写入面）。
+
+    :param params: 任务参数（raw_text/company/role/user_id）
     :return: {polished_text, original_text}
+    :raises ValueError: user_id 缺失或 raw_text 缺失
     """
     from app.tools.experience_polish import polish_experience
 
     task_id = params.get("task_id")
+    _require_user_id(params, "经历润色")
     raw_text = params.get("raw_text", "")
     company = params.get("company", "")
     role = params.get("role", "")
