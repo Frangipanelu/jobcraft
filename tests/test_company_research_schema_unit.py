@@ -226,3 +226,6 @@ class TestPromptVersioning:
         # 铁律与 validator 兼容：非 AI推断必须带 URL，否则校验拒绝
         assert "必须给出 source_url" in text
         assert "校验拒绝" in text
+        # T-P7-3 D4：新闻/近期动态日期约束收紧——必须用检索结果 published_date
+        assert "published_date" in text
+        assert "不许编造日期" in text

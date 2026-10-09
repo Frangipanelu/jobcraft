@@ -6,7 +6,12 @@
 
 T-P7-2 query 工程：7 条配方表（模块级常量，运行时渲染）+ topic 参数启用 +
 动态年份 + 单失败跳过继续 + 全失败守卫（成功查询为 0 或累计结果为 0 →
-不调 LLM、不写缓存，返回 None）+ search_data 体积瘦身投影。
+不调 LLM、不写缓存）+ search_data 体积瘦身投影。
+
+T-P7-3 降级矩阵：全失败守卫/LLM 失败回退旧缓存（顶层 ``stale: True``，
+不 upsert）或返回 None；LLM 汇总失败重试 1 次（同一份 search_data）；
+半成品不落库（upsert 仅最终成功后执行一次）；检索投影保留 Tavily
+``published_date``（D4 新闻条目日期）。
 """
 
 import json
@@ -170,21 +175,32 @@ def _dedup_key(url: str) -> str:
 def _project_items(
     items: List[Dict[str, Any]], snippet_limit: int
 ) -> List[Dict[str, Any]]:
-    """把原始结果条目投影为 prompt 条目（title/url/content 摘要截断）。"""
-    return [
-        {
+    """把原始结果条目投影为 prompt 条目（title/url/content 摘要截断）。
+
+    D4（T-P7-3）：Tavily 条目级 ``published_date``（topic=news 等结果才带）
+    原样保留进投影，缺省不造键——新闻条目日期不得丢失，供 prompt 约束
+    「必须使用检索结果中的发布日期」引用；字段极小，对预算/去重/url
+    cap 逻辑免疫（投影键并集不变）。
+    """
+    projected: List[Dict[str, Any]] = []
+    for item in items:
+        entry: Dict[str, Any] = {
             "title": str(item.get("title") or "")[:_TITLE_LIMIT],
             "url": str(item.get("url") or "")[:_URL_LIMIT],
             "content": str(item.get("content") or "")[:snippet_limit],
         }
-        for item in items
-    ]
+        published = item.get("published_date")
+        if published:
+            entry["published_date"] = str(published)
+        projected.append(entry)
+    return projected
 
 
 def _slim_search_data(results: List[Dict[str, Any]]) -> Dict[str, Any]:
     """search_data 的 prompt 体积瘦身投影（T-P7-2 体积防线）。
 
-    每条检索结果只保留 title/url/content 摘要，去掉 query 回显、score、
+    每条检索结果只保留 title/url/content 摘要（T-P7-3 D4：另保留条目级
+    ``published_date`` 发布日期，缺省不造键），去掉 query 回显、score、
     response_time 等冗余；url 按归一化键去重（去 fragment/尾斜杠/小写，
     query 串保留）。预算策略：content 摘要逐级减半至 _SNIPPET_FLOOR（=40，
     质量审查 Minor-6）仍超预算时，按条丢弃尾部结果并 logger.warning
@@ -192,7 +208,7 @@ def _slim_search_data(results: List[Dict[str, Any]]) -> Dict[str, Any]:
     [:8000] 静默砍。
 
     :param results: 原始检索条目 [{"query": ..., "result": Tavily响应}, ...]
-    :return: {"search_results": [{"title", "url", "content"}, ...]}
+    :return: {"search_results": [{"title", "url", "content"[, "published_date"]}, ...]}
     """
     items: List[Dict[str, Any]] = []
     seen_keys: set = set()
@@ -261,6 +277,65 @@ class CompanyResearchAgent(BaseAgent):
         return {"info": info.model_dump()}
 
 
+#: 六维 aspect 键（与 CompanyResearchAspects 对齐），供缺维可观测日志使用
+_ASPECT_KEYS: List[str] = [
+    "overview",
+    "business",
+    "ecosystem",
+    "team",
+    "recent",
+    "reputation",
+]
+
+
+def _stale_fallback(
+    company: str, cached: Optional[Dict[str, Any]]
+) -> Optional[Dict[str, Any]]:
+    """降级矩阵回退：旧缓存非空 → 返回旧 info + ``stale: True``；无缓存 → None。
+
+    T-P7-3 契约：stale 只出现在回退返回值上，**永不** upsert 进全局缓存行
+    （调用方在回退路径零写库）；形状与实时/缓存命中路径同构
+    （``{**info, cached_at, from_cache: True, stale: True}``）。
+
+    :param company: 公司名（日志上下文）
+    :param cached: ``get_company_research`` 返回行（{info, cached_at, fresh}）
+    :return: stale 回退 dict 或 None（无可用旧缓存）
+    """
+    info = (cached or {}).get("info") or {}
+    if not info:
+        return None
+    logger.warning(
+        "公司调研降级回退旧缓存 company=%s cached_at=%s（stale=True，不写缓存）",
+        company,
+        (cached or {}).get("cached_at"),
+    )
+    return {
+        **info,
+        "cached_at": (cached or {}).get("cached_at") or datetime.now().isoformat(),
+        "from_cache": True,
+        "stale": True,
+    }
+
+
+def _log_empty_aspects(company: str, info: Dict[str, Any]) -> None:
+    """成功解析后记录缺维（空列表）维度，observability（矩阵行3）。
+
+    wire 不加字段：缺维=空列表语义 P7-1 已定，此处仅日志可观测，
+    「insufficient」措辞差异由 prep 控制器登记。
+
+    :param company: 公司名
+    :param info: 汇总后的 CompanyResearchInfo dict
+    """
+    aspects = (info or {}).get("aspects") or {}
+    empty_dims = [k for k in _ASPECT_KEYS if not aspects.get(k)]
+    if empty_dims:
+        logger.info(
+            "公司调研完成 company=%s 缺维（空列表）=%s",
+            company,
+            ",".join(empty_dims),
+        )
+
+
 def get_or_search_company(
     company: str, force: bool = False
 ) -> Optional[Dict[str, Any]]:
@@ -269,8 +344,9 @@ def get_or_search_company(
     :param company: 公司名
     :param force: 是否强制重新搜索（忽略缓存）
     :return: CompanyResearchInfo dict + ``{cached_at, from_cache}`` 元数据
-        （fresh 命中时 ``from_cache=True``；全 query 失败或 0 结果时返回
-        None——全失败守卫：不调 LLM、不写缓存）
+        （fresh 命中时 ``from_cache=True``）；降级路径（T-P7-3）：全 query
+        失败/0 结果或 LLM 重试后仍失败 → 旧缓存非空时返回旧 info +
+        ``stale: True``（不写缓存），否则返回 None
     """
     from app.tools import db_tools
     from app.tools.tavily_tool import internet_search
@@ -347,7 +423,7 @@ def get_or_search_company(
         total_items,
     )
     # 全失败守卫（矩阵「全 query 失败/0 结果 → 不调 LLM」）：
-    # 不调 CompanyResearchAgent、不写缓存，返回 None
+    # 不调 CompanyResearchAgent、不写缓存；旧缓存非空 → stale 回退，无缓存 → None
     if success_queries == 0 or total_items == 0:
         logger.warning(
             "公司调研全失败守卫触发 company=%s 成功查询=%d 累计结果=%d，不调 LLM、不写缓存",
@@ -355,13 +431,37 @@ def get_or_search_company(
             success_queries,
             total_items,
         )
-        return None
+        return _stale_fallback(company, cached)
 
     search_data = _slim_search_data(results)
 
+    # LLM 汇总（矩阵行4）：失败重试 1 次（同一份 search_data，不重跑搜索）；
+    # 仍失败 → 与全失败守卫相同的回退（旧缓存 stale 或 None）；
+    # 半成品不落库：upsert 仅在最终成功后执行一次
     agent = CompanyResearchAgent()
-    out = agent.run({"company": company, "search_data": search_data})
+    try:
+        out = agent.run({"company": company, "search_data": search_data})
+    except Exception as exc:
+        logger.error(
+            "公司调研 LLM 汇总失败 company=%s，重试 1 次（同一份 search_data）: %s",
+            company,
+            exc,
+            exc_info=True,
+        )
+        try:
+            out = agent.run({"company": company, "search_data": search_data})
+        except Exception as retry_exc:
+            logger.error(
+                "公司调研 LLM 汇总重试后仍失败 company=%s 重试次数=1，"
+                "回退旧缓存（stale）或 None，不写缓存: %s",
+                company,
+                retry_exc,
+                exc_info=True,
+            )
+            return _stale_fallback(company, cached)
     info = out.get("info")
+
+    _log_empty_aspects(company, info)
 
     db_tools.upsert_company_research(company, info)
     return {**info, "cached_at": datetime.now().isoformat(), "from_cache": False}

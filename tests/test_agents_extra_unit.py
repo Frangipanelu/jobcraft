@@ -1257,3 +1257,314 @@ def test_get_or_search_company_recipe5_news_refocus(monkeypatch):
     assert focused["include_domains"] == ["stcn.com", "yicai.com"]
     assert len(upserts) == 1
     assert llm_states  # 聚焦为空仍出结果：首轮结果先入账，守卫未触发
+
+
+# ---------- T-P7-3 降级矩阵（stale/None 回退 / LLM 重试 / 半成品不落库 / D4 日期） ----------
+
+
+def _stale_cache_row(info: dict | None = None, fresh: bool = False) -> dict:
+    """构造一条「过期」缓存行（fresh 短路在全失败守卫之前，stale 才会走到回退）。"""
+    return {
+        "company": "字节跳动",
+        "info": _fake_aspects_info() if info is None else info,
+        "cached_at": "2026-09-01T00:00:00",
+        "fresh": fresh,
+    }
+
+
+def test_slim_search_data_keeps_published_date():
+    """D4：投影保留 Tavily 条目级 published_date（缺省不造键，值原样）。"""
+    from app.agents.company_research_agent import _slim_search_data
+
+    entry = {
+        "query": "字节跳动 最新新闻 2026",
+        "result": {
+            "results": [
+                {
+                    "title": "新闻条目",
+                    "url": "https://www.stcn.com/a/1",
+                    "content": "新闻摘要",
+                    "published_date": "2026-09-30",
+                    "score": 0.9,
+                },
+                {
+                    "title": "普通条目",
+                    "url": "https://www.example.com/about",
+                    "content": "官网摘要",
+                },
+            ]
+        },
+    }
+    data = _slim_search_data([entry])
+    dated, plain = data["search_results"]
+    assert dated["published_date"] == "2026-09-30"  # 值原样，不改写
+    assert set(dated.keys()) == {"title", "url", "content", "published_date"}
+    assert "published_date" not in plain  # 缺省不造键
+
+
+def test_guard_all_queries_fail_falls_back_to_stale_cache(monkeypatch, caplog):
+    """矩阵行2 回退①：全 query 失败 + 旧缓存 → stale 返回，不调 LLM、不写库。"""
+    import logging
+
+    from app.agents import company_research_agent as mod
+
+    fake = _FakeInternetSearch(lambda _p: (_ for _ in ()).throw(RuntimeError("down")))
+    upserts = []
+    monkeypatch.setattr(
+        "app.tools.db_tools.get_company_research", lambda c: _stale_cache_row()
+    )
+    monkeypatch.setattr(
+        "app.tools.db_tools.upsert_company_research", lambda c, i: upserts.append(i)
+    )
+    monkeypatch.setattr("app.tools.tavily_tool.internet_search", fake)
+
+    def _no_llm(self, state):
+        raise AssertionError("全失败守卫不应调用 CompanyResearchAgent")
+
+    monkeypatch.setattr(mod.CompanyResearchAgent, "run", _no_llm)
+
+    with caplog.at_level(logging.WARNING, logger="jobcraft.agents.company_research"):
+        out = mod.get_or_search_company("字节跳动")
+
+    assert out is not None
+    assert out["stale"] is True
+    assert out["from_cache"] is True
+    assert out["cached_at"] == "2026-09-01T00:00:00"
+    assert out["aspects"] == _fake_aspects_info()["aspects"]
+    assert upserts == []  # 回退零写库（stale 永不落全局缓存行）
+    assert "字节跳动" in caplog.text and "全失败守卫触发" in caplog.text
+
+
+def test_guard_zero_results_falls_back_to_stale_cache(monkeypatch):
+    """矩阵行2 回退②：0 结果守卫同样走旧缓存 stale 回退。"""
+    from app.agents import company_research_agent as mod
+
+    upserts = []
+    monkeypatch.setattr(
+        "app.tools.db_tools.get_company_research", lambda c: _stale_cache_row()
+    )
+    monkeypatch.setattr(
+        "app.tools.db_tools.upsert_company_research", lambda c, i: upserts.append(i)
+    )
+    monkeypatch.setattr(
+        "app.tools.tavily_tool.internet_search",
+        _FakeInternetSearch(lambda _p: {"results": []}),
+    )
+
+    def _no_llm(self, state):
+        raise AssertionError("0 结果守卫不应调用 CompanyResearchAgent")
+
+    monkeypatch.setattr(mod.CompanyResearchAgent, "run", _no_llm)
+
+    out = mod.get_or_search_company("字节跳动")
+    assert out is not None and out["stale"] is True
+    assert upserts == []
+
+
+def test_guard_force_with_stale_cache_falls_back_on_all_fail(monkeypatch):
+    """force + 全失败：fresh 缓存在 force 下不短路，守卫触发仍可 stale 回退。"""
+    from app.agents import company_research_agent as mod
+
+    monkeypatch.setattr(
+        "app.tools.db_tools.get_company_research",
+        lambda c: _stale_cache_row(fresh=True),
+    )
+    upserts = []
+    monkeypatch.setattr(
+        "app.tools.db_tools.upsert_company_research", lambda c, i: upserts.append(i)
+    )
+    monkeypatch.setattr(
+        "app.tools.tavily_tool.internet_search",
+        _FakeInternetSearch(lambda _p: (_ for _ in ()).throw(RuntimeError("down"))),
+    )
+    monkeypatch.setattr(
+        mod.CompanyResearchAgent,
+        "run",
+        lambda self, state: (_ for _ in ()).throw(AssertionError("不应调 LLM")),
+    )
+
+    out = mod.get_or_search_company("字节跳动", force=True)
+    assert out is not None and out["stale"] is True
+    assert upserts == []
+
+
+def test_llm_fail_then_retry_success_upserts_once(monkeypatch, caplog):
+    """矩阵行4①：LLM 首次失败 → 重试 1 次成功（同一 search_data）→ upsert 恰一次。"""
+    import logging
+
+    from app.agents import company_research_agent as mod
+
+    fake, upserts, llm_states = _patch_company_research_env(
+        monkeypatch,
+        lambda _p: {
+            "results": [{"title": "T", "url": "https://e.com/x", "content": "C"}]
+        },
+    )
+    calls = {"n": 0}
+
+    def _flaky_run(self, state):
+        llm_states.append(state)
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise RuntimeError("schema 校验失败")
+        return {"info": _fake_aspects_info()}
+
+    monkeypatch.setattr(mod.CompanyResearchAgent, "run", _flaky_run)
+
+    with caplog.at_level(logging.ERROR, logger="jobcraft.agents.company_research"):
+        out = mod.get_or_search_company("字节跳动")
+
+    assert out is not None
+    assert "stale" not in out  # 重试成功走实时路径，无 stale 标记
+    assert out["from_cache"] is False
+    assert calls["n"] == 2
+    # 重试复用同一份 search_data（不重跑搜索）
+    assert llm_states[0]["search_data"] == llm_states[1]["search_data"]
+    assert len(fake.calls) == 9  # 7 配方 + 官网/新闻聚焦；LLM 重试零新增搜索
+    # 半成品不落库：仅最终成功后 upsert 一次，且 info 恒无 stale 键
+    assert len(upserts) == 1
+    assert "stale" not in upserts[0][1]
+    assert "字节跳动" in caplog.text and "重试 1 次" in caplog.text
+
+
+def test_llm_fail_twice_falls_back_to_stale_cache(monkeypatch, caplog):
+    """矩阵行4②：LLM 重试后仍失败 → 旧缓存 stale 回退，失败路径零写库。"""
+    import logging
+
+    from app.agents import company_research_agent as mod
+
+    upserts = []
+    llm_calls = []
+    monkeypatch.setattr(
+        "app.tools.db_tools.get_company_research", lambda c: _stale_cache_row()
+    )
+    monkeypatch.setattr(
+        "app.tools.db_tools.upsert_company_research", lambda c, i: upserts.append(i)
+    )
+    monkeypatch.setattr(
+        "app.tools.tavily_tool.internet_search",
+        _FakeInternetSearch(
+            lambda _p: {
+                "results": [{"title": "T", "url": "https://e.com/x", "content": "C"}]
+            }
+        ),
+    )
+
+    def _boom(self, state):
+        llm_calls.append(state)
+        raise RuntimeError("LLM 不可用")
+
+    monkeypatch.setattr(mod.CompanyResearchAgent, "run", _boom)
+
+    with caplog.at_level(logging.ERROR, logger="jobcraft.agents.company_research"):
+        out = mod.get_or_search_company("字节跳动")
+
+    assert out is not None
+    assert out["stale"] is True
+    assert out["from_cache"] is True
+    assert len(llm_calls) == 2  # 重试恰好 1 次
+    assert upserts == []  # 半成品不落库
+    assert "字节跳动" in caplog.text and "重试次数=1" in caplog.text
+
+
+def test_llm_fail_twice_without_cache_returns_none(monkeypatch):
+    """矩阵行4③：LLM 重试后仍失败且无旧缓存 → None，零写库。"""
+    from app.agents import company_research_agent as mod
+
+    upserts = []
+    llm_calls = []
+    monkeypatch.setattr("app.tools.db_tools.get_company_research", lambda c: None)
+    monkeypatch.setattr(
+        "app.tools.db_tools.upsert_company_research", lambda c, i: upserts.append(i)
+    )
+    monkeypatch.setattr(
+        "app.tools.tavily_tool.internet_search",
+        _FakeInternetSearch(
+            lambda _p: {
+                "results": [{"title": "T", "url": "https://e.com/x", "content": "C"}]
+            }
+        ),
+    )
+
+    def _boom(self, state):
+        llm_calls.append(state)
+        raise RuntimeError("LLM 不可用")
+
+    monkeypatch.setattr(mod.CompanyResearchAgent, "run", _boom)
+
+    assert mod.get_or_search_company("字节跳动") is None
+    assert len(llm_calls) == 2
+    assert upserts == []
+
+
+def test_stale_fallback_then_success_new_snapshot_has_no_stale(monkeypatch):
+    """stale 语义注记①：回退后再次成功 → 新快照无 stale 且 upsert 新 info。"""
+    from app.agents import company_research_agent as mod
+
+    upserts = []
+    monkeypatch.setattr(
+        "app.tools.db_tools.get_company_research", lambda c: _stale_cache_row()
+    )
+    monkeypatch.setattr(
+        "app.tools.db_tools.upsert_company_research",
+        lambda c, i: upserts.append((c, i)),
+    )
+    state = {"fail": True}
+
+    def _responder(_p):
+        if state["fail"]:
+            raise RuntimeError("tavily down")
+        return {"results": [{"title": "T", "url": "https://e.com/x", "content": "C"}]}
+
+    monkeypatch.setattr(
+        "app.tools.tavily_tool.internet_search", _FakeInternetSearch(_responder)
+    )
+    monkeypatch.setattr(
+        mod.CompanyResearchAgent,
+        "run",
+        lambda self, s: {"info": _fake_aspects_info()},
+    )
+
+    first = mod.get_or_search_company("字节跳动")
+    assert first is not None and first["stale"] is True
+    assert upserts == []
+
+    state["fail"] = False
+    second = mod.get_or_search_company("字节跳动")
+    assert second is not None
+    assert "stale" not in second  # force/再次成功后 prep 快照被覆盖为非 stale
+    assert second["from_cache"] is False
+    assert len(upserts) == 1
+    assert "stale" not in upserts[0][1]  # upsert 的 info 恒无 stale 键
+
+
+def test_success_logs_empty_dims(monkeypatch, caplog):
+    """矩阵行3 缺维 observability：成功解析后日志记录空维列表（wire 不加字段）。"""
+    import logging
+
+    from app.agents import company_research_agent as mod
+
+    info = _fake_aspects_info()
+    info["aspects"]["business"] = [
+        {
+            "content": "主营 AI 招聘 SaaS",
+            "source_type": "官方",
+            "source_url": "https://e.com",
+        }
+    ]
+    _fake, upserts, _states = _patch_company_research_env(
+        monkeypatch,
+        lambda _p: {
+            "results": [{"title": "T", "url": "https://e.com/x", "content": "C"}]
+        },
+    )
+    monkeypatch.setattr(
+        mod.CompanyResearchAgent, "run", lambda self, state: {"info": info}
+    )
+
+    with caplog.at_level(logging.INFO, logger="jobcraft.agents.company_research"):
+        out = mod.get_or_search_company("字节跳动")
+
+    assert out is not None
+    assert "缺维（空列表）=overview,ecosystem,team,recent,reputation" in caplog.text
+    assert "stale" not in out  # wire 不因缺维加字段
