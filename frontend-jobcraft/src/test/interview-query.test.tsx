@@ -125,7 +125,13 @@ const JobCache = () => {
   return <span data-testid="job-interview-ids">{jobs.map((j) => j.interviewIds.join(',')).join(';')}</span>;
 };
 
-const CreateHarness = ({ jobId = '1' }: { jobId?: string }) => {
+const CreateHarness = ({
+  jobId = '1',
+  resumeVersionId,
+}: {
+  jobId?: string;
+  resumeVersionId?: number;
+}) => {
   const createInterview = useCreateInterviewMutation();
   const [created, setCreated] = useState<Interview | null>(null);
   const [error, setError] = useState('');
@@ -146,6 +152,7 @@ const CreateHarness = ({ jobId = '1' }: { jobId?: string }) => {
               time: '2026-09-20 10:00',
               format: 'video',
               supplementNotes: '',
+              resumeVersionId,
             })
             .then(setCreated)
             .catch((e: unknown) => setError((e as Error).message));
@@ -264,6 +271,31 @@ describe('useCreateInterviewMutation', () => {
     renderWithProviders(
       <>
         <CreateHarness />
+        <JobCache />
+      </>,
+    );
+    await screen.findByText('创建面试');
+    // 等 JOBS 查询落缓存后再点创建（mutation 从缓存解析 job_analysis_id，防时序 flake）
+    await waitFor(() => expect(job.getDashboard).toHaveBeenCalled());
+    fireEvent.click(screen.getByText('创建面试'));
+    await waitFor(() => expect(screen.getByTestId('created-record').textContent).toBe('901'));
+
+    expect(interview.createInterviewSession).toHaveBeenCalledWith(
+      expect.objectContaining({ resume_version_id: 403 }),
+    );
+  });
+
+  it('T-M7-8：向导显式选中 resumeVersionId 覆盖派生值（显式优先）', async () => {
+    job.getDashboard.mockResolvedValue({ submissions: [DASH_JOB] });
+    // 派生本会得到 402（同 analysis 单选），显式传 403 必须覆盖
+    job.listResumeVersions.mockResolvedValue([
+      { id: 401, job_analysis_id: 12, version_no: 2, selected_for_application: false },
+      { id: 402, job_analysis_id: 12, version_no: 1, selected_for_application: true },
+    ]);
+
+    renderWithProviders(
+      <>
+        <CreateHarness resumeVersionId={403} />
         <JobCache />
       </>,
     );

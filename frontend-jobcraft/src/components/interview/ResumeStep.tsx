@@ -1,11 +1,11 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useToastActions } from '../../context/JobCraftContext';
 import {
-  useHistoricalResumesQuery,
   useUploadResumeMutation,
   resumeFileError,
 } from '../../features/historical-resumes/hooks';
-import type { HistoricalResume } from '../../types/jobcraft';
+import { useResumeVersionsQuery } from '../../features/resume/hooks';
+import type { ResumeVersionWire } from '../../api/types';
 
 export type ResumeMode = 'existing' | 'upload' | 'none';
 
@@ -13,32 +13,62 @@ interface ResumeStepProps {
   stepNumber: number;
   resumeMode: ResumeMode;
   onResumeModeChange: (mode: ResumeMode) => void;
-  selectedResumeId: string;
-  onSelectedResumeIdChange: (id: string) => void;
+  /** T-M7-8：向导显式选中的投递版本 id（字符串化数字版本 id，非底座 hr- id） */
+  selectedVersionId: string;
+  onSelectedVersionIdChange: (id: string) => void;
+  /** 当前岗位的 job_analysis_id（版本列表客户端过滤键；缺省时列表视为空） */
+  jobAnalysisId?: number | null;
 }
 
 /**
  * 关联简历步骤（standalone 第 3 步 / from-job 第 2 步）。
- * 自 NewInterviewModal 抽出并去除硬编码假简历：
- * 「从简历库选择」接真实底座简历（useHistoricalResumesQuery）；
- * FE-UPLOAD-01：上传接真实链（preview 解析 → confirm 入库 → base-resumes 元数据），
- * 成功后回填真实 id（hr-<serverId>）并选中，失败报错、不出现假成功。
+ * H⑪/T-M7-8「关联简历」切投递版本（方案 1，零 DDL/零后端改动）：
+ * - 数据源 = 投递版本（useResumeVersionsQuery，与简历工作台共享缓存、不改查询 key），
+ *   按当前岗位 job_analysis_id 客户端过滤，只列本岗位版本；
+ * - 向导显式选中的版本经 onSelectedVersionIdChange 上交，创建时覆盖派生值；
+ *   none/upload/未选则维持 mutation 内既有派生逻辑；
+ * - 上传成功不再回填选中（底座 hr-<serverId> 不得流入版本字段，域隔离）；
+ * - FE-UPLOAD-01 上传链（preview 解析 → confirm 入库 → base-resumes 元数据）
+ *   保持不变：失败报错、不出现假成功。
  */
 export const ResumeStep: React.FC<ResumeStepProps> = ({
   stepNumber,
   resumeMode,
   onResumeModeChange,
-  selectedResumeId,
-  onSelectedResumeIdChange,
+  selectedVersionId,
+  onSelectedVersionIdChange,
+  jobAnalysisId,
 }) => {
-  const { data: historicalResumes = [] } = useHistoricalResumesQuery();
+  const { data: allVersions = [], isPending } = useResumeVersionsQuery();
   const { showToast } = useToastActions();
   const uploadResumeMutation = useUploadResumeMutation();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
-  const [uploaded, setUploaded] = useState<HistoricalResume | null>(null);
+  const [uploaded, setUploaded] = useState<
+    Awaited<ReturnType<typeof uploadResumeMutation.mutateAsync>> | null
+  >(null);
 
-  const selectedResume = historicalResumes.find((r) => r.id === selectedResumeId);
+  const versions: ResumeVersionWire[] = allVersions
+    .filter(
+      (v) =>
+        jobAnalysisId != null &&
+        v.job_analysis_id != null &&
+        v.job_analysis_id === jobAnalysisId,
+    )
+    .sort((a, b) => b.version_no - a.version_no);
+  const selected = versions.find((v) => String(v.id) === selectedVersionId);
+
+  // T-M7-8 自愈：切换岗位或草稿残留的旧选中不属于本岗位版本列表时自动清空，
+  // 防止显式覆盖把他岗版本 id 透传进场次；查询未结束前不动，避免误清。
+  useEffect(() => {
+    if (
+      !isPending &&
+      selectedVersionId &&
+      !versions.some((v) => String(v.id) === selectedVersionId)
+    ) {
+      onSelectedVersionIdChange('');
+    }
+  }, [isPending, selectedVersionId, versions, onSelectedVersionIdChange]);
 
   const handleUploadFile = async (file: File): Promise<void> => {
     const err = resumeFileError(file);
@@ -49,7 +79,6 @@ export const ResumeStep: React.FC<ResumeStepProps> = ({
     try {
       const record = await uploadResumeMutation.mutateAsync(file);
       setUploaded(record);
-      onSelectedResumeIdChange(record.id);
       showToast({
         type: 'success',
         title: '简历上传成功',
@@ -74,7 +103,7 @@ export const ResumeStep: React.FC<ResumeStepProps> = ({
           步骤 {stepNumber}：关联简历
         </h3>
         <p className="text-xs mt-1" style={{ color: '#737873' }}>
-          选择用于本次面试的简历，同一方向可沿用已有简历。
+          选择用于本次面试的简历版本，同一方向可沿用已有版本。
         </p>
       </div>
 
@@ -93,44 +122,75 @@ export const ResumeStep: React.FC<ResumeStepProps> = ({
               fontWeight: resumeMode === mode ? 500 : 400
             }}
           >
-            {mode === 'existing' ? '从简历库选择' : mode === 'upload' ? '上传简历' : '暂不关联'}
+            {mode === 'existing' ? '选择简历版本' : mode === 'upload' ? '上传简历' : '暂不关联'}
           </button>
         ))}
       </div>
 
-      {/* Existing resume */}
+      {/* Existing resume versions（本岗位投递版本，按 version_no 降序） */}
       {resumeMode === 'existing' && (
         <div className="space-y-3">
-          <select
-            value={selectedResumeId}
-            onChange={(e) => onSelectedResumeIdChange(e.target.value)}
-            className="w-full px-3 py-[9px] text-[13.5px] rounded-lg outline-none"
-            style={{
-              border: '1px solid #E4E5E0',
-              background: '#FFFFFF',
-              color: '#202421'
-            }}
-          >
-            <option value="">请选择简历</option>
-            {historicalResumes.map((resume) => (
-              <option key={resume.id} value={resume.id}>
-                {resume.name}
-              </option>
-            ))}
-          </select>
-
-          {selectedResume && (
-            <div
-              className="p-3 rounded-lg"
-              style={{ background: '#FAFAF8', border: '1px solid #E4E5E0' }}
-            >
-              <div className="text-[13px] font-medium" style={{ color: '#202421' }}>
-                {selectedResume.name}
-              </div>
-              <div className="text-xs mt-1" style={{ color: '#A8ADA8' }}>
-                {[selectedResume.uploadDate, ...selectedResume.tags].filter(Boolean).join(' · ')}
-              </div>
+          {versions.length === 0 ? (
+            <div className="py-8 text-center">
+              <p className="text-[13px]" style={{ color: '#A8ADA8' }}>
+                该岗位暂无简历版本，可先到简历工作台生成
+              </p>
             </div>
+          ) : (
+            <>
+              <select
+                value={selectedVersionId}
+                onChange={(e) => onSelectedVersionIdChange(e.target.value)}
+                className="w-full px-3 py-[9px] text-[13.5px] rounded-lg outline-none"
+                style={{
+                  border: '1px solid #E4E5E0',
+                  background: '#FFFFFF',
+                  color: '#202421'
+                }}
+              >
+                <option value="">请选择简历版本</option>
+                {versions.map((v) => (
+                  <option key={v.id} value={String(v.id)}>
+                    {v.version_name
+                      ? `${v.version_name}（v${v.version_no}）`
+                      : `版本 v${v.version_no}`}
+                  </option>
+                ))}
+              </select>
+
+              {selected && (
+                <div
+                  className="p-3 rounded-lg"
+                  style={{ background: '#FAFAF8', border: '1px solid #E4E5E0' }}
+                >
+                  <div className="text-[13px] font-medium" style={{ color: '#202421' }}>
+                    {selected.version_name || `版本 v${selected.version_no}`}
+                  </div>
+                  <div className="text-xs mt-1" style={{ color: '#A8ADA8' }}>
+                    {`v${selected.version_no} · ${
+                      selected.created_at
+                        ? selected.created_at.slice(0, 16).replace('T', ' ')
+                        : ''
+                    }`}
+                    {selected.selected_for_application && (
+                      <span
+                        className="ml-2 inline-block"
+                        style={{
+                          padding: '1px 6px',
+                          borderRadius: '6px',
+                          background: '#E5EEE9',
+                          color: '#3E6256',
+                          fontSize: '11px',
+                          fontWeight: 500
+                        }}
+                      >
+                        当前投递版
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </div>
       )}

@@ -25,6 +25,8 @@ export interface CreateInterviewArgs {
   format: Interview['format'];
   interviewer?: string;
   supplementNotes?: string;
+  /** T-M7-8：向导显式选中的简历版本 id，优先于 mutation 内派生值 */
+  resumeVersionId?: number;
 }
 
 /**
@@ -52,6 +54,8 @@ export function useInterviewsQuery() {
  * - T-M7-5 残：场次行透传 `resume_version_id`（M5-Q3「轮次关联岗位+简历版本」），
  *   口径对齐 BE `get_selected_resume_version`——同 analysis 单选优先、无单选取
  *   最新（version_no/id 降序）、均无则 null；版本查询失败不阻断建场次（落 null）。
+ * - T-M7-8：`data.resumeVersionId`（向导显式选中）优先覆盖上述派生；
+ *   `none` / `upload` / 未选时仍走派生逻辑。
  * - 成功后 cache 前置插入面试 + 跨域补写 JOBS cache（interviewIds / steps.prepStage）。
  * - 不内置 toast / nextActions（nextActions 无消费方，toast 归视图层）。
  * - mutateAsync 返回创建后的 Interview（含 id，供 navigateTo）。
@@ -95,23 +99,31 @@ export function useCreateInterviewMutation() {
       );
 
       // T-M7-5 残：解析本场面试关联的简历版本（同 analysis 单选优先 → 最新兜底）。
-      let resumeVersionId: number | null = null;
-      try {
-        const versions = await queryClient.fetchQuery<ResumeVersionWire[]>({
-          queryKey: [...RESUME_VERSIONS_QUERY_KEY],
-          queryFn: () => jobApi.listResumeVersions(),
-          staleTime: 60_000,
-        });
-        const scoped = versions.filter((v) => v.job_analysis_id === jobAnalysisId);
-        const byVersionDesc = (a: ResumeVersionWire, b: ResumeVersionWire) =>
-          b.version_no - a.version_no || b.id - a.id;
-        const selected = scoped
-          .filter((v) => v.selected_for_application)
-          .sort(byVersionDesc)[0];
-        resumeVersionId =
-          (selected ?? [...scoped].sort(byVersionDesc)[0])?.id ?? null;
-      } catch {
-        resumeVersionId = null;
+      // T-M7-8：向导显式选中的版本优先，未选（none/upload/未选）时才走既有派生。
+      let resumeVersionId: number | null =
+        typeof data.resumeVersionId === 'number' &&
+        Number.isFinite(data.resumeVersionId) &&
+        data.resumeVersionId > 0
+          ? data.resumeVersionId
+          : null;
+      if (resumeVersionId == null) {
+        try {
+          const versions = await queryClient.fetchQuery<ResumeVersionWire[]>({
+            queryKey: [...RESUME_VERSIONS_QUERY_KEY],
+            queryFn: () => jobApi.listResumeVersions(),
+            staleTime: 60_000,
+          });
+          const scoped = versions.filter((v) => v.job_analysis_id === jobAnalysisId);
+          const byVersionDesc = (a: ResumeVersionWire, b: ResumeVersionWire) =>
+            b.version_no - a.version_no || b.id - a.id;
+          const selected = scoped
+            .filter((v) => v.selected_for_application)
+            .sort(byVersionDesc)[0];
+          resumeVersionId =
+            (selected ?? [...scoped].sort(byVersionDesc)[0])?.id ?? null;
+        } catch {
+          resumeVersionId = null;
+        }
       }
 
       // T-M7-4：预建面试场次行（record+1，status=planned），向导字段全透传。

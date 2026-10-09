@@ -440,6 +440,6 @@ export interface InterviewDraft {
   remindUpload: boolean;
   resumeVersion: 'ai' | 'general';
   resumeMode?: 'existing' | 'upload' | 'none';
-  selectedResumeId?: string;
+  selectedVersionId?: string;
   coverLetter: string;
 }

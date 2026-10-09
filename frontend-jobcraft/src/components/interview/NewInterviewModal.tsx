@@ -109,8 +109,8 @@ export const NewInterviewModal: React.FC<Props> = ({ isOpen, jobId, mode, onClos
   const [resumeMode, setResumeMode] = useState<ResumeMode>(
     draft?.resumeMode || 'none'
   );
-  const [selectedResumeId, setSelectedResumeId] = useState<string>(
-    draft?.selectedResumeId || ''
+  const [selectedVersionId, setSelectedVersionId] = useState<string>(
+    draft?.selectedVersionId || ''
   );
 
   // Step 3/2 - Additional info
@@ -126,6 +126,13 @@ export const NewInterviewModal: React.FC<Props> = ({ isOpen, jobId, mode, onClos
   const [currentAiStep, setCurrentAiStep] = useState(-1);
 
   const currentJob = jobs.find((j) => j.id === selectedJobId);
+  // T-M7-8：当前岗位的 job_analysis_id（ResumeStep 版本列表客户端过滤键，缺岗位/未分析时为 null）
+  const jobAnalysisId =
+    currentJob?.jdAnalysisId != null &&
+    currentJob.jdAnalysisId !== '' &&
+    !Number.isNaN(Number(currentJob.jdAnalysisId))
+      ? Number(currentJob.jdAnalysisId)
+      : null;
 
   // Can proceed
   const canNext = () => {
@@ -147,7 +154,7 @@ export const NewInterviewModal: React.FC<Props> = ({ isOpen, jobId, mode, onClos
       platform,
       interviewer,
       resumeMode,
-      selectedResumeId,
+      selectedVersionId,
       supplementNotes,
       remindUpload
     };
@@ -162,7 +169,7 @@ export const NewInterviewModal: React.FC<Props> = ({ isOpen, jobId, mode, onClos
     platform,
     interviewer,
     resumeMode,
-    selectedResumeId,
+    selectedVersionId,
     supplementNotes,
     remindUpload
   ]);
@@ -218,7 +225,12 @@ export const NewInterviewModal: React.FC<Props> = ({ isOpen, jobId, mode, onClos
             time: interviewTime,
             format: interviewFormat,
             interviewer,
-            supplementNotes
+            supplementNotes,
+            // T-M7-8：existing 模式显式选中的版本覆盖 mutation 内派生值（none/upload/未选走派生）
+            resumeVersionId:
+              resumeMode === 'existing' && selectedVersionId
+                ? Number(selectedVersionId)
+                : undefined,
           });
           clearInterviewModalDraft();
           setIsGenerating(false);
@@ -303,8 +315,9 @@ export const NewInterviewModal: React.FC<Props> = ({ isOpen, jobId, mode, onClos
           stepNumber={resumeStep + 1}
           resumeMode={resumeMode}
           onResumeModeChange={setResumeMode}
-          selectedResumeId={selectedResumeId}
-          onSelectedResumeIdChange={setSelectedResumeId}
+          selectedVersionId={selectedVersionId}
+          onSelectedVersionIdChange={setSelectedVersionId}
+          jobAnalysisId={jobAnalysisId}
         />
       );
     }
