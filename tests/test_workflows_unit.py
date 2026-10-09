@@ -2138,9 +2138,15 @@ class TestTaskDivSharedValidation:
             "get_job_analysis",
             lambda jid, uid=None: {"company": "X公司"},
         )
+        calls = []
+
+        def _guard_none(company, force=False):
+            calls.append((company,))
+            return None
+
         monkeypatch.setattr(
             "app.agents.company_research_agent.get_or_search_company",
-            lambda c, force=False: None,
+            _guard_none,
         )
         monkeypatch.setattr(flow.db_tools, "list_submissions", lambda uid: [])
         monkeypatch.setattr(flow.db_tools, "get_submission", lambda sid, uid=None: None)
@@ -2151,3 +2157,5 @@ class TestTaskDivSharedValidation:
 
         enrich = flow.load_interview_prep_enrichment(10, 1)
         assert enrich["company_research"] is None
+        # 质量审查 Minor-4：桩内记录，证明 guard 分支真被走到（非压根没调）
+        assert calls == [("X公司",)]

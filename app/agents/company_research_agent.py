@@ -25,7 +25,8 @@ logger = logging.getLogger("jobcraft.agents.company_research")
 
 #: T-P7-2 query 配方表（矩阵「query 配方 7 条」原文，语义不得改动）。
 #: template 运行时渲染；topic 首次全仓启用（news/finance/general）。
-#: domain_refocus=True 的配方在首轮结果后按回捞域名再做一次聚焦检索
+#: domain_refocus=True 的配方（配方 1 官网 / 配方 5 新闻）在首轮结果后
+#: 按回捞域名再做一次聚焦检索（质量审查 Minor-8 拍板沿用已证策略）
 _QUERY_RECIPES: List[Dict[str, Any]] = [
     {
         "template": "{company} 官网 关于我们 产品服务",
@@ -35,7 +36,11 @@ _QUERY_RECIPES: List[Dict[str, Any]] = [
     {"template": "{company} 主营业务 产品线 自研", "topic": "general"},
     {"template": "{company} 行业 地位 竞争对手 融资", "topic": "finance"},
     {"template": "{company} 创始人 高管 背景", "topic": "general"},
-    {"template": "{company} 最新新闻 {year}", "topic": "news"},
+    {
+        "template": "{company} 最新新闻 {year}",
+        "topic": "news",
+        "domain_refocus": True,
+    },
     {"template": "{company} 面经 面试经验 牛客", "topic": "general"},
     {"template": "{company} 脉脉 知乎 员工评价", "topic": "general"},
 ]
@@ -43,10 +48,27 @@ _QUERY_RECIPES: List[Dict[str, Any]] = [
 #: search_data 序列化预算：低于 _build_company_prompt 的 8000 硬截断，
 #: 保证 7 条配方（含聚焦补检）的检索结果全部进入 prompt 不被饿死
 _SEARCH_DATA_BUDGET = 7600
-#: 每条结果 content 摘要初始上限（字符），超预算时逐级减半压缩
+#: 每条结果 content 摘要初始上限（字符），超预算时逐级减半，
+#: 实际下限 = _SNIPPET_FLOOR（质量审查 Minor-6：先判下限再减半，不落到 22）
 _SNIPPET_LIMIT = 180
 _SNIPPET_FLOOR = 40
 _TITLE_LIMIT = 120
+#: url 单项上限（质量审查 Minor-1）：追踪参数堆叠的超长 url 截断，
+#: 防止单条 url 击穿预算
+_URL_LIMIT = 120
+
+#: 搜索引擎/聚合站域名后缀：对这些域名做聚焦复检无意义，回捞时跳过
+#: （质量审查 Minor-2；匹配 = 精确命中或子域名后缀命中）
+_DOMAIN_DENY_SUFFIXES = (
+    "baidu.com",
+    "google.com",
+    "bing.com",
+    "sogou.com",
+    "so.com",
+    "360.cn",
+    "sm.cn",
+    "wikipedia.org",
+)
 
 
 def _build_company_prompt(company: str, search_data: Dict[str, Any]) -> str:
@@ -62,15 +84,20 @@ def _build_company_prompt(company: str, search_data: Dict[str, Any]) -> str:
 def _render_queries(company: str, year: Optional[int] = None) -> List[Dict[str, Any]]:
     """按配方表渲染本次公司调研的全部 query。
 
+    渲染层自防（质量审查 Minor-9）：company 先 strip、渲染结果再 strip，
+    空串/前后空白不会产出前导空格；入口 ``get_or_search_company`` 亦已 strip，
+    此处重复仅为直调安全。
+
     :param company: 公司名
     :param year: 新闻配方年份；缺省取当前年（T-P7-2 动态年份）
     :return: 与 _QUERY_RECIPES 等长的 [{"query", "topic", "domain_refocus"}]
     """
+    company = company.strip()
     if year is None:
         year = datetime.now().year
     return [
         {
-            "query": recipe["template"].format(company=company, year=year),
+            "query": recipe["template"].format(company=company, year=year).strip(),
             "topic": recipe["topic"],
             "domain_refocus": recipe.get("domain_refocus", False),
         }
@@ -96,7 +123,8 @@ def _harvest_domains(response: Any, limit: int = 2) -> List[str]:
     """从首轮检索结果 URL 回捞域名，供 include_domains 聚焦检索使用。
 
     白名单不静态编造：域名全部来自真实返回的首轮结果，只对已出现的
-    域名做收敛复检（T-P7-2 官网聚焦策略）。
+    域名做收敛复检（T-P7-2 官网/新闻聚焦策略）。护栏（质量审查 Minor-2）：
+    跳过搜索引擎/聚合站 denylist、全数字 IP host，去尾点与 www 前缀。
 
     :param response: 首轮 internet_search 响应
     :param limit: 最多回捞域名数
@@ -109,56 +137,103 @@ def _harvest_domains(response: Any, limit: int = 2) -> List[str]:
             host = urlparse(url).netloc.lower()
         except ValueError:
             continue
-        host = host.split("@")[-1].split(":")[0]
+        host = host.split("@")[-1].split(":")[0].rstrip(".")
         if host.startswith("www."):
             host = host[4:]
-        if host and "." in host and host not in domains:
+        if not host or "." not in host:
+            continue
+        if host.replace(".", "").isdigit():  # IPv4 地址不做聚焦
+            continue
+        if any(
+            host == suffix or host.endswith("." + suffix)
+            for suffix in _DOMAIN_DENY_SUFFIXES
+        ):
+            continue
+        if host not in domains:
             domains.append(host)
         if len(domains) >= limit:
             break
     return domains
 
 
+def _dedup_key(url: str) -> str:
+    """去重键归一化：去 fragment + 去尾部 ``/`` + 小写（质量审查 Minor-5）。
+
+    query 串刻意不剥离——参数不同可能是不同页面，宁可少去重不误删。
+
+    :param url: 原始 url
+    :return: 归一化去重键
+    """
+    return url.split("#", 1)[0].rstrip("/").lower()
+
+
+def _project_items(
+    items: List[Dict[str, Any]], snippet_limit: int
+) -> List[Dict[str, Any]]:
+    """把原始结果条目投影为 prompt 条目（title/url/content 摘要截断）。"""
+    return [
+        {
+            "title": str(item.get("title") or "")[:_TITLE_LIMIT],
+            "url": str(item.get("url") or "")[:_URL_LIMIT],
+            "content": str(item.get("content") or "")[:snippet_limit],
+        }
+        for item in items
+    ]
+
+
 def _slim_search_data(results: List[Dict[str, Any]]) -> Dict[str, Any]:
     """search_data 的 prompt 体积瘦身投影（T-P7-2 体积防线）。
 
     每条检索结果只保留 title/url/content 摘要，去掉 query 回显、score、
-    response_time 等冗余；按 url 去重。序列化超过预算时逐级压缩 content
-    摘要长度，保证全部配方结果都留在预算内（不被 8000 硬截断砍掉尾部
-    的面经/口碑配方）。
+    response_time 等冗余；url 按归一化键去重（去 fragment/尾斜杠/小写，
+    query 串保留）。预算策略：content 摘要逐级减半至 _SNIPPET_FLOOR（=40，
+    质量审查 Minor-6）仍超预算时，按条丢弃尾部结果并 logger.warning
+    显式上报丢弃条数（Minor-1），不依赖 _build_company_prompt 的
+    [:8000] 静默砍。
 
     :param results: 原始检索条目 [{"query": ..., "result": Tavily响应}, ...]
     :return: {"search_results": [{"title", "url", "content"}, ...]}
     """
     items: List[Dict[str, Any]] = []
-    seen_urls: set = set()
+    seen_keys: set = set()
     for entry in results:
         raw = entry.get("result") if isinstance(entry, dict) else None
         for item in _extract_items(raw):
             url = str(item.get("url") or "")
-            if url:
-                if url in seen_urls:
+            key = _dedup_key(url) if url else ""
+            if key:
+                if key in seen_keys:
                     continue
-                seen_urls.add(url)
+                seen_keys.add(key)
             items.append(item)
 
+    # 阶段一：content 摘要逐级减半，实际下限 _SNIPPET_FLOOR
     snippet_limit = _SNIPPET_LIMIT
-    while True:
-        slim = [
-            {
-                "title": str(item.get("title") or "")[:_TITLE_LIMIT],
-                "url": str(item.get("url") or ""),
-                "content": str(item.get("content") or "")[:snippet_limit],
-            }
-            for item in items
-        ]
-        data: Dict[str, Any] = {"search_results": slim}
-        if (
-            len(json.dumps(data, ensure_ascii=False)) <= _SEARCH_DATA_BUDGET
-            or snippet_limit <= _SNIPPET_FLOOR
-        ):
-            return data
-        snippet_limit //= 2
+    slim = _project_items(items, snippet_limit)
+    data: Dict[str, Any] = {"search_results": slim}
+    while len(json.dumps(data, ensure_ascii=False)) > _SEARCH_DATA_BUDGET:
+        if snippet_limit <= _SNIPPET_FLOOR:
+            break
+        snippet_limit = max(snippet_limit // 2, _SNIPPET_FLOOR)
+        slim = _project_items(items, snippet_limit)
+        data = {"search_results": slim}
+
+    # 阶段二（floor 路径）：按条丢弃尾部结果直至进预算，显式可观测
+    dropped = 0
+    while (
+        len(slim) > 1
+        and len(json.dumps(data, ensure_ascii=False)) > _SEARCH_DATA_BUDGET
+    ):
+        slim.pop()
+        dropped += 1
+        data = {"search_results": slim}
+    if dropped:
+        logger.warning(
+            "search_data 超预算（budget=%d），按条丢弃尾部检索结果 %d 条",
+            _SEARCH_DATA_BUDGET,
+            dropped,
+        )
+    return data
 
 
 class CompanyResearchAgent(BaseAgent):
@@ -193,8 +268,9 @@ def get_or_search_company(
 
     :param company: 公司名
     :param force: 是否强制重新搜索（忽略缓存）
-    :return: CompanyResearchInfo dict；全 query 失败或 0 结果时返回 None
-        （全失败守卫：不调 LLM、不写缓存）
+    :return: CompanyResearchInfo dict + ``{cached_at, from_cache}`` 元数据
+        （fresh 命中时 ``from_cache=True``；全 query 失败或 0 结果时返回
+        None——全失败守卫：不调 LLM、不写缓存）
     """
     from app.tools import db_tools
     from app.tools.tavily_tool import internet_search
@@ -204,7 +280,17 @@ def get_or_search_company(
     company = company.strip()
     cached = db_tools.get_company_research(company)
     if cached and cached.get("fresh") and not force:
-        return cached.get("info")
+        info = cached.get("info") or {}
+        if not info:
+            # 空壳缓存视同未命中，避免元数据空壳进 prompt（不渲染空壳）
+            return None
+        # 质量审查 Minor-3：命中路径与实时路径形状统一
+        # （cached_at 取行内值，from_cache=True，顶层 = aspects + 元数据）
+        return {
+            **info,
+            "cached_at": cached.get("cached_at") or datetime.now().isoformat(),
+            "from_cache": True,
+        }
 
     # 搜索：按配方表逐条执行，单条失败跳过继续（语义与 T-P7-1 前一致）
     results: List[Dict[str, Any]] = []
@@ -228,11 +314,17 @@ def get_or_search_company(
         total_items += len(_extract_items(response))
         results.append({"query": spec["query"], "result": response})
 
-        # include_domains 官网聚焦：仅用首轮结果回捞的域名做收敛复检，
-        # 聚焦失败只跳过不致命，首轮结果已在账上不会滤空
+        # include_domains 聚焦（官网配方 1 / 新闻配方 5）：仅用首轮结果回捞
+        # 的域名做收敛复检，聚焦失败只跳过不致命，首轮结果已在账上不会滤空
         if not spec.get("domain_refocus"):
             continue
         domains = _harvest_domains(response)
+        logger.info(
+            "公司调研域名回捞 company=%s query=%s domains=%s",
+            company,
+            spec["query"],
+            domains,
+        )
         if not domains:
             continue
         attempted += 1
@@ -241,13 +333,11 @@ def get_or_search_company(
                 {**payload, "max_results": 2, "include_domains": domains}
             )
         except Exception as exc:
-            logger.warning(
-                "公司调研官网聚焦搜索「%s」失败，跳过: %s", spec["query"], exc
-            )
+            logger.warning("公司调研聚焦搜索「%s」失败，跳过: %s", spec["query"], exc)
             continue
         success_queries += 1
         total_items += len(_extract_items(focused))
-        results.append({"query": f"{spec['query']}（官网聚焦）", "result": focused})
+        results.append({"query": f"{spec['query']}（域名聚焦）", "result": focused})
 
     logger.info(
         "公司调研搜索完成 company=%s 成功查询=%d/%d 累计结果=%d 条",

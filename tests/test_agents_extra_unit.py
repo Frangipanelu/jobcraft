@@ -737,18 +737,24 @@ def test_query_recipes_seven_with_topic_and_dynamic_year():
         "字节跳动 脉脉 知乎 员工评价",
     ]
     assert [q["topic"] for q in rendered] == [r["topic"] for r in _QUERY_RECIPES]
-    # 只有官网配方带 include_domains 聚焦标记
+    # 质量审查 Minor-8：配方 1（官网）+ 配方 5（新闻）带域名聚焦标记
     assert [q["domain_refocus"] for q in rendered] == [
         True,
         False,
         False,
         False,
-        False,
+        True,
         False,
         False,
     ]
     # 硬编码「2025 2026」必须清除，动态年份只出现在新闻配方
     assert all("2025 2026" not in q["query"] for q in rendered)
+    # 质量审查 Minor-9：渲染层自防——company strip 后渲染、空串无前导空格
+    assert (
+        _render_queries("  字节跳动  ")[0]["query"] == "字节跳动 官网 关于我们 产品服务"
+    )
+    assert _render_queries("")[0]["query"] == "官网 关于我们 产品服务"
+    assert _render_queries(" 字节 ")[4]["query"] == f"字节 最新新闻 {year}"
 
 
 def test_get_or_search_company_all_queries_fail_returns_none(monkeypatch, caplog):
@@ -840,9 +846,10 @@ def test_get_or_search_company_partial_failure_proceeds(monkeypatch, caplog):
     assert out is not None
     assert out["from_cache"] is False
     assert len(upserts) == 1
-    assert len(fake.calls) == 7  # 官网配方失败 → 无聚焦补检
-    assert "成功查询=5/7" in caplog.text
-    assert "累计结果=5 条" in caplog.text
+    # 7 配方 + 配方 5 新闻聚焦补检（官网配方失败 → 无官网聚焦）
+    assert len(fake.calls) == 8
+    assert "成功查询=6/8" in caplog.text
+    assert "累计结果=6 条" in caplog.text
     # 体积防线：进 LLM 的 search_data 是瘦身投影（每条只留 title/url/content）
     items = llm_states[0]["search_data"]["search_results"]
     assert items
@@ -856,7 +863,7 @@ def test_get_or_search_company_refocus_uses_include_domains(monkeypatch):
 
     def _responder(payload):
         if payload.get("include_domains"):
-            assert payload["include_domains"] == ["bytedance.com", "baike.baidu.com"]
+            assert payload["include_domains"] == ["bytedance.com", "tiktok.com"]
             return {
                 "results": [
                     {
@@ -875,9 +882,9 @@ def test_get_or_search_company_refocus_uses_include_domains(monkeypatch):
                         "content": "官网",
                     },
                     {
-                        "title": "百科",
-                        "url": "https://baike.baidu.com/item/x",
-                        "content": "百科",
+                        "title": "国际官网",
+                        "url": "https://www.tiktok.com/about",
+                        "content": "国际站",
                     },
                 ]
             }
@@ -892,7 +899,7 @@ def test_get_or_search_company_refocus_uses_include_domains(monkeypatch):
     assert "include_domains" not in first
     assert first["query"] == "字节跳动 官网 关于我们 产品服务"
     assert first["topic"] == "general"
-    assert focused["include_domains"] == ["bytedance.com", "baike.baidu.com"]
+    assert focused["include_domains"] == ["bytedance.com", "tiktok.com"]
     assert focused["max_results"] == 2
     assert focused["query"] == first["query"]
     assert focused["topic"] == "general"
@@ -991,7 +998,7 @@ def test_slim_search_data_fits_budget_for_full_recipe_batch():
     )
 
     entries = []
-    for i in range(8):  # 7 条配方 + 1 次官网聚焦
+    for i in range(8):  # 构造 24 条肥数据（7 条配方 + 聚焦补检量级）
         entries.append(
             {
                 "query": f"query-{i}",
@@ -1018,3 +1025,235 @@ def test_slim_search_data_fits_budget_for_full_recipe_batch():
     assert data["search_results"][-1]["title"].startswith("标题7-2")
     # prompt 注入的是完整投影（[:8000] 未砍尾）
     assert dumped in _build_company_prompt("字节跳动", data)
+
+
+def test_slim_search_data_url_cap_floor_drop_and_warning(caplog):
+    """体积防线④（Minor-1/6）：url 截 120、floor 实际下限 40、
+    超预算按条丢尾并显式 warning（不依赖 [:8000] 静默砍）。"""
+    import json
+    import logging
+
+    from app.agents import company_research_agent as mod
+
+    entries = [
+        {
+            "query": f"q{i}",
+            "result": {
+                "results": [
+                    {
+                        "title": "T" * mod._TITLE_LIMIT,
+                        "url": "u" * 300
+                        + str(i),  # 200+ 字超长 url（逐条唯一，不去重）
+                        "content": "c" * 200,
+                    }
+                ]
+            },
+        }
+        for i in range(80)
+    ]
+    with caplog.at_level(logging.WARNING, logger="jobcraft.agents.company_research"):
+        data = mod._slim_search_data(entries)
+
+    dumped = json.dumps(data, ensure_ascii=False)
+    assert len(dumped) <= 8000  # 单项 url 击穿被 120 上限拦住
+    assert all(len(item["url"]) == 120 for item in data["search_results"])
+    # floor 实际下限 = 40（旧减半实现会落到 22）
+    assert all(len(item["content"]) == 40 for item in data["search_results"])
+    dropped = 80 - len(data["search_results"])
+    assert dropped > 0
+    # 丢弃条数显式可观测（warning 文案与实际丢弃数一致）
+    assert f"按条丢弃尾部检索结果 {dropped} 条" in caplog.text
+    # 丢的是尾部：头部条目仍在
+    assert data["search_results"][0]["title"] == "T" * 120
+
+
+def test_slim_search_data_dedup_key_normalization():
+    """体积防线⑤（Minor-5）：去 fragment/尾斜杠/小写归一去重，query 串不剥。"""
+    from app.agents.company_research_agent import _slim_search_data
+
+    urls = [
+        "https://Example.com/Path/",
+        "https://example.com/Path",
+        "https://example.com/Path#section",
+        "https://example.com/Path?a=1",
+        "https://example.com/Path?a=2",
+    ]
+    entry = {
+        "result": {
+            "results": [
+                {"title": f"t{i}", "url": url, "content": "c"}
+                for i, url in enumerate(urls)
+            ]
+        },
+    }
+    data = _slim_search_data([entry])
+    # 前三个变体（大小写/尾斜杠/fragment）归一 → 1 条；query 不剥 → 各留
+    assert len(data["search_results"]) == 3
+    kept = [item["url"] for item in data["search_results"]]
+    assert kept[0] == "https://Example.com/Path/"  # 首见原样保留
+    assert "https://example.com/Path?a=1" in kept
+    assert "https://example.com/Path?a=2" in kept
+
+
+def test_harvest_domains_filters_denylist_ip_and_keeps_official():
+    """Minor-2：搜索引擎/聚合站 denylist + IP host 过滤 + 去尾点，正常官网域过。"""
+    from app.agents.company_research_agent import _harvest_domains
+
+    for suffix in (
+        "baidu.com",
+        "google.com",
+        "bing.com",
+        "sogou.com",
+        "so.com",
+        "360.cn",
+        "sm.cn",
+        "wikipedia.org",
+    ):
+        assert _harvest_domains({"results": [{"url": f"https://www.{suffix}/x"}]}) == []
+        assert (
+            _harvest_domains({"results": [{"url": f"https://news.{suffix}/x"}]}) == []
+        )
+
+    # 全数字点分 host（IPv4）不过
+    assert _harvest_domains({"results": [{"url": "http://192.168.1.10/admin"}]}) == []
+
+    # 去尾点 + 去 www：正常官网域过，IP 不占坑
+    resp = {
+        "results": [
+            {"url": "https://www.Official-Corp.com./about"},
+            {"url": "https://192.168.0.1/"},
+            {"url": "https://sub.official-corp.com/team"},
+        ]
+    }
+    assert _harvest_domains(resp) == ["official-corp.com", "sub.official-corp.com"]
+
+
+def test_get_or_search_company_fresh_cache_hit_shape(monkeypatch):
+    """Minor-3a/c：fresh 命中 → 0 次搜索、不回写，形状与实时路径统一。"""
+    from app.agents import company_research_agent as mod
+
+    fake_info = _fake_aspects_info()
+    monkeypatch.setattr(
+        "app.tools.db_tools.get_company_research",
+        lambda c: {
+            "company": c,
+            "info": fake_info,
+            "cached_at": "2026-10-01T00:00:00",
+            "fresh": True,
+        },
+    )
+    fake = _FakeInternetSearch(lambda _p: {"results": []})
+    upserts = []
+    monkeypatch.setattr("app.tools.tavily_tool.internet_search", fake)
+    monkeypatch.setattr(
+        "app.tools.db_tools.upsert_company_research",
+        lambda c, i: upserts.append(i),
+    )
+
+    out = mod.get_or_search_company("字节跳动")
+
+    assert out is not None
+    assert fake.calls == []  # 命中缓存不发任何搜索
+    assert upserts == []
+    # 形状与实时路径统一：aspects + cached_at + from_cache=True
+    assert set(out.keys()) == {"aspects", "cached_at", "from_cache"}
+    assert out["cached_at"] == "2026-10-01T00:00:00"
+    assert out["from_cache"] is True
+    assert out["aspects"] == fake_info["aspects"]
+
+
+def test_get_or_search_company_fresh_empty_info_returns_none(monkeypatch):
+    """空壳缓存（info={}）视同未命中 → None，不产元数据空壳。"""
+    from app.agents import company_research_agent as mod
+
+    monkeypatch.setattr(
+        "app.tools.db_tools.get_company_research",
+        lambda c: {"info": {}, "cached_at": "2026-10-01T00:00:00", "fresh": True},
+    )
+    assert mod.get_or_search_company("字节跳动") is None
+
+
+def test_get_or_search_company_force_ignores_fresh_cache(monkeypatch):
+    """Minor-3b：force=True 忽略 fresh 缓存照常搜索（走实时路径形状）。"""
+    from app.agents import company_research_agent as mod
+
+    fake_info = _fake_aspects_info()
+    fake, upserts, llm_states = _patch_company_research_env(
+        monkeypatch,
+        lambda _p: {"results": [{"title": "T", "url": "", "content": "C"}]},
+    )
+    # helper 默认无缓存，这里覆写成 fresh 命中行
+    monkeypatch.setattr(
+        "app.tools.db_tools.get_company_research",
+        lambda c: {
+            "company": c,
+            "info": fake_info,
+            "cached_at": "2026-10-01T00:00:00",
+            "fresh": True,
+        },
+    )
+
+    out = mod.get_or_search_company("字节跳动", force=True)
+
+    assert out is not None
+    assert len(fake.calls) == 7  # url 空 → 无聚焦补检，7 条配方全试
+    assert out["from_cache"] is False  # 实时路径，不吃缓存
+    assert len(upserts) == 1
+    assert llm_states  # LLM 被真调用（force 汇总新结果）
+
+
+def test_get_or_search_company_recipe5_news_refocus(monkeypatch):
+    """Minor-8：配方 5 新闻域名回捞复检——9 次调用链、聚焦 payload 来自
+    首轮真实新闻域、首轮结果先入账（聚焦为空也不误伤守卫）。"""
+    from datetime import datetime
+
+    from app.agents import company_research_agent as mod
+
+    year = datetime.now().year
+
+    def _responder(payload):
+        if payload.get("include_domains"):
+            return {"results": []}  # 聚焦返回空：首轮已入账，守卫不触发
+        if "官网" in payload["query"]:
+            return {
+                "results": [
+                    {
+                        "title": "官网",
+                        "url": "https://www.bytedance.com/zh/",
+                        "content": "官网",
+                    }
+                ]
+            }
+        if "最新新闻" in payload["query"]:
+            return {
+                "results": [
+                    {
+                        "title": "新闻A",
+                        "url": "https://www.stcn.com/a/1",
+                        "content": "A",
+                    },
+                    {
+                        "title": "新闻B",
+                        "url": "https://www.yicai.com/b/2",
+                        "content": "B",
+                    },
+                ]
+            }
+        return {"results": []}
+
+    fake, upserts, llm_states = _patch_company_research_env(monkeypatch, _responder)
+    out = mod.get_or_search_company("字节跳动")
+
+    assert out is not None
+    # 调用链 r1,f1,r2,r3,r4,r5,f5,r6,r7 = 9 次（8→9：配方 5 新增聚焦）
+    assert len(fake.calls) == 9
+    news_query = f"字节跳动 最新新闻 {year}"
+    assert fake.calls[5]["query"] == news_query
+    focused = fake.calls[6]
+    assert focused["query"] == news_query
+    assert focused["topic"] == "news"
+    assert focused["max_results"] == 2
+    # 聚焦白名单来自首轮真实回捞域（经 denylist 护栏后）
+    assert focused["include_domains"] == ["stcn.com", "yicai.com"]
+    assert len(upserts) == 1
+    assert llm_states  # 聚焦为空仍出结果：首轮结果先入账，守卫未触发

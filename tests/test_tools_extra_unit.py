@@ -940,6 +940,30 @@ class TestTavilyTool:
                     "example.org",
                 ]
 
+    def test_internet_search_monitor_truncates_include_domains(self):
+        """质量审查 Minor-7：超长 include_domains 上报截前 10 + …(+n) 尾标，
+        tavily_client 收到的仍是完整白名单。"""
+        mock_client = MagicMock()
+        mock_client.search.return_value = {"results": []}
+        domains = [f"site{i}.example.com" for i in range(15)]
+
+        with (
+            patch("tavily.TavilyClient", return_value=mock_client),
+            patch.dict("os.environ", {"TAVILY_API_KEY": "fake-key"}),
+        ):
+            import importlib
+            import app.tools.tavily_tool as mod
+
+            importlib.reload(mod)
+            with (
+                patch.object(mod, "tavily_client", mock_client),
+                patch.object(mod, "monitor") as mock_monitor,
+            ):
+                mod.internet_search.invoke({"query": "q", "include_domains": domains})
+                reported = mock_monitor.report_tool.call_args.kwargs["args"]
+                assert reported["include_domains"] == domains[:10] + ["…(+5)"]
+                assert mock_client.search.call_args.kwargs["include_domains"] == domains
+
 
 # ============================================================
 # 5. db_tools.py — _parse_json, get_db_config, _jc_config

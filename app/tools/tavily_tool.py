@@ -21,6 +21,24 @@ load_dotenv(override=True)
 # TavilyClient 是实际访问搜索服务的客户端；模块级复用可避免每次工具调用重复初始化
 tavily_client = TavilyClient(api_key=os.getenv("TAVILY_API_KEY"))
 
+# monitor 上报时 include_domains 最多带 10 个，其余折叠成计数尾标，
+# 避免超长白名单撑大监控事件体（质量审查 Minor-7）
+_MONITOR_DOMAINS_LIMIT = 10
+
+
+def _summarize_include_domains(
+    include_domains: Optional[List[str]],
+) -> Optional[List[str]]:
+    """monitor 上报用的域名摘要：超限截断为前 N 项 + ``…(+n)`` 计数尾标。
+
+    :param include_domains: 原始域名白名单（可为 None）
+    :return: 截断摘要（≤10 项 + 尾标）；None/未超限原样返回
+    """
+    if not include_domains or len(include_domains) <= _MONITOR_DOMAINS_LIMIT:
+        return include_domains
+    rest = len(include_domains) - _MONITOR_DOMAINS_LIMIT
+    return include_domains[:_MONITOR_DOMAINS_LIMIT] + [f"…(+{rest})"]
+
 
 # @tool 会把函数签名和 docstring 暴露给 DeepAgents，模型据此决定是否调用以及如何填参
 @tool
@@ -51,7 +69,7 @@ def internet_search(
             "topic": topic,
             "max_results": max_results,
             "include_raw_content": include_raw_content,
-            "include_domains": include_domains,
+            "include_domains": _summarize_include_domains(include_domains),
         },
     )
 
