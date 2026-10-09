@@ -451,6 +451,37 @@ def test_dispatch_routes_to_known_handler(monkeypatch):
     assert called["user_id"] == 7
 
 
+def test_dispatch_forces_queue_task_id_over_client_value(monkeypatch):
+    """T-M10-4 评审修复：params 中客户端塞入的伪造 task_id 不得覆盖队列 task_id，
+    否则 handler 会把状态写到他人任务（跨用户投毒）。"""
+    fake_mgr = FakeTaskManager()
+    called = {}
+
+    def fake_handler(params):
+        called.update(params)
+
+    monkeypatch.setattr(
+        "app.tasks.handlers.get_task_handler",
+        lambda _t: fake_handler,
+    )
+
+    _dispatch_one(
+        fake_mgr,
+        {
+            "task_id": "t-real",
+            "task_type": "interview_prep",
+            "params": {
+                "job_analysis_id": 5,
+                "user_id": 7,
+                "task_id": "t-victim",
+            },
+        },
+    )
+
+    assert called["task_id"] == "t-real"
+    assert called["user_id"] == 7
+
+
 # ============================================================
 # BE-TASKDIV-01：路径行为对齐（校验/增强下沉共享入口）
 # ============================================================

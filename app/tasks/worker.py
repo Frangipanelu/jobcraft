@@ -480,7 +480,9 @@ def _dispatch_one(task_manager: TaskManager, payload: Dict[str, Any]) -> None:
 
     # 参数中补入 task_id / task_type，供 handler 更新状态
     run_params = dict(params)
-    run_params.setdefault("task_id", task_id)
+    # T-M10-4 评审修复：task_id 强制取队列消息自身值——params 里客户端塞入的
+    # 伪造 task_id 不得覆盖，否则 handler 会把状态写到他人任务（跨用户投毒）
+    run_params["task_id"] = task_id
     # T-M10-4：user_id 必须由 submit 端点从 JWT 注入，分发层不再回落固定用户。
     # 缺失/非正整数为确定性输入错误，抛出交由 _process_payload 走既有失败/死信路径
     raw_user_id = run_params.get("user_id")

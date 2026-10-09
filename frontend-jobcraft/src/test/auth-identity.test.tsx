@@ -51,6 +51,17 @@ beforeEach(() => {
 });
 
 describe('currentUserId 初值与空值语义（T-M10-4）', () => {
+  it('渲染瞬间（autoLogin 未决）初值即为 null 且未登录——初值回归保护', () => {
+    // autoLogin 永不 resolve：任何状态更新都不会发生，
+    // 此时读到的就是 useState 初值本身（若被改回 1，此断言立即失败）
+    auth.autoLogin.mockReturnValue(new Promise(() => {}));
+
+    renderWithProviders(<IdentityProbe />);
+
+    expect(screen.getByTestId('uid')).toHaveTextContent('null');
+    expect(screen.getByTestId('auth')).toHaveTextContent('no');
+  });
+
   it('autoLogin 返回用户 id：置入该 id 并视为已登录', async () => {
     auth.autoLogin.mockResolvedValue(7);
 

@@ -272,6 +272,79 @@ def test_submit_task_injects_user_id_when_client_omits(monkeypatch):
     assert captured["params"]["user_id"] == 7
 
 
+def test_submit_task_strips_client_task_id(monkeypatch):
+    """T-M10-4 评审修复：客户端塞入的 task_id 在源头剥离，不得进入队列 params。"""
+    captured = {}
+
+    class _FakeManager:
+        def submit_task(self, task_type, params, **kwargs):
+            captured["params"] = params
+            return "t-new"
+
+    monkeypatch.setattr("app.tasks.get_task_manager", lambda: _FakeManager())
+
+    token = make_token(42)
+    resp = client.post(
+        "/api/jobcraft/tasks/submit",
+        json={
+            "task_type": "resume_generate",
+            "params": {"task_id": "victim-task", "company": "A"},
+        },
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert resp.status_code == 200
+    assert "task_id" not in captured["params"]
+    assert captured["params"]["company"] == "A"
+    assert captured["params"]["user_id"] == 42
+
+
+@pytest.mark.parametrize("bad_params", [[], "", 0])
+def test_submit_task_rejects_non_object_params(monkeypatch, bad_params):
+    """params 为非对象（含 falsy 非对象）一律 400，不被 `or {}` 静默当空对象绕过。"""
+
+    def _must_not_call():
+        raise AssertionError("params 非对象时不得触达 task manager")
+
+    monkeypatch.setattr("app.tasks.get_task_manager", _must_not_call)
+
+    token = make_token(42)
+    resp = client.post(
+        "/api/jobcraft/tasks/submit",
+        json={"task_type": "resume_generate", "params": bad_params},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert resp.status_code == 400
+    assert "params" in resp.json()["error"]["message"]
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        {"task_type": "resume_generate", "params": None},
+        {"task_type": "resume_generate"},
+    ],
+)
+def test_submit_task_accepts_null_or_absent_params(monkeypatch, body):
+    """params 为 null / 缺省视为无参提交：200 且照常注入 user_id。"""
+    captured = {}
+
+    class _FakeManager:
+        def submit_task(self, task_type, params, **kwargs):
+            captured["params"] = params
+            return "t-3"
+
+    monkeypatch.setattr("app.tasks.get_task_manager", lambda: _FakeManager())
+
+    token = make_token(42)
+    resp = client.post(
+        "/api/jobcraft/tasks/submit",
+        json=body,
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert resp.status_code == 200
+    assert captured["params"] == {"user_id": 42}
+
+
 # ============================================================
 # 3. 公开端点无需认证
 # ============================================================
