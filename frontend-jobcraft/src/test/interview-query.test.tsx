@@ -24,6 +24,7 @@ const job = vi.hoisted(() => ({
   getSubmission: vi.fn(),
   listBaseResumes: vi.fn(),
   listJobAnalyses: vi.fn(),
+  listResumeVersions: vi.fn(),
 }));
 
 const interview = vi.hoisted(() => ({
@@ -169,6 +170,7 @@ beforeEach(() => {
   job.getDashboard.mockResolvedValue({ submissions: [] });
   job.listBaseResumes.mockResolvedValue([]);
   job.listJobAnalyses.mockResolvedValue({ analyses: [] });
+  job.listResumeVersions.mockResolvedValue([]);
   experience.listCards.mockResolvedValue({ cards: [] });
   interview.listInterviewPreps.mockResolvedValue({ records: [] });
   interview.generateInterviewPrep.mockResolvedValue(buildPrepResult());
@@ -244,10 +246,58 @@ describe('useCreateInterviewMutation', () => {
       occurred_at: '2026-09-20 10:00',
       interviewer: undefined,
       format: 'video',
+      resume_version_id: null,
     });
 
     expect(screen.getByTestId('iv-cache-count').textContent).toBe('1');
     expect(screen.getByTestId('job-interview-ids').textContent).toBe('prep-55');
+  });
+
+  it('T-M7-5 残：同 analysis 单选版本优先透传 resume_version_id（他 analysis 排除）', async () => {
+    job.getDashboard.mockResolvedValue({ submissions: [DASH_JOB] });
+    job.listResumeVersions.mockResolvedValue([
+      { id: 401, job_analysis_id: 12, version_no: 2, selected_for_application: false },
+      { id: 403, job_analysis_id: 12, version_no: 1, selected_for_application: true },
+      { id: 999, job_analysis_id: 77, version_no: 9, selected_for_application: true },
+    ]);
+
+    renderWithProviders(
+      <>
+        <CreateHarness />
+        <JobCache />
+      </>,
+    );
+    await screen.findByText('创建面试');
+    // 等 JOBS 查询落缓存后再点创建（mutation 从缓存解析 job_analysis_id，防时序 flake）
+    await waitFor(() => expect(job.getDashboard).toHaveBeenCalled());
+    fireEvent.click(screen.getByText('创建面试'));
+    await waitFor(() => expect(screen.getByTestId('created-record').textContent).toBe('901'));
+
+    expect(interview.createInterviewSession).toHaveBeenCalledWith(
+      expect.objectContaining({ resume_version_id: 403 }),
+    );
+  });
+
+  it('T-M7-5 残：版本列表查询失败不阻断建场次，resume_version_id 落 null', async () => {
+    job.getDashboard.mockResolvedValue({ submissions: [DASH_JOB] });
+    job.listResumeVersions.mockRejectedValue(new Error('version boom'));
+
+    renderWithProviders(
+      <>
+        <CreateHarness />
+        <JobCache />
+      </>,
+    );
+    await screen.findByText('创建面试');
+    // 等 JOBS 查询落缓存后再点创建（mutation 从缓存解析 job_analysis_id，防时序 flake）
+    await waitFor(() => expect(job.getDashboard).toHaveBeenCalled());
+    fireEvent.click(screen.getByText('创建面试'));
+
+    await waitFor(() => expect(screen.getByTestId('created-record').textContent).toBe('901'));
+    expect(screen.getByTestId('create-error').textContent).toBe('');
+    expect(interview.createInterviewSession).toHaveBeenCalledWith(
+      expect.objectContaining({ resume_version_id: null }),
+    );
   });
 
   it('T-M7-4：场次预建失败时向上抛错，不写入 interviews cache', async () => {

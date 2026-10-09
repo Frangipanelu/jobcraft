@@ -1,10 +1,16 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as authApi from '../../api/auth';
 import * as interviewApi from '../../api/interview';
+import * as jobApi from '../../api/job';
 import * as tasksApi from '../../api/tasks';
-import type { InterviewPrepResult, InterviewReviewCreateResult } from '../../api/types';
+import type {
+  InterviewPrepResult,
+  InterviewReviewCreateResult,
+  ResumeVersionWire,
+} from '../../api/types';
 import { Interview, Job } from '../../types/jobcraft';
 import { JOBS_QUERY_KEY } from '../jobs/mappers';
+import { RESUME_VERSIONS_QUERY_KEY } from '../resume/mappers';
 import { INTERVIEWS_QUERY_KEY, buildInterviewFromPrep, prepRecordToInterview, roundTypeToCn } from './mappers';
 
 
@@ -43,6 +49,9 @@ export function useInterviewsQuery() {
  *   任务服务不可用时降级为同步 generateInterviewPrep；
  * - T-M7-4：prep 成功后预建 interview_records 场次行（record+1，status=planned），
  *   向导字段全透传，成功后落 Interview.sessionRecordId；失败向上抛不伪造；
+ * - T-M7-5 残：场次行透传 `resume_version_id`（M5-Q3「轮次关联岗位+简历版本」），
+ *   口径对齐 BE `get_selected_resume_version`——同 analysis 单选优先、无单选取
+ *   最新（version_no/id 降序）、均无则 null；版本查询失败不阻断建场次（落 null）。
  * - 成功后 cache 前置插入面试 + 跨域补写 JOBS cache（interviewIds / steps.prepStage）。
  * - 不内置 toast / nextActions（nextActions 无消费方，toast 归视图层）。
  * - mutateAsync 返回创建后的 Interview（含 id，供 navigateTo）。
@@ -85,6 +94,26 @@ export function useCreateInterviewMutation() {
         { timeout: 180_000 }
       );
 
+      // T-M7-5 残：解析本场面试关联的简历版本（同 analysis 单选优先 → 最新兜底）。
+      let resumeVersionId: number | null = null;
+      try {
+        const versions = await queryClient.fetchQuery<ResumeVersionWire[]>({
+          queryKey: [...RESUME_VERSIONS_QUERY_KEY],
+          queryFn: () => jobApi.listResumeVersions(),
+          staleTime: 60_000,
+        });
+        const scoped = versions.filter((v) => v.job_analysis_id === jobAnalysisId);
+        const byVersionDesc = (a: ResumeVersionWire, b: ResumeVersionWire) =>
+          b.version_no - a.version_no || b.id - a.id;
+        const selected = scoped
+          .filter((v) => v.selected_for_application)
+          .sort(byVersionDesc)[0];
+        resumeVersionId =
+          (selected ?? [...scoped].sort(byVersionDesc)[0])?.id ?? null;
+      } catch {
+        resumeVersionId = null;
+      }
+
       // T-M7-4：预建面试场次行（record+1，status=planned），向导字段全透传。
       // 放在 prep 成功之后：prep 失败不落 planned 孤儿行；本步失败向上抛，不伪造 sessionRecordId。
       const session = await interviewApi.createInterviewSession({
@@ -96,6 +125,7 @@ export function useCreateInterviewMutation() {
         occurred_at: data.time || undefined,
         interviewer: data.interviewer,
         format: data.format,
+        resume_version_id: resumeVersionId,
       });
 
       const newId = result.id ? `prep-${result.id}` : 'prep-' + Date.now();
