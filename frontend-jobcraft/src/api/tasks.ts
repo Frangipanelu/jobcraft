@@ -52,7 +52,8 @@ function httpStatusOf(err: unknown): number | undefined {
  *
  * - 4xx（400 参数错、404 任务丢失等）与 503（Redis 不可用）→ 不降级，原样上抛，
  *   交调用方既有 error toast 路径接管；
- * - 其余（超时、5xx 非 503、网络错误、无 status 异常）→ 静默降级 fallback()。
+ * - 其余（超时、5xx 非 503、网络错误、无 status 异常）→ 静默降级 fallback()；
+ *   3xx（未被 fetch 跟随的最终响应，如重定向异常）同落降级分支，不作上抛。
  */
 function shouldRethrow(err: unknown): boolean {
   const status = httpStatusOf(err)
@@ -66,6 +67,9 @@ function shouldRethrow(err: unknown): boolean {
  * 打点占位说明：后端 Prometheus 无对应 FE task_fallback 指标（PRD §8.1 记载缺口），
  * 产品侧埋点基建（PRD §8.2）尚未落地——此处仅为前端结构化 console.warn 占位，
  * 待埋点基建落地后迁移；这是本文件唯一的 console 点位，禁止在业务代码散落裸 console。
+ *
+ * 脱敏禁令：message 可能回显用户派生内容（后端 error 原样透传）——当前仅本地
+ * console 输出，可接受；未来接入服务端埋点前必须先做脱敏处理。
  */
 function logTaskFallback(
   taskType: string,
@@ -82,8 +86,9 @@ function logTaskFallback(
 }
 
 /**
- * 提交异步任务并轮询到完成；任务系统不可用（Redis/worker 未就绪）或
- * 服务异常时降级为同步端点调用，保证功能可用。
+ * 提交异步任务并轮询到完成；超时/网络错误/5xx 非 503/业务失败 → 静默降级为
+ * 同步端点调用（fallback）保证功能可用；4xx 与 503（Redis 不可用）→ 原样上抛，
+ * 交调用方既有 error toast 路径接管。
  *
  * 分级降级（submit 与 poll 两阶段统一，见 {@link shouldRethrow}）：
  * 4xx/503 原样上抛不降级；其他错误静默降级 fallback() 并打点 task_fallback。

@@ -196,6 +196,105 @@ describe('runTaskOrSync 分级降级（T-M10-2）', () => {
     });
   });
 
+  describe('duck-type status 分支（httpStatusOf 非 ApiError 路径，评审 Minor-1）', () => {
+    // client.ts 统一产出 ApiError；该分支为向前兼容（其他携带数值 status 的抛出物）。
+    // 经 onProgress 回调注入闭合分类边界——当前生产链无此形态抛出物，测试即契约锁定。
+    it('抛出 {status:404}（数值鸭子类型）→ 上抛不降级', async () => {
+      fetchMock
+        .mockResolvedValueOnce(okSubmitResponse())
+        .mockResolvedValueOnce(jsonResponse(200, { status: 'running' }));
+
+      const duck = { status: 404, message: '鸭子丢失' };
+      await expect(
+        runTaskOrSync('resume_generate', {}, fallback, {
+          interval: 1,
+          onProgress: () => {
+            throw duck;
+          },
+        })
+      ).rejects.toBe(duck);
+
+      expect(fallback).not.toHaveBeenCalled();
+      expect(warnSpy).not.toHaveBeenCalled();
+    });
+
+    it('抛出 {status:"500"}（字符串 status 不作数）→ 降级 + 打点', async () => {
+      fetchMock
+        .mockResolvedValueOnce(okSubmitResponse())
+        .mockResolvedValueOnce(jsonResponse(200, { status: 'running' }));
+
+      const result = await runTaskOrSync('resume_generate', {}, fallback, {
+        interval: 1,
+        onProgress: () => {
+          throw { status: '500', message: '字符串状态不算 status' };
+        },
+      });
+
+      expect(result).toEqual({ from: 'fallback' });
+      expect(fallback).toHaveBeenCalledTimes(1);
+      expect(warnSpy).toHaveBeenCalledWith(
+        '[task_fallback]',
+        expect.objectContaining({ phase: 'poll', status: undefined })
+      );
+    });
+  });
+
+  describe('边界补全（评审 Minor-5）', () => {
+    it('mid-poll 401（token 过期）→ 上抛不降级', async () => {
+      fetchMock
+        .mockResolvedValueOnce(okSubmitResponse())
+        .mockResolvedValueOnce(
+          jsonResponse(401, {
+            error: { code: 'UNAUTHORIZED', message: '认证已过期，请重新登录' },
+          })
+        );
+
+      await expect(
+        runTaskOrSync('resume_generate', {}, fallback, { interval: 1 })
+      ).rejects.toThrow('认证已过期，请重新登录');
+      expect(fallback).not.toHaveBeenCalled();
+      expect(warnSpy).not.toHaveBeenCalled();
+    });
+
+    it('fallback 自身抛错 → 错误上抛不被吞（降级打点仍先发生）', async () => {
+      fetchMock.mockResolvedValueOnce(
+        jsonResponse(500, { error: { code: 'INTERNAL', message: '提交任务失败' } })
+      );
+      fallback.mockImplementationOnce(async () => {
+        throw new Error('fallback 自身失败');
+      });
+
+      await expect(runTaskOrSync('resume_generate', {}, fallback)).rejects.toThrow(
+        'fallback 自身失败'
+      );
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+      expect(warnSpy).toHaveBeenCalledWith(
+        '[task_fallback]',
+        expect.objectContaining({ phase: 'submit', status: 500 })
+      );
+    });
+
+    it('非 Error 抛出物（字符串）→ String(err) 降级不崩', async () => {
+      fetchMock
+        .mockResolvedValueOnce(okSubmitResponse())
+        .mockResolvedValueOnce(jsonResponse(200, { status: 'running' }));
+
+      const result = await runTaskOrSync('resume_generate', {}, fallback, {
+        interval: 1,
+        onProgress: () => {
+          throw '原始字符串错误';
+        },
+      });
+
+      expect(result).toEqual({ from: 'fallback' });
+      expect(fallback).toHaveBeenCalledTimes(1);
+      expect(warnSpy).toHaveBeenCalledWith(
+        '[task_fallback]',
+        expect.objectContaining({ message: '原始字符串错误', status: undefined })
+      );
+    });
+  });
+
   it('成功路径：submit+poll 完成 → 返回结果，不降级不打点', async () => {
     fetchMock
       .mockResolvedValueOnce(okSubmitResponse())
