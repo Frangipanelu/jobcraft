@@ -86,6 +86,13 @@ class TestCompanyResearchWireShape:
         assert len(info.aspects.business) == 1
         assert info.aspects.overview == [] and info.aspects.reputation == []
 
+    def test_flat_payload_rejected_by_extra_forbid(self):
+        """LLM 漏包 aspects 层（平铺输出）→ 拒收走兜底重试，不静默落空缓存。"""
+        with pytest.raises(ValidationError):
+            CompanyResearchInfo.model_validate({"overview": []})
+        nested = CompanyResearchInfo.model_validate({"aspects": {"overview": []}})
+        assert nested.aspects.overview == []
+
 
 class TestSharedContractFixture:
     def test_fixture_parses_and_round_trips(self):

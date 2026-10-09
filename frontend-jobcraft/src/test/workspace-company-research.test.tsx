@@ -174,6 +174,13 @@ describe('T-P7-1 工作区公司调研双形渲染', () => {
     expect(screen.queryByText('成立时间')).not.toBeInTheDocument();
     expect(screen.queryByText('创始人')).not.toBeInTheDocument();
     expect(screen.queryByText('最新轮次')).not.toBeInTheDocument();
+
+    // wire 不带 funding/team legacy 键 → 两张空卡连同「AI 生成」提示整卡不渲染
+    expect(screen.queryByText('融资与估值')).not.toBeInTheDocument();
+    expect(screen.queryByText('核心团队')).not.toBeInTheDocument();
+    expect(
+      screen.queryByText('以上为 AI 检索生成，面试前请复核。')
+    ).not.toBeInTheDocument();
   });
 
   it('legacy 结构（无 aspects）按原样渲染 InfoRow，且不出现公司概况派生行', async () => {
@@ -198,6 +205,10 @@ describe('T-P7-1 工作区公司调研双形渲染', () => {
     expect(screen.getByText('最新轮次')).toBeInTheDocument();
     // 新闻素材在 cr.news 与 mapper 派生 recentNews 两处合并（既有行为）
     expect(screen.getAllByText('发布新模型').length).toBeGreaterThan(0);
+
+    // legacy（无 aspects）两张卡仍在渲染
+    expect(screen.getByText('融资与估值')).toBeInTheDocument();
+    expect(screen.getByText('核心团队')).toBeInTheDocument();
 
     // aspects 缺失 → 不渲染新结构派生行
     expect(screen.queryByText('公司概况')).not.toBeInTheDocument();

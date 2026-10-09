@@ -442,18 +442,22 @@ export const InterviewPrepWorkspaceView: React.FC<InterviewPrepWorkspaceViewProp
             <InfoRow label="机遇" value={industry?.opportunities} />
             <InfoRow label="风险" value={industry?.risks} />
           </div>
-          <div className="bg-white border border-[#CCD8D1] rounded-2xl p-5 sm:p-6 shadow-2xs">
-            <div className="text-xs font-black text-[#1A5340] uppercase tracking-wider mb-3">融资与估值</div>
-            <InfoRow label="最新轮次" value={funding?.latest_round} />
-            <InfoRow label="投资方" value={funding?.investors} />
-            <InfoRow label="估值" value={funding?.valuation} />
-            <div className="text-[11px] text-[#8D9A92] mt-3">以上为 AI 检索生成，面试前请复核。</div>
-          </div>
-          <div className="bg-white border border-[#CCD8D1] rounded-2xl p-5 sm:p-6 shadow-2xs">
-            <div className="text-xs font-black text-[#1A5340] uppercase tracking-wider mb-3">核心团队</div>
-            <InfoRow label="创始人" value={team?.founders} />
-            <InfoRow label="关键高管" value={team?.key_executives} />
-          </div>
+          {!aspects && (
+            <div className="bg-white border border-[#CCD8D1] rounded-2xl p-5 sm:p-6 shadow-2xs">
+              <div className="text-xs font-black text-[#1A5340] uppercase tracking-wider mb-3">融资与估值</div>
+              <InfoRow label="最新轮次" value={funding?.latest_round} />
+              <InfoRow label="投资方" value={funding?.investors} />
+              <InfoRow label="估值" value={funding?.valuation} />
+              <div className="text-[11px] text-[#8D9A92] mt-3">以上为 AI 检索生成，面试前请复核。</div>
+            </div>
+          )}
+          {!aspects && (
+            <div className="bg-white border border-[#CCD8D1] rounded-2xl p-5 sm:p-6 shadow-2xs">
+              <div className="text-xs font-black text-[#1A5340] uppercase tracking-wider mb-3">核心团队</div>
+              <InfoRow label="创始人" value={team?.founders} />
+              <InfoRow label="关键高管" value={team?.key_executives} />
+            </div>
+          )}
         </div>
       </>
     );

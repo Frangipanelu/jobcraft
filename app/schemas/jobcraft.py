@@ -7,7 +7,7 @@ JobCraft 求职助手 Pydantic 数据模型
 import json
 from typing import Any, Dict, List, Literal, Optional
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 # ============================================================
@@ -953,9 +953,13 @@ class CompanyResearchInfo(BaseModel):
     = `{aspects, cached_at, from_cache}`，键无碰撞。
     旧自由字段 basic/business/funding/team/industry/news/sources 已删除；
     旧缓存无 aspects → FE 双形消费走 legacy 分支（mappers.buildInterviewFromPrep）。
+    顶层 extra=forbid：LLM 漏包 aspects（平铺输出 overview 在顶层）校验即拒，
+    走 llm_json plain-JSON 兜底重试，而不是静默落一个空容器缓存 7 天。
 
     :param aspects: 6 维 aspect 集合（缺省空容器 = 各维皆无据）
     """
+
+    model_config = ConfigDict(extra="forbid")
 
     aspects: CompanyResearchAspects = Field(
         default_factory=CompanyResearchAspects,
