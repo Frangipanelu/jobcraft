@@ -10,7 +10,7 @@
 - [x] **主窗口规格审查补 1 修复**：跨岗位切换/草稿残留的旧 `selectedVersionId` 不在本岗位列表时——select 显示空但显式 id 仍透传（**他岗版本泄漏进场次**）→ `ResumeStep` 加自愈 effect（`!isPending` 且 id 不在过滤列表 → 自动清空），+2 测试（旧选中自愈清空 / 有效选中不误清）。
 - **门禁（本批实跑）**：tsc exit 0；定向 vitest **19/19**；全量 vitest **386/386（41 文件，0 failed）**；build ✓；ruff ✓；pytest **1310 passed / 13 skipped**；encoding **429 文件 0 错**。全量曾见 1 failed 复跑即绿——他窗在途测试文件瞬态（两次跑间其新增 2 个测试文件），与本改动无关。
 - **他窗并发**：本批他窗在途 company_research（py）+ 曾同域 FE（`api/types`/`interview/mappers`）交错，pathspec 6 文件零越界。
-- **遗留（登记 H 节 ⑪，非本任务范围）**：空列表「去简历工作台生成」跳转 CTA；方案 2 底座 `base_resume_id` 落列（等真实消费方）。
+- **遗留（登记 H 节 ⑪）**：~~空列表「去简历工作台生成」跳转 CTA~~ **已上线 `3f13d0a`（2026-10-08 遗留 A）**：`ResumeStep` 空态 CTA 按钮（可选 prop `onGoGenerate`）+ modal 镜像 `handleOpenJDAnalysis` 模式（`saveDraft` 不清稿 → toast → `go('resume_editor', { jobId })` 带岗位跳转 → `onClose`），回流靠草稿恢复，+1 测试（CTA 点击/未传不渲染）；门禁 tsc 0 / 定向 20 绿 / 全量 **392/392** / build ✓ / ruff ✓ / pytest **1345/13** / encoding **433 文件 0 错**（全量 1 failed 复跑即绿=他窗在途瞬态）。**遗留 B（方案 2 底座 `base_resume_id` 落列）** 等触发条件（H 节 ⑪ 蓝图）。
 
 ## T-P7-1 公司调研 wire 统一包 aspects 层 + 规格审查修复收口（2026-10-09，A 窗·P7 批首任务）
 
