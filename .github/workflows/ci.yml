@@ -49,6 +49,8 @@ jobs:
           MYSQL_USER: test
           MYSQL_PASSWORD: test
           MYSQL_DATABASE: jobcraft
+          # T-P7-2 起 company_research 构造 TavilyClient（需该环境变量；测试用假搜索不外呼）
+          TAVILY_API_KEY: tvly-ci-fake-key-not-real
 
   security-scan:
     runs-on: ubuntu-latest
