@@ -14,10 +14,6 @@ import { JOBS_QUERY_KEY, deriveJobStatus } from '../jobs/mappers';
 import { EXPERIENCES_QUERY_KEY } from '../experiences/mappers';
 
 
-function readJdAnalyses(client: QueryClient): JDAnalysis[] {
-  return client.getQueryData<JDAnalysis[]>([...JD_ANALYSES_QUERY_KEY]) || [];
-}
-
 function readJobs(client: QueryClient): Job[] {
   return client.getQueryData<Job[]>([...JOBS_QUERY_KEY]) || [];
 }

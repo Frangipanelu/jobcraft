@@ -7,8 +7,7 @@ import {
   Briefcase,
   Search,
   Plus,
-  ArrowRight,
-  Filter
+  ArrowRight
 } from 'lucide-react';
 
 interface JobsListViewProps {

@@ -43,9 +43,6 @@ export const WorkbenchView: React.FC<WorkbenchViewProps> = ({
   const pendingCount = jobs.filter(
     (j) => j.status === 'pending'
   ).length;
-  const finishedCount = jobs.filter(
-    (j) => j.status === 'finished'
-  ).length;
 
   const activeCount = jobs.filter(
     (j) => j.status !== 'finished'
