@@ -189,6 +189,19 @@ export const NewInterviewModal: React.FC<Props> = ({ isOpen, jobId, mode, onClos
     }
   };
 
+  // T-M7-8 遗留 A：空列表「去简历工作台生成」——镜像 handleOpenJDAnalysis：
+  // saveDraft 保存草稿（不走 handleClose，它会清稿），回流靠草稿恢复（无反向返回目标机制）。
+  const handleGoGenerateResume = () => {
+    saveDraft();
+    showToast({
+      type: 'info',
+      title: '前往简历工作台',
+      message: '生成该岗位简历版本后，返回此处继续创建面试（草稿已保存）。'
+    });
+    go('resume_editor', selectedJobId ? { jobId: selectedJobId } : undefined);
+    onClose();
+  };
+
   // Handle next
   const handleNext = () => {
     if (step < maxStep) {
@@ -318,6 +331,7 @@ export const NewInterviewModal: React.FC<Props> = ({ isOpen, jobId, mode, onClos
           selectedVersionId={selectedVersionId}
           onSelectedVersionIdChange={setSelectedVersionId}
           jobAnalysisId={jobAnalysisId}
+          onGoGenerate={handleGoGenerateResume}
         />
       );
     }

@@ -258,6 +258,44 @@ describe('ResumeStep（H⑪/T-M7-8 关联简历切投递版本）', () => {
     expect(onSelectedVersionIdChange).not.toHaveBeenCalled();
   });
 
+  it('遗留 A：空列表且提供 onGoGenerate → 渲染「去简历工作台生成」CTA 并触发回调；未提供不渲染', async () => {
+    job.listResumeVersions.mockResolvedValue([]);
+    const onGoGenerate = vi.fn();
+    const first = renderWithProviders(
+      <ResumeStep
+        stepNumber={3}
+        resumeMode="existing"
+        onResumeModeChange={() => {}}
+        selectedVersionId=""
+        onSelectedVersionIdChange={() => {}}
+        jobAnalysisId={42}
+        onGoGenerate={onGoGenerate}
+      />,
+    );
+
+    expect(
+      await screen.findByText('该岗位暂无简历版本，可先到简历工作台生成'),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '去简历工作台生成' }));
+    expect(onGoGenerate).toHaveBeenCalledTimes(1);
+    first.unmount();
+
+    renderWithProviders(
+      <ResumeStep
+        stepNumber={3}
+        resumeMode="existing"
+        onResumeModeChange={() => {}}
+        selectedVersionId=""
+        onSelectedVersionIdChange={() => {}}
+        jobAnalysisId={42}
+      />,
+    );
+    expect(
+      await screen.findByText('该岗位暂无简历版本，可先到简历工作台生成'),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '去简历工作台生成' })).not.toBeInTheDocument();
+  });
+
   it('无关联简历时展示提示文案', () => {
     renderWithProviders(
       <ResumeStep

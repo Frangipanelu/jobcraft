@@ -18,6 +18,8 @@ interface ResumeStepProps {
   onSelectedVersionIdChange: (id: string) => void;
   /** 当前岗位的 job_analysis_id（版本列表客户端过滤键；缺省时列表视为空） */
   jobAnalysisId?: number | null;
+  /** T-M7-8 遗留 A：空列表「去简历工作台生成」CTA 回调（由 modal 注入保存草稿+跳转逻辑） */
+  onGoGenerate?: () => void;
 }
 
 /**
@@ -28,6 +30,8 @@ interface ResumeStepProps {
  * - 向导显式选中的版本经 onSelectedVersionIdChange 上交，创建时覆盖派生值；
  *   none/upload/未选则维持 mutation 内既有派生逻辑；
  * - 上传成功不再回填选中（底座 hr-<serverId> 不得流入版本字段，域隔离）；
+ * - 遗留 A（2026-10-08）：空列表提供「去简历工作台生成」CTA，跳转/存草稿逻辑
+ *   经 onGoGenerate 由 modal 注入（本组件不依赖路由）；
  * - FE-UPLOAD-01 上传链（preview 解析 → confirm 入库 → base-resumes 元数据）
  *   保持不变：失败报错、不出现假成功。
  */
@@ -38,6 +42,7 @@ export const ResumeStep: React.FC<ResumeStepProps> = ({
   selectedVersionId,
   onSelectedVersionIdChange,
   jobAnalysisId,
+  onGoGenerate,
 }) => {
   const { data: allVersions = [], isPending } = useResumeVersionsQuery();
   const { showToast } = useToastActions();
@@ -135,6 +140,20 @@ export const ResumeStep: React.FC<ResumeStepProps> = ({
               <p className="text-[13px]" style={{ color: '#A8ADA8' }}>
                 该岗位暂无简历版本，可先到简历工作台生成
               </p>
+              {onGoGenerate && (
+                <button
+                  type="button"
+                  onClick={onGoGenerate}
+                  className="mt-3 px-4 py-[7px] text-[13px] rounded-lg"
+                  style={{
+                    border: '1px solid #C8D8D1',
+                    background: '#FFFFFF',
+                    color: '#3E6256'
+                  }}
+                >
+                  去简历工作台生成
+                </button>
+              )}
             </div>
           ) : (
             <>
