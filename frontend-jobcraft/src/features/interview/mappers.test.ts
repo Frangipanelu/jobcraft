@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { CompanyResearchAspects } from '../../api/types';
 import { InterviewPrepRecord } from '../../types/jobcraft';
 import { buildInterviewFromPrep, mapRoundType, prepRecordToInterview, roundTypeToCn } from './mappers';
 
@@ -99,6 +100,120 @@ describe('buildInterviewFromPrep', () => {
     );
     expect(iv.roundName).toBe('面试准备');
     expect(iv.time).toBe('');
+  });
+});
+
+describe('buildInterviewFromPrep · 公司调研双形消费（T-P7-1）', () => {
+  const aspects: CompanyResearchAspects = {
+    overview: [
+      { content: '公司 2012 年成立于北京', source_url: 'https://example.com/about', source_type: '官方', sufficiency: 'full' },
+      { content: '团队规模 10 万+，Pre-IPO 阶段', source_type: '官方', sufficiency: 'partial' },
+    ],
+    business: [
+      { content: '主营抖音/今日头条，广告+电商盈利（自研）', source_type: '官方', sufficiency: 'full' },
+      { content: '第二业务线', source_type: '官方', sufficiency: 'partial' },
+      { content: '第三业务线', source_type: '官方', sufficiency: 'partial' },
+      { content: '第四业务线', source_type: '官方', sufficiency: 'partial' },
+    ],
+    ecosystem: [{ content: '短视频赛道头部（推断）', source_type: 'AI推断', sufficiency: 'partial' }],
+    team: [{ content: '创始人张一鸣', source_type: '官方', sufficiency: 'full' }],
+    recent: [
+      { content: '发布新 AI 产品', date: '2026-01-15', source_type: '新闻', sufficiency: 'full' },
+      { content: '无日期动态', source_type: '新闻', sufficiency: 'partial' },
+    ],
+    reputation: [{ content: '牛客面经：三轮技术面重项目深挖', source_type: '社交', sufficiency: 'partial' }],
+  };
+
+  it('aspects 存在时新结构推导：overview 连接 / business 首条与前 3 / recent 带日期', () => {
+    const iv = buildInterviewFromPrep(
+      {
+        round_type: '技术面',
+        dimension_questions: [],
+        company_research: { aspects },
+        created_at: null,
+      },
+      { id: 'prep-a', company: '字节跳动', role: 'AI 产品经理' }
+    );
+
+    expect(iv.preparation.companyResearch).toEqual({
+      background: '公司 2012 年成立于北京；团队规模 10 万+，Pre-IPO 阶段',
+      coreBusiness: '主营抖音/今日头条，广告+电商盈利（自研）',
+      keyProducts: [
+        '主营抖音/今日头条，广告+电商盈利（自研）',
+        '第二业务线',
+        '第三业务线',
+      ],
+      relevantBusiness: '短视频赛道头部（推断）',
+      recentNews: ['2026-01-15 发布新 AI 产品', '无日期动态'],
+      aiHiringIntent: '',
+    });
+  });
+
+  it('aspects 存在但维级缺据（空列表）时该字段回退旧字段映射，无旧字段则为空', () => {
+    const iv = buildInterviewFromPrep(
+      {
+        round_type: '技术面',
+        dimension_questions: [],
+        company_research: {
+          aspects: { overview: [], business: [], ecosystem: [], team: [], recent: [], reputation: [] },
+          basic: { description: '旧缓存描述', industry: 'AIGC' },
+          business: { main_business: '旧缓存主营', product_names: ['旧产品'] },
+          news: [{ title: '旧新闻' }],
+          ai_hiring: '旧招聘意图',
+        },
+        created_at: null,
+      },
+      { id: 'prep-b', company: 'X', role: 'Y' }
+    );
+
+    expect(iv.preparation.companyResearch.background).toBe('旧缓存描述');
+    expect(iv.preparation.companyResearch.coreBusiness).toBe('旧缓存主营');
+    expect(iv.preparation.companyResearch.keyProducts).toEqual(['旧产品']);
+    expect(iv.preparation.companyResearch.relevantBusiness).toBe('AIGC');
+    expect(iv.preparation.companyResearch.recentNews).toEqual(['旧新闻']);
+    expect(iv.preparation.companyResearch.aiHiringIntent).toBe('旧招聘意图');
+  });
+
+  it('aspects 缺失（旧缓存）走旧字段映射：news 对象/字符串混合', () => {
+    const iv = buildInterviewFromPrep(
+      {
+        round_type: '技术面',
+        dimension_questions: [],
+        company_research: {
+          basic: { description: '人工智能公司', industry: 'AIGC' },
+          business: { main_business: '智能助手', product_names: ['豆包'] },
+          news: [{ title: '发布新模型' }, '字符串新闻', { title: '' }],
+          ai_hiring: '加大 AI 人才招聘',
+        },
+        created_at: null,
+      },
+      { id: 'prep-c', company: '字节跳动', role: 'AI 产品经理' }
+    );
+
+    expect(iv.preparation.companyResearch).toEqual({
+      background: '人工智能公司',
+      coreBusiness: '智能助手',
+      keyProducts: ['豆包'],
+      relevantBusiness: 'AIGC',
+      recentNews: ['发布新模型', '字符串新闻'],
+      aiHiringIntent: '加大 AI 人才招聘',
+    });
+  });
+
+  it('aspects 与旧字段皆缺（{}）不抛，产出全空壳', () => {
+    const iv = buildInterviewFromPrep(
+      { round_type: '技术面', dimension_questions: [], company_research: {}, created_at: null },
+      { id: 'prep-d', company: 'X', role: 'Y' }
+    );
+
+    expect(iv.preparation.companyResearch).toEqual({
+      background: '',
+      coreBusiness: '',
+      keyProducts: [],
+      relevantBusiness: '',
+      recentNews: [],
+      aiHiringIntent: '',
+    });
   });
 });
 

@@ -581,10 +581,35 @@ export interface DimensionQuestion {
 }
 
 /**
+ * 公司调研单条条目（T-P7-1：6 维 aspect 内层结构化，与后端 ResearchItem 对齐）。
+ * 旧缓存（无 aspects）仍可能是旧自由结构，字段因此全可选。
+ */
+export interface ResearchItemShape {
+  content?: string
+  source_url?: string
+  date?: string
+  source_type?: '官方' | '新闻' | '社交' | 'AI推断'
+  sufficiency?: 'full' | 'partial' | 'insufficient'
+}
+
+/** 公司调研 6 维 aspect（键名与后端 CompanyResearchInfo 裁定一致，不得改）。 */
+export interface CompanyResearchAspects {
+  overview?: ResearchItemShape[]
+  business?: ResearchItemShape[]
+  ecosystem?: ResearchItemShape[]
+  team?: ResearchItemShape[]
+  recent?: ResearchItemShape[]
+  reputation?: ResearchItemShape[]
+}
+
+/**
  * 公司背调结构（后端 company_research JSON 的消费子集）。
+ * 双形（T-P7-1）：新数据走 aspects 六维逐条结构，旧缓存仍是下方自由字段，
+ * 消费方（mappers.buildInterviewFromPrep）新结构优先、旧字段兜底。
  * 与 app/schemas/jobcraft.py CompanyResearchInfo 对齐，字段均可选（AI 生成结果可能缺项）。
  */
 export interface CompanyResearchShape {
+  aspects?: CompanyResearchAspects
   basic?: {
     name?: string
     full_name?: string

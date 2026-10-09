@@ -1,4 +1,4 @@
-import { CompanyResearchShape } from '../../api/types';
+import { CompanyResearchAspects, CompanyResearchShape, ResearchItemShape } from '../../api/types';
 import { Interview, InterviewPrepRecord, InterviewPreparation } from '../../types/jobcraft';
 
 /** Interviews 查询缓存 key（react-query 唯读源）。 */
@@ -56,6 +56,61 @@ export function prepRecordToInterview(rec: InterviewPrepRecord): Interview {
 }
 
 /**
+ * 旧结构（aspects 缺失的历史缓存）→ companyResearch 映射。
+ * T-P7-1 前的原逻辑保留，作为旧缓存读兜底。
+ */
+function legacyCompanyResearch(cr: CompanyResearchShape): InterviewPreparation['companyResearch'] {
+  return {
+    background: cr?.basic?.description || '',
+    coreBusiness: cr?.business?.main_business || '',
+    keyProducts: cr?.business?.product_names || [],
+    relevantBusiness: cr?.basic?.industry || '',
+    recentNews: (cr?.news || []).slice(0, 3).map((n) => (typeof n === 'string' ? n : (n?.title ?? ''))).filter(Boolean),
+    aiHiringIntent: cr?.ai_hiring || ''
+  };
+}
+
+/** aspect 条目列表 → 非空 content 列表（空 content 条目丢弃）。 */
+function aspectContents(items?: ResearchItemShape[]): string[] {
+  return (items || []).map((it) => (it?.content ? it.content : '')).filter(Boolean);
+}
+
+/**
+ * 新结构 aspects（6 维逐条）→ companyResearch 推导（T-P7-1）：
+ * background=overview 各条连接、coreBusiness=business 首条、
+ * keyProducts=business 前 3 条、relevantBusiness=ecosystem 首条、
+ * recentNews=recent 前 3 条（带 date 前缀）、aiHiringIntent 新结构无对应走旧字段。
+ * 派生值为空的字段回退旧字段映射（同一记录理论上不会双形并存，纯防御）。
+ */
+function deriveCompanyResearch(cr: CompanyResearchShape): InterviewPreparation['companyResearch'] {
+  const aspects: CompanyResearchAspects = cr.aspects || {};
+  const legacy = legacyCompanyResearch(cr);
+  const business = aspectContents(aspects.business);
+  const keyProducts = business.slice(0, 3);
+  const recentNews = (aspects.recent || [])
+    .slice(0, 3)
+    .map((it) => (!it?.content ? '' : it.date ? `${it.date} ${it.content}` : it.content))
+    .filter(Boolean);
+  const background = aspectContents(aspects.overview).join('；');
+  return {
+    background: background || legacy.background,
+    coreBusiness: business[0] || legacy.coreBusiness,
+    keyProducts: keyProducts.length ? keyProducts : legacy.keyProducts,
+    relevantBusiness: aspectContents(aspects.ecosystem)[0] || legacy.relevantBusiness,
+    recentNews: recentNews.length ? recentNews : legacy.recentNews,
+    aiHiringIntent: legacy.aiHiringIntent
+  };
+}
+
+/**
+ * 公司调研双形消费入口（T-P7-1）：aspects 存在优先新结构推导，
+ * 缺失（旧缓存）走旧字段映射，两者皆缺返回全空壳不抛。
+ */
+function buildCompanyResearch(cr: CompanyResearchShape): InterviewPreparation['companyResearch'] {
+  return cr.aspects ? deriveCompanyResearch(cr) : legacyCompanyResearch(cr);
+}
+
+/**
  * 由后端面试准备结果（维度题 + 公司调研摘要）构建前端 Interview 全量模型。
  * 自 JobCraftContext 移出；语义原样搬移（status 'preparing'、逐题构建 preparedAnswer）。
  * 不再伪造 readinessPercent/星级/推荐分等假指标（FE-FAKE-01），缺值由消费方按真实数据显示。
@@ -104,14 +159,7 @@ export function buildInterviewFromPrep(
     format: 'video',
     status: 'preparing',
     preparation: {
-      companyResearch: {
-        background: cr?.basic?.description || '',
-        coreBusiness: cr?.business?.main_business || '',
-        keyProducts: cr?.business?.product_names || [],
-        relevantBusiness: cr?.basic?.industry || '',
-        recentNews: (cr?.news || []).slice(0, 3).map((n) => (typeof n === 'string' ? n : (n?.title ?? ''))).filter(Boolean) || [],
-        aiHiringIntent: cr?.ai_hiring || ''
-      },
+      companyResearch: buildCompanyResearch(cr),
       aiStrategy: {
         roundTypeDesc: prep.round_type ? `${prep.round_type}面试准备` : '面试准备',
         keyFocusAreas: (prep.dimension_questions || []).map((dq) => ({
