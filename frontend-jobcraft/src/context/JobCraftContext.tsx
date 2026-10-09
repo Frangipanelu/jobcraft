@@ -39,10 +39,17 @@ interface JobCraftContextType {
   login: (username: string, password: string) => Promise<void>;
   register: (username: string, password: string, email?: string) => Promise<void>;
   logout: () => void;
-  currentUserId: number;
+  currentUserId: number | null;
 }
 
 const JobCraftContext = createContext<JobCraftContextType | undefined>(undefined);
+
+/**
+ * 归一化服务端返回的用户身份（T-M10-4）：仅接受有限正整数，
+ * 其余（null/undefined/0/非法值）一律视为未登录，避免类型违约置入 undefined。
+ */
+export const normalizeUserId = (value: unknown): number | null =>
+  typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null;
 
 // ---- Toast 高变上下文（独立拆分：toast 队列变化不影响 useJobCraft 消费者）----
 
@@ -108,7 +115,7 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
   const [isLoading, setIsLoading] = useState(true);
   const [isInitialLoaded, setIsInitialLoaded] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [currentUserId, setCurrentUserId] = useState<number>(1);
+  const [currentUserId, setCurrentUserId] = useState<number | null>(null);
 
   // 初始化：尝试自动登录。域数据由路由下的 react-query hooks 自行加载，不再经 context 聚合。
   useEffect(() => {
@@ -117,8 +124,9 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
         setIsLoading(true)
 
         // 1. 尝试自动登录（无 token 或失效则停留在登录页）
-        const userId = await authApi.autoLogin()
+        const userId = normalizeUserId(await authApi.autoLogin())
         if (userId === null) {
+          setCurrentUserId(null)
           setIsAuthenticated(false)
           setIsInitialLoaded(true)
           return
@@ -144,7 +152,11 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
   const login = useCallback(async (username: string, password: string) => {
     setIsLoading(true)
     try {
-      const userId = await authApi.login(username, password)
+      const userId = normalizeUserId(await authApi.login(username, password))
+      if (userId === null) {
+        // 服务端契约违约：不置入伪身份，也不谎报已登录
+        throw new Error('登录失败：服务端未返回有效的用户 ID')
+      }
       setCurrentUserId(userId)
       setIsAuthenticated(true)
       setIsInitialLoaded(true)
@@ -161,7 +173,10 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
   const register = useCallback(async (username: string, password: string, email?: string) => {
     setIsLoading(true)
     try {
-      const userId = await authApi.register(username, password, email)
+      const userId = normalizeUserId(await authApi.register(username, password, email))
+      if (userId === null) {
+        throw new Error('注册失败：服务端未返回有效的用户 ID')
+      }
       setCurrentUserId(userId)
       setIsAuthenticated(true)
       setIsInitialLoaded(true)
@@ -178,7 +193,7 @@ export const JobCraftProvider: React.FC<{ children: ReactNode }> = ({ children }
   const logout = useCallback(() => {
     authApi.logout()
     setIsAuthenticated(false)
-    setCurrentUserId(1)
+    setCurrentUserId(null)
   }, [])
 
   /**

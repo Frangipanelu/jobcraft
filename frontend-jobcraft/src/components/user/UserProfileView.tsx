@@ -33,6 +33,14 @@ interface UserProfileViewProps {
   initialTab?: 'resumes' | 'profile' | 'preferences' | 'settings';
 }
 
+/**
+ * 构造全量数据包导出文件名（T-M10-4）。
+ * currentUserId 为 null（未登录/异常）时不拼接 "null" 字样，回退匿名标识，
+ * 避免文件名谎报身份或写出 `..._null.json`。
+ */
+export const buildExportFileName = (userId: number | null): string =>
+  `jobcraft_export_${userId ?? 'anonymous'}.json`;
+
 export const UserProfileView: React.FC<UserProfileViewProps> = ({ initialTab }) => {
   const {
     navigateTo,
@@ -127,7 +135,7 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({ initialTab }) 
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `jobcraft_export_${currentUserId}.json`;
+      a.download = buildExportFileName(currentUserId);
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
