@@ -2,6 +2,16 @@
 
 > 本文件用于追踪项目整体进度。AI 在每次会话结束或完成子任务时，必须更新本文件的对应板块。
 
+## T-M9-3 沉淀为表达按钮 + T-M7-5 残透传——第五轮 C 窗批次收口（2026-10-08，C 窗·P1 反哺链第四棒）
+
+> 计划：`docs/superpowers/plans/2026-10-07-p1-feedback-chain-m9.md` Task 3/4。T-M9-3 = subagent-driven（fresh implementer → 主窗口双审无阻断）；T-M7-5 残 = 主窗口自实现（0.05d 小改，上下文已完整掌握）。**P1 关键路径（T-W12-1 → M9-1 → M9-2 → M9-3）全清 ✅**。
+
+- [x] **T-M9-3 `6d84f56`（5 文件，+381/-11）**：`SourceRef.source_type` 两端 additive 扩 `interview_prep`（BE `jobcraft.py` Literal + FE `types.ts` 联合；DB `_normalize_source_refs` 直通零改动）；`InterviewPrepWorkspaceView` 演练 tab「保存草稿」旁加「沉淀为表达」（草稿空禁用 → inline 弹层：active 卡懒加载下拉必选 + 内容预填可编辑 + pending 防重复），payload `source_refs=[{id:'interview_prep:<prepId>:<qid>', source_type, source_id:String(prepId), locator:String(qid)}]` 走 `useCreateExpressionMutation`（candidate 态，自动失效 `expressionQueryKey`）；成功 toast 标注「候选态可在经历库激活」、失败 toast 不关弹层；**切题自动收起弹层**（content 与 locator 题号防错位，实现者正确增补）；测试 FE +4（禁用/预填/载荷/失败）+ BE +2（interview_prep 200 / 未知值仍 422）。
+- [x] **T-M7-5 残 `1d0d4f0`（2 文件，+81/-1）**：向导 finish → mutation → `createInterviewSession` 补 `resume_version_id`。**语义裁决**（执行时发现底座简历与 version 域不同源，登记 TODO H 节 ⑪）：不透传 `ResumeStep` 的底座简历选择（`hr-<serverId>` 写入会跨域悬挂），改按列语义 **M5-Q3「轮次关联简历版本」** 从 `resume-versions` 派生——同 analysis `selected_for_application` 单选优先 → version_no/id 降序最新兜底 → 无则 null（对齐 BE `get_selected_resume_version`），`fetchQuery(staleTime 60s)` 查询失败 catch 落 null **不阻断建场次**；测试 +2（单选优先跨 analysis 排除 / 查询失败仍建场次）+ 既有 exact 断言同步 `resume_version_id: null`，新测试加 JOBS 缓存预热等待防时序 flake。
+- **门禁（批次终局实跑）**：pytest **1273 passed / 13 skipped / 0 failed**；ruff check ✓；encoding **426 文件 0 错**；tsc exit 0；vitest **354 passed / 38 files**（基线 350 + 本批 +2 + 他窗在途 +2）；build ✓（4.01s，存量 chunk>500kB 与 @import 告警）。
+- **⚠️ 共享工作区**：他窗 T-M4-4（jd 分类域）本批全程交错提交（`cd3518b`/`d1de6f1`/`a2bead0`/`c1e02c5`），pathspec 均零越界；首跑 vitest 1 failed 复跑全绿（他窗在途文件瞬态），本批新测试已加竞态防护。
+- **遗留移交**：W12 §7 手动验收待用户（真库跑 V0026 应用 + 链路点验）；H 节 ⑪（向导版本选择 UX）登记备查；部署序「先 migrate 后发码」上线时执行。
+
 ## T-M9-2 回流读取改造：validation_level/usage 降序 + deprecated 语义锁定（2026-10-08，C 窗·P1 反哺链第三棒）
 
 > 计划：`docs/superpowers/plans/2026-10-07-p1-feedback-chain-m9.md` Task 2（动前实测核验收窄改动面）。执行方式 = subagent-driven：fresh implementer → 主窗口双审（spec 逐项吻合 + 质量无阻断，无 Critical/Important）→ 门禁抽查 → 提交。裁决依据 = feature-alignment M9 Q2-A + PRD:161/431。
