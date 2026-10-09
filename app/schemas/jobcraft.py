@@ -7,7 +7,7 @@ JobCraft 求职助手 Pydantic 数据模型
 import json
 from typing import Any, Dict, List, Literal, Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 # ============================================================
@@ -872,14 +872,15 @@ class ResearchItem(BaseModel):
     """公司调研单条条目：内容与来源绑定（D3 Evidence 契约）。
 
     每条信息必须能追溯来源强度：source_url/source_type 绑定来源，
-    sufficiency 标注条目级证据强度。纯推断条目 source_type=AI推断
-    且 source_url 可为空——任何降级路径不产出无来源内容（铁律）。
+    sufficiency 标注条目级证据强度。铁律（矩阵失败降级段：任何降级
+    路径不产出无来源内容）在 schema 层强制：source_type != AI推断
+    的条目必须给出 source_url，给不出来源就只能标 AI推断。
     """
 
     content: str = Field(
         ..., min_length=1, description="面试桌上直接用得上的一句话（禁止空串）"
     )
-    source_url: str = Field("", description="来源 URL；AI推断条目可为空")
+    source_url: str = Field("", description="来源 URL；仅 AI推断条目可为空")
     date: str = Field("", description="信息日期 YYYY-MM-DD，近期动态尽量提供")
     source_type: Literal["官方", "新闻", "社交", "AI推断"] = Field(
         "AI推断",
@@ -890,15 +891,27 @@ class ResearchItem(BaseModel):
         description="条目级证据强度：full=来源明确，partial=部分佐证，insufficient=存疑待核",
     )
 
+    @model_validator(mode="after")
+    def _require_source_url_for_non_inference(self) -> "ResearchItem":
+        """非 AI推断条目必须绑定 source_url（无来源只能标 AI推断）。
 
-class CompanyResearchInfo(BaseModel):
-    """公司背调 6 维结构（P7 维度终稿，D3：schema 内层结构化）。
+        :return: 自身（校验通过）
+        :raises ValueError: source_type 非 AI推断且 source_url 为空
+        """
+        if self.source_type != "AI推断" and not self.source_url.strip():
+            raise ValueError(
+                f"source_type={self.source_type} 必须提供 source_url"
+                "（铁律：不产出无来源内容，给不出来源请标 AI推断）"
+            )
+        return self
+
+
+class CompanyResearchAspects(BaseModel):
+    """公司调研 6 维 aspect 集合（P7 维度终稿，D3：schema 内层结构化）。
 
     唯一目的=拿下面试；评估类信息（薪资/吐槽/去不去判断）不进本期。
     每维 ≤5 条，只留面试桌上用得上的句子；维级缺证据=空列表
     （消费方视空为不足），禁止编造占位条目。
-    旧自由字段 basic/business/funding/team/industry/news/sources 已删除；
-    旧缓存读兼容由 FE 双形消费完成（mappers.buildInterviewFromPrep）。
 
     :param overview: ①概况卡（成立/规模/阶段一句话），服务开场闲聊，官网顺带
     :param business: ②业务与产品（含盈利方式+是否自研），服务「你对我们业务的理解」，必产
@@ -927,6 +940,26 @@ class CompanyResearchInfo(BaseModel):
     )
     reputation: List[ResearchItem] = Field(
         default_factory=list, max_length=5, description="⑥口碑与面经（必产）"
+    )
+
+
+class CompanyResearchInfo(BaseModel):
+    """公司调研 wire 容器：顶层唯一 `aspects` 键（spec 复审 Critical 修复）。
+
+    wire == `model_dump()` == `{"aspects": {overview/business/ecosystem/team/recent/reputation}}`。
+    agent `run` 返回、`upsert_company_research`、prep 快照（`db_interview`）、
+    force 端点回写全是 dict 透传，天然携带 aspects，链路零改动。
+    顶层留给元数据：`get_or_search_company` 合并 `{**info, cached_at, from_cache}`
+    = `{aspects, cached_at, from_cache}`，键无碰撞。
+    旧自由字段 basic/business/funding/team/industry/news/sources 已删除；
+    旧缓存无 aspects → FE 双形消费走 legacy 分支（mappers.buildInterviewFromPrep）。
+
+    :param aspects: 6 维 aspect 集合（缺省空容器 = 各维皆无据）
+    """
+
+    aspects: CompanyResearchAspects = Field(
+        default_factory=CompanyResearchAspects,
+        description="6 维 aspect 集合（overview/business/ecosystem/team/recent/reputation）",
     )
 
 

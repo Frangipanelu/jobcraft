@@ -1,0 +1,93 @@
+{
+  "aspects": {
+    "overview": [
+      {
+        "content": "字节跳动 2012 年成立于北京，团队规模 10 万+，处于 Pre-IPO 阶段",
+        "source_url": "https://www.bytedance.com/about",
+        "date": "",
+        "source_type": "官方",
+        "sufficiency": "full"
+      },
+      {
+        "content": "总部位于北京，在上海、深圳、杭州设有办公地",
+        "source_url": "https://www.bytedance.com/contact",
+        "date": "",
+        "source_type": "官方",
+        "sufficiency": "partial"
+      }
+    ],
+    "business": [
+      {
+        "content": "主营抖音、今日头条等内容产品，广告与电商为主要盈利方式，核心推荐算法自研",
+        "source_url": "https://www.bytedance.com/zh-cn/",
+        "date": "",
+        "source_type": "官方",
+        "sufficiency": "full"
+      },
+      {
+        "content": "飞书面向企业提供协同办公套件，走 to B 订阅收费",
+        "source_url": "https://www.feishu.cn/",
+        "date": "",
+        "source_type": "官方",
+        "sufficiency": "partial"
+      }
+    ],
+    "ecosystem": [
+      {
+        "content": "位于短视频与内容分发赛道头部，海外 TikTok 面临多国监管不确定性（推断）",
+        "source_url": "",
+        "date": "",
+        "source_type": "AI推断",
+        "sufficiency": "partial"
+      }
+    ],
+    "team": [
+      {
+        "content": "创始人张一鸣为连续创业者，技术背景出身",
+        "source_url": "https://www.bytedance.com/about",
+        "date": "",
+        "source_type": "官方",
+        "sufficiency": "full"
+      },
+      {
+        "content": "组织文化强调始终创业、务实敢为",
+        "source_url": "https://www.bytedance.com/culture",
+        "date": "",
+        "source_type": "官方",
+        "sufficiency": "partial"
+      }
+    ],
+    "recent": [
+      {
+        "content": "发布新一代 AI 编程助手，加码 to B 场景",
+        "source_url": "https://news.example.com/bytedance-ai-2026",
+        "date": "2026-01-15",
+        "source_type": "新闻",
+        "sufficiency": "full"
+      },
+      {
+        "content": "秋招提前批已开放投递，技术岗占多数",
+        "source_url": "https://www.nowcoder.com/effort/bytedance-camp",
+        "date": "2026-02-02",
+        "source_type": "社交",
+        "sufficiency": "partial"
+      }
+    ],
+    "reputation": [
+      {
+        "content": "面经反馈：三轮技术面重项目深挖与系统设计，HR 面关注离职原因",
+        "source_url": "https://www.nowcoder.com/discuss/bytedance-interview",
+        "date": "2025-12-20",
+        "source_type": "社交",
+        "sufficiency": "full"
+      },
+      {
+        "content": "脉脉讨论称面试节奏快、算法题占比高（推断）",
+        "source_url": "",
+        "date": "",
+        "source_type": "AI推断",
+        "sufficiency": "insufficient"
+      }
+    ]
+  }
+}

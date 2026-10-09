@@ -31,6 +31,33 @@ DIMENSION_DESCRIPTIONS = {
 }
 
 
+def _slim_company_research(company_research: Dict[str, Any]) -> Dict[str, Any]:
+    """新结构公司调研的 prompt 瘦身投影（T-P7-1 spec 复审 3c）。
+
+    每条只保留 `content/date/source_type`——source_url/sufficiency 不进
+    prep prompt（URL 无面试价值且占 token）；旧结构原样返回，注入逻辑不动。
+
+    :param company_research: 公司调研 dict（新结构含顶层 aspects，旧结构为自由字段）
+    :return: 新结构投影后的 dict；旧结构/非 dict 形态原样返回
+    """
+    aspects = company_research.get("aspects")
+    if not isinstance(aspects, dict):
+        return company_research
+    slim_aspects: Dict[str, Any] = {}
+    for key, items in aspects.items():
+        if not isinstance(items, list):
+            slim_aspects[key] = items
+            continue
+        slim_aspects[key] = [
+            {field: item.get(field, "") for field in ("content", "date", "source_type")}
+            for item in items
+            if isinstance(item, dict)
+        ]
+    projected = dict(company_research)
+    projected["aspects"] = slim_aspects
+    return projected
+
+
 def _build_interview_prompt(
     round_type: str,
     position: str,
@@ -68,7 +95,11 @@ def _build_interview_prompt(
     company_section = ""
     if company_research:
         try:
-            cr = json.dumps(company_research, ensure_ascii=False, default=str)[:3000]
+            cr = json.dumps(
+                _slim_company_research(company_research),
+                ensure_ascii=False,
+                default=str,
+            )[:3000]
             company_section = (
                 "公司调研信息（面试前了解目标公司，在回答中适当融入）:\n"
                 "---\n"

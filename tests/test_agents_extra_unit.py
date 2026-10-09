@@ -528,12 +528,14 @@ def test_company_research_agent_empty_input(monkeypatch):
         "app.agents.company_research_agent.invoke_structured", _fake_invoke
     )
     out = CompanyResearchAgent().run({"company": "", "search_data": {}})
-    # T-P7-1：六维 aspect 默认空列表（无据维=空，不编造）
-    assert out["info"]["overview"] == []
-    assert out["info"]["business"] == []
-    assert out["info"]["reputation"] == []
+    # T-P7-1：wire 顶层唯一 aspects，六维默认空列表（无据维=空，不编造）
+    assert set(out["info"].keys()) == {"aspects"}
+    assert out["info"]["aspects"]["overview"] == []
+    assert out["info"]["aspects"]["business"] == []
+    assert out["info"]["aspects"]["reputation"] == []
     # 版本化：prompt v2 + prompt_version 记账
     assert captured["prompt_version"] == "2"
+    assert '"aspects"' in captured["prompt"]
     assert "reputation" in captured["prompt"]
 
 
@@ -592,7 +594,7 @@ def test_company_research_agent_with_mock_llm(monkeypatch):
     }
 
     def _fake_invoke(model, schema, prompt, **kwargs):
-        return schema(**fake)
+        return schema(aspects=fake)
 
     monkeypatch.setattr(
         "app.agents.company_research_agent.invoke_structured", _fake_invoke
@@ -603,8 +605,44 @@ def test_company_research_agent_with_mock_llm(monkeypatch):
             "search_data": {"search_results": [{"query": "字节跳动", "result": {}}]},
         }
     )
-    assert out["info"]["overview"][0]["content"].startswith("字节跳动")
-    assert out["info"]["business"][0]["source_type"] == "官方"
-    assert out["info"]["recent"][0]["date"] == "2026-01-15"
-    assert out["info"]["reputation"][0]["source_type"] == "社交"
-    assert "basic" not in out["info"]
+    info = out["info"]
+    assert set(info.keys()) == {"aspects"}
+    aspects = info["aspects"]
+    assert aspects["overview"][0]["content"].startswith("字节跳动")
+    assert aspects["business"][0]["source_type"] == "官方"
+    assert aspects["recent"][0]["date"] == "2026-01-15"
+    assert aspects["reputation"][0]["source_type"] == "社交"
+    assert aspects["ecosystem"][0]["source_type"] == "AI推断"
+
+
+def test_get_or_search_company_merges_metadata_without_collision(monkeypatch):
+    """顶层元数据合并：{**info, cached_at, from_cache} 与 aspects 键无碰撞。"""
+    from app.agents import company_research_agent as mod
+
+    fake_info = {
+        "aspects": {
+            "overview": [],
+            "business": [],
+            "ecosystem": [],
+            "team": [],
+            "recent": [],
+            "reputation": [],
+        }
+    }
+
+    monkeypatch.setattr("app.tools.db_tools.get_company_research", lambda c: None)
+    monkeypatch.setattr("app.tools.db_tools.upsert_company_research", lambda c, i: None)
+
+    class _FakeSearch:
+        def invoke(self, _payload):
+            return {"results": []}
+
+    monkeypatch.setattr("app.tools.tavily_tool.internet_search", _FakeSearch())
+    monkeypatch.setattr(
+        mod.CompanyResearchAgent, "run", lambda self, state: {"info": fake_info}
+    )
+
+    out = mod.get_or_search_company("字节跳动")
+    assert out is not None
+    assert set(out.keys()) == {"aspects", "cached_at", "from_cache"}
+    assert out["aspects"] == fake_info["aspects"]
