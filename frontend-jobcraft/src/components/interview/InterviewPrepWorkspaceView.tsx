@@ -299,6 +299,10 @@ export const InterviewPrepWorkspaceView: React.FC<InterviewPrepWorkspaceViewProp
     const funding = cr?.funding || {};
     const team = cr?.team || {};
     const industry = cr?.industry || {};
+    // T-P7-1 双形：新结构（wire 顶层 aspects）渲染 mapper 派生句，
+    // 旧缓存（无 aspects）照旧读下方自由字段；读不到的 InfoRow 行自然隐藏。
+    const aspects = cr?.aspects;
+    const derived = prep?.companyResearch;
     const news: NewsItemShape[] = [
       ...(cr?.news || []).map((n) => (typeof n === 'string' ? { title: n } : n)),
       ...((prep?.companyResearch?.recentNews as string[]) || []).map((t) => ({ title: t }))
@@ -336,6 +340,7 @@ export const InterviewPrepWorkspaceView: React.FC<InterviewPrepWorkspaceViewProp
               公司基本概况
             </div>
             <InfoRow label="公司名称" value={basic?.full_name || basic?.name || iv.company} />
+            {aspects && <InfoRow label="公司概况" value={derived?.background} />}
             <InfoRow label="成立时间" value={basic?.founded} />
             <InfoRow label="总部地点" value={basic?.headquarters} />
             <InfoRow label="团队规模" value={basic?.size} />
@@ -429,7 +434,10 @@ export const InterviewPrepWorkspaceView: React.FC<InterviewPrepWorkspaceViewProp
         <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
           <div className="bg-white border border-[#CCD8D1] rounded-2xl p-5 sm:p-6 shadow-2xs">
             <div className="text-xs font-black text-[#1A5340] uppercase tracking-wider mb-3">行业与趋势</div>
-            <InfoRow label="所处赛道" value={industry?.sector} />
+            <InfoRow
+              label="所处赛道"
+              value={industry?.sector || (aspects ? derived?.relevantBusiness : '')}
+            />
             <InfoRow label="行业趋势" value={industry?.trends} />
             <InfoRow label="机遇" value={industry?.opportunities} />
             <InfoRow label="风险" value={industry?.risks} />

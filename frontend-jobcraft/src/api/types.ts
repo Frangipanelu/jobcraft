@@ -604,9 +604,10 @@ export interface CompanyResearchAspects {
 
 /**
  * 公司背调结构（后端 company_research JSON 的消费子集）。
- * 双形（T-P7-1）：新数据走 aspects 六维逐条结构，旧缓存仍是下方自由字段，
- * 消费方（mappers.buildInterviewFromPrep）新结构优先、旧字段兜底。
- * 与 app/schemas/jobcraft.py CompanyResearchInfo 对齐，字段均可选（AI 生成结果可能缺项）。
+ * 双形：旧缓存自由结构（basic/business/…）+ 新结构 aspects
+ * （对齐 `app/schemas/jobcraft.py` `CompanyResearchInfo.aspects`）。
+ * 消费方（mappers.buildInterviewFromPrep）新结构优先、旧字段兜底；
+ * 字段均可选（AI 生成结果可能缺项）。
  */
 export interface CompanyResearchShape {
   aspects?: CompanyResearchAspects

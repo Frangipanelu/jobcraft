@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { CompanyResearchAspects } from '../../api/types';
 import { InterviewPrepRecord } from '../../types/jobcraft';
 import { buildInterviewFromPrep, mapRoundType, prepRecordToInterview, roundTypeToCn } from './mappers';
+import researchFixture from '../../../../tests/fixtures/company_research_payload.json';
 
 function buildRecord(overrides: Partial<InterviewPrepRecord> = {}): InterviewPrepRecord {
   return {
@@ -104,27 +105,11 @@ describe('buildInterviewFromPrep', () => {
 });
 
 describe('buildInterviewFromPrep · 公司调研双形消费（T-P7-1）', () => {
-  const aspects: CompanyResearchAspects = {
-    overview: [
-      { content: '公司 2012 年成立于北京', source_url: 'https://example.com/about', source_type: '官方', sufficiency: 'full' },
-      { content: '团队规模 10 万+，Pre-IPO 阶段', source_type: '官方', sufficiency: 'partial' },
-    ],
-    business: [
-      { content: '主营抖音/今日头条，广告+电商盈利（自研）', source_type: '官方', sufficiency: 'full' },
-      { content: '第二业务线', source_type: '官方', sufficiency: 'partial' },
-      { content: '第三业务线', source_type: '官方', sufficiency: 'partial' },
-      { content: '第四业务线', source_type: '官方', sufficiency: 'partial' },
-    ],
-    ecosystem: [{ content: '短视频赛道头部（推断）', source_type: 'AI推断', sufficiency: 'partial' }],
-    team: [{ content: '创始人张一鸣', source_type: '官方', sufficiency: 'full' }],
-    recent: [
-      { content: '发布新 AI 产品', date: '2026-01-15', source_type: '新闻', sufficiency: 'full' },
-      { content: '无日期动态', source_type: '新闻', sufficiency: 'partial' },
-    ],
-    reputation: [{ content: '牛客面经：三轮技术面重项目深挖', source_type: '社交', sufficiency: 'partial' }],
-  };
+  // 共享契约 fixture：与 BE tests/test_company_research_schema_unit.py 同一份
+  // （tests/fixtures/company_research_payload.json），封死「单测绿但契约断」。
+  const aspects = researchFixture.aspects as CompanyResearchAspects;
 
-  it('aspects 存在时新结构推导：overview 连接 / business 首条与前 3 / recent 带日期', () => {
+  it('aspects 存在时新结构推导（共享契约 fixture）：overview 连接 / business 首条与前 3 / recent 带日期', () => {
     const iv = buildInterviewFromPrep(
       {
         round_type: '技术面',
@@ -136,17 +121,45 @@ describe('buildInterviewFromPrep · 公司调研双形消费（T-P7-1）', () =>
     );
 
     expect(iv.preparation.companyResearch).toEqual({
-      background: '公司 2012 年成立于北京；团队规模 10 万+，Pre-IPO 阶段',
-      coreBusiness: '主营抖音/今日头条，广告+电商盈利（自研）',
+      background:
+        '字节跳动 2012 年成立于北京，团队规模 10 万+，处于 Pre-IPO 阶段；总部位于北京，在上海、深圳、杭州设有办公地',
+      coreBusiness:
+        '主营抖音、今日头条等内容产品，广告与电商为主要盈利方式，核心推荐算法自研',
       keyProducts: [
-        '主营抖音/今日头条，广告+电商盈利（自研）',
-        '第二业务线',
-        '第三业务线',
+        '主营抖音、今日头条等内容产品，广告与电商为主要盈利方式，核心推荐算法自研',
+        '飞书面向企业提供协同办公套件，走 to B 订阅收费',
       ],
-      relevantBusiness: '短视频赛道头部（推断）',
-      recentNews: ['2026-01-15 发布新 AI 产品', '无日期动态'],
+      relevantBusiness:
+        '位于短视频与内容分发赛道头部，海外 TikTok 面临多国监管不确定性（推断）',
+      recentNews: [
+        '2026-01-15 发布新一代 AI 编程助手，加码 to B 场景',
+        '2026-02-02 秋招提前批已开放投递，技术岗占多数',
+      ],
       aiHiringIntent: '',
     });
+  });
+
+  it('business 超过 3 条时 keyProducts 只取前 3（截断规则钉住）', () => {
+    const longBusiness = Array.from({ length: 5 }, (_, i) => ({
+      content: `业务线 ${i + 1}`,
+      source_type: '官方' as const,
+      sufficiency: 'partial' as const,
+    }));
+    const iv = buildInterviewFromPrep(
+      {
+        round_type: '技术面',
+        dimension_questions: [],
+        company_research: { aspects: { ...aspects, business: longBusiness } },
+        created_at: null,
+      },
+      { id: 'prep-e', company: 'X', role: 'Y' }
+    );
+
+    expect(iv.preparation.companyResearch.keyProducts).toEqual([
+      '业务线 1',
+      '业务线 2',
+      '业务线 3',
+    ]);
   });
 
   it('aspects 存在但维级缺据（空列表）时该字段回退旧字段映射，无旧字段则为空', () => {
