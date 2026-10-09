@@ -2124,3 +2124,30 @@ class TestTaskDivSharedValidation:
             "resume_markdown": None,
             "previous_review_summary": None,
         }
+
+    def test_load_enrichment_company_research_guard_returns_none(self, monkeypatch):
+        """T-P7-2 全失败守卫：get_or_search_company 返回 None → enrich 透传 None。
+
+        prep 流 company_research 可空（与 company 字段为空的现状一致），
+        prompt 层 `if company_research` 跳过公司调研段，不产无来源内容。
+        """
+        from app.workflows import interview_prep_flow as flow
+
+        monkeypatch.setattr(
+            flow.db_tools,
+            "get_job_analysis",
+            lambda jid, uid=None: {"company": "X公司"},
+        )
+        monkeypatch.setattr(
+            "app.agents.company_research_agent.get_or_search_company",
+            lambda c, force=False: None,
+        )
+        monkeypatch.setattr(flow.db_tools, "list_submissions", lambda uid: [])
+        monkeypatch.setattr(flow.db_tools, "get_submission", lambda sid, uid=None: None)
+        monkeypatch.setattr(
+            "app.tools.db_resume_version.get_latest_resume_version",
+            lambda *a, **k: None,
+        )
+
+        enrich = flow.load_interview_prep_enrichment(10, 1)
+        assert enrich["company_research"] is None

@@ -6,7 +6,7 @@ Tavily 网络搜索工具模块
 """
 
 import os
-from typing import Literal
+from typing import List, Literal, Optional
 
 from dotenv import load_dotenv
 from langchain_core.tools import tool
@@ -29,6 +29,7 @@ def internet_search(
     topic: Literal["news", "finance", "general"] = "general",
     max_results: int = 5,
     include_raw_content: bool = False,
+    include_domains: Optional[List[str]] = None,
 ):
     """
     根据用户问题检索互联网公开信息
@@ -38,6 +39,7 @@ def internet_search(
     :param topic: 搜索主题，可选 news、finance、general
     :param max_results: 返回的最大结果数
     :param include_raw_content: 是否返回网页原文内容；False 返回摘要，True 尝试返回更完整正文
+    :param include_domains: 域名白名单（可选）：只返回这些域名下的结果；None 表示不限制
     :return: Tavily 返回的结构化搜索结果
     """
     # 工具内部埋点比外层 stream 解析更直接：只要工具被调用，前端就能看到本次搜索参数
@@ -49,6 +51,7 @@ def internet_search(
             "topic": topic,
             "max_results": max_results,
             "include_raw_content": include_raw_content,
+            "include_domains": include_domains,
         },
     )
 
@@ -58,6 +61,7 @@ def internet_search(
         topic=topic,
         max_results=max_results,
         include_raw_content=include_raw_content,
+        include_domains=include_domains,
     )
 
 

@@ -875,6 +875,7 @@ class TestTavilyTool:
                     topic="general",
                     max_results=3,
                     include_raw_content=False,
+                    include_domains=None,
                 )
                 assert result == {"results": [{"title": "test"}]}
 
@@ -900,7 +901,44 @@ class TestTavilyTool:
                     topic="general",
                     max_results=5,
                     include_raw_content=False,
+                    include_domains=None,
                 )
+
+    def test_internet_search_include_domains_passthrough(self):
+        """T-P7-2：include_domains 透传 tavily_client.search + monitor 上报。"""
+        mock_client = MagicMock()
+        mock_client.search.return_value = {"results": []}
+
+        with (
+            patch("tavily.TavilyClient", return_value=mock_client),
+            patch.dict("os.environ", {"TAVILY_API_KEY": "fake-key"}),
+        ):
+            import importlib
+            import app.tools.tavily_tool as mod
+
+            importlib.reload(mod)
+            with (
+                patch.object(mod, "tavily_client", mock_client),
+                patch.object(mod, "monitor") as mock_monitor,
+            ):
+                mod.internet_search.invoke(
+                    {
+                        "query": "字节跳动 官网",
+                        "include_domains": ["bytedance.com", "example.org"],
+                    }
+                )
+                mock_client.search.assert_called_once_with(
+                    query="字节跳动 官网",
+                    topic="general",
+                    max_results=5,
+                    include_raw_content=False,
+                    include_domains=["bytedance.com", "example.org"],
+                )
+                reported = mock_monitor.report_tool.call_args.kwargs["args"]
+                assert reported["include_domains"] == [
+                    "bytedance.com",
+                    "example.org",
+                ]
 
 
 # ============================================================

@@ -635,7 +635,15 @@ def test_get_or_search_company_merges_metadata_without_collision(monkeypatch):
 
     class _FakeSearch:
         def invoke(self, _payload):
-            return {"results": []}
+            return {
+                "results": [
+                    {
+                        "title": "字节跳动官网",
+                        "url": "https://www.bytedance.com/zh/",
+                        "content": "字节跳动是一家科技公司",
+                    }
+                ]
+            }
 
     monkeypatch.setattr("app.tools.tavily_tool.internet_search", _FakeSearch())
     monkeypatch.setattr(
@@ -646,3 +654,367 @@ def test_get_or_search_company_merges_metadata_without_collision(monkeypatch):
     assert out is not None
     assert set(out.keys()) == {"aspects", "cached_at", "from_cache"}
     assert out["aspects"] == fake_info["aspects"]
+
+
+# ---------- T-P7-2 query 工程（配方表 / 全失败守卫 / include_domains / 体积防线） ----------
+
+
+def _fake_aspects_info() -> dict:
+    """空 aspects 六维 info（P7-1 wire 结构）。"""
+    keys = ("overview", "business", "ecosystem", "team", "recent", "reputation")
+    return {"aspects": {k: [] for k in keys}}
+
+
+class _FakeInternetSearch:
+    """internet_search 替身：记录全部调用 payload，按传入函数分派响应。"""
+
+    def __init__(self, responder):
+        self.calls = []
+        self._responder = responder
+
+    def invoke(self, payload):
+        self.calls.append(payload)
+        return self._responder(payload)
+
+
+def _patch_company_research_env(monkeypatch, responder):
+    """替换缓存/搜索/LLM 三层，返回 (fake_search, upserts, llm_states)。"""
+    from app.agents import company_research_agent as mod
+
+    fake = _FakeInternetSearch(responder)
+    upserts = []
+    llm_states = []
+
+    monkeypatch.setattr("app.tools.db_tools.get_company_research", lambda c: None)
+    monkeypatch.setattr(
+        "app.tools.db_tools.upsert_company_research",
+        lambda c, i: upserts.append((c, i)),
+    )
+    monkeypatch.setattr("app.tools.tavily_tool.internet_search", fake)
+
+    def _fake_run(self, state):
+        llm_states.append(state)
+        return {"info": _fake_aspects_info()}
+
+    monkeypatch.setattr(mod.CompanyResearchAgent, "run", _fake_run)
+    return fake, upserts, llm_states
+
+
+def test_query_recipes_seven_with_topic_and_dynamic_year():
+    """矩阵「query 配方 7 条」原文 + topic 分布 + 动态年份（清除硬编码）。"""
+    from datetime import datetime
+
+    from app.agents.company_research_agent import _QUERY_RECIPES, _render_queries
+
+    assert [r["template"] for r in _QUERY_RECIPES] == [
+        "{company} 官网 关于我们 产品服务",
+        "{company} 主营业务 产品线 自研",
+        "{company} 行业 地位 竞争对手 融资",
+        "{company} 创始人 高管 背景",
+        "{company} 最新新闻 {year}",
+        "{company} 面经 面试经验 牛客",
+        "{company} 脉脉 知乎 员工评价",
+    ]
+    assert [r["topic"] for r in _QUERY_RECIPES] == [
+        "general",
+        "general",
+        "finance",
+        "general",
+        "news",
+        "general",
+        "general",
+    ]
+
+    year = datetime.now().year
+    rendered = _render_queries("字节跳动")
+    assert [q["query"] for q in rendered] == [
+        "字节跳动 官网 关于我们 产品服务",
+        "字节跳动 主营业务 产品线 自研",
+        "字节跳动 行业 地位 竞争对手 融资",
+        "字节跳动 创始人 高管 背景",
+        f"字节跳动 最新新闻 {year}",
+        "字节跳动 面经 面试经验 牛客",
+        "字节跳动 脉脉 知乎 员工评价",
+    ]
+    assert [q["topic"] for q in rendered] == [r["topic"] for r in _QUERY_RECIPES]
+    # 只有官网配方带 include_domains 聚焦标记
+    assert [q["domain_refocus"] for q in rendered] == [
+        True,
+        False,
+        False,
+        False,
+        False,
+        False,
+        False,
+    ]
+    # 硬编码「2025 2026」必须清除，动态年份只出现在新闻配方
+    assert all("2025 2026" not in q["query"] for q in rendered)
+
+
+def test_get_or_search_company_all_queries_fail_returns_none(monkeypatch, caplog):
+    """全失败守卫①：所有 query 抛错 → 不调 LLM、不写缓存，返回 None。"""
+    import logging
+
+    from app.agents import company_research_agent as mod
+
+    def _boom(_payload):
+        raise RuntimeError("tavily down")
+
+    fake = _FakeInternetSearch(_boom)
+    upserts = []
+    monkeypatch.setattr("app.tools.db_tools.get_company_research", lambda c: None)
+    monkeypatch.setattr(
+        "app.tools.db_tools.upsert_company_research", lambda c, i: upserts.append(i)
+    )
+    monkeypatch.setattr("app.tools.tavily_tool.internet_search", fake)
+
+    def _no_llm(self, state):
+        raise AssertionError("全失败守卫不应调用 CompanyResearchAgent")
+
+    monkeypatch.setattr(mod.CompanyResearchAgent, "run", _no_llm)
+
+    with caplog.at_level(logging.INFO, logger="jobcraft.agents.company_research"):
+        out = mod.get_or_search_company("字节跳动")
+
+    assert out is None
+    assert len(fake.calls) == 7  # 7 条配方全部尝试，单条失败不中断
+    assert upserts == []
+    assert "成功查询=0/7" in caplog.text
+    assert "全失败守卫触发" in caplog.text
+
+
+def test_get_or_search_company_zero_results_returns_none(monkeypatch, caplog):
+    """全失败守卫②：查询全成功但 0 结果 → 不调 LLM，返回 None。"""
+    import logging
+
+    from app.agents import company_research_agent as mod
+
+    fake = _FakeInternetSearch(lambda _p: {"results": []})
+    upserts = []
+    monkeypatch.setattr("app.tools.db_tools.get_company_research", lambda c: None)
+    monkeypatch.setattr(
+        "app.tools.db_tools.upsert_company_research", lambda c, i: upserts.append(i)
+    )
+    monkeypatch.setattr("app.tools.tavily_tool.internet_search", fake)
+
+    def _no_llm(self, state):
+        raise AssertionError("0 结果守卫不应调用 CompanyResearchAgent")
+
+    monkeypatch.setattr(mod.CompanyResearchAgent, "run", _no_llm)
+
+    with caplog.at_level(logging.INFO, logger="jobcraft.agents.company_research"):
+        out = mod.get_or_search_company("字节跳动")
+
+    assert out is None
+    assert len(fake.calls) == 7  # 0 结果无可回捞域名，不触发聚焦补检
+    assert upserts == []
+    assert "累计结果=0 条" in caplog.text
+    assert "全失败守卫触发" in caplog.text
+
+
+def test_get_or_search_company_partial_failure_proceeds(monkeypatch, caplog):
+    """单条失败跳过继续：2 条失败/5 条成功照常汇总，LLM 收到瘦身投影。"""
+    import logging
+
+    from app.agents import company_research_agent as mod
+
+    def _responder(payload):
+        if "官网" in payload["query"] or "面经" in payload["query"]:
+            raise RuntimeError("单条超时")
+        tail = payload["query"].split()[-1]
+        return {
+            "results": [
+                {
+                    "title": "条目-" + payload["query"],
+                    "url": f"https://site.example.com/{tail}",
+                    "content": "检索摘要内容",
+                }
+            ]
+        }
+
+    fake, upserts, llm_states = _patch_company_research_env(monkeypatch, _responder)
+
+    with caplog.at_level(logging.INFO, logger="jobcraft.agents.company_research"):
+        out = mod.get_or_search_company("字节跳动")
+
+    assert out is not None
+    assert out["from_cache"] is False
+    assert len(upserts) == 1
+    assert len(fake.calls) == 7  # 官网配方失败 → 无聚焦补检
+    assert "成功查询=5/7" in caplog.text
+    assert "累计结果=5 条" in caplog.text
+    # 体积防线：进 LLM 的 search_data 是瘦身投影（每条只留 title/url/content）
+    items = llm_states[0]["search_data"]["search_results"]
+    assert items
+    assert all(set(item.keys()) == {"title", "url", "content"} for item in items)
+    assert llm_states[0]["company"] == "字节跳动"
+
+
+def test_get_or_search_company_refocus_uses_include_domains(monkeypatch):
+    """include_domains 官网聚焦：白名单只来自首轮结果回捞的域名。"""
+    from app.agents import company_research_agent as mod
+
+    def _responder(payload):
+        if payload.get("include_domains"):
+            assert payload["include_domains"] == ["bytedance.com", "baike.baidu.com"]
+            return {
+                "results": [
+                    {
+                        "title": "聚焦页",
+                        "url": "https://www.bytedance.com/about",
+                        "content": "官网介绍",
+                    }
+                ]
+            }
+        if "官网" in payload["query"]:
+            return {
+                "results": [
+                    {
+                        "title": "官网首页",
+                        "url": "https://www.bytedance.com/zh/",
+                        "content": "官网",
+                    },
+                    {
+                        "title": "百科",
+                        "url": "https://baike.baidu.com/item/x",
+                        "content": "百科",
+                    },
+                ]
+            }
+        return {"results": []}
+
+    fake, upserts, llm_states = _patch_company_research_env(monkeypatch, _responder)
+    out = mod.get_or_search_company("字节跳动")
+
+    assert out is not None
+    assert len(fake.calls) == 8  # 7 条配方 + 1 次官网聚焦
+    first, focused = fake.calls[0], fake.calls[1]  # 聚焦紧跟首轮官网查询
+    assert "include_domains" not in first
+    assert first["query"] == "字节跳动 官网 关于我们 产品服务"
+    assert first["topic"] == "general"
+    assert focused["include_domains"] == ["bytedance.com", "baike.baidu.com"]
+    assert focused["max_results"] == 2
+    assert focused["query"] == first["query"]
+    assert focused["topic"] == "general"
+    # 首轮 2 条 + 聚焦 1 条（去重后）全部进 LLM
+    assert len(llm_states[0]["search_data"]["search_results"]) == 3
+    assert len(upserts) == 1
+
+
+def test_get_or_search_company_refocus_failure_skipped(monkeypatch):
+    """聚焦补检失败只跳过：首轮结果照常汇总，不触发全失败守卫。"""
+    from app.agents import company_research_agent as mod
+
+    def _responder(payload):
+        if payload.get("include_domains"):
+            raise RuntimeError("聚焦超时")
+        if "官网" in payload["query"]:
+            return {
+                "results": [
+                    {
+                        "title": "官网首页",
+                        "url": "https://www.example.com/",
+                        "content": "官网",
+                    }
+                ]
+            }
+        return {"results": []}
+
+    fake, upserts, _states = _patch_company_research_env(monkeypatch, _responder)
+    out = mod.get_or_search_company("字节跳动")
+
+    assert out is not None
+    assert len(fake.calls) == 8  # 聚焦被尝试但失败
+    assert len(upserts) == 1
+
+
+def test_slim_search_data_projects_fields_and_drops_query_echo():
+    """体积防线①：只留 title/url/content，去掉 query 回显与 Tavily 冗余字段。"""
+    import json
+
+    from app.agents.company_research_agent import _slim_search_data
+
+    results = [
+        {
+            "query": "QUERY_ECHO_MARKER 官网",
+            "result": {
+                "query": "QUERY_ECHO_MARKER 官网",
+                "response_time": 0.42,
+                "results": [
+                    {
+                        "title": "官网标题",
+                        "url": "https://www.example.com/about",
+                        "content": "内容" * 200,
+                        "score": 0.97,
+                    }
+                ],
+            },
+        }
+    ]
+    data = _slim_search_data(results)
+    assert list(data.keys()) == ["search_results"]
+    item = data["search_results"][0]
+    assert set(item.keys()) == {"title", "url", "content"}
+    assert item["title"] == "官网标题"
+    assert item["url"] == "https://www.example.com/about"
+    assert len(item["content"]) <= 180  # 摘要有上限，非盲目全量
+    dumped = json.dumps(data, ensure_ascii=False)
+    assert "QUERY_ECHO_MARKER" not in dumped
+    assert "response_time" not in dumped
+    assert "score" not in dumped
+
+
+def test_slim_search_data_dedups_repeated_urls():
+    """体积防线②：跨查询/聚焦重复 URL 去重，不重复占预算。"""
+    from app.agents.company_research_agent import _slim_search_data
+
+    entry = {
+        "query": "q",
+        "result": {
+            "results": [
+                {"title": "A", "url": "https://same.example.com/p", "content": "一"},
+                {"title": "B", "url": "https://same.example.com/p", "content": "二"},
+            ]
+        },
+    }
+    data = _slim_search_data([entry, dict(entry)])
+    assert len(data["search_results"]) == 1
+
+
+def test_slim_search_data_fits_budget_for_full_recipe_batch():
+    """体积防线③：7 配方×3 结果+聚焦的肥数据整体 ≤8000，尾部口碑配方不被饿死。"""
+    import json
+
+    from app.agents.company_research_agent import (
+        _build_company_prompt,
+        _slim_search_data,
+    )
+
+    entries = []
+    for i in range(8):  # 7 条配方 + 1 次官网聚焦
+        entries.append(
+            {
+                "query": f"query-{i}",
+                "result": {
+                    "results": [
+                        {
+                            "title": f"标题{i}-{j} " + "长" * 50,
+                            "url": (
+                                f"https://news{i}.example.com/path/{j}"
+                                "?ref=nav&id=123456&from=search"
+                            ),
+                            "content": "内容" * 150,  # 300 字符/条，远超摘要上限
+                            "score": 0.99,
+                        }
+                        for j in range(3)
+                    ]
+                },
+            }
+        )
+    data = _slim_search_data(entries)
+    assert len(data["search_results"]) == 24  # 全部配方结果保留，不整条丢弃
+    dumped = json.dumps(data, ensure_ascii=False)
+    assert len(dumped) <= 8000  # 不触发 _build_company_prompt 的硬截断
+    assert data["search_results"][-1]["title"].startswith("标题7-2")
+    # prompt 注入的是完整投影（[:8000] 未砍尾）
+    assert dumped in _build_company_prompt("字节跳动", data)
