@@ -35,7 +35,25 @@ interface UnifiedErrorBody {
   }
 }
 
-async function parseUnifiedError(res: Response, fallback: string): Promise<Error> {
+/**
+ * 携带 HTTP status 的统一错误对象（T-M10-2 additive）。
+ *
+ * 消息解析与统一错误契约 `{error:{code,message}}` 完全不变——`ApiError` 仅是
+ * `Error` 的子类（message 语义、`instanceof Error` 均与既有消费方兼容），
+ * 附加 `status` 供调用方做分级判断（如 runTaskOrSync 4xx/503 不降级）。
+ */
+export class ApiError extends Error {
+  /** HTTP 响应状态码（非 2xx 时由 request 系列注入） */
+  readonly status: number
+
+  constructor(message: string, status: number) {
+    super(message)
+    this.name = 'ApiError'
+    this.status = status
+  }
+}
+
+async function parseUnifiedError(res: Response, fallback: string): Promise<ApiError> {
   const text = await res.text().catch(() => 'Unknown error')
   let body: UnifiedErrorBody | string = text
   try {
@@ -43,7 +61,7 @@ async function parseUnifiedError(res: Response, fallback: string): Promise<Error
   } catch {
     // 保持原始 text
   }
-  return new Error(parseErrorMessage(body, fallback))
+  return new ApiError(parseErrorMessage(body, fallback), res.status)
 }
 
 function parseErrorMessage(body: UnifiedErrorBody | string, fallback: string): string {
