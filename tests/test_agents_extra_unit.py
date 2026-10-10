@@ -186,6 +186,67 @@ def test_soft_analyzer_with_mock_llm(monkeypatch):
     assert out["soft_results"][0]["score"] == 70
 
 
+def test_analyzers_v3_prompt_version_constant_and_listening(monkeypatch):
+    """T-P7-4 规格收敛（M1-a/m4）：analyzer 模块常量 _PROMPT_VERSION=3，load 版本与审计 prompt_version 一致，v3 注入结构化倾听四步。"""
+    from app.agents.soft_analyzer import SoftAnalyzer
+    from app.agents.soft_analyzer import _PROMPT_VERSION as SOFT_VER
+    from app.agents.tech_analyzer import TechAnalyzer
+    from app.agents.tech_analyzer import _PROMPT_VERSION as TECH_VER
+
+    assert SOFT_VER == 3
+    assert TECH_VER == 3
+
+    cases = (
+        (
+            SoftAnalyzer,
+            "app.agents.soft_analyzer",
+            {
+                "classified": {"tech": [], "soft": [1]},
+                "selected_qa_pairs": [
+                    {
+                        "sequence": 1,
+                        "question_text": "如何协作",
+                        "my_answer": "定期同步",
+                    }
+                ],
+                "position": "产品经理",
+                "company": "腾讯",
+                "round_type": "业务面",
+            },
+        ),
+        (
+            TechAnalyzer,
+            "app.agents.tech_analyzer",
+            {
+                "classified": {"tech": [1], "soft": []},
+                "selected_qa_pairs": [
+                    {
+                        "sequence": 1,
+                        "question_text": "项目经验",
+                        "my_answer": "推荐系统",
+                    }
+                ],
+                "position": "后端工程师",
+                "company": "字节",
+                "round_type": "技术面",
+            },
+        ),
+    )
+    for agent_cls, module_path, state in cases:
+        captured = {}
+
+        def _fake_invoke(model, schema, prompt, **kwargs):
+            captured.update(prompt=prompt, **kwargs)
+            return schema(analyses=[])
+
+        monkeypatch.setattr(f"{module_path}.llm_call", _fake_invoke)
+        agent_cls().run(state)
+        # load 版本（v3 注入内容）与审计 prompt_version 同源一致
+        assert captured["prompt_version"] == "3", module_path
+        assert "结构化倾听" in captured["prompt"], module_path
+        assert "金字塔四原则" in captured["prompt"], module_path
+
+
 # ---------- GateAgent ----------
 
 

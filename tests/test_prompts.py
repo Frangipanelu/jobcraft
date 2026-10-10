@@ -255,15 +255,17 @@ def test_interview_prep_script_v3_framework_routing():
     assert "禁止填卡片标题" in rendered
 
 
-def test_analyzer_v2_pyramid_quality_checklist():
-    """T-P7-4：soft/tech analyzer v2 注入复盘质检方法论（金字塔四原则 + KISS）。"""
+def test_analyzer_v3_pyramid_and_listening_methodology():
+    """T-P7-4：soft/tech analyzer v3 注入复盘质检方法论（③-1 金字塔 + ③-2 结构化倾听 + KISS）。"""
     for name in ("soft_analyzer", "tech_analyzer"):
         fields = _REQUIRED_FIELDS[("interview", name)]
         rendered = load_prompt(
-            "interview", name, version=2, **{f: f"<{f}>" for f in fields}
+            "interview", name, version=3, **{f: f"<{f}>" for f in fields}
         )
         assert "复盘质检方法论" in rendered, name
         assert "金字塔四原则" in rendered, name
+        assert "结构化倾听" in rendered, name
+        assert "intent 字段" in rendered, name
         assert "KISS" in rendered, name
         assert "docs/methodology/structured-expression.md" in rendered, name
         # v1 输出结构约束随全文继承

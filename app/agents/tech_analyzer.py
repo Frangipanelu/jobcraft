@@ -13,6 +13,9 @@ from app.core.llm import model
 from app.core.prompts import load_prompt
 from app.tools.llm_json import invoke_structured as llm_call
 
+#: prompt 模板版本（与 load_prompt version 同步演进；审计 prompt_version 透传用，T-P7-4）
+_PROMPT_VERSION = 3
+
 
 class _TechQuestionAnalysis(BaseModel):
     sequence: int = Field(..., description="问题序号")
@@ -63,7 +66,7 @@ class TechAnalyzer(BaseAgent):
         return load_prompt(
             "interview",
             "tech_analyzer",
-            version=2,
+            version=_PROMPT_VERSION,
             round_type=state.get("round_type", ""),
             position=state.get("position", ""),
             company=state.get("company", ""),
@@ -85,6 +88,6 @@ class TechAnalyzer(BaseAgent):
             prompt,
             debug_label="tech_analyzer",
             max_tokens=4096,
-            prompt_version="2",
+            prompt_version=str(_PROMPT_VERSION),
         )
         return {"tech_results": [a.model_dump() for a in raw.analyses]}
