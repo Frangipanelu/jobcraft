@@ -16,7 +16,7 @@ from app.tools.card_render import get_card_render_text
 logger = logging.getLogger("jobcraft.tools.interview_pre")
 
 #: 面试准备稿 prompt 模板版本（与 load_prompt version 同步演进，审计透传用）
-INTERVIEW_PREP_PROMPT_VERSION = 2
+INTERVIEW_PREP_PROMPT_VERSION = 3
 
 # 8 维能力说明
 DIMENSION_DESCRIPTIONS = {

@@ -63,6 +63,7 @@ class SoftAnalyzer(BaseAgent):
         return load_prompt(
             "interview",
             "soft_analyzer",
+            version=2,
             round_type=state.get("round_type", ""),
             position=state.get("position", ""),
             company=state.get("company", ""),
@@ -84,6 +85,6 @@ class SoftAnalyzer(BaseAgent):
             prompt,
             debug_label="soft_analyzer",
             max_tokens=4096,
-            prompt_version="1",
+            prompt_version="2",
         )
         return {"soft_results": [a.model_dump() for a in raw.analyses]}

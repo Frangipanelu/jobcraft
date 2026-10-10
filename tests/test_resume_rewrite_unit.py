@@ -40,7 +40,10 @@ class TestRewriteResumeBullet:
         )
         assert out == "改写后的要点"
         assert seen["debug_label"] == "resume_rewrite"
-        assert seen["prompt_version"] == "1"
+        assert seen["prompt_version"] == "2"
+        # T-P7-4：v2 注入表达方法论（文档化框架落 prompt）
+        assert "表达方法论" in seen["prompt"]
+        assert "三增量" in seen["prompt"]
         # prompt 已渲染：注入原文与缺口上下文
         assert "负责系统开发" in seen["prompt"]
         assert "要求熟练 Go" in seen["prompt"]

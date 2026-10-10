@@ -1359,7 +1359,7 @@ class TestInterviewPrepFlow:
         assert result["job_analysis_id"] == 10
 
     def test_prep_flow_passes_prompt_version_to_agent(self, monkeypatch):
-        """BE-AI-01：flow 应把 prompt 模板版本（v2）经 state 传给 Agent 审计。"""
+        """BE-AI-01：flow 应把 prompt 模板版本（v3）经 state 传给 Agent 审计。"""
         from app.workflows.interview_prep_flow import run_interview_prep_workflow
 
         self._mock_prep_deps(monkeypatch)
@@ -1398,7 +1398,7 @@ class TestInterviewPrepFlow:
             card_ids=[1],
             user_id=1,
         )
-        assert captured.get("prompt_version") == "2"
+        assert captured.get("prompt_version") == "3"
 
     def test_prep_flow_attaches_active_expression(self, monkeypatch):
         """P2C-01：面试准备消费链应携带每个活跃卡片的激活表达供渲染优先使用。"""

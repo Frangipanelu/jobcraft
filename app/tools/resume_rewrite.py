@@ -47,7 +47,7 @@ def rewrite_resume_bullet(
     prompt = load_prompt(
         "resume",
         "rewrite",
-        version=1,
+        version=2,
         dimension=dimension or "未指定",
         gap_current=gap_current or "未提供",
         jd_evidence=jd_evidence or "未提供",
@@ -60,7 +60,7 @@ def rewrite_resume_bullet(
         RewriteOutput,
         prompt,
         debug_label="resume_rewrite",
-        prompt_version="1",
+        prompt_version="2",
     )
     rewritten = parsed.rewritten_text.strip()
     if not rewritten:

@@ -213,6 +213,64 @@ def test_interview_prep_script_v2_field_mapping():
     assert "elevator_pitch" in rendered
 
 
+# ---------- T-P7-4：三处 prompt 统一引用表达方法论文档 ----------
+
+
+def test_resume_rewrite_v2_expression_methodology():
+    """T-P7-4：rewrite_v2 注入表达方法论切片（事实支撑+数据 / STAR / 三增量 / 克制精炼）。"""
+    fields = _REQUIRED_FIELDS[("resume", "rewrite")]
+    rendered = load_prompt(
+        "resume", "rewrite", version=2, **{f: f"<{f}>" for f in fields}
+    )
+    assert "表达方法论" in rendered
+    assert "三增量" in rendered
+    assert "STAR" in rendered
+    assert "docs/methodology/structured-expression.md" in rendered
+    # 反编造红线随 v1 全文继承
+    assert "禁止编造" in rendered
+
+
+def test_interview_prep_script_v3_framework_routing():
+    """T-P7-4：prep v3 注入表达框架路由（IPRA / MTV / 经历题 / SCQA / 三问）。"""
+    fields = _REQUIRED_FIELDS[("interview", "interview_prep_script")]
+    rendered = load_prompt(
+        "interview",
+        "interview_prep_script",
+        version=3,
+        **{f: f"<{f}>" for f in fields},
+    )
+    assert "表达框架路由" in rendered
+    for keyword in (
+        "IPRA",
+        "MTV",
+        "背景-思路-行动-结果",
+        "PREP",
+        "SCQA",
+        "过去/现在/未来",
+    ):
+        assert keyword in rendered, f"prep v3 缺方法论关键字: {keyword}"
+    assert "docs/methodology/structured-expression.md" in rendered
+    # v2 字段映射与 card_ids 约束随全文继承
+    assert "elevator_pitch" in rendered
+    assert "禁止填卡片标题" in rendered
+
+
+def test_analyzer_v2_pyramid_quality_checklist():
+    """T-P7-4：soft/tech analyzer v2 注入复盘质检方法论（金字塔四原则 + KISS）。"""
+    for name in ("soft_analyzer", "tech_analyzer"):
+        fields = _REQUIRED_FIELDS[("interview", name)]
+        rendered = load_prompt(
+            "interview", name, version=2, **{f: f"<{f}>" for f in fields}
+        )
+        assert "复盘质检方法论" in rendered, name
+        assert "金字塔四原则" in rendered, name
+        assert "KISS" in rendered, name
+        assert "docs/methodology/structured-expression.md" in rendered, name
+        # v1 输出结构约束随全文继承
+        assert "related_card_id" in rendered, name
+        assert "analyses" in rendered, name
+
+
 def test_load_prompt_renders_placeholders():
     """load_prompt 应返回已填充、无残留占位符的字符串，且字面花括号保留。"""
     for (subdir, name), fields in _REQUIRED_FIELDS.items():
