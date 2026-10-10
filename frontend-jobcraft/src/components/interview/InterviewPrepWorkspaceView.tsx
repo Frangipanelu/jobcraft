@@ -94,9 +94,19 @@ function InfoRow({ label, value }: { label: string; value?: string }) {
   );
 }
 
+/** legacy 自由字段区块是否「内容非空」（M-1：按值判，不按 key 存在判）。 */
+function hasAnyLegacyContent(block?: Record<string, unknown> | null): boolean {
+  if (!block) return false;
+  return Object.values(block).some((v) =>
+    Array.isArray(v) ? v.length > 0 : typeof v === 'string' ? v.trim() !== '' : Boolean(v)
+  );
+}
+
 /**
  * T-P7-3 降级矩阵行5：调研内容是否全空（降级态判定，不渲染空壳）。
- * - 新结构：六维 aspects 全为空列表 → 空；- legacy：自由字段全缺/空 → 空。
+ * - 新结构：六维 aspects 全为空列表 → 空；
+ * - legacy：自由字段按**内容**判空（M-1，如 {basic:{}} 也落降级卡）。
+ * BE 侧同口径判定见 company_research_agent._is_research_info_empty。
  */
 function isCompanyResearchContentEmpty(cr: CompanyResearchShape): boolean {
   if (cr.aspects) {
@@ -111,13 +121,13 @@ function isCompanyResearchContentEmpty(cr: CompanyResearchShape): boolean {
     );
   }
   return !(
-    cr.basic ||
-    cr.business ||
-    cr.funding ||
-    cr.team ||
-    cr.industry ||
+    hasAnyLegacyContent(cr.basic) ||
+    hasAnyLegacyContent(cr.business) ||
+    hasAnyLegacyContent(cr.funding) ||
+    hasAnyLegacyContent(cr.team) ||
+    hasAnyLegacyContent(cr.industry) ||
     cr.news?.length ||
-    cr.ai_hiring ||
+    (cr.ai_hiring ?? '').trim() !== '' ||
     cr.sources?.length
   );
 }
@@ -306,12 +316,21 @@ export const InterviewPrepWorkspaceView: React.FC<InterviewPrepWorkspaceViewProp
       return;
     }
     try {
-      await refreshResearch.mutateAsync(prepId);
-      showToast({
-        type: 'success',
-        title: '公司调研已更新',
-        message: '已绕过缓存重新检索最新资料并同步到本场准备稿。'
-      });
+      const res = await refreshResearch.mutateAsync(prepId);
+      // Min-2：force 成功但后端检索失败回退旧缓存（stale=true）→ warning 如实告知
+      if (res.company_research?.stale) {
+        showToast({
+          type: 'warning',
+          title: '公司调研未更新',
+          message: '检索失败，已保留旧资料'
+        });
+      } else {
+        showToast({
+          type: 'success',
+          title: '公司调研已更新',
+          message: '已绕过缓存重新检索最新资料并同步到本场准备稿。'
+        });
+      }
     } catch {
       showToast({
         type: 'error',
@@ -335,6 +354,10 @@ export const InterviewPrepWorkspaceView: React.FC<InterviewPrepWorkspaceViewProp
   );
 
   const renderCompanyResearch = () => {
+    // Min-7 加载闸门：interviews 未就绪不渲染（否则空数组会被误判为
+    // 「无调研」闪现降级卡）——数据到达后才做降级/正常分派
+    if (!interviewData) return null;
+
     const basic = cr?.basic || {};
     const business = cr?.business || {};
     const funding = cr?.funding || {};

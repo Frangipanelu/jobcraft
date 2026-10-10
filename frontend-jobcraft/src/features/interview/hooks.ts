@@ -4,9 +4,10 @@ import * as interviewApi from '../../api/interview';
 import * as jobApi from '../../api/job';
 import * as tasksApi from '../../api/tasks';
 import type {
+  CompanyResearchShape,
   InterviewPrepResult,
   InterviewReviewCreateResult,
-  ResumeVersionWire,
+  ResumeVersionWire
 } from '../../api/types';
 import { Interview, Job } from '../../types/jobcraft';
 import { JOBS_QUERY_KEY } from '../jobs/mappers';
@@ -242,12 +243,13 @@ export function useSavePrepDraftsMutation() {
  * 公司调研「重新调研」（T-M7-6）：
  * - POST /api/jobcraft/interview-prep/{id}/company-research（force 绕 7 天缓存）；
  * - 成功后失效 INTERVIEWS 列表重新拉取（prepSource.company_research 服务端已回写）；
+ * - 成功响应可能带 stale=true（后端检索失败回退旧缓存），视图层据此弹 warning；
  * - 失败原样抛出由视图层弹错误 toast，不上报假成功。
  */
 export function useRefreshCompanyResearchMutation() {
   const queryClient = useQueryClient();
 
-  return useMutation<{ id: number; company_research: unknown }, unknown, number>({
+  return useMutation<{ id: number; company_research: CompanyResearchShape }, unknown, number>({
     mutationFn: (prepId) => interviewApi.refreshInterviewPrepResearch(prepId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [...INTERVIEWS_QUERY_KEY] });

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { renderWithProviders } from './test-utils';
+import { ToastContainer } from '../components/common/Toast';
 import { InterviewPrepWorkspaceView } from '../components/interview/InterviewPrepWorkspaceView';
 import type { CompanyResearchShape, InterviewPrepRecord } from '../api/types';
 import researchFixture from '../../../tests/fixtures/company_research_payload.json';
@@ -254,6 +255,31 @@ describe('T-P7-1 工作区公司调研双形渲染', () => {
     expect(screen.queryByText('公司概况')).not.toBeInTheDocument();
     expect(screen.queryByText('待补充')).not.toBeInTheDocument();
   });
+
+  it('legacy 自由字段按内容判空（{basic:{}} 等全空）→ 同样落降级卡（M-1）', async () => {
+    interview.listInterviewPreps.mockResolvedValue({
+      records: [
+        buildRecord({
+          company_research: {
+            basic: {},
+            business: {},
+            funding: {},
+            team: {},
+            industry: {},
+            news: [],
+            sources: [],
+          },
+        }),
+      ],
+    });
+
+    renderWithProviders(<InterviewPrepWorkspaceView interviewId="prep-7" />);
+    await openOverview();
+
+    expect(await screen.findByText('调研暂不可用')).toBeInTheDocument();
+    expect(screen.queryByText('融资与估值')).not.toBeInTheDocument();
+    expect(screen.queryByText('待补充')).not.toBeInTheDocument();
+  });
 });
 
 describe('T-P7-3 降级矩阵前端态（stale 提示 + force 刷新消失）', () => {
@@ -303,5 +329,81 @@ describe('T-P7-3 降级矩阵前端态（stale 提示 + force 刷新消失）', 
     // 非 stale 正常态仍渲染数据 + 按钮（零回归）
     expect(screen.getAllByText(BIZ_MAIN).length).toBeGreaterThan(0);
     expect(screen.getByRole('button', { name: /重新调研/ })).toBeEnabled();
+  });
+
+  it('aspects 部分非空（overview/business 有内容，其余空）→ 正常渲染，无降级卡无 stale 条（Min-4）', async () => {
+    const partial = {
+      overview: NEW_ASPECTS.overview,
+      business: NEW_ASPECTS.business,
+      ecosystem: [],
+      team: [],
+      recent: [],
+      reputation: [],
+    };
+    interview.listInterviewPreps.mockResolvedValue({
+      records: [buildRecord({ company_research: { aspects: partial } })],
+    });
+
+    renderWithProviders(<InterviewPrepWorkspaceView interviewId="prep-7" />);
+    await openOverview();
+
+    expect(await screen.findByText('公司概况')).toBeInTheDocument();
+    expect(screen.getAllByText(BIZ_MAIN).length).toBeGreaterThan(0);
+    expect(screen.queryByText('调研暂不可用')).not.toBeInTheDocument();
+    expect(screen.queryByText(/调研数据可能过时/)).not.toBeInTheDocument();
+  });
+
+  it('interviews 数据未返回（undefined）→ 不闪现降级卡（Min-7 加载闸门）', async () => {
+    interview.listInterviewPreps.mockImplementation(() => new Promise(() => {}));
+
+    renderWithProviders(<InterviewPrepWorkspaceView interviewId="prep-7" />);
+
+    // 头部兜底文案先到，但调研区块整体不挂载（无降级卡闪现）
+    expect(await screen.findByText(/目标公司/)).toBeInTheDocument();
+    expect(screen.queryByText('调研暂不可用')).not.toBeInTheDocument();
+  });
+
+  it('force 返回 stale=true → warning toast「检索失败，已保留旧资料」（Min-2）', async () => {
+    interview.listInterviewPreps.mockResolvedValue({
+      records: [buildRecord({ company_research: { aspects: NEW_ASPECTS, stale: true } })],
+    });
+    interview.refreshInterviewPrepResearch.mockResolvedValue({
+      id: 7,
+      company_research: { aspects: NEW_ASPECTS, stale: true },
+    });
+
+    renderWithProviders(
+      <>
+        <InterviewPrepWorkspaceView interviewId="prep-7" />
+        <ToastContainer />
+      </>
+    );
+    await openOverview();
+    fireEvent.click(await screen.findByRole('button', { name: /重新调研/ }));
+
+    expect(await screen.findByText('检索失败，已保留旧资料')).toBeInTheDocument();
+    expect(screen.queryByText('公司调研已更新')).not.toBeInTheDocument();
+  });
+
+  it('force 返回非 stale → success toast「公司调研已更新」（Min-2 对照）', async () => {
+    interview.listInterviewPreps.mockResolvedValue({
+      records: [buildRecord({ company_research: { aspects: NEW_ASPECTS } })],
+    });
+    interview.refreshInterviewPrepResearch.mockResolvedValue({
+      id: 7,
+      company_research: { aspects: NEW_ASPECTS },
+    });
+
+    renderWithProviders(
+      <>
+        <InterviewPrepWorkspaceView interviewId="prep-7" />
+        <ToastContainer />
+      </>
+    );
+    await openOverview();
+    fireEvent.click(await screen.findByRole('button', { name: /重新调研/ }));
+
+    expect(await screen.findByText('公司调研已更新')).toBeInTheDocument();
+    expect(screen.queryByText('检索失败，已保留旧资料')).not.toBeInTheDocument();
   });
 });

@@ -4,6 +4,7 @@
 
 import { request, requestFormData } from './client'
 import type {
+  CompanyResearchShape,
   FeedbackBatchConfirmPayload,
   FeedbackBatchConfirmResult,
   FeedbackCandidateItem,
@@ -63,8 +64,8 @@ export async function saveInterviewPrepDrafts(
 
 export async function refreshInterviewPrepResearch(
   prepId: number
-): Promise<{ id: number; company_research: unknown }> {
-  return request<{ id: number; company_research: unknown }>(
+): Promise<{ id: number; company_research: CompanyResearchShape }> {
+  return request<{ id: number; company_research: CompanyResearchShape }>(
     `/api/jobcraft/interview-prep/${prepId}/company-research`,
     { method: 'POST' }
   )
