@@ -187,11 +187,11 @@ def test_soft_analyzer_with_mock_llm(monkeypatch):
 
 
 def test_analyzers_v3_prompt_version_constant_and_listening(monkeypatch):
-    """T-P7-4 规格收敛（M1-a/m4）：analyzer 模块常量 _PROMPT_VERSION=3，load 版本与审计 prompt_version 一致，v3 注入结构化倾听四步。"""
+    """T-P7-4 规格收敛（M1-a/m4）：analyzer 模块常量 _PROMPT_TEMPLATE_VERSION=3（避开 BaseAgent._PROMPT_VERSION 同名陷阱），load 版本与审计 prompt_version 一致，v3 注入结构化倾听四步。"""
     from app.agents.soft_analyzer import SoftAnalyzer
-    from app.agents.soft_analyzer import _PROMPT_VERSION as SOFT_VER
+    from app.agents.soft_analyzer import _PROMPT_TEMPLATE_VERSION as SOFT_VER
     from app.agents.tech_analyzer import TechAnalyzer
-    from app.agents.tech_analyzer import _PROMPT_VERSION as TECH_VER
+    from app.agents.tech_analyzer import _PROMPT_TEMPLATE_VERSION as TECH_VER
 
     assert SOFT_VER == 3
     assert TECH_VER == 3
