@@ -2,6 +2,16 @@
 
 > 本文件用于追踪项目整体进度。AI 在每次会话结束或完成子任务时，必须更新本文件的对应板块。
 
+## T-P7-4 表达方法论文档 + 三处 prompt 统一引用接入（2026-10-10，A 窗 P7 批第四任务）
+
+> 依据 matrix :446-452（三落点裁决）/:461（T-P7-4）+ PRD :62（表达质量地板）/:124（方法论库→prompt 统一引用）/:594（版本化进 prompt、三处统一引用 = 工具与玩具分界线）。零迁移、零新依赖、LLM 全 mock。
+
+- [x] **方法论文档 `docs/methodology/structured-expression.md` v1**：定位 =《结构化汇报》（黄漫宇）用户附件的**项目落地裁决版**（框架库+路由+质检，非书籍复刻，不引原文/页码，文首注明定位与依据）。§1 框架库 **16 个**（事实支撑+数据、STAR、三增量、1 页纸精简、IPRA、MTV、背景-思路-行动-结果、PREP、问题-原因-方案、黄金三点、SCQA、三问过去/现在/未来、金字塔四原则、结构化倾听四步、KISS、周报三段），每个含一句话定义/适用场景/骨架模板/极短示例，MTV 注明「带来价值」=与目标岗位的匹配论证；§2 题型→框架路由表（①简历建议 4 行 / ②面试表达 5 行 / ③复盘标准 4 行，对齐 matrix 三落点）；§3 质检表 6 条可打勾 checklist（金字塔逐题、结论先行、数据事实、KISS、增量防灌水、路由一致）；§4 三处 prompt 接入对照表（文件名+版本+引用路由行）；§5 演进规则。⚠️ 文档本体按 `.gitignore:77`（`0d5d367` 内部文档不入库）不进 git，与 matrix/PRD 等 docs/ 同策略。
+- [x] **三处 prompt 版本化接入（`92dcf0d`，11 文件）**：① `prompts/resume/rewrite_v2.txt` 注入 4 行「表达方法论」段（事实支撑+数据 / STAR / 三增量防灌水 / 克制精炼），`app/tools/resume_rewrite.py` `version=2` + `prompt_version="2"`；② `prompts/interview/interview_prep_script_v3.txt` 注入 4 条「表达框架路由」（自我介绍 IPRA/MTV 且 MTV 带来价值=岗位匹配论证、经历题背景-思路-行动-结果、通用题 PREP/问题-原因-方案/黄金三点按题择一、开场追问 SCQA、反问过去/现在/未来三问），`INTERVIEW_PREP_PROMPT_VERSION = 3`（`interview_prep_flow.py:187` 经 state 常量自动跟）；③ `prompts/interview/soft_analyzer_v2.txt` + `tech_analyzer_v2.txt` 各注入 3 行「复盘质检方法论」（expected_answer/评分结构化质检用金字塔四原则、总结输出 KISS），两 agent `load_prompt(version=2)` + `prompt_version="2"`。注入段尾统一标注「（表达方法论文档 v1：docs/methodology/structured-expression.md）」；**旧 v 文件一字不动**，新文件占位符集 = 注册表字段（test_prompts 版本矩阵直通）。
+- **受影响测试修正**：`tests/test_prompts.py` +3（rewrite_v2 方法论关键字、prep_v3 六个框架关键字+v2 字段映射继承、analyzers_v2 金字塔/KISS+v1 输出约束继承）；`tests/test_resume_rewrite_unit.py` `prompt_version` "1"→"2" 并断言注入段；`tests/test_workflows_unit.py` prep flow `prompt_version` "2"→"3"（docstring 同步 v3）。
+- **门禁（全绿）**：`check_encoding` **433 文件 0 错**；`ruff check` 通过 + `ruff format --check` 167 files formatted；`pytest tests/ -q` **1375 passed / 13 skipped**（基线 1372/13 + 新增 3）；前端零触碰 `npx tsc --noEmit` exit 0 + `npx vitest run` **400 passed / 41 files**。
+- **未做/偏差**：文档文件不随 commit 入库（`.gitignore:77` 内部文档策略，需 `-f` 才会入库，未越权强加）；不 push（按任务边界）。
+
 ## B 窗 P3 批收口：T-M4-4 + T-M10-4 + T-M10 残量（2026-10-09，B 窗·Subagent-Driven 三任务串行）
 
 > TODO:72 认领（2026-10-07 第六轮）。执行方式 = 每任务 fresh implementer → spec 审 → 质量审 → issue 回派原实现者 → 原审查者复审；批次末整体终审（跨任务契约咬合 + 红线扫描 + 门禁实跑）。零迁移、零 LLM、全程 mock、pathspec 提交。
