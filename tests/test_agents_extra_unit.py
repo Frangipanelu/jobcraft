@@ -665,6 +665,19 @@ def _fake_aspects_info() -> dict:
     return {"aspects": {k: [] for k in keys}}
 
 
+def _nonempty_aspects_info() -> dict:
+    """六维中至少一维非空的 info（M-2b：全空不落库后，成功路径测试须用非空）。"""
+    info = _fake_aspects_info()
+    info["aspects"]["business"] = [
+        {
+            "content": "主营 AI 招聘 SaaS",
+            "source_type": "官方",
+            "source_url": "https://example.com",
+        }
+    ]
+    return info
+
+
 class _FakeInternetSearch:
     """internet_search 替身：记录全部调用 payload，按传入函数分派响应。"""
 
@@ -678,7 +691,11 @@ class _FakeInternetSearch:
 
 
 def _patch_company_research_env(monkeypatch, responder):
-    """替换缓存/搜索/LLM 三层，返回 (fake_search, upserts, llm_states)。"""
+    """替换缓存/搜索/LLM 三层，返回 (fake_search, upserts, llm_states)。
+
+    M-2b 口径：LLM 全空六维不落库，故默认 run 返回非空 info（需要全空
+    语义的用例自行覆写 ``CompanyResearchAgent.run``）。
+    """
     from app.agents import company_research_agent as mod
 
     fake = _FakeInternetSearch(responder)
@@ -694,7 +711,7 @@ def _patch_company_research_env(monkeypatch, responder):
 
     def _fake_run(self, state):
         llm_states.append(state)
-        return {"info": _fake_aspects_info()}
+        return {"info": _nonempty_aspects_info()}
 
     monkeypatch.setattr(mod.CompanyResearchAgent, "run", _fake_run)
     return fake, upserts, llm_states
@@ -1129,10 +1146,14 @@ def test_harvest_domains_filters_denylist_ip_and_keeps_official():
 
 
 def test_get_or_search_company_fresh_cache_hit_shape(monkeypatch):
-    """Minor-3a/c：fresh 命中 → 0 次搜索、不回写，形状与实时路径统一。"""
+    """Minor-3a/c：fresh 命中（非空内容）→ 0 次搜索、不回写，形状与实时路径统一。
+
+    M-2a 口径：命中须内容非空——六维全空 aspects 视同未命中走重搜，
+    故本用例改用非空 info（全空分支见 test_fresh_six_dim_empty_cache_triggers_research）。
+    """
     from app.agents import company_research_agent as mod
 
-    fake_info = _fake_aspects_info()
+    fake_info = _nonempty_aspects_info()
     monkeypatch.setattr(
         "app.tools.db_tools.get_company_research",
         lambda c: {
@@ -1162,15 +1183,30 @@ def test_get_or_search_company_fresh_cache_hit_shape(monkeypatch):
     assert out["aspects"] == fake_info["aspects"]
 
 
-def test_get_or_search_company_fresh_empty_info_returns_none(monkeypatch):
-    """空壳缓存（info={}）视同未命中 → None，不产元数据空壳。"""
+def test_get_or_search_company_fresh_empty_info_triggers_research(monkeypatch):
+    """M-2a：空壳缓存（info={}）fresh 命中视同未命中 → 走实时重搜（不再直接 None）。
+
+    （原「返回 None」语义随 M-2 口径调整：空壳与六维全空同样重搜，
+    与 FE「调研暂不可用」+重新调研同口径；无缓存行的 None 语义不变。）
+    """
     from app.agents import company_research_agent as mod
 
+    fake, upserts, _llm_states = _patch_company_research_env(
+        monkeypatch,
+        lambda _p: {"results": [{"title": "T", "url": "", "content": "C"}]},
+    )
+    # helper 默认无缓存，这里覆写成「fresh 但 info 为空壳」的命中行
     monkeypatch.setattr(
         "app.tools.db_tools.get_company_research",
         lambda c: {"info": {}, "cached_at": "2026-10-01T00:00:00", "fresh": True},
     )
-    assert mod.get_or_search_company("字节跳动") is None
+
+    out = mod.get_or_search_company("字节跳动")
+
+    assert out is not None
+    assert len(fake.calls) > 0  # 触发重搜（非短路返回）
+    assert out["from_cache"] is False
+    assert len(upserts) == 1
 
 
 def test_get_or_search_company_force_ignores_fresh_cache(monkeypatch):
@@ -1407,7 +1443,7 @@ def test_llm_fail_then_retry_success_upserts_once(monkeypatch, caplog):
         calls["n"] += 1
         if calls["n"] == 1:
             raise RuntimeError("schema 校验失败")
-        return {"info": _fake_aspects_info()}
+        return {"info": _nonempty_aspects_info()}
 
     monkeypatch.setattr(mod.CompanyResearchAgent, "run", _flaky_run)
 
@@ -1522,7 +1558,7 @@ def test_stale_fallback_then_success_new_snapshot_has_no_stale(monkeypatch):
     monkeypatch.setattr(
         mod.CompanyResearchAgent,
         "run",
-        lambda self, s: {"info": _fake_aspects_info()},
+        lambda self, s: {"info": _nonempty_aspects_info()},
     )
 
     first = mod.get_or_search_company("字节跳动")
@@ -1568,3 +1604,196 @@ def test_success_logs_empty_dims(monkeypatch, caplog):
     assert out is not None
     assert "缺维（空列表）=overview,ecosystem,team,recent,reputation" in caplog.text
     assert "stale" not in out  # wire 不因缺维加字段
+
+
+# ---------- T-P7-3 质量收敛（I-1 限流豁免 / M-2 六维空口径 / M-3 派生键 / M-4 回退分支） ----------
+
+
+def _rate_limit_run(self, state):
+    """抛限流特征错误的 agent.run 替身（消息含 429，命中 is_rate_limit_error）。"""
+    raise RuntimeError(
+        "[company_research] 结构化调用失败（限流退避已耗尽，跳过兜底请求）: HTTP 429"
+    )
+
+
+def test_llm_rate_limit_no_retry_falls_back_to_stale(monkeypatch, caplog):
+    """[I-1] 限流不重试：LLM 恰调 1 次 → stale 回退，upserts==[]。"""
+    import logging
+
+    from app.agents import company_research_agent as mod
+
+    upserts = []
+    llm_calls = []
+    monkeypatch.setattr(
+        "app.tools.db_tools.get_company_research", lambda c: _stale_cache_row()
+    )
+    monkeypatch.setattr(
+        "app.tools.db_tools.upsert_company_research", lambda c, i: upserts.append(i)
+    )
+    monkeypatch.setattr(
+        "app.tools.tavily_tool.internet_search",
+        _FakeInternetSearch(
+            lambda _p: {
+                "results": [{"title": "T", "url": "https://e.com/x", "content": "C"}]
+            }
+        ),
+    )
+
+    def _limited(self, state):
+        llm_calls.append(state)
+        return _rate_limit_run(self, state)
+
+    monkeypatch.setattr(mod.CompanyResearchAgent, "run", _limited)
+
+    with caplog.at_level(logging.ERROR, logger="jobcraft.agents.company_research"):
+        out = mod.get_or_search_company("字节跳动")
+
+    assert out is not None
+    assert out["stale"] is True
+    assert len(llm_calls) == 1  # 限流不重试（穿 llm_json 护栏的重试被豁免）
+    assert upserts == []
+    assert "限流不重试" in caplog.text
+
+
+def test_llm_rate_limit_no_cache_returns_none(monkeypatch):
+    """[I-1] 限流不重试且无旧缓存 → None，LLM 恰 1 次、零写库。"""
+    from app.agents import company_research_agent as mod
+
+    upserts = []
+    llm_calls = []
+    monkeypatch.setattr("app.tools.db_tools.get_company_research", lambda c: None)
+    monkeypatch.setattr(
+        "app.tools.db_tools.upsert_company_research", lambda c, i: upserts.append(i)
+    )
+    monkeypatch.setattr(
+        "app.tools.tavily_tool.internet_search",
+        _FakeInternetSearch(
+            lambda _p: {
+                "results": [{"title": "T", "url": "https://e.com/x", "content": "C"}]
+            }
+        ),
+    )
+
+    def _limited(self, state):
+        llm_calls.append(state)
+        return _rate_limit_run(self, state)
+
+    monkeypatch.setattr(mod.CompanyResearchAgent, "run", _limited)
+
+    assert mod.get_or_search_company("字节跳动") is None
+    assert len(llm_calls) == 1
+    assert upserts == []
+
+
+def test_fresh_six_dim_empty_cache_triggers_research(monkeypatch):
+    """[M-2a] 六维全空 aspects 的 fresh 缓存视同未命中 → 实时重搜（与 FE 同口径）。"""
+    from app.agents import company_research_agent as mod
+
+    fake, upserts, _llm_states = _patch_company_research_env(
+        monkeypatch,
+        lambda _p: {"results": [{"title": "T", "url": "", "content": "C"}]},
+    )
+    # helper 默认无缓存，覆写成 fresh + 六维全空 aspects 的命中行
+    monkeypatch.setattr(
+        "app.tools.db_tools.get_company_research",
+        lambda c: _stale_cache_row(fresh=True),
+    )
+
+    out = mod.get_or_search_company("字节跳动")
+
+    assert out is not None
+    assert len(fake.calls) > 0  # 触发重搜（未被空壳缓存短路）
+    assert out["from_cache"] is False
+    assert len(upserts) == 1
+
+
+def test_llm_success_six_dim_empty_no_upsert(monkeypatch, caplog):
+    """[M-2b] LLM 成功但六维全空 → warning + 不 upsert，返回无 stale（FE 自然降级）。"""
+    import logging
+
+    from app.agents import company_research_agent as mod
+
+    fake, upserts, _llm_states = _patch_company_research_env(
+        monkeypatch,
+        lambda _p: {"results": [{"title": "T", "url": "", "content": "C"}]},
+    )
+    monkeypatch.setattr(
+        mod.CompanyResearchAgent,
+        "run",
+        lambda self, state: {"info": _fake_aspects_info()},
+    )
+
+    with caplog.at_level(logging.WARNING, logger="jobcraft.agents.company_research"):
+        out = mod.get_or_search_company("字节跳动")
+
+    assert out is not None
+    assert upserts == []  # 半成品不落库
+    assert "stale" not in out  # 非回退路径，无 stale 标记
+    assert out["from_cache"] is False
+    assert "六维全空" in caplog.text
+    assert fake.calls  # 搜索照常发生
+
+
+def test_guard_all_queries_fail_with_empty_info_cache_returns_none(monkeypatch):
+    """[M-4a] 守卫触发 + cached.info={} → None（空壳不值得 stale 回退），零写库。"""
+    from app.agents import company_research_agent as mod
+
+    upserts = []
+    monkeypatch.setattr(
+        "app.tools.db_tools.get_company_research",
+        lambda c: _stale_cache_row(info={}),
+    )
+    monkeypatch.setattr(
+        "app.tools.db_tools.upsert_company_research", lambda c, i: upserts.append(i)
+    )
+    monkeypatch.setattr(
+        "app.tools.tavily_tool.internet_search",
+        _FakeInternetSearch(lambda _p: (_ for _ in ()).throw(RuntimeError("down"))),
+    )
+    monkeypatch.setattr(
+        mod.CompanyResearchAgent,
+        "run",
+        lambda self, state: (_ for _ in ()).throw(AssertionError("不应调 LLM")),
+    )
+
+    assert mod.get_or_search_company("字节跳动") is None
+    assert upserts == []
+
+
+def test_stale_fallback_unit_none_and_empty_info():
+    """[M-4a] _stale_fallback：None 行 / info={} → None；cached_at 直取不伪造时间戳。"""
+    from app.agents.company_research_agent import _stale_fallback
+
+    assert _stale_fallback("字节跳动", None) is None
+    assert (
+        _stale_fallback(
+            "字节跳动", {"info": {}, "cached_at": "2026-09-01T00:00:00", "fresh": False}
+        )
+        is None
+    )
+    out = _stale_fallback(
+        "字节跳动",
+        {
+            "info": _nonempty_aspects_info(),
+            "cached_at": "2026-09-01T00:00:00",
+            "fresh": False,
+        },
+    )
+    assert out is not None
+    assert out["cached_at"] == "2026-09-01T00:00:00"  # 行内值，非当下伪造
+
+
+def test_aspect_keys_derived_from_schema():
+    """[M-3] _ASPECT_KEYS 从 CompanyResearchAspects.model_fields 派生（第 7 维自动进）。"""
+    from app.agents.company_research_agent import _ASPECT_KEYS
+    from app.schemas.jobcraft import CompanyResearchAspects
+
+    assert _ASPECT_KEYS == list(CompanyResearchAspects.model_fields)
+    assert _ASPECT_KEYS == [
+        "overview",
+        "business",
+        "ecosystem",
+        "team",
+        "recent",
+        "reputation",
+    ]

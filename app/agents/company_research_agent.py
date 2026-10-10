@@ -9,9 +9,10 @@ T-P7-2 query 工程：7 条配方表（模块级常量，运行时渲染）+ top
 不调 LLM、不写缓存）+ search_data 体积瘦身投影。
 
 T-P7-3 降级矩阵：全失败守卫/LLM 失败回退旧缓存（顶层 ``stale: True``，
-不 upsert）或返回 None；LLM 汇总失败重试 1 次（同一份 search_data）；
-半成品不落库（upsert 仅最终成功后执行一次）；检索投影保留 Tavily
-``published_date``（D4 新闻条目日期）。
+不 upsert）或返回 None；LLM 汇总失败重试 1 次（同一份 search_data），
+限流错误豁免重试（对齐 llm_json 护栏）；半成品不落库（upsert 仅最终
+成功且非六维全空后执行一次）；检索投影保留 Tavily ``published_date``
+（D4 新闻条目日期）。
 """
 
 import json
@@ -23,8 +24,9 @@ from urllib.parse import urlparse
 from app.agents.base_agent import BaseAgent
 from app.core.llm import model
 from app.core.prompts import load_prompt
-from app.schemas.jobcraft import CompanyResearchInfo
+from app.schemas.jobcraft import CompanyResearchAspects, CompanyResearchInfo
 from app.tools.llm_json import invoke_structured
+from app.tools.llm_rate_limit import is_rate_limit_error
 
 logger = logging.getLogger("jobcraft.agents.company_research")
 
@@ -277,15 +279,27 @@ class CompanyResearchAgent(BaseAgent):
         return {"info": info.model_dump()}
 
 
-#: 六维 aspect 键（与 CompanyResearchAspects 对齐），供缺维可观测日志使用
-_ASPECT_KEYS: List[str] = [
-    "overview",
-    "business",
-    "ecosystem",
-    "team",
-    "recent",
-    "reputation",
-]
+#: aspect 键（M-3：从 CompanyResearchAspects.model_fields 派生，schema 第 7 维自动进），
+#: 供缺维可观测日志与「六维全空」口径判定使用
+_ASPECT_KEYS: List[str] = list(CompanyResearchAspects.model_fields)
+
+
+def _is_research_info_empty(info: Optional[Dict[str, Any]]) -> bool:
+    """调研内容是否全空（BE 侧口径，与 FE ``isCompanyResearchContentEmpty`` 对齐）。
+
+    - 空 dict / None → 空；
+    - 带 aspects → 六维（schema 全部字段）全为空列表才算空；
+    - legacy 旧缓存（非 aspects 自由字段非空 dict）→ 非空（内容判定在 FE）。
+
+    :param info: 缓存行 info 或 LLM 汇总 info
+    :return: 全空返回 True
+    """
+    if not info:
+        return True
+    aspects = info.get("aspects")
+    if not isinstance(aspects, dict):
+        return False
+    return not any(aspects.get(key) for key in _ASPECT_KEYS)
 
 
 def _stale_fallback(
@@ -296,6 +310,7 @@ def _stale_fallback(
     T-P7-3 契约：stale 只出现在回退返回值上，**永不** upsert 进全局缓存行
     （调用方在回退路径零写库）；形状与实时/缓存命中路径同构
     （``{**info, cached_at, from_cache: True, stale: True}``）。
+    cached_at 直取行内值（真实行恒有该字段，缺失即 None，不伪造当下时间戳）。
 
     :param company: 公司名（日志上下文）
     :param cached: ``get_company_research`` 返回行（{info, cached_at, fresh}）
@@ -311,7 +326,7 @@ def _stale_fallback(
     )
     return {
         **info,
-        "cached_at": (cached or {}).get("cached_at") or datetime.now().isoformat(),
+        "cached_at": (cached or {}).get("cached_at"),
         "from_cache": True,
         "stale": True,
     }
@@ -357,16 +372,17 @@ def get_or_search_company(
     cached = db_tools.get_company_research(company)
     if cached and cached.get("fresh") and not force:
         info = cached.get("info") or {}
-        if not info:
-            # 空壳缓存视同未命中，避免元数据空壳进 prompt（不渲染空壳）
-            return None
-        # 质量审查 Minor-3：命中路径与实时路径形状统一
-        # （cached_at 取行内值，from_cache=True，顶层 = aspects + 元数据）
-        return {
-            **info,
-            "cached_at": cached.get("cached_at") or datetime.now().isoformat(),
-            "from_cache": True,
-        }
+        if info and not _is_research_info_empty(info):
+            # 质量审查 Minor-3：命中路径与实时路径形状统一
+            # （cached_at 取行内值，from_cache=True，顶层 = aspects + 元数据）
+            return {
+                **info,
+                "cached_at": cached.get("cached_at") or datetime.now().isoformat(),
+                "from_cache": True,
+            }
+        # 空壳缓存（{} / aspects 六维全空）视同未命中 → 走实时重搜，
+        # 与 FE isCompanyResearchContentEmpty「调研暂不可用」同口径（M-2），
+        # 避免空壳元数据进 prompt、也避免命中六维全空缓存渲染不出内容
 
     # 搜索：按配方表逐条执行，单条失败跳过继续（语义与 T-P7-1 前一致）
     results: List[Dict[str, Any]] = []
@@ -437,11 +453,23 @@ def get_or_search_company(
 
     # LLM 汇总（矩阵行4）：失败重试 1 次（同一份 search_data，不重跑搜索）；
     # 仍失败 → 与全失败守卫相同的回退（旧缓存 stale 或 None）；
-    # 半成品不落库：upsert 仅在最终成功后执行一次
+    # 半成品不落库：upsert 仅在最终成功后执行一次。
+    # 最坏 LLM 调用 = 外层 2 ×（bind_tools + plain 兜底）2 = 4；
+    # 限流路径不进兜底、现已被外层限流豁免直接回退（不重试，见下）
     agent = CompanyResearchAgent()
     try:
         out = agent.run({"company": company, "search_data": search_data})
     except Exception as exc:
+        # I-1 限流穿透豁免：llm_json 对限流已跳过兜底直接上抛（避免再打
+        # 一枪加重账户级限流），此处重试同样违背该护栏 → 不重试，直接回退
+        if is_rate_limit_error(exc):
+            logger.error(
+                "公司调研 LLM 汇总限流 company=%s（限流不重试，直接回退旧缓存或 None）: %s",
+                company,
+                exc,
+                exc_info=True,
+            )
+            return _stale_fallback(company, cached)
         logger.error(
             "公司调研 LLM 汇总失败 company=%s，重试 1 次（同一份 search_data）: %s",
             company,
@@ -451,6 +479,15 @@ def get_or_search_company(
         try:
             out = agent.run({"company": company, "search_data": search_data})
         except Exception as retry_exc:
+            if is_rate_limit_error(retry_exc):
+                logger.error(
+                    "公司调研 LLM 汇总重试限流 company=%s 重试次数=1"
+                    "（限流不继续，回退旧缓存或 None）: %s",
+                    company,
+                    retry_exc,
+                    exc_info=True,
+                )
+                return _stale_fallback(company, cached)
             logger.error(
                 "公司调研 LLM 汇总重试后仍失败 company=%s 重试次数=1，"
                 "回退旧缓存（stale）或 None，不写缓存: %s",
@@ -459,9 +496,18 @@ def get_or_search_company(
                 exc_info=True,
             )
             return _stale_fallback(company, cached)
-    info = out.get("info")
+    info = out.get("info") or {}
 
     _log_empty_aspects(company, info)
+
+    # M-2b：LLM 成功但六维全空 → 半成品不落库（不 upsert），仍原样返回
+    # （无 stale 标记；FE isCompanyResearchContentEmpty 判空自然落降级卡）
+    if _is_research_info_empty(info):
+        logger.warning(
+            "公司调研 LLM 汇总六维全空 company=%s，半成品不落库（不 upsert），原样返回供前端降级",
+            company,
+        )
+        return {**info, "cached_at": datetime.now().isoformat(), "from_cache": False}
 
     db_tools.upsert_company_research(company, info)
     return {**info, "cached_at": datetime.now().isoformat(), "from_cache": False}

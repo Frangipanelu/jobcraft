@@ -881,7 +881,13 @@ class ResearchItem(BaseModel):
         ..., min_length=1, description="面试桌上直接用得上的一句话（禁止空串）"
     )
     source_url: str = Field("", description="来源 URL；仅 AI推断条目可为空")
-    date: str = Field("", description="信息日期 YYYY-MM-DD，近期动态尽量提供")
+    date: str = Field(
+        "",
+        description=(
+            "信息日期 YYYY-MM-DD；新闻与近期动态必须用检索结果中的发布日期"
+            "（published_date）填写，检索无日期才留空，不许编造"
+        ),
+    )
     source_type: Literal["官方", "新闻", "社交", "AI推断"] = Field(
         "AI推断",
         description="来源类型：官网域→官方，权威媒体→新闻，牛客/脉脉/知乎 UGC→社交，无直接来源→AI推断",

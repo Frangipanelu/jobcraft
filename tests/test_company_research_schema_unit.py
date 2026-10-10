@@ -174,6 +174,15 @@ class TestResearchItem:
         with pytest.raises(ValidationError):
             ResearchItem(content="x", source_type="官方", source_url="   ")
 
+    def test_date_description_aligns_with_prompt_v2(self):
+        """Min-6：date 字段 JSON schema 描述与 prompt v2 约束 5 同口径
+        （published_date 必用、无日期留空、不许编造）。"""
+        schema = CompanyResearchInfo.model_json_schema()
+        item_def = schema["$defs"]["ResearchItem"]
+        desc = item_def["properties"]["date"]["description"]
+        assert "published_date" in desc
+        assert "不许编造" in desc
+
 
 class TestPromptVersioning:
     def test_v1_prompt_still_loads(self):
