@@ -23,6 +23,7 @@
 - **门禁（本批实跑）**：tsc exit 0；定向 vitest **19/19**；全量 vitest **386/386（41 文件，0 failed）**；build ✓；ruff ✓；pytest **1310 passed / 13 skipped**；encoding **429 文件 0 错**。全量曾见 1 failed 复跑即绿——他窗在途测试文件瞬态（两次跑间其新增 2 个测试文件），与本改动无关。
 - **他窗并发**：本批他窗在途 company_research（py）+ 曾同域 FE（`api/types`/`interview/mappers`）交错，pathspec 6 文件零越界。
 - **遗留（登记 H 节 ⑪）**：~~空列表「去简历工作台生成」跳转 CTA~~ **已上线 `3f13d0a`（2026-10-08 遗留 A）**：`ResumeStep` 空态 CTA 按钮（可选 prop `onGoGenerate`）+ modal 镜像 `handleOpenJDAnalysis` 模式（`saveDraft` 不清稿 → toast → `go('resume_editor', { jobId })` 带岗位跳转 → `onClose`），回流靠草稿恢复，+1 测试（CTA 点击/未传不渲染）；门禁 tsc 0 / 定向 20 绿 / 全量 **392/392** / build ✓ / ruff ✓ / pytest **1345/13** / encoding **433 文件 0 错**（全量 1 failed 复跑即绿=他窗在途瞬态）。**遗留 B（方案 2 底座 `base_resume_id` 落列）** 等触发条件（H 节 ⑪ 蓝图）。
+- **CI 事故修复（2026-10-08 追记，`4a34e7a`）**：本批 push 触发的 JobCraft CI 红——根因=A 窗 T-P7-2 `8bc3971` 新增真实 `TavilyClient()` 构造路径而 CI 无 `TAVILY_API_KEY`（本机 `.env` 有真实 key 故本地绿）；干净克隆 CI 同款树复现 → 假 key 全量 1345/13 绿 → `ci.yml` `Run tests` env 注入 `TAVILY_API_KEY` 假值（沿用该 job 既有 dummy JWT/MYSQL 模式，测试假搜索不外呼）。教训：**BE 新增依赖外部凭证的构造路径时，须同步补 CI dummy env**。
 
 ## T-P7-1 公司调研 wire 统一包 aspects 层 + 规格审查修复收口（2026-10-09，A 窗·P7 批首任务）
 
