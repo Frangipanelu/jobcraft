@@ -127,7 +127,7 @@ function isCompanyResearchContentEmpty(cr: CompanyResearchShape): boolean {
     hasAnyLegacyContent(cr.team) ||
     hasAnyLegacyContent(cr.industry) ||
     cr.news?.length ||
-    (cr.ai_hiring ?? '').trim() !== '' ||
+    hasAnyLegacyContent({ ai_hiring: cr.ai_hiring }) ||
     cr.sources?.length
   );
 }

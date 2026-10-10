@@ -1299,10 +1299,14 @@ def test_get_or_search_company_recipe5_news_refocus(monkeypatch):
 
 
 def _stale_cache_row(info: dict | None = None, fresh: bool = False) -> dict:
-    """构造一条「过期」缓存行（fresh 短路在全失败守卫之前，stale 才会走到回退）。"""
+    """构造一条「过期」缓存行（fresh 短路在全失败守卫之前，stale 才会走到回退）。
+
+    N-3 口径：六维全空行不再是可用旧缓存（``_stale_fallback`` 返回 None），
+    故默认 info 为非空六维；需要空壳语义的用例显式传 ``info=_fake_aspects_info()``。
+    """
     return {
         "company": "字节跳动",
-        "info": _fake_aspects_info() if info is None else info,
+        "info": _nonempty_aspects_info() if info is None else info,
         "cached_at": "2026-09-01T00:00:00",
         "fresh": fresh,
     }
@@ -1366,7 +1370,7 @@ def test_guard_all_queries_fail_falls_back_to_stale_cache(monkeypatch, caplog):
     assert out["stale"] is True
     assert out["from_cache"] is True
     assert out["cached_at"] == "2026-09-01T00:00:00"
-    assert out["aspects"] == _fake_aspects_info()["aspects"]
+    assert out["aspects"] == _nonempty_aspects_info()["aspects"]
     assert upserts == []  # 回退零写库（stale 永不落全局缓存行）
     assert "字节跳动" in caplog.text and "全失败守卫触发" in caplog.text
 
@@ -1693,10 +1697,10 @@ def test_fresh_six_dim_empty_cache_triggers_research(monkeypatch):
         monkeypatch,
         lambda _p: {"results": [{"title": "T", "url": "", "content": "C"}]},
     )
-    # helper 默认无缓存，覆写成 fresh + 六维全空 aspects 的命中行
+    # helper 默认非空缓存，覆写成 fresh + 六维全空 aspects 的命中行（M-2a 空壳语义）
     monkeypatch.setattr(
         "app.tools.db_tools.get_company_research",
-        lambda c: _stale_cache_row(fresh=True),
+        lambda c: _stale_cache_row(info=_fake_aspects_info(), fresh=True),
     )
 
     out = mod.get_or_search_company("字节跳动")
@@ -1760,14 +1764,81 @@ def test_guard_all_queries_fail_with_empty_info_cache_returns_none(monkeypatch):
     assert upserts == []
 
 
+def test_guard_all_queries_fail_with_six_dim_empty_cache_returns_none(monkeypatch):
+    """[N-3] 守卫触发 + cached.info 六维全空 aspects → None（空壳行不值得 stale 回退），零写库。"""
+    from app.agents import company_research_agent as mod
+
+    upserts = []
+    monkeypatch.setattr(
+        "app.tools.db_tools.get_company_research",
+        lambda c: _stale_cache_row(info=_fake_aspects_info()),
+    )
+    monkeypatch.setattr(
+        "app.tools.db_tools.upsert_company_research", lambda c, i: upserts.append(i)
+    )
+    monkeypatch.setattr(
+        "app.tools.tavily_tool.internet_search",
+        _FakeInternetSearch(lambda _p: (_ for _ in ()).throw(RuntimeError("down"))),
+    )
+    monkeypatch.setattr(
+        mod.CompanyResearchAgent,
+        "run",
+        lambda self, state: (_ for _ in ()).throw(AssertionError("不应调 LLM")),
+    )
+
+    assert mod.get_or_search_company("字节跳动") is None
+    assert upserts == []
+
+
+def test_llm_success_six_dim_empty_with_good_cache_falls_back_stale(monkeypatch):
+    """[N-4] LLM 成功但六维全空 + 非空旧好缓存 → 回退旧数据含 stale，不 upsert（不覆盖好快照）。"""
+    from app.agents import company_research_agent as mod
+
+    fake, upserts, _llm_states = _patch_company_research_env(
+        monkeypatch,
+        lambda _p: {"results": [{"title": "T", "url": "", "content": "C"}]},
+    )
+    monkeypatch.setattr(
+        "app.tools.db_tools.get_company_research",
+        lambda c: _stale_cache_row(info=_nonempty_aspects_info(), fresh=True),
+    )
+    monkeypatch.setattr(
+        mod.CompanyResearchAgent,
+        "run",
+        lambda self, state: {"info": _fake_aspects_info()},
+    )
+
+    out = mod.get_or_search_company("字节跳动", force=True)
+
+    assert out is not None
+    assert out["stale"] is True
+    assert out["from_cache"] is True
+    assert out["aspects"] == _nonempty_aspects_info()["aspects"]  # 旧好数据
+    assert out["cached_at"] == "2026-09-01T00:00:00"
+    assert upserts == []  # 不覆盖好快照
+    assert fake.calls  # 检索照常发生
+
+
 def test_stale_fallback_unit_none_and_empty_info():
-    """[M-4a] _stale_fallback：None 行 / info={} → None；cached_at 直取不伪造时间戳。"""
+    """[M-4a/N-3] _stale_fallback：None 行 / info={} / 六维全空 aspects → None；cached_at 不伪造。"""
     from app.agents.company_research_agent import _stale_fallback
 
     assert _stale_fallback("字节跳动", None) is None
     assert (
         _stale_fallback(
             "字节跳动", {"info": {}, "cached_at": "2026-09-01T00:00:00", "fresh": False}
+        )
+        is None
+    )
+    # N-3：六维全空 aspects 的缓存行同样回 None（口径与 _is_research_info_empty 对齐）
+    assert (
+        _stale_fallback(
+            "字节跳动",
+            {
+                "info": _fake_aspects_info(),
+                "cached_at": "2026-09-01T00:00:00",
+                "fresh": False,
+            },
         )
         is None
     )

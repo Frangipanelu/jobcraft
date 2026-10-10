@@ -305,7 +305,8 @@ def _is_research_info_empty(info: Optional[Dict[str, Any]]) -> bool:
 def _stale_fallback(
     company: str, cached: Optional[Dict[str, Any]]
 ) -> Optional[Dict[str, Any]]:
-    """降级矩阵回退：旧缓存非空 → 返回旧 info + ``stale: True``；无缓存 → None。
+    """降级矩阵回退：旧缓存非空（六维口径，N-3） → 返回旧 info + ``stale: True``；
+    无缓存或空壳行（{} / aspects 六维全空） → None。
 
     T-P7-3 契约：stale 只出现在回退返回值上，**永不** upsert 进全局缓存行
     （调用方在回退路径零写库）；形状与实时/缓存命中路径同构
@@ -314,10 +315,10 @@ def _stale_fallback(
 
     :param company: 公司名（日志上下文）
     :param cached: ``get_company_research`` 返回行（{info, cached_at, fresh}）
-    :return: stale 回退 dict 或 None（无可用旧缓存）
+    :return: stale 回退 dict 或 None（无可用旧缓存，含六维全空行）
     """
     info = (cached or {}).get("info") or {}
-    if not info:
+    if _is_research_info_empty(info):
         return None
     logger.warning(
         "公司调研降级回退旧缓存 company=%s cached_at=%s（stale=True，不写缓存）",
@@ -500,9 +501,16 @@ def get_or_search_company(
 
     _log_empty_aspects(company, info)
 
-    # M-2b：LLM 成功但六维全空 → 半成品不落库（不 upsert），仍原样返回
-    # （无 stale 标记；FE isCompanyResearchContentEmpty 判空自然落降级卡）
+    # M-2b：LLM 成功但六维全空 → 半成品不落库（不 upsert）。
+    # N-4：存在非空旧好缓存 → 回退旧数据 + stale 条（不覆盖好快照），
+    # 无可用旧缓存才返回空 info（from_cache=False，FE 自然降级）。
+    # N-2 成本口径：六维全空不落库=持续全空的公司每次生成/重调研重跑
+    # 7-9 次 Tavily+1-2 次 LLM（旧行为靠空缓存抑制 7 天），
+    # 权衡换取不覆盖好缓存/不产空壳。
     if _is_research_info_empty(info):
+        stale = _stale_fallback(company, cached)
+        if stale is not None:
+            return stale
         logger.warning(
             "公司调研 LLM 汇总六维全空 company=%s，半成品不落库（不 upsert），原样返回供前端降级",
             company,
