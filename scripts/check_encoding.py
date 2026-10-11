@@ -1,4 +1,4 @@
-"""扫描仓库中的文件编码问题（非 UTF-8 / U+FFFD）。
+"""扫描仓库中的文件编码问题（非 UTF-8 / U+FFFD / 控制字符）。
 
 背景：Windows PowerShell 5.1 的 ``Set-Content`` / ``Out-File`` / ``>`` / ``Add-Content``
 默认按 ANSI（中文系统为 GBK）写入，会把 UTF-8 源码里的中文写成乱码；而 mojibake 往往仍能
@@ -8,6 +8,11 @@
 
 1. 无法按 UTF-8 解码（``UnicodeDecodeError``）——源文件被 ANSI/GBK 重写。
 2. 含替换字符 ``U+FFFD``——解码失败的残留。
+3. 含 C0 控制字符（BEL/FF/VT/NUL 等）或孤立 TAB / CR——典型来源为
+   PowerShell ``python -c "..."`` 双引号路径把 markdown 反引号当转义符吃掉
+   （`` `a ``→BEL、`` `f ``→FF、`` `t ``→TAB、`` `r ``→CR/断行），
+   2026-10-11 曾致 PROGRESS.md 4 处损坏（commit ``7738f8a`` 修复）。
+   允许字符仅 ``\\n`` 与 ``\\r\\n``；其余 C0/DEL 一律报错。
 
 退出码：0 全部通过；1 存在错误级问题。
 
@@ -110,6 +115,46 @@ BOM_CHECK_EXTENSIONS = {
 }
 
 REPLACEMENT_CHAR = "\ufffd"
+
+# 允许的字符仅 \n 与成对 \r\n；其余 C0 控制字符与 DEL 视为损坏
+# （PowerShell 反引号转义事故：`a→BEL `f→FF `t→TAB `r→CR，2026-10-11）。
+FORBIDDEN_CONTROL_RANGES = (
+    (0x00, 0x08),  # NUL..BS（含 BEL 0x07）
+    (0x0B, 0x0C),  # VT, FF
+    (0x0E, 0x1F),  # SO..US
+    (0x7F, 0x7F),  # DEL
+)
+
+
+def find_control_chars(text: str) -> list[tuple[int, str]]:
+    """返回 ``(行号, 字符描述)`` 列表。
+
+    仅放行 ``\n`` 与 ``\r\n``；孤立 ``\r``、孤立 ``\t``（TAB）与
+    其余 C0/DEL 控制字符均视为损坏（PowerShell 反引号转义的典型残留）。
+    """
+    hits: list[tuple[int, str]] = []
+    line = 1
+    i = 0
+    n = len(text)
+    while i < n:
+        ch = text[i]
+        if ch == "\n":
+            line += 1
+        elif ch == "\r":
+            if i + 1 < n and text[i + 1] == "\n":
+                line += 1  # CRLF 整体视为一次换行
+                i += 1  # 跳过 LF，避免重复计行
+            else:
+                hits.append((line, "U+000D 孤立 CR"))
+        elif ch == "\t":
+            hits.append((line, "U+0009 TAB"))
+        else:
+            cp = ord(ch)
+            if cp < 0x20 or cp == 0x7F:
+                if any(lo <= cp <= hi for lo, hi in FORBIDDEN_CONTROL_RANGES):
+                    hits.append((line, f"U+{cp:04X}"))
+        i += 1
+    return hits
 
 
 class Finding:
@@ -226,6 +271,18 @@ def check_file(path: Path) -> list[Finding]:
                 relative,
                 first_line_with(text, REPLACEMENT_CHAR),
                 "含替换字符 U+FFFD（编码损坏残留）",
+            )
+        )
+
+    control_hits = find_control_chars(text)
+    if control_hits:
+        first_line, first_desc = control_hits[0]
+        findings.append(
+            Finding(
+                relative,
+                first_line,
+                f"含控制字符 {first_desc} 等 {len(control_hits)} 处"
+                "（疑似 PowerShell 反引号转义损坏）",
             )
         )
 
