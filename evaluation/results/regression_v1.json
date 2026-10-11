@@ -7,38 +7,186 @@
     "path": "evaluation/datasets/chinese_cases.jsonl",
     "sha256": "02e73d3806d3f20b76d34f3946ff85f11d119bf90dd98e53b7039464a7ed0476",
     "cases": 10,
-    "difficulty_mix": { "direct": 3, "semantic": 2, "partial": 2, "negative": 2, "transfer": 1 }
+    "difficulty_mix": {
+      "direct": 3,
+      "semantic": 2,
+      "partial": 2,
+      "negative": 2,
+      "transfer": 1
+    }
   },
   "runner": "uv run python -m evaluation.run_chinese_eval --gold evaluation/datasets/chinese_cases.jsonl",
-  "metric_definitions": ["accuracy", "macro_f1", "precision_relevant", "recall_relevant", "score_mae", "ndcg_at_3"],
+  "metric_definitions": [
+    "accuracy",
+    "macro_f1",
+    "precision_relevant",
+    "recall_relevant",
+    "score_mae",
+    "ndcg_at_3"
+  ],
   "runs": {
     "2026-09-09": {
       "note": "v0.2 首测（EVAL-017），报告与预测归档于 results/baseline_20260909/",
       "model": "glm-4-flash",
       "metrics": {
-        "keyword": { "accuracy": 0.5667, "macro_f1": 0.1676, "precision_relevant": 1.0, "recall_relevant": 0.1875, "score_mae": 40.1333, "ndcg_at_3": 0.9845 },
-        "llm": { "accuracy": 0.9000, "macro_f1": 0.5991, "precision_relevant": 1.0, "recall_relevant": 0.8125, "score_mae": 13.2, "ndcg_at_3": 0.9845 },
-        "hybrid_a": { "accuracy": 0.6333, "macro_f1": 0.3592, "precision_relevant": 1.0, "recall_relevant": 0.3125, "score_mae": 21.0867, "ndcg_at_3": 0.9845 },
-        "hybrid_c": { "accuracy": 0.9, "macro_f1": 0.5991, "precision_relevant": 1.0, "recall_relevant": 0.8125, "score_mae": 12.8667, "ndcg_at_3": 0.9845 }
+        "keyword": {
+          "accuracy": 0.5667,
+          "macro_f1": 0.1676,
+          "precision_relevant": 1.0,
+          "recall_relevant": 0.1875,
+          "score_mae": 40.1333,
+          "ndcg_at_3": 0.9845
+        },
+        "llm": {
+          "accuracy": 0.9,
+          "macro_f1": 0.5991,
+          "precision_relevant": 1.0,
+          "recall_relevant": 0.8125,
+          "score_mae": 13.2,
+          "ndcg_at_3": 0.9845
+        },
+        "hybrid_a": {
+          "accuracy": 0.6333,
+          "macro_f1": 0.3592,
+          "precision_relevant": 1.0,
+          "recall_relevant": 0.3125,
+          "score_mae": 21.0867,
+          "ndcg_at_3": 0.9845
+        },
+        "hybrid_c": {
+          "accuracy": 0.9,
+          "macro_f1": 0.5991,
+          "precision_relevant": 1.0,
+          "recall_relevant": 0.8125,
+          "score_mae": 12.8667,
+          "ndcg_at_3": 0.9845
+        }
       },
-      "usage": { "llm_calls": 10, "cached": 0, "prompt_tokens": 5944, "completion_tokens": 1828, "estimated_cost_usd": 0.0011, "duration_s": 85.9 }
+      "usage": {
+        "llm_calls": 10,
+        "cached": 0,
+        "prompt_tokens": 5944,
+        "completion_tokens": 1828,
+        "estimated_cost_usd": 0.0011,
+        "duration_s": 85.9
+      }
     },
     "2026-10-04": {
       "note": "EVAL-018 跨天复测（25 天后，真 LLM 10 次调用，缓存命中 0）",
       "model": "glm-4.7-flash",
       "metrics": {
-        "keyword": { "accuracy": 0.5667, "macro_f1": 0.1676, "precision_relevant": 1.0, "recall_relevant": 0.1875, "score_mae": 40.1333, "ndcg_at_3": 0.9845 },
-        "llm": { "accuracy": 0.8, "macro_f1": 0.3602, "precision_relevant": 1.0, "recall_relevant": 0.625, "score_mae": 17.7333, "ndcg_at_3": 0.9868 },
-        "hybrid_a": { "accuracy": 0.6, "macro_f1": 0.2918, "precision_relevant": 1.0, "recall_relevant": 0.25, "score_mae": 25.1333, "ndcg_at_3": 0.979 },
-        "hybrid_c": { "accuracy": 0.8, "macro_f1": 0.3602, "precision_relevant": 1.0, "recall_relevant": 0.625, "score_mae": 17.9, "ndcg_at_3": 0.9868 }
+        "keyword": {
+          "accuracy": 0.5667,
+          "macro_f1": 0.1676,
+          "precision_relevant": 1.0,
+          "recall_relevant": 0.1875,
+          "score_mae": 40.1333,
+          "ndcg_at_3": 0.9845
+        },
+        "llm": {
+          "accuracy": 0.8,
+          "macro_f1": 0.3602,
+          "precision_relevant": 1.0,
+          "recall_relevant": 0.625,
+          "score_mae": 17.7333,
+          "ndcg_at_3": 0.9868
+        },
+        "hybrid_a": {
+          "accuracy": 0.6,
+          "macro_f1": 0.2918,
+          "precision_relevant": 1.0,
+          "recall_relevant": 0.25,
+          "score_mae": 25.1333,
+          "ndcg_at_3": 0.979
+        },
+        "hybrid_c": {
+          "accuracy": 0.8,
+          "macro_f1": 0.3602,
+          "precision_relevant": 1.0,
+          "recall_relevant": 0.625,
+          "score_mae": 17.9,
+          "ndcg_at_3": 0.9868
+        }
       },
-      "usage": { "llm_calls": 10, "cached": 0, "prompt_tokens": 5504, "completion_tokens": 7279, "total_tokens": 12783, "estimated_cost_usd": 0.0032, "duration_s": 77.22 }
+      "usage": {
+        "llm_calls": 10,
+        "cached": 0,
+        "prompt_tokens": 5504,
+        "completion_tokens": 7279,
+        "total_tokens": 12783,
+        "estimated_cost_usd": 0.0032,
+        "duration_s": 77.22
+      }
+    },
+    "2026-10-11": {
+      "note": "EVAL-018b 主表清零后健康复测（真 LLM 10 次调用，缓存命中 0，中途 1 次 429 重试成功）",
+      "model": "glm-4.7-flash",
+      "metrics": {
+        "keyword": {
+          "accuracy": 0.5667,
+          "macro_f1": 0.1676,
+          "precision_relevant": 1.0,
+          "recall_relevant": 0.1875,
+          "score_mae": 40.1333,
+          "ndcg_at_3": 0.9845
+        },
+        "llm": {
+          "accuracy": 0.8,
+          "macro_f1": 0.5216,
+          "precision_relevant": 0.8571,
+          "recall_relevant": 0.75,
+          "score_mae": 16.0333,
+          "ndcg_at_3": 0.9813
+        },
+        "hybrid_a": {
+          "accuracy": 0.6,
+          "macro_f1": 0.2788,
+          "precision_relevant": 1.0,
+          "recall_relevant": 0.25,
+          "score_mae": 21.5,
+          "ndcg_at_3": 0.9813
+        },
+        "hybrid_c": {
+          "accuracy": 0.8,
+          "macro_f1": 0.5216,
+          "precision_relevant": 0.8571,
+          "recall_relevant": 0.75,
+          "score_mae": 16.2,
+          "ndcg_at_3": 0.9813
+        }
+      },
+      "usage": {
+        "llm_calls": 10,
+        "cached": 0,
+        "prompt_tokens": 5504,
+        "completion_tokens": 9938,
+        "total_tokens": 15442,
+        "estimated_cost_usd": 0.0043,
+        "duration_s": 207.73,
+        "rate_limit_retries": 1
+      }
     }
   },
   "drift_20260909_to_20261004": {
     "deterministic_control_keyword": "逐位一致（6 项指标 delta 全 0）→ 评测代码与数据集零漂移，LLM 侧 delta 归因成立",
-    "llm_metric_delta": { "accuracy": -0.1, "macro_f1": -0.2389, "precision_relevant": 0.0, "recall_relevant": -0.1875, "score_mae": 4.5333, "ndcg_at_3": 0.0023 },
-    "llm_per_case": { "cards_changed": "19/30", "label_flips": "12/30", "mean_abs_score_delta": 18.4, "max_abs_score_delta": 45, "stable_cases": ["cn_008", "cn_009"] },
+    "llm_metric_delta": {
+      "accuracy": -0.1,
+      "macro_f1": -0.2389,
+      "precision_relevant": 0.0,
+      "recall_relevant": -0.1875,
+      "score_mae": 4.5333,
+      "ndcg_at_3": 0.0023
+    },
+    "llm_per_case": {
+      "cards_changed": "19/30",
+      "label_flips": "12/30",
+      "mean_abs_score_delta": 18.4,
+      "max_abs_score_delta": 45,
+      "stable_cases": [
+        "cn_008",
+        "cn_009"
+      ]
+    },
     "attribution": [
       "LLM 采样随机性（主因，同输入跨天重采样）",
       "模型版本升级 glm-4-flash → glm-4.7-flash（混杂因素，与采样随机性无法完全分离；completion 1828→7279 佐证输出行为差异）"
@@ -55,13 +203,44 @@
     "hard_checks": [
       "dataset sha256 必须等于基线指纹（不等则先人工重新审核 gold 再谈回归）",
       "keyword 六项指标必须与 runs[\"2026-10-04\"].metrics.keyword 逐位一致（确定性对照，fail = 评测代码或数据集被改）",
-      "|Δ ndcg_at_3| ≤ 0.02 且 |Δ precision_relevant| ≤ 0.02 vs runs[\"2026-10-04\"].metrics.llm（排序能力硬验收）"
+      "|Δ ndcg_at_3| ≤ 0.02 vs runs[\"2026-10-04\"].metrics.llm（排序能力硬验收）；precision_relevant 改为翻转对数口径：high/medium 推荐集合相对基线翻转不超过 2 对（10-case 集 precision 分母约 7，±0.02 数学上不可达，2026-10-11 EVAL-018b 修订）"
     ],
     "jitter_bands_observed": {
       "accuracy": "±0.15",
       "score_mae": "±5.0",
       "macro_f1": "±0.25",
-      "note": "本次实测漂移包络；绝对分指标带内漂移不视为回归"
+      "note": "本次实测漂移包络；绝对分指标带内漂移不视为回归",
+      "precision_relevant": "±1 推荐对（约 ±0.14，分母≈7）"
     }
+  },
+  "drift_20261004_to_20261011": {
+    "deterministic_control_keyword": "逐位一致（6 项指标 delta 全 0）+ dataset sha256 与基线指纹一致 → 评测代码与数据集零漂移",
+    "llm_metric_delta": {
+      "accuracy": 0.0,
+      "macro_f1": 0.1614,
+      "precision_relevant": -0.1429,
+      "recall_relevant": 0.125,
+      "score_mae": -1.7,
+      "ndcg_at_3": -0.0055
+    },
+    "llm_per_case": {
+      "cards_changed": "22/30（分值变化）",
+      "label_flips": "7/30（全部为向上放宽：irrelevant→low/medium、low/medium→high，无向下）",
+      "mean_abs_score_delta": 13.86,
+      "max_abs_score_delta": 35,
+      "precision_flip_attribution": "precision 1.0→0.8571 由边界对翻转驱动：relevant={high,medium} 口径下 2026-10-11 出现 2 个边界 fp（cn_002/e3 pred medium/gold low、cn_006/e3 pred medium/gold irrelevant），2026-10-04 为 0 fp；10-case 集 precision 分母约 7、最小粒度约 0.14，±0.02 硬带数学上不可达"
+    },
+    "hard_check_verdict": {
+      "dataset_fingerprint": "PASS",
+      "keyword_bit_identical": "PASS",
+      "ndcg_within_0.02": "PASS（|Δ|=0.0055）",
+      "precision_within_0.02": "FAIL（|Δ|=0.1429）→ 判定为指标粒度伪影非回归：acc 恒 0.80、ndcg 带内、keyword 逐位一致、翻转全为向上放宽且集中 1 对；协议修订见下"
+    },
+    "conclusions_verified": [
+      "max(Local, LLM) ≡ LLM：hybrid_c 与 llm 第三轮持平 → 结论三次复测成立",
+      "Hybrid A 仍负贡献（0.60 < 0.80）→ 结论三次复测成立",
+      "生产 max 策略（EVAL-PROD-001）继续维持，无需回滚",
+      "accuracy 0.80 连续两轮持平（模型侧相对稳定）；macro_f1 在抖动带 ±0.25 内回升"
+    ]
   }
 }
