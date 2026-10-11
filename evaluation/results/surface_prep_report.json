@@ -4,133 +4,35 @@
   "n_cases": 1,
   "l1_only": true,
   "l1_summary": {
-    "total": 13,
-    "passed": 5,
-    "failed": 8,
-    "pass_rate": 0.3846,
-    "failures": [
-      {
-        "case_id": "prep_synth_01",
-        "check": "dimension_format_q0",
-        "passed": false,
-        "detail": "第0题 dimension='微服务拆分与架构设计' 不符 D1-D8"
-      },
-      {
-        "case_id": "prep_synth_01",
-        "check": "answer_points_nonempty_q0",
-        "passed": false,
-        "detail": "第0题 answer_points 为空"
-      },
-      {
-        "case_id": "prep_synth_01",
-        "check": "dimension_format_q1",
-        "passed": false,
-        "detail": "第1题 dimension='分布式锁与并发控制' 不符 D1-D8"
-      },
-      {
-        "case_id": "prep_synth_01",
-        "check": "answer_points_nonempty_q1",
-        "passed": false,
-        "detail": "第1题 answer_points 为空"
-      },
-      {
-        "case_id": "prep_synth_01",
-        "check": "dimension_format_q2",
-        "passed": false,
-        "detail": "第2题 dimension='大促高可用保障' 不符 D1-D8"
-      },
-      {
-        "case_id": "prep_synth_01",
-        "check": "answer_points_nonempty_q2",
-        "passed": false,
-        "detail": "第2题 answer_points 为空"
-      },
-      {
-        "case_id": "prep_synth_01",
-        "check": "dimension_format_q3",
-        "passed": false,
-        "detail": "第3题 dimension='性能调优' 不符 D1-D8"
-      },
-      {
-        "case_id": "prep_synth_01",
-        "check": "answer_points_nonempty_q3",
-        "passed": false,
-        "detail": "第3题 answer_points 为空"
-      }
-    ]
+    "total": 21,
+    "passed": 21,
+    "failed": 0,
+    "pass_rate": 1.0,
+    "failures": []
   },
   "judge_summary": {},
   "usage": {
     "llm_calls": 1,
     "llm_calls_cached": 0,
-    "duration_s": 132.67,
-    "prompt_tokens": 1357,
-    "completion_tokens": 7296,
-    "total_tokens": 8653
+    "duration_s": 102.56,
+    "prompt_tokens": 1471,
+    "completion_tokens": 11101,
+    "total_tokens": 12572
   },
   "per_case": [
     {
       "case_id": "prep_synth_01",
       "l1": {
-        "total": 13,
-        "passed": 5,
-        "failed": 8,
-        "pass_rate": 0.3846,
-        "failures": [
-          {
-            "case_id": "prep_synth_01",
-            "check": "dimension_format_q0",
-            "passed": false,
-            "detail": "第0题 dimension='微服务拆分与架构设计' 不符 D1-D8"
-          },
-          {
-            "case_id": "prep_synth_01",
-            "check": "answer_points_nonempty_q0",
-            "passed": false,
-            "detail": "第0题 answer_points 为空"
-          },
-          {
-            "case_id": "prep_synth_01",
-            "check": "dimension_format_q1",
-            "passed": false,
-            "detail": "第1题 dimension='分布式锁与并发控制' 不符 D1-D8"
-          },
-          {
-            "case_id": "prep_synth_01",
-            "check": "answer_points_nonempty_q1",
-            "passed": false,
-            "detail": "第1题 answer_points 为空"
-          },
-          {
-            "case_id": "prep_synth_01",
-            "check": "dimension_format_q2",
-            "passed": false,
-            "detail": "第2题 dimension='大促高可用保障' 不符 D1-D8"
-          },
-          {
-            "case_id": "prep_synth_01",
-            "check": "answer_points_nonempty_q2",
-            "passed": false,
-            "detail": "第2题 answer_points 为空"
-          },
-          {
-            "case_id": "prep_synth_01",
-            "check": "dimension_format_q3",
-            "passed": false,
-            "detail": "第3题 dimension='性能调优' 不符 D1-D8"
-          },
-          {
-            "case_id": "prep_synth_01",
-            "check": "answer_points_nonempty_q3",
-            "passed": false,
-            "detail": "第3题 answer_points 为空"
-          }
-        ]
+        "total": 21,
+        "passed": 21,
+        "failed": 0,
+        "pass_rate": 1.0,
+        "failures": []
       },
-      "n_dimension_questions": 4,
-      "elevator_pitch_len": 152,
-      "full_version_len": 3316,
-      "elapsed_s": 134.6
+      "n_dimension_questions": 8,
+      "elevator_pitch_len": 164,
+      "full_version_len": 4323,
+      "elapsed_s": 104.92
     }
   ]
 }

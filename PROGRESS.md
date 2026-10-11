@@ -10,10 +10,11 @@
 - [x] **A4-A5 schema 与裁判 prompt**：`evaluation/surface_schemas.py`（`JudgeScore` 四维 0-10 统一契约 + `L1Finding`/`summarize_l1` + `check_review_l1` 7 项规则 / `check_prep_l1` 7 项规则）；`evaluation/prompts/judge_review_v1.md` + `judge_prep_v1.md`（版本化，GLM-4.7 temperature=0）。
 - [x] **B1-B2 runner**：`evaluation/run_review_eval.py`（绕 DB 驱动 Router→Tech/Soft→Gate→离线 assemble，L1+L2，`--l1-only`/`--case-id`）+ `evaluation/run_prep_eval.py`（纯函数 `_build_interview_prompt`→`InterviewPrepAgent`，同上）。裁判模型 `JC_EVAL_JUDGE_MODEL` 默认 glm-4.7。
 - [x] **C1 契约锁定测试**：`tests/test_surface_l1.py` 27 例（InterviewPrepLLMOutput min_length JSON schema required/minLength/minItems、CompanyResearchInfo extra=forbid、ResearchItem 铁律、score/overall_score 边界、JudgeScore 边界、两链 L1 检查行为）。
-- **L1 冒烟（真 LLM，单窗口串行）**：review 链 rev_synth_01 跑通 L1 **100%**（首跑抓到 dimension="D7 协作沟通" 码+名格式 → 放宽正则为前缀匹配 `^D[1-8]` 对齐 wire 实际）；prep 链 prep_synth_01 跑通 L1 **0.3846**——抓到真实 prompt-schema 缺口：`interview_prep_script_v3` 未提 `dimension`/`answer_points` 字段名，LLM 填主题名（"微服务拆分与架构设计"）+空要点 → **按"暴露问题"准则保留为发现，不放宽检查**；修复属 app/prompt 域，登记待后续任务。
-- **门禁**：encoding **441 文件 0 错**；ruff check+format ✓；pytest **1420 passed / 7 skipped**（较 T-EVAL-1 批 +27 = test_surface_l1 新增）。并行跑两 runner 曾撞 429（违反单窗口独占规则），已改串行。
+- **L1 冒烟（真 LLM，单窗口串行）**：review 链 rev_synth_01 跑通 L1 **100%**（首跑抓到 dimension="D7 协作沟通" 码+名格式 → 放宽正则为前缀匹配 `^D[1-8]` 对齐 wire 实际）；prep 链 prep_synth_01 首跑 L1 **0.3846**——抓到真实 prompt-schema 缺口：`interview_prep_script_v3` 未提 `dimension`/`answer_points` 字段名，LLM 填主题名（"微服务拆分与架构设计"）+空要点。
+- [x] **prep prompt-schema 缺口修复（同日跟进，v4）**：新建 `interview_prep_script_v4.txt`（v3 全文 + dimension_questions 四字段显式映射：dimension=D1-D8 编码禁主题名 / question / answer_points 非空 2-6 条禁空数组 / card_ids 整数），`INTERVIEW_PREP_PROMPT_VERSION` 3→4；v3 一字未动（版本化红线）。受影响测试同步（test_prompts +v4 断言、workflows prompt_version "3"→"4"）。**真 LLM 复测：prep L1 0.3846 → 1.0**（1 call 无 429）。
+- **门禁**：encoding **450 文件 0 错**；ruff check+format ✓；pytest **1421 passed / 7 skipped**（+28 = test_surface_l1 27 + v4 prompt 断言 1）。并行跑两 runner 曾撞 429（违反单窗口独占规则），已改串行。
 - **⚠️ 共享工作区**：pathspec 提交（evaluation/ 全部新文件 + tests/test_surface_l1.py + .gitignore + PROGRESS）；docs/（evaluation-design-v1.md）按 `.gitignore:77` 本地不入库。
-- **下一步**：等真实素材（面试逐字稿 3-5 份 + JD 3-5 份，用户待提供）→ 跑 S4 正式基线冻结（L2 裁判 GLM-4.7 就绪）；prep 链 prompt-schema 缺口修复（dimension/answer_points 字段名注入 prompt 或 L1 放宽裁决）待定；链②表达建议 + 链④公司调研按优先级决策后置。
+- **下一步**：等真实素材（面试逐字稿 3-5 份 + JD 3-5 份，用户待提供）→ 跑 S4 正式基线冻结（L2 裁判 GLM-4.7 就绪，四链中 ①③ 已冒烟通过）；链②表达建议 + 链④公司调研按优先级决策后置。
 
 ## 评测阶段开工批：T-QA-1 编码防线加固 + T-EVAL-1 匹配回归复测（2026-10-11）
 

@@ -255,6 +255,36 @@ def test_interview_prep_script_v3_framework_routing():
     assert "禁止填卡片标题" in rendered
 
 
+def test_interview_prep_script_v4_dimension_questions_mapping():
+    """T-EVAL-2：prep v4 显式映射 dimension_questions 四字段（修 v3 prompt-schema 缺口）。
+
+    v3 只写「question + 完整 answer 逐字稿 + card_ids」，未提 dimension/answer_points
+    字段名 → LLM 填主题名 + 空要点（L1 冒烟抓到，prep L1 0.3846）。
+    """
+    fields = _REQUIRED_FIELDS[("interview", "interview_prep_script")]
+    rendered = load_prompt(
+        "interview",
+        "interview_prep_script",
+        version=4,
+        **{f: f"<{f}>" for f in fields},
+    )
+    # 四字段显式映射
+    assert "dimension_questions" in rendered
+    assert "dimension：维度编码" in rendered
+    assert "D1-D8" in rendered
+    assert "answer_points" in rendered
+    assert "非空数组" in rendered
+    assert "禁止输出空数组" in rendered
+    assert "question：该维度的面试题" in rendered
+    assert "card_ids" in rendered
+    # v3 框架路由与 v2 字段映射随全文继承
+    assert "表达框架路由" in rendered
+    assert "elevator_pitch" in rendered
+    assert "禁止填卡片标题" in rendered
+    # 禁止主题名（L1 dimension_format 检查的 prompt 侧对应约束）
+    assert "禁止填主题名" in rendered
+
+
 def test_analyzer_v3_pyramid_and_listening_methodology():
     """T-P7-4：soft/tech analyzer v3 注入复盘质检方法论（③-1 金字塔 + ③-2 结构化倾听 + KISS）。"""
     for name in ("soft_analyzer", "tech_analyzer"):

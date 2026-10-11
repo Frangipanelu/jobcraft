@@ -16,7 +16,10 @@ from app.tools.card_render import get_card_render_text
 logger = logging.getLogger("jobcraft.tools.interview_pre")
 
 #: 面试准备稿 prompt 模板版本（与 load_prompt version 同步演进，审计透传用）
-INTERVIEW_PREP_PROMPT_VERSION = 3
+#: v4（T-EVAL-2）：dimension_questions 四字段显式映射（dimension D1-D8 编码 /
+#: question / answer_points 非空 2-6 条 / card_ids 整数），修 L1 抓到的
+#: prompt-schema 缺口（v3 未提字段名 → LLM 填主题名 + 空要点）
+INTERVIEW_PREP_PROMPT_VERSION = 4
 
 # 8 维能力说明
 DIMENSION_DESCRIPTIONS = {
