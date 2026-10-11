@@ -85,6 +85,10 @@ docs/
 # eval-generated predictions (re-creatable, report is the record)
 evaluation/predictions/
 
+# eval real interview material (user-provided PII, never commit;
+# anonymized versions land in evaluation/datasets/*.jsonl)
+evaluation/datasets/real/
+
 # Debug scripts and test samples
 tests/debug/
 tests/user_sample_*.txt

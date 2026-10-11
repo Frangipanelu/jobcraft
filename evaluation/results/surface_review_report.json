@@ -1,0 +1,37 @@
+{
+  "chain": "review",
+  "dataset": "D:\\A-pythonProject\\AI-learning\\multi-agent\\jobcraft\\evaluation\\datasets\\review_cases.jsonl",
+  "n_cases": 1,
+  "l1_only": true,
+  "l1_summary": {
+    "total": 19,
+    "passed": 19,
+    "failed": 0,
+    "pass_rate": 1.0,
+    "failures": []
+  },
+  "judge_summary": {},
+  "usage": {
+    "llm_calls": 0,
+    "llm_calls_cached": 4,
+    "duration_s": 0.0,
+    "prompt_tokens": 0,
+    "completion_tokens": 0,
+    "total_tokens": 0
+  },
+  "per_case": [
+    {
+      "case_id": "rev_synth_01",
+      "l1": {
+        "total": 19,
+        "passed": 19,
+        "failed": 0,
+        "pass_rate": 1.0,
+        "failures": []
+      },
+      "overall_score": 87,
+      "n_questions": 5,
+      "elapsed_s": 3.08
+    }
+  ]
+}

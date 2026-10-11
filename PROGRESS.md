@@ -2,6 +2,19 @@
 
 > 本文件用于追踪项目整体进度。AI 在每次会话结束或完成子任务时，必须更新本文件的对应板块。
 
+## T-EVAL-2 四链评测基础设施落地 S1-S3（2026-10-11）
+
+> 用户批准 4 项决策（数据来源=真实素材+脱敏、裁判=GLM-4.7 付费、优先级=先①复盘+③prep、CI=L1 进 PR）后实施。本批只动 `evaluation/` + `tests/` + `.gitignore` + 本文档，零 app/ 触碰（runner 只读 import agents/纯函数层）。
+
+- [x] **A1-A3 数据侧**：`.gitignore` 加 `evaluation/datasets/real/`（真实素材本地私有，README 说明收集清单与流程）；`evaluation/anonymize.py` 脱敏管线（手机/邮箱/微信/QQ/身份证/姓名/学校正则替换，公司名保留，CLI `--kind review|prep --append`）；`evaluation/datasets/review_cases.jsonl` + `prep_cases.jsonl` 各 3 条合成种子（字节/美团/腾讯 × 技术面/业务面，覆盖 tech+soft 问题、STAR 卡、dimension_requirements）。
+- [x] **A4-A5 schema 与裁判 prompt**：`evaluation/surface_schemas.py`（`JudgeScore` 四维 0-10 统一契约 + `L1Finding`/`summarize_l1` + `check_review_l1` 7 项规则 / `check_prep_l1` 7 项规则）；`evaluation/prompts/judge_review_v1.md` + `judge_prep_v1.md`（版本化，GLM-4.7 temperature=0）。
+- [x] **B1-B2 runner**：`evaluation/run_review_eval.py`（绕 DB 驱动 Router→Tech/Soft→Gate→离线 assemble，L1+L2，`--l1-only`/`--case-id`）+ `evaluation/run_prep_eval.py`（纯函数 `_build_interview_prompt`→`InterviewPrepAgent`，同上）。裁判模型 `JC_EVAL_JUDGE_MODEL` 默认 glm-4.7。
+- [x] **C1 契约锁定测试**：`tests/test_surface_l1.py` 27 例（InterviewPrepLLMOutput min_length JSON schema required/minLength/minItems、CompanyResearchInfo extra=forbid、ResearchItem 铁律、score/overall_score 边界、JudgeScore 边界、两链 L1 检查行为）。
+- **L1 冒烟（真 LLM，单窗口串行）**：review 链 rev_synth_01 跑通 L1 **100%**（首跑抓到 dimension="D7 协作沟通" 码+名格式 → 放宽正则为前缀匹配 `^D[1-8]` 对齐 wire 实际）；prep 链 prep_synth_01 跑通 L1 **0.3846**——抓到真实 prompt-schema 缺口：`interview_prep_script_v3` 未提 `dimension`/`answer_points` 字段名，LLM 填主题名（"微服务拆分与架构设计"）+空要点 → **按"暴露问题"准则保留为发现，不放宽检查**；修复属 app/prompt 域，登记待后续任务。
+- **门禁**：encoding **441 文件 0 错**；ruff check+format ✓；pytest **1420 passed / 7 skipped**（较 T-EVAL-1 批 +27 = test_surface_l1 新增）。并行跑两 runner 曾撞 429（违反单窗口独占规则），已改串行。
+- **⚠️ 共享工作区**：pathspec 提交（evaluation/ 全部新文件 + tests/test_surface_l1.py + .gitignore + PROGRESS）；docs/（evaluation-design-v1.md）按 `.gitignore:77` 本地不入库。
+- **下一步**：等真实素材（面试逐字稿 3-5 份 + JD 3-5 份，用户待提供）→ 跑 S4 正式基线冻结（L2 裁判 GLM-4.7 就绪）；prep 链 prompt-schema 缺口修复（dimension/answer_points 字段名注入 prompt 或 L1 放宽裁决）待定；链②表达建议 + 链④公司调研按优先级决策后置。
+
 ## 评测阶段开工批：T-QA-1 编码防线加固 + T-EVAL-1 匹配回归复测（2026-10-11）
 
 > 主表 63 项全清后的首日，按 TODO H2 评测阶段任务表执行：先清两个质量基建小项，再跑匹配回归复测。全程本窗口单线程，无撞车。
