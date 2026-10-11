@@ -11,7 +11,7 @@
 - [x] **T-EVAL-1 匹配回归复测 EVAL-018b**：`run_chinese_eval --gold chinese_cases.jsonl`（真 LLM 10 calls、缓存 0、中途 1 次 429 重试成功、$0.0043、207.7s）；旧预测已备份 `results/baseline_20261004_predictions/`+`baseline_20261004_report.md`；结果已固化 `regression_v1.json` 第三轮（2026-10-11）+ 专节漂移分析。**硬验收裁决**：① dataset sha256 与基线指纹一致 PASS；② keyword 六项逐位一致 PASS（评测代码/数据集零漂移）；③ LLM ndcg |Δ|=0.0055 ≤0.02 PASS；④ precision 1.0→0.8571（|Δ|=0.1429）**FAIL→判指标粒度伪影非回归**——`relevant={high,medium}` 口径下 fp 仅 2 对（cn_002/e3、cn_006/e3，均为 pred medium 边界放宽），10-case 集分母≈7 最小粒度≈0.14，±0.02 带数学上不可达 → 协议修订：precision 硬验收改为「相对基线翻转 ≤2 对」。**结论三轮验证**：max 策略≡LLM 成立（hybrid_c 三轮持平）、Hybrid A 三轮负贡献、EVAL-PROD-001 维持不回滚；acc 0.80 连续两轮持平，标签翻转 7/30 全为向上放宽（模型略慷慨，无质量劣化证据）。
 - **门禁**：encoding 440 文件 0 错；ruff check + format 绿；pytest **1393 passed / 7 skipped**（较前基线 +17 = 新 11 例 + 6 例 DB skip 因 docker 在线恢复执行）；vitest 全量 400/400（无 flaky 复现）。
 - **⚠️ 共享工作区**：pathspec 提交（`scripts/check_encoding.py`、`tests/test_check_encoding_unit.py`、`evaluation/results/regression_v1.json`、`evaluation/reports/chinese_matching_report.md`、基线备份两文件、本 PROGRESS）；TODO 为本地文档同步登记 H2 任务表。
-- **下一步**：T-EVAL-2 新表面评测立项（复盘/表达/prep/调研四链评测集与指标，需先出设计草案）；T-USER-1（W12 手动验收）与 T-USER-2（盘点表 9 条拍板）待用户。
+- **下一步**：~~T-EVAL-2 新表面评测立项~~ 设计草案已出（2026-10-11，本地 `docs/evaluation-design-v1.md`，docs/ 不入库）——四链（复盘/建议/prep/调研）评测集+指标+三层方法论（L1 结构合规/L2 LLM-judge/L3 人工校准 κ≥0.6），S1-S5 共 3.5d，**待用户确认 4 项**（数据来源/裁判模型/优先级/CI 集成）后实施；T-USER-1（W12 手动验收）与 T-USER-2（盘点表 9 条拍板）待用户。
 
 ## P7 批整体收口：公司调研深化四任务（2026-10-10，A 窗·Subagent-Driven 串行批）
 
