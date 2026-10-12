@@ -96,6 +96,88 @@ def _extract_docx_text(path: Path) -> str:
     return "\n".join(paragraphs)
 
 
+# ---- 会议转录归一化（讲话人N - 时间戳 → 显式角色标签） ----
+
+_SPEAKER_LINE_RE = re.compile(
+    r"^(?:讲话人|说话人|发言人|发言者|Speaker|Person|Spk)\s*(\d+)\s*[-–—~]\s*"
+    r"(?P<time>\d{1,2}:\d{2}(?::\d{2})?)\s*(?P<content>.*)$",
+    re.IGNORECASE,
+)
+_FOOTER_LINE = "（内容由AI生成）"
+
+
+def parse_speaker_map(spec: str) -> dict[str, str]:
+    """解析 ``--speaker-map`` 规格，如 ``1=面试官,2=候选人``。
+
+    :param spec: 逗号分隔的 ``编号=标签`` 列表
+    :return: {编号: 角色标签} 字典（非法片段忽略）
+    """
+    out: dict[str, str] = {}
+    for part in spec.split(","):
+        if "=" in part:
+            key, val = part.split("=", 1)
+            if key.strip() and val.strip():
+                out[key.strip()] = val.strip()
+    return out
+
+
+def normalize_transcript(text: str, speaker_map: dict[str, str] | None = None) -> str:
+    """归一化会议转录文本（脱敏前的结构预处理）。
+
+    处理三件事（按序）：
+
+    1. **去首尾杂质**：砍掉首个说话人行之前的标题/「关键词/全文概要」
+       头部（含 AI 摘要里的姓名泄漏面），去掉结尾「（内容由AI生成）」
+       页脚与尾部空行；
+    2. **角色标签改写**（``speaker_map`` 给定时）：把 ``讲话人N - 0:02``
+       按逐文件核定的角色映射改写为 ``面试官 0:02 内容``（同一行，内容
+       与下一发言行拼接）。显式标签使 ``_parse_dialogue`` 直接识别角色，
+       绕过内容启发式——逐字稿角色推断存在反例（聚智案例）；
+    3. **未映射说话人保持原样**，交给解析器自有逻辑。
+
+    :param text: 原始转录文本
+    :param speaker_map: {讲话人编号: 角色标签}，None 则只去杂质
+    :return: 归一化后的文本
+    """
+    lines = text.splitlines()
+
+    # 1a. 去头部：定位首个说话人行
+    start = next(
+        (i for i, line in enumerate(lines) if _SPEAKER_LINE_RE.match(line.strip())),
+        0,
+    )
+    lines = lines[start:]
+
+    # 1b. 去页脚与尾部空行
+    while lines and (not lines[-1].strip() or lines[-1].strip() == _FOOTER_LINE):
+        lines.pop()
+
+    if not speaker_map:
+        return "\n".join(lines)
+
+    # 2. 按说话人分组发言（发言行 + 后续内容行），再按角色标签重写
+    utterances: list[list] = []  # [编号, 时间, [内容行...]]
+    for line in lines:
+        m = _SPEAKER_LINE_RE.match(line.strip())
+        if m:
+            utterances.append([m.group(1), m.group("time"), [m.group("content")]])
+        elif utterances:
+            utterances[-1][2].append(line)
+
+    out: list[str] = []
+    for num, time_str, parts in utterances:
+        content = " ".join(p.strip() for p in parts if p.strip())
+        label = speaker_map.get(num)
+        if label:
+            out.append(f"{label} {time_str} {content}".rstrip())
+        else:
+            # 未映射：保持原「讲话人N」行 + 内容行结构
+            out.append(f"讲话人{num} - {time_str}")
+            if content:
+                out.append(content)
+    return "\n".join(out)
+
+
 # ---- 正则（顺序即替换顺序，先长后短避免子串截断） ----
 
 _PHONE_RE = re.compile(r"(?:\+?86[-\s]?)?1[3-9]\d{9}")
@@ -268,12 +350,19 @@ def main() -> None:
     )
     p.add_argument("--names", default="", help="候选人姓名，逗号分隔")
     p.add_argument("--school", default="", help="学校名")
+    p.add_argument(
+        "--speaker-map",
+        default="",
+        help='会议转录角色映射，如 "1=面试官,2=候选人"（逐文件核定）',
+    )
     p.add_argument("--out", type=Path, default=None, help="输出 jsonl 路径")
     p.add_argument("--append", action="store_true", help="追加而非覆盖")
     p.add_argument("--dry-run", action="store_true", help="只打印脱敏结果不落盘")
     args = p.parse_args()
 
     raw = load_text_file(args.input)
+    speaker_map = parse_speaker_map(args.speaker_map) if args.speaker_map else None
+    raw = normalize_transcript(raw, speaker_map=speaker_map)
     names = [n.strip() for n in args.names.split(",") if n.strip()]
     case_id = args.case_id or args.input.stem
 

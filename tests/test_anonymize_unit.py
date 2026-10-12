@@ -15,6 +15,8 @@ from evaluation.anonymize import (
     build_prep_case,
     build_review_case,
     load_text_file,
+    normalize_transcript,
+    parse_speaker_map,
     scrub_text,
 )
 
@@ -110,6 +112,65 @@ class TestLoadTextFile:
         p.write_bytes(b"not a zip")
         with pytest.raises(ValueError, match="非法 docx"):
             load_text_file(p)
+
+
+class TestNormalizeTranscript:
+    """normalize_transcript 会议转录归一化。"""
+
+    RAW = (
+        "聚智科技产品助理岗位面试沟通\n\n\n关键词\n产品助理 顺德\n\n\n"
+        "全文概要\n求职者与公司讨论了产品助理岗位。\n\n\n"
+        "讲话人1 - 0:00\n我看一下你的简历，你之前是做项目助理的，那你能为产品助理岗位带来什么呢？\n\n"
+        "讲话人2 - 0:40\n我觉得项目助理和产品助理本质上有一部分工作内容是可以迁移的，我在之前的实习中也参与过需求分析。\n\n"
+        "讲话人1 - 5:47\n啊行，你把你扫回过来就一个多小时的了。对。\n\n\n"
+        "（内容由AI生成）"
+    )
+
+    def test_parse_speaker_map(self):
+        assert parse_speaker_map("1=面试官,2=候选人") == {"1": "面试官", "2": "候选人"}
+        assert parse_speaker_map(" 1 = 面试官 , 2=候选人 ") == {
+            "1": "面试官",
+            "2": "候选人",
+        }
+        assert parse_speaker_map("bad,,=x") == {}
+
+    def test_strip_preamble_and_footer(self):
+        out = normalize_transcript(self.RAW, speaker_map={"1": "面试官", "2": "候选人"})
+        assert "关键词" not in out
+        assert "全文概要" not in out
+        assert "（内容由AI生成）" not in out
+        assert "聚智科技产品助理岗位面试沟通" not in out
+        assert out.splitlines()[0].startswith("面试官 0:00")
+
+    def test_speaker_map_rewrites_label_and_joins_content(self):
+        out = normalize_transcript(self.RAW, speaker_map={"1": "面试官", "2": "候选人"})
+        lines = out.splitlines()
+        assert lines[0].startswith("面试官 0:00 我看一下你的简历")
+        assert lines[1].startswith("候选人 0:40 我觉得项目助理和产品助理")
+        assert all("讲话人" not in line for line in lines)
+
+    def test_speaker_map_none_keeps_structure(self):
+        out = normalize_transcript(self.RAW)
+        assert "讲话人1 - 0:00" in out
+        assert "我看一下你的简历" in out
+        assert "（内容由AI生成）" not in out
+
+    def test_unmapped_speaker_keeps_original_form(self):
+        out = normalize_transcript(self.RAW, speaker_map={"1": "面试官"})
+        assert "面试官 0:00" in out
+        assert "讲话人2 - 0:40" in out
+
+    def test_normalized_text_parses_with_explicit_roles(self):
+        """归一化后 _parse_dialogue 直接识别显式角色（绕过内容启发式）。"""
+        from app.tools.interview_dialogue import _build_qa_pairs, _parse_dialogue
+
+        out = normalize_transcript(self.RAW, speaker_map={"1": "面试官", "2": "候选人"})
+        dialogue = _parse_dialogue(out)
+        assert dialogue, "解析不应为空"
+        roles = {(d["speaker"], d["role"]) for d in dialogue}
+        assert ("面试官", "interviewer") in roles
+        assert ("候选人", "candidate") in roles
+        assert len(_build_qa_pairs(dialogue)) >= 1
 
 
 class TestBuildCase:
