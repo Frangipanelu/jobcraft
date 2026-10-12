@@ -11,7 +11,7 @@
     # 只跑指定 case
     python -m evaluation.run_review_eval --case-id rev_synth_01
 
-    # 只跑 L1（零 LLM 成本，CI 用）
+    # 只跑 L1（跳过 L2 裁判，链本身仍需 LLM）
     python -m evaluation.run_review_eval --l1-only
 
 设计说明（evaluation-design-v1.md §runner）：
@@ -314,24 +314,25 @@ def _judge(
 
 def run_eval(
     dataset_path: Path | None = None,
-    case_id: str | None = None,
+    case_id: str | list[str] | None = None,
     l1_only: bool = False,
     out_dir: Path | None = None,
 ) -> dict[str, Any]:
     """执行复盘链评测主流程。
 
     :param dataset_path: 数据集路径，缺省 ``review_cases.jsonl``
-    :param case_id: 只跑指定 case
-    :param l1_only: 只跑 L1（零 LLM 成本）
+    :param case_id: 只跑指定 case（单个 id 或 id 列表）
+    :param l1_only: 只跳过 L2 裁判（链本身仍执行）
     :param out_dir: 结果输出目录，缺省 ``evaluation/results``
     :return: 评测报告 dict
     """
     path = dataset_path or DEFAULT_DATASET
     cases = load_cases(path)
     if case_id:
-        cases = [c for c in cases if c.get("case_id") == case_id]
+        wanted = {case_id} if isinstance(case_id, str) else set(case_id)
+        cases = [c for c in cases if c.get("case_id") in wanted]
         if not cases:
-            raise ValueError(f"case_id={case_id} 不在 {path}")
+            raise ValueError(f"case_id={sorted(wanted)} 不在 {path}")
 
     out = out_dir or DEFAULT_OUT_DIR
     out.mkdir(parents=True, exist_ok=True)
@@ -422,7 +423,8 @@ def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s %(message)s")
     p = argparse.ArgumentParser(description="复盘链评测 runner")
     p.add_argument("--dataset", type=Path, default=None)
-    p.add_argument("--case-id", default=None)
+    p.add_argument("--case-id", nargs="+", default=None, help="只跑指定 case（可多个）")
+    # 只跑 L1（跳过 L2 裁判；链本身仍需 LLM）
     p.add_argument("--l1-only", action="store_true")
     p.add_argument("--out-dir", type=Path, default=None)
     args = p.parse_args()
