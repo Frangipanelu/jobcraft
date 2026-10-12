@@ -18,8 +18,8 @@
 
 用法::
 
-    # 逐字稿 → review_cases
-    python -m evaluation.anonymize evaluation/datasets/real/raw_review_01.txt \\
+    # 逐字稿 → review_cases（.txt / .md / .docx 均可）
+    python -m evaluation.anonymize evaluation/datasets/real/raw_review_01.docx \\
         --kind review --company 字节跳动 --position 后端开发工程师 \\
         --round-type 技术面 --out evaluation/datasets/review_cases.jsonl --append
 
@@ -40,7 +40,61 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import zipfile
 from pathlib import Path
+from xml.etree import ElementTree
+
+
+def load_text_file(path: Path) -> str:
+    """按扩展名读取素材文本（.docx 走 stdlib 提取，其余按 UTF-8 文本读）。
+
+    支持 ``.txt`` / ``.md`` / ``.docx``（docx = zip + word/document.xml，
+    用 zipfile + ElementTree 提取 ``w:t`` 段落文本，零第三方依赖）。
+
+    :param path: 素材文件路径
+    :return: 提取的纯文本
+    :raises ValueError: 扩展名不支持或 docx 损坏
+    :raises UnicodeDecodeError: 文本文件非 UTF-8
+    """
+    suffix = path.suffix.lower()
+    if suffix in (".txt", ".md", ""):
+        return path.read_text(encoding="utf-8")
+    if suffix == ".docx":
+        return _extract_docx_text(path)
+    raise ValueError(f"不支持的素材格式: {path.suffix}（支持 .txt / .md / .docx）")
+
+
+_W_NS = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
+
+
+def _extract_docx_text(path: Path) -> str:
+    """从 docx 提取段落文本（stdlib：zip + ElementTree，零新依赖）。
+
+    逐段落（``w:p``）收集 ``w:t`` 文本，段内 ``w:tab`` 转制表符，
+    段落间以换行连接——保留 ``_parse_dialogue`` 所需的逐行结构。
+
+    :param path: docx 文件路径
+    :return: 提取的纯文本
+    :raises ValueError: 不是合法 zip 或缺 word/document.xml
+    """
+    try:
+        with zipfile.ZipFile(path) as zf:
+            xml_bytes = zf.read("word/document.xml")
+    except (zipfile.BadZipFile, KeyError) as exc:
+        raise ValueError(f"非法 docx 文件: {path}（{exc}）") from exc
+
+    root = ElementTree.fromstring(xml_bytes)
+    paragraphs: list[str] = []
+    for p in root.iter(f"{_W_NS}p"):
+        parts: list[str] = []
+        for node in p.iter():
+            if node.tag == f"{_W_NS}t":
+                parts.append(node.text or "")
+            elif node.tag == f"{_W_NS}tab":
+                parts.append("\t")
+        paragraphs.append("".join(parts))
+    return "\n".join(paragraphs)
+
 
 # ---- 正则（顺序即替换顺序，先长后短避免子串截断） ----
 
@@ -219,12 +273,12 @@ def main() -> None:
     p.add_argument("--dry-run", action="store_true", help="只打印脱敏结果不落盘")
     args = p.parse_args()
 
-    raw = args.input.read_text(encoding="utf-8")
+    raw = load_text_file(args.input)
     names = [n.strip() for n in args.names.split(",") if n.strip()]
     case_id = args.case_id or args.input.stem
 
     if args.kind == "review":
-        jd_text = args.jd_file.read_text(encoding="utf-8") if args.jd_file else ""
+        jd_text = load_text_file(args.jd_file) if args.jd_file else ""
         case = build_review_case(
             raw,
             case_id=case_id,
