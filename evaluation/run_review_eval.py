@@ -26,6 +26,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import os
 import time
 from pathlib import Path
 from typing import Any
@@ -317,6 +318,10 @@ def run_eval(
     case_id: str | list[str] | None = None,
     l1_only: bool = False,
     out_dir: Path | None = None,
+    case_retries: int = 0,
+    case_retry_wait: float = 60.0,
+    judge_retries: int = 0,
+    judge_retry_wait: float = 30.0,
 ) -> dict[str, Any]:
     """执行复盘链评测主流程。
 
@@ -324,6 +329,10 @@ def run_eval(
     :param case_id: 只跑指定 case（单个 id 或 id 列表）
     :param l1_only: 只跳过 L2 裁判（链本身仍执行）
     :param out_dir: 结果输出目录，缺省 ``evaluation/results``
+    :param case_retries: 链执行失败（含 429 限流）后整 case 重试次数
+    :param case_retry_wait: case 重试基础间隔秒数（按 2^n 递增）
+    :param judge_retries: 裁判失败后重试次数
+    :param judge_retry_wait: 裁判重试基础间隔秒数（按 2^n 递增）
     :return: 评测报告 dict
     """
     path = dataset_path or DEFAULT_DATASET
@@ -343,27 +352,67 @@ def run_eval(
     judge_model = None
     if not l1_only:
         from app.core.llm import init_chat_model
-        import os
 
         judge_model = init_chat_model(
             model=os.getenv("JC_EVAL_JUDGE_MODEL", "glm-4.7"),
             model_provider="openai",
+            # 必须显式传 timeout：langchain 传 None 会禁用 openai SDK 默认超时，
+            # 上游挂起连接（accept 后不回包）将无限阻塞评测进程
+            timeout=float(os.getenv("LLM_REQUEST_TIMEOUT", "180")),
         )
 
     all_findings = []
     judge_scores: list[dict[str, Any]] = []
     per_case: list[dict[str, Any]] = []
+    out_file = out / "surface_review_report.json"
+
+    def _flush() -> dict[str, Any]:
+        """构建并落盘当前进度报告（逐 case 写，中断可保留已完成结果）。"""
+        report = _make_report(
+            path=path,
+            n_cases=len(cases),
+            l1_only=l1_only,
+            all_findings=all_findings,
+            judge_scores=judge_scores,
+            usage=usage,
+            per_case=per_case,
+        )
+        out_file.write_text(
+            json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+        return report
 
     for case in cases:
         cid = case.get("case_id", "?")
         t0 = time.perf_counter()
-        try:
-            state = _build_state_from_case(case)
-            state = _run_review_chain(state)
-            result = state["result"]
-        except Exception as exc:
-            logger.error("case %s 执行失败: %s", cid, exc)
-            per_case.append({"case_id": cid, "error": str(exc)})
+
+        # 链执行（带限流重试：整 case 重启，已完成步骤视缓存可用性可能复用）
+        result: dict[str, Any] | None = None
+        last_exc: Exception | None = None
+        for attempt in range(case_retries + 1):
+            try:
+                state = _build_state_from_case(case)
+                state = _run_review_chain(state)
+                result = state["result"]
+                last_exc = None
+                break
+            except Exception as exc:
+                last_exc = exc
+                logger.error(
+                    "case %s 执行失败（%d/%d）: %s",
+                    cid,
+                    attempt + 1,
+                    case_retries + 1,
+                    exc,
+                )
+                if attempt < case_retries:
+                    wait = case_retry_wait * (2**attempt)
+                    logger.warning("case %s 链 %.0fs 后重试", cid, wait)
+                    time.sleep(wait)
+
+        if result is None:
+            per_case.append({"case_id": cid, "error": str(last_exc)})
+            _flush()
             continue
 
         # L1
@@ -378,20 +427,62 @@ def run_eval(
             "n_questions": len(result.get("questions", [])),
             "elapsed_s": round(time.perf_counter() - t0, 2),
         }
-
-        # L2
-        if not l1_only and judge_model is not None:
-            try:
-                js = _judge(case, result, judge_model)
-                entry["judge"] = js.model_dump()
-                judge_scores.append(js.model_dump())
-            except Exception as exc:
-                logger.error("case %s 裁判失败: %s", cid, exc)
-                entry["judge_error"] = str(exc)
-
+        # 链成功即落盘（judge 可能因限流/连接挂起丢失，不拖累链结果）
         per_case.append(entry)
+        _flush()
 
-    # 汇总
+        # L2（带限流重试）
+        if not l1_only and judge_model is not None:
+            for j_attempt in range(judge_retries + 1):
+                try:
+                    js = _judge(case, result, judge_model)
+                    entry["judge"] = js.model_dump()
+                    judge_scores.append(js.model_dump())
+                    break
+                except Exception as exc:
+                    logger.error(
+                        "case %s 裁判失败（%d/%d）: %s",
+                        cid,
+                        j_attempt + 1,
+                        judge_retries + 1,
+                        exc,
+                    )
+                    if j_attempt < judge_retries:
+                        wait = judge_retry_wait * (2**j_attempt)
+                        logger.warning("case %s 裁判 %.0fs 后重试", cid, wait)
+                        time.sleep(wait)
+                    else:
+                        entry["judge_error"] = str(exc)
+
+        # judge 结果回写该 case 条目并再次落盘
+        _flush()
+
+    report = _flush()
+    logger.info("报告已写入 %s", out_file)
+    return report
+
+
+def _make_report(
+    *,
+    path: Path,
+    n_cases: int,
+    l1_only: bool,
+    all_findings: list[Any],
+    judge_scores: list[dict[str, Any]],
+    usage: UsageCollector,
+    per_case: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """汇总当前累积状态为完整报告 dict。
+
+    :param path: 数据集路径
+    :param n_cases: 本次运行的 case 总数
+    :param l1_only: 是否只跑 L1
+    :param all_findings: 累积的 L1 findings
+    :param judge_scores: 累积的裁判打分
+    :param usage: 用量采集器
+    :param per_case: 逐 case 结果
+    :return: 报告 dict
+    """
     l1_total = summarize_l1(all_findings)
     judge_agg: dict[str, Any] = {}
     if judge_scores:
@@ -399,23 +490,20 @@ def run_eval(
         for key in ("accuracy", "completeness", "actionability", "safety", "overall"):
             judge_agg[f"{key}_mean"] = round(sum(s[key] for s in judge_scores) / n, 3)
 
-    report = {
+    return {
         "chain": "review",
         "dataset": str(path),
-        "n_cases": len(cases),
+        "n_cases": n_cases,
         "l1_only": l1_only,
+        "chain_model": os.getenv("LLM_model"),
+        "judge_model": (
+            os.getenv("JC_EVAL_JUDGE_MODEL", "glm-4.7") if not l1_only else None
+        ),
         "l1_summary": l1_total,
         "judge_summary": judge_agg,
         "usage": usage.snapshot(),
         "per_case": per_case,
     }
-
-    out_file = out / "surface_review_report.json"
-    out_file.write_text(
-        json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
-    logger.info("报告已写入 %s", out_file)
-    return report
 
 
 def main() -> None:
@@ -427,12 +515,32 @@ def main() -> None:
     # 只跑 L1（跳过 L2 裁判；链本身仍需 LLM）
     p.add_argument("--l1-only", action="store_true")
     p.add_argument("--out-dir", type=Path, default=None)
+    p.add_argument(
+        "--case-retries", type=int, default=0, help="链失败（含429）后整 case 重试次数"
+    )
+    p.add_argument(
+        "--case-retry-wait",
+        type=float,
+        default=60.0,
+        help="case 重试基础间隔（秒，2^n 递增）",
+    )
+    p.add_argument("--judge-retries", type=int, default=0, help="裁判失败后重试次数")
+    p.add_argument(
+        "--judge-retry-wait",
+        type=float,
+        default=30.0,
+        help="裁判重试基础间隔（秒，2^n 递增）",
+    )
     args = p.parse_args()
     report = run_eval(
         dataset_path=args.dataset,
         case_id=args.case_id,
         l1_only=args.l1_only,
         out_dir=args.out_dir,
+        case_retries=args.case_retries,
+        case_retry_wait=args.case_retry_wait,
+        judge_retries=args.judge_retries,
+        judge_retry_wait=args.judge_retry_wait,
     )
     print(
         json.dumps(

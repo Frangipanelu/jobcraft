@@ -212,6 +212,9 @@ def run_eval(
         judge_model = init_chat_model(
             model=os.getenv("JC_EVAL_JUDGE_MODEL", "glm-4.7"),
             model_provider="openai",
+            # 必须显式传 timeout：langchain 传 None 会禁用 openai SDK 默认超时，
+            # 上游挂起连接将无限阻塞评测进程
+            timeout=float(os.getenv("LLM_REQUEST_TIMEOUT", "180")),
         )
 
     all_findings = []
