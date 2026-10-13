@@ -113,6 +113,20 @@ class TestLoadTextFile:
         with pytest.raises(ValueError, match="非法 docx"):
             load_text_file(p)
 
+    def test_docx_with_dtd_rejected(self, tmp_path):
+        """含 DTD/ENTITY 的 docx 拒绝解析（防 XML 实体攻击，S314 加固）。"""
+        evil = (
+            '<?xml version="1.0"?>'
+            '<!DOCTYPE lolz [<!ENTITY lol "lol">]>'
+            '<w:document xmlns:w="http://schemas.openxmlformats.org/'
+            'wordprocessingml/2006/main"><w:body><w:p><w:r>'
+            "<w:t>&lol;</w:t></w:r></w:p></w:body></w:document>"
+        )
+        p = tmp_path / "evil.docx"
+        _make_docx(p, xml=evil)
+        with pytest.raises(ValueError, match="DTD/ENTITY"):
+            load_text_file(p)
+
 
 class TestNormalizeTranscript:
     """normalize_transcript 会议转录归一化。"""

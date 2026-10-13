@@ -75,7 +75,7 @@ def _extract_docx_text(path: Path) -> str:
 
     :param path: docx 文件路径
     :return: 提取的纯文本
-    :raises ValueError: 不是合法 zip 或缺 word/document.xml
+    :raises ValueError: 不是合法 zip、缺 word/document.xml 或含 DTD/ENTITY 声明
     """
     try:
         with zipfile.ZipFile(path) as zf:
@@ -83,7 +83,13 @@ def _extract_docx_text(path: Path) -> str:
     except (zipfile.BadZipFile, KeyError) as exc:
         raise ValueError(f"非法 docx 文件: {path}（{exc}）") from exc
 
-    root = ElementTree.fromstring(xml_bytes)
+    # 防 XML 实体攻击（billion laughs / 外部实体）：stdlib ElementTree 不展开外部实体
+    # 但仍可能解析内部实体，先拒绝含 DTD/ENTITY 的输入（不引入 defusedxml，零新依赖）
+    head = xml_bytes[:4096].upper()
+    if b"<!DOCTYPE" in head or b"<!ENTITY" in head:
+        raise ValueError(f"docx XML 含 DTD/ENTITY 声明，已拒绝解析: {path}")
+
+    root = ElementTree.fromstring(xml_bytes)  # noqa: S314 - 已在上方拒绝 DTD/ENTITY
     paragraphs: list[str] = []
     for p in root.iter(f"{_W_NS}p"):
         parts: list[str] = []
