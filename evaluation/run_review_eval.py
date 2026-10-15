@@ -382,9 +382,21 @@ def run_eval(
         )
         return report
 
+    # 预读旧报告：链失败时保留上次成功的 l1/judge，避免重跑风暴把已有结果冲掉
+    prev_by_cid: dict[str, dict[str, Any]] = {}
+    if out_file.exists():
+        try:
+            old = json.loads(out_file.read_text(encoding="utf-8"))
+            for row in old.get("per_case") or []:
+                if isinstance(row, dict) and row.get("case_id"):
+                    prev_by_cid[row["case_id"]] = row
+        except (OSError, json.JSONDecodeError):
+            logger.warning("旧报告损坏，忽略: %s", out_file)
+
     for case in cases:
         cid = case.get("case_id", "?")
         t0 = time.perf_counter()
+        prev = prev_by_cid.get(cid, {})
 
         # 链执行（带限流重试：整 case 重启，已完成步骤视缓存可用性可能复用）
         result: dict[str, Any] | None = None
@@ -411,7 +423,16 @@ def run_eval(
                     time.sleep(wait)
 
         if result is None:
-            per_case.append({"case_id": cid, "error": str(last_exc)})
+            entry = {"case_id": cid, "error": str(last_exc)}
+            # 保留上次成功结果（限流重跑不冲掉已有基线数据）
+            if prev.get("l1") is not None:
+                entry["l1"] = prev["l1"]
+                entry["overall_score"] = prev.get("overall_score")
+                entry["n_questions"] = prev.get("n_questions")
+                entry["chain_preserved"] = True
+            if prev.get("judge") is not None:
+                entry["judge"] = prev["judge"]
+            per_case.append(entry)
             _flush()
             continue
 
