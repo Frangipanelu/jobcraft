@@ -125,3 +125,125 @@ class TestRunEvalArgs:
             rre.run_eval(
                 dataset_path=ds, case_id="nope", l1_only=True, out_dir=tmp_path
             )
+
+
+_FAKE_CHAIN_RESULT = {
+    "record_id": 0,
+    "user_id": 0,
+    "title": "复盘",
+    "company": "测试公司",
+    "position": "后端工程师",
+    "round_type": "技术面",
+    "overall_score": 88,
+    "summary": "整体良好",
+    "strengths": ["基础扎实"],
+    "weaknesses": ["表达可更精炼"],
+    "action_items": ["复盘 STAR 叙事"],
+    "questions": [
+        {
+            "sequence": 1,
+            "start_time": "0:00",
+            "speaker": "面试官",
+            "question_text": "你好，请介绍自己。",
+            "dimension": "D1",
+            "level": "mid",
+            "intent": "自我介绍",
+            "expected_answer": "结构化背景+匹配点",
+            "my_answer": "我是张三",
+            "score": 80,
+            "feedback": ["缺少量化成果"],
+            "suggestions": ["补充实习量化数据"],
+        },
+        {
+            "sequence": 2,
+            "start_time": "0:10",
+            "speaker": "面试官",
+            "question_text": "说说你的项目。",
+            "dimension": "D4",
+            "level": "mid",
+            "intent": "项目深挖",
+            "expected_answer": "STAR 结构",
+            "my_answer": "做了电商系统",
+            "score": 85,
+            "feedback": ["结果维度缺失"],
+            "suggestions": ["补充上线后的指标"],
+        },
+    ],
+}
+
+
+def _fake_chain(*_args, **_kwargs):
+    import copy
+
+    return {"result": copy.deepcopy(_FAKE_CHAIN_RESULT)}
+
+
+class TestChainResultSidecar:
+    """链结果 sidecar 落盘与 --reuse-chain 复用。"""
+
+    def test_chain_success_writes_sidecar(self, tmp_path, monkeypatch):
+        ds = _write_dataset(tmp_path)
+        out = tmp_path / "out"
+        monkeypatch.setattr(rre, "_run_review_chain", _fake_chain)
+
+        rre.run_eval(dataset_path=ds, case_id="t_preserve", l1_only=True, out_dir=out)
+
+        sidecar = out / "chain_result_t_preserve.json"
+        assert sidecar.exists()
+        data = json.loads(sidecar.read_text(encoding="utf-8"))
+        assert data["overall_score"] == 88
+
+    def test_reuse_chain_skips_execution(self, tmp_path, monkeypatch):
+        ds = _write_dataset(tmp_path)
+        out = tmp_path / "out"
+        out.mkdir()
+        sidecar = out / "chain_result_t_preserve.json"
+        sidecar.write_text(
+            json.dumps(_FAKE_CHAIN_RESULT, ensure_ascii=False), encoding="utf-8"
+        )
+        # 若 reuse 失效走到链执行，_boom 会抛错并被记为 error 条目
+        monkeypatch.setattr(rre, "_run_review_chain", _boom)
+
+        report = rre.run_eval(
+            dataset_path=ds,
+            case_id="t_preserve",
+            l1_only=True,
+            out_dir=out,
+            reuse_chain=True,
+        )
+
+        row = report["per_case"][0]
+        assert "error" not in row
+        assert row["l1"]["pass_rate"] == 1.0
+        assert row["overall_score"] == 88
+
+    def test_reuse_without_sidecar_runs_chain(self, tmp_path, monkeypatch):
+        ds = _write_dataset(tmp_path)
+        monkeypatch.setattr(rre, "_run_review_chain", _fake_chain)
+
+        report = rre.run_eval(
+            dataset_path=ds,
+            case_id="t_preserve",
+            l1_only=True,
+            out_dir=tmp_path / "out",
+            reuse_chain=True,
+        )
+        assert "error" not in report["per_case"][0]
+        assert report["per_case"][0]["l1"]["pass_rate"] == 1.0
+
+    def test_corrupt_sidecar_reruns_chain(self, tmp_path, monkeypatch):
+        ds = _write_dataset(tmp_path)
+        out = tmp_path / "out"
+        out.mkdir()
+        (out / "chain_result_t_preserve.json").write_text("{broken", encoding="utf-8")
+        monkeypatch.setattr(rre, "_run_review_chain", _fake_chain)
+
+        report = rre.run_eval(
+            dataset_path=ds,
+            case_id="t_preserve",
+            l1_only=True,
+            out_dir=out,
+            reuse_chain=True,
+        )
+        assert "error" not in report["per_case"][0]
+        assert report["per_case"][0]["l1"]["pass_rate"] == 1.0

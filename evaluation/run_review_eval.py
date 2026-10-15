@@ -322,6 +322,7 @@ def run_eval(
     case_retry_wait: float = 60.0,
     judge_retries: int = 0,
     judge_retry_wait: float = 30.0,
+    reuse_chain: bool = False,
 ) -> dict[str, Any]:
     """执行复盘链评测主流程。
 
@@ -333,6 +334,9 @@ def run_eval(
     :param case_retry_wait: case 重试基础间隔秒数（按 2^n 递增）
     :param judge_retries: 裁判失败后重试次数
     :param judge_retry_wait: 裁判重试基础间隔秒数（按 2^n 递增）
+    :param reuse_chain: 复用 out-dir 已落盘的链结果 sidecar
+        （``chain_result_<case_id>.json``），不重跑链只补裁判——链输出非确定
+        （同输入 L1 漂移），且限流下整链重跑浪费配额、judge 必须评同一份输出
     :return: 评测报告 dict
     """
     path = dataset_path or DEFAULT_DATASET
@@ -401,7 +405,17 @@ def run_eval(
         # 链执行（带限流重试：整 case 重启，已完成步骤视缓存可用性可能复用）
         result: dict[str, Any] | None = None
         last_exc: Exception | None = None
+        sidecar = out / f"chain_result_{cid}.json"
+        if reuse_chain and sidecar.exists():
+            try:
+                result = json.loads(sidecar.read_text(encoding="utf-8"))
+                logger.info("case %s 复用已落盘链结果: %s", cid, sidecar.name)
+            except (OSError, json.JSONDecodeError) as exc:
+                logger.warning("case %s 链 sidecar 损坏，重跑: %s", cid, exc)
+                result = None
         for attempt in range(case_retries + 1):
+            if result is not None:
+                break
             try:
                 state = _build_state_from_case(case)
                 state = _run_review_chain(state)
@@ -435,6 +449,9 @@ def run_eval(
             per_case.append(entry)
             _flush()
             continue
+
+        # 链结果 sidecar：后续 --reuse-chain 补裁判时不重跑（保同份输出评同份 L1）
+        sidecar.write_text(json.dumps(result, ensure_ascii=False), encoding="utf-8")
 
         # L1
         findings = check_review_l1(cid, result)
@@ -552,6 +569,11 @@ def main() -> None:
         default=30.0,
         help="裁判重试基础间隔（秒，2^n 递增）",
     )
+    p.add_argument(
+        "--reuse-chain",
+        action="store_true",
+        help="复用 out-dir 链结果 sidecar（chain_result_<case>.json），只补裁判不重跑链",
+    )
     args = p.parse_args()
     report = run_eval(
         dataset_path=args.dataset,
@@ -562,6 +584,7 @@ def main() -> None:
         case_retry_wait=args.case_retry_wait,
         judge_retries=args.judge_retries,
         judge_retry_wait=args.judge_retry_wait,
+        reuse_chain=args.reuse_chain,
     )
     print(
         json.dumps(
