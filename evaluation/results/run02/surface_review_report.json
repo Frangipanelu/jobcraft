@@ -1,0 +1,63 @@
+{
+  "chain": "review",
+  "dataset": "D:\\A-pythonProject\\AI-learning\\multi-agent\\jobcraft\\evaluation\\datasets\\review_cases.jsonl",
+  "n_cases": 1,
+  "l1_only": false,
+  "chain_model": "glm-4.7-flash",
+  "judge_model": "glm-4.7-flash",
+  "l1_summary": {
+    "total": 115,
+    "passed": 115,
+    "failed": 0,
+    "pass_rate": 1.0,
+    "failures": []
+  },
+  "judge_summary": {
+    "accuracy_mean": 2.0,
+    "completeness_mean": 3.0,
+    "actionability_mean": 7.0,
+    "safety_mean": 10.0,
+    "overall_mean": 6.0
+  },
+  "usage": {
+    "llm_calls": 1,
+    "llm_calls_cached": 4,
+    "duration_s": 44.78,
+    "prompt_tokens": 3741,
+    "completion_tokens": 2788,
+    "total_tokens": 6529
+  },
+  "per_case": [
+    {
+      "case_id": "rev_real_02",
+      "l1": {
+        "total": 115,
+        "passed": 115,
+        "failed": 0,
+        "pass_rate": 1.0,
+        "failures": []
+      },
+      "overall_score": 79,
+      "n_questions": 37,
+      "elapsed_s": 1.25,
+      "judge": {
+        "accuracy": 2,
+        "completeness": 3,
+        "actionability": 7,
+        "safety": 10,
+        "strengths": [
+          "对Q1-Q5的分析与逐字稿高度一致，准确捕捉了自我介绍和AI项目的关键信息",
+          "对自我介绍和AI项目的反馈切中要害，指出了量化不足的问题",
+          "输出结构完整，维度和意图定义清晰"
+        ],
+        "weaknesses": [
+          "逐字稿在Q6处中断，但AI输出继续分析了Q7-Q13，属于严重的幻觉（编造问题）",
+          "对'Office工具'和'云厂商深度使用场景'的弱点描述在逐字稿中未明确体现，属于过度推断",
+          "总体评分偏高，未充分反映输入材料的不完整性"
+        ],
+        "overall": 6,
+        "rationale": "AI输出在逐字稿中断后编造了Q7-Q13的问题和回答，严重违反了准确性要求。"
+      }
+    }
+  ]
+}

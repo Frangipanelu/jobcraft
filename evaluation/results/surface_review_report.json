@@ -1,37 +1,264 @@
 {
-  "chain": "review",
-  "dataset": "D:\\A-pythonProject\\AI-learning\\multi-agent\\jobcraft\\evaluation\\datasets\\review_cases.jsonl",
-  "n_cases": 1,
-  "l1_only": true,
-  "l1_summary": {
-    "total": 19,
-    "passed": 19,
-    "failed": 0,
-    "pass_rate": 1.0,
-    "failures": []
-  },
-  "judge_summary": {},
-  "usage": {
-    "llm_calls": 0,
-    "llm_calls_cached": 4,
-    "duration_s": 0.0,
-    "prompt_tokens": 0,
-    "completion_tokens": 0,
-    "total_tokens": 0
+  "n_cases": 5,
+  "n_cases_pending_judge": 1,
+  "pending_cases": [],
+  "chain_model": "glm-4.7-flash",
+  "judge_model": "glm-4.7-flash",
+  "l1_pass_rate": 0.9523,
+  "judge_summary": {
+    "accuracy_mean": 4.75,
+    "completeness_mean": 4.75,
+    "actionability_mean": 6.25,
+    "safety_mean": 10.0,
+    "overall_mean": 6.5
   },
   "per_case": [
     {
-      "case_id": "rev_synth_01",
+      "case_id": "rev_real_01",
       "l1": {
-        "total": 19,
-        "passed": 19,
+        "total": 46,
+        "passed": 44,
+        "failed": 2,
+        "pass_rate": 0.9565,
+        "failures": [
+          {
+            "case_id": "rev_real_01",
+            "check": "feedback_nonempty_q13",
+            "passed": false,
+            "detail": "Q13 feedback/suggestions 有空（feedback=0, suggestions=0）"
+          },
+          {
+            "case_id": "rev_real_01",
+            "check": "feedback_nonempty_q14",
+            "passed": false,
+            "detail": "Q14 feedback/suggestions 有空（feedback=0, suggestions=0）"
+          }
+        ]
+      },
+      "overall_score": 55,
+      "n_questions": 14,
+      "elapsed_s": 1.33,
+      "judge": {
+        "accuracy": 2,
+        "completeness": 4,
+        "actionability": 3,
+        "safety": 10,
+        "strengths": [
+          "对Q1-Q3的intent和expected_answer分析准确",
+          "Q2的expected_answer正确识别了AVI术语",
+          "Q3的feedback与候选人回答相符"
+        ],
+        "weaknesses": [
+          "分析了10个问题但逐字稿只有3个问题，存在严重内容不匹配",
+          "Q4-Q10的内容完全编造，逐字稿中不存在这些问题",
+          "feedback和suggestions对Q4-Q10完全不可用"
+        ],
+        "overall": 4,
+        "rationale": "AI输出了10个问题的分析但逐字稿只有3个问题，存在严重的内容不匹配问题，整体可用性极低。"
+      }
+    },
+    {
+      "case_id": "rev_real_02",
+      "l1": {
+        "total": 115,
+        "passed": 115,
         "failed": 0,
         "pass_rate": 1.0,
         "failures": []
       },
-      "overall_score": 87,
-      "n_questions": 5,
-      "elapsed_s": 3.08
+      "overall_score": 79,
+      "n_questions": 37,
+      "elapsed_s": 1.25,
+      "judge": {
+        "accuracy": 2,
+        "completeness": 3,
+        "actionability": 7,
+        "safety": 10,
+        "strengths": [
+          "对Q1-Q5的分析与逐字稿高度一致，准确捕捉了自我介绍和AI项目的关键信息",
+          "对自我介绍和AI项目的反馈切中要害，指出了量化不足的问题",
+          "输出结构完整，维度和意图定义清晰"
+        ],
+        "weaknesses": [
+          "逐字稿在Q6处中断，但AI输出继续分析了Q7-Q13，属于严重的幻觉（编造问题）",
+          "对'Office工具'和'云厂商深度使用场景'的弱点描述在逐字稿中未明确体现，属于过度推断",
+          "总体评分偏高，未充分反映输入材料的不完整性"
+        ],
+        "overall": 6,
+        "rationale": "AI输出在逐字稿中断后编造了Q7-Q13的问题和回答，严重违反了准确性要求。"
+      }
+    },
+    {
+      "case_id": "rev_real_03",
+      "l1": {
+        "total": 82,
+        "passed": 82,
+        "failed": 0,
+        "pass_rate": 1.0,
+        "failures": []
+      },
+      "overall_score": 69,
+      "n_questions": 26,
+      "elapsed_s": 167.16,
+      "judge": {
+        "accuracy": 8,
+        "completeness": 4,
+        "actionability": 8,
+        "safety": 10,
+        "strengths": [
+          "修正了转录错误（如将'高效开认所'修正为'高效光伏所'），提升了分析准确性",
+          "维度划分（D2/D7等）与问题内容匹配度高",
+          "建议具体且具有可操作性"
+        ],
+        "weaknesses": [
+          "严重遗漏Q7和Q8的逐题分析，逐字稿共8题，输出仅覆盖6题",
+          "Q2分析中'仅提出一个重复性问题'的判断略显主观，候选人实际提出了'哪个层面'的问题",
+          "Q1评分65分略显严苛，候选人已清晰区分To G与To B业务"
+        ],
+        "overall": 8,
+        "rationale": "分析准确且修正了转录错误，但严重遗漏Q7和Q8的分析，导致覆盖度不足。"
+      }
+    },
+    {
+      "case_id": "rev_real_04",
+      "l1": {
+        "total": 82,
+        "passed": 66,
+        "failed": 16,
+        "pass_rate": 0.8049,
+        "failures": [
+          {
+            "case_id": "rev_real_04",
+            "check": "feedback_nonempty_q1",
+            "passed": false,
+            "detail": "Q1 feedback/suggestions 有空（feedback=0, suggestions=0）"
+          },
+          {
+            "case_id": "rev_real_04",
+            "check": "feedback_nonempty_q2",
+            "passed": false,
+            "detail": "Q2 feedback/suggestions 有空（feedback=0, suggestions=0）"
+          },
+          {
+            "case_id": "rev_real_04",
+            "check": "feedback_nonempty_q4",
+            "passed": false,
+            "detail": "Q4 feedback/suggestions 有空（feedback=0, suggestions=0）"
+          },
+          {
+            "case_id": "rev_real_04",
+            "check": "feedback_nonempty_q5",
+            "passed": false,
+            "detail": "Q5 feedback/suggestions 有空（feedback=0, suggestions=0）"
+          },
+          {
+            "case_id": "rev_real_04",
+            "check": "feedback_nonempty_q6",
+            "passed": false,
+            "detail": "Q6 feedback/suggestions 有空（feedback=0, suggestions=0）"
+          },
+          {
+            "case_id": "rev_real_04",
+            "check": "feedback_nonempty_q8",
+            "passed": false,
+            "detail": "Q8 feedback/suggestions 有空（feedback=0, suggestions=0）"
+          },
+          {
+            "case_id": "rev_real_04",
+            "check": "feedback_nonempty_q10",
+            "passed": false,
+            "detail": "Q10 feedback/suggestions 有空（feedback=0, suggestions=0）"
+          },
+          {
+            "case_id": "rev_real_04",
+            "check": "feedback_nonempty_q11",
+            "passed": false,
+            "detail": "Q11 feedback/suggestions 有空（feedback=0, suggestions=0）"
+          },
+          {
+            "case_id": "rev_real_04",
+            "check": "feedback_nonempty_q12",
+            "passed": false,
+            "detail": "Q12 feedback/suggestions 有空（feedback=0, suggestions=0）"
+          },
+          {
+            "case_id": "rev_real_04",
+            "check": "feedback_nonempty_q15",
+            "passed": false,
+            "detail": "Q15 feedback/suggestions 有空（feedback=0, suggestions=0）"
+          },
+          {
+            "case_id": "rev_real_04",
+            "check": "feedback_nonempty_q17",
+            "passed": false,
+            "detail": "Q17 feedback/suggestions 有空（feedback=0, suggestions=0）"
+          },
+          {
+            "case_id": "rev_real_04",
+            "check": "feedback_nonempty_q20",
+            "passed": false,
+            "detail": "Q20 feedback/suggestions 有空（feedback=0, suggestions=0）"
+          },
+          {
+            "case_id": "rev_real_04",
+            "check": "feedback_nonempty_q21",
+            "passed": false,
+            "detail": "Q21 feedback/suggestions 有空（feedback=0, suggestions=0）"
+          },
+          {
+            "case_id": "rev_real_04",
+            "check": "feedback_nonempty_q23",
+            "passed": false,
+            "detail": "Q23 feedback/suggestions 有空（feedback=0, suggestions=0）"
+          },
+          {
+            "case_id": "rev_real_04",
+            "check": "feedback_nonempty_q25",
+            "passed": false,
+            "detail": "Q25 feedback/suggestions 有空（feedback=0, suggestions=0）"
+          },
+          {
+            "case_id": "rev_real_04",
+            "check": "feedback_nonempty_q26",
+            "passed": false,
+            "detail": "Q26 feedback/suggestions 有空（feedback=0, suggestions=0）"
+          }
+        ]
+      },
+      "overall_score": 62,
+      "n_questions": 26,
+      "elapsed_s": 0.07,
+      "judge_error": "[judge_review] 结构化调用失败（限流退避已耗尽，跳过兜底请求）: Error code: 429 - {'error': {'code': '1305', 'message': '该模型当前访问量过大，请您稍后再试'}}"
+    },
+    {
+      "case_id": "rev_real_05",
+      "l1": {
+        "total": 22,
+        "passed": 22,
+        "failed": 0,
+        "pass_rate": 1.0,
+        "failures": []
+      },
+      "overall_score": 79,
+      "n_questions": 6,
+      "elapsed_s": 1.19,
+      "judge": {
+        "accuracy": 7,
+        "completeness": 8,
+        "actionability": 7,
+        "safety": 10,
+        "strengths": [
+          "逐题分析框架完整，intent与expected_answer判断准确",
+          "feedback与suggestions具体可执行，action_items具有指导意义"
+        ],
+        "weaknesses": [
+          "Q1 feedback称候选人'对岗位差异的理解较为表面，停留在流程vs研发的简单对比'，但逐字稿中A1已提到实习中的需求分析、方案梳理等可迁移能力，该判断不准确",
+          "strengths重复出现3次相同条目，未提炼核心亮点",
+          "Q2 feedback表述不够精准，'缺少对聚智科技业务特点的回应'应为'缺少回应'而非'缺少理解'"
+        ],
+        "overall": 8,
+        "rationale": "整体分析框架完整，但部分feedback存在事实性错误，strengths重复且不够精准，导致评分偏高。"
+      }
     }
   ]
 }

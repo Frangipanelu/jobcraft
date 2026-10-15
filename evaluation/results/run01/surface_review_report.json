@@ -1,0 +1,89 @@
+{
+  "chain": "review",
+  "dataset": "D:\\A-pythonProject\\AI-learning\\multi-agent\\jobcraft\\evaluation\\datasets\\review_cases.jsonl",
+  "n_cases": 1,
+  "l1_only": false,
+  "chain_model": "glm-4.7-flash",
+  "judge_model": "glm-4.7-flash",
+  "l1_summary": {
+    "total": 46,
+    "passed": 44,
+    "failed": 2,
+    "pass_rate": 0.9565,
+    "failures": [
+      {
+        "case_id": "rev_real_01",
+        "check": "feedback_nonempty_q13",
+        "passed": false,
+        "detail": "Q13 feedback/suggestions 有空（feedback=0, suggestions=0）"
+      },
+      {
+        "case_id": "rev_real_01",
+        "check": "feedback_nonempty_q14",
+        "passed": false,
+        "detail": "Q14 feedback/suggestions 有空（feedback=0, suggestions=0）"
+      }
+    ]
+  },
+  "judge_summary": {
+    "accuracy_mean": 2.0,
+    "completeness_mean": 4.0,
+    "actionability_mean": 3.0,
+    "safety_mean": 10.0,
+    "overall_mean": 4.0
+  },
+  "usage": {
+    "llm_calls": 1,
+    "llm_calls_cached": 4,
+    "duration_s": 24.68,
+    "prompt_tokens": 3173,
+    "completion_tokens": 810,
+    "total_tokens": 3983
+  },
+  "per_case": [
+    {
+      "case_id": "rev_real_01",
+      "l1": {
+        "total": 46,
+        "passed": 44,
+        "failed": 2,
+        "pass_rate": 0.9565,
+        "failures": [
+          {
+            "case_id": "rev_real_01",
+            "check": "feedback_nonempty_q13",
+            "passed": false,
+            "detail": "Q13 feedback/suggestions 有空（feedback=0, suggestions=0）"
+          },
+          {
+            "case_id": "rev_real_01",
+            "check": "feedback_nonempty_q14",
+            "passed": false,
+            "detail": "Q14 feedback/suggestions 有空（feedback=0, suggestions=0）"
+          }
+        ]
+      },
+      "overall_score": 55,
+      "n_questions": 14,
+      "elapsed_s": 1.33,
+      "judge": {
+        "accuracy": 2,
+        "completeness": 4,
+        "actionability": 3,
+        "safety": 10,
+        "strengths": [
+          "对Q1-Q3的intent和expected_answer分析准确",
+          "Q2的expected_answer正确识别了AVI术语",
+          "Q3的feedback与候选人回答相符"
+        ],
+        "weaknesses": [
+          "分析了10个问题但逐字稿只有3个问题，存在严重内容不匹配",
+          "Q4-Q10的内容完全编造，逐字稿中不存在这些问题",
+          "feedback和suggestions对Q4-Q10完全不可用"
+        ],
+        "overall": 4,
+        "rationale": "AI输出了10个问题的分析但逐字稿只有3个问题，存在严重的内容不匹配问题，整体可用性极低。"
+      }
+    }
+  ]
+}

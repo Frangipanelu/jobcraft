@@ -1,0 +1,234 @@
+{
+  "chain": "review",
+  "dataset": "D:\\A-pythonProject\\AI-learning\\multi-agent\\jobcraft\\evaluation\\datasets\\review_cases.jsonl",
+  "n_cases": 1,
+  "l1_only": false,
+  "chain_model": "glm-4.7-flash",
+  "judge_model": "glm-4.7-flash",
+  "l1_summary": {
+    "total": 82,
+    "passed": 66,
+    "failed": 16,
+    "pass_rate": 0.8049,
+    "failures": [
+      {
+        "case_id": "rev_real_04",
+        "check": "feedback_nonempty_q1",
+        "passed": false,
+        "detail": "Q1 feedback/suggestions 有空（feedback=0, suggestions=0）"
+      },
+      {
+        "case_id": "rev_real_04",
+        "check": "feedback_nonempty_q2",
+        "passed": false,
+        "detail": "Q2 feedback/suggestions 有空（feedback=0, suggestions=0）"
+      },
+      {
+        "case_id": "rev_real_04",
+        "check": "feedback_nonempty_q4",
+        "passed": false,
+        "detail": "Q4 feedback/suggestions 有空（feedback=0, suggestions=0）"
+      },
+      {
+        "case_id": "rev_real_04",
+        "check": "feedback_nonempty_q5",
+        "passed": false,
+        "detail": "Q5 feedback/suggestions 有空（feedback=0, suggestions=0）"
+      },
+      {
+        "case_id": "rev_real_04",
+        "check": "feedback_nonempty_q6",
+        "passed": false,
+        "detail": "Q6 feedback/suggestions 有空（feedback=0, suggestions=0）"
+      },
+      {
+        "case_id": "rev_real_04",
+        "check": "feedback_nonempty_q8",
+        "passed": false,
+        "detail": "Q8 feedback/suggestions 有空（feedback=0, suggestions=0）"
+      },
+      {
+        "case_id": "rev_real_04",
+        "check": "feedback_nonempty_q10",
+        "passed": false,
+        "detail": "Q10 feedback/suggestions 有空（feedback=0, suggestions=0）"
+      },
+      {
+        "case_id": "rev_real_04",
+        "check": "feedback_nonempty_q11",
+        "passed": false,
+        "detail": "Q11 feedback/suggestions 有空（feedback=0, suggestions=0）"
+      },
+      {
+        "case_id": "rev_real_04",
+        "check": "feedback_nonempty_q12",
+        "passed": false,
+        "detail": "Q12 feedback/suggestions 有空（feedback=0, suggestions=0）"
+      },
+      {
+        "case_id": "rev_real_04",
+        "check": "feedback_nonempty_q15",
+        "passed": false,
+        "detail": "Q15 feedback/suggestions 有空（feedback=0, suggestions=0）"
+      },
+      {
+        "case_id": "rev_real_04",
+        "check": "feedback_nonempty_q17",
+        "passed": false,
+        "detail": "Q17 feedback/suggestions 有空（feedback=0, suggestions=0）"
+      },
+      {
+        "case_id": "rev_real_04",
+        "check": "feedback_nonempty_q20",
+        "passed": false,
+        "detail": "Q20 feedback/suggestions 有空（feedback=0, suggestions=0）"
+      },
+      {
+        "case_id": "rev_real_04",
+        "check": "feedback_nonempty_q21",
+        "passed": false,
+        "detail": "Q21 feedback/suggestions 有空（feedback=0, suggestions=0）"
+      },
+      {
+        "case_id": "rev_real_04",
+        "check": "feedback_nonempty_q23",
+        "passed": false,
+        "detail": "Q23 feedback/suggestions 有空（feedback=0, suggestions=0）"
+      },
+      {
+        "case_id": "rev_real_04",
+        "check": "feedback_nonempty_q25",
+        "passed": false,
+        "detail": "Q25 feedback/suggestions 有空（feedback=0, suggestions=0）"
+      },
+      {
+        "case_id": "rev_real_04",
+        "check": "feedback_nonempty_q26",
+        "passed": false,
+        "detail": "Q26 feedback/suggestions 有空（feedback=0, suggestions=0）"
+      }
+    ]
+  },
+  "judge_summary": {},
+  "usage": {
+    "llm_calls": 0,
+    "llm_calls_cached": 0,
+    "duration_s": 0.0,
+    "prompt_tokens": 0,
+    "completion_tokens": 0,
+    "total_tokens": 0
+  },
+  "per_case": [
+    {
+      "case_id": "rev_real_04",
+      "l1": {
+        "total": 82,
+        "passed": 66,
+        "failed": 16,
+        "pass_rate": 0.8049,
+        "failures": [
+          {
+            "case_id": "rev_real_04",
+            "check": "feedback_nonempty_q1",
+            "passed": false,
+            "detail": "Q1 feedback/suggestions 有空（feedback=0, suggestions=0）"
+          },
+          {
+            "case_id": "rev_real_04",
+            "check": "feedback_nonempty_q2",
+            "passed": false,
+            "detail": "Q2 feedback/suggestions 有空（feedback=0, suggestions=0）"
+          },
+          {
+            "case_id": "rev_real_04",
+            "check": "feedback_nonempty_q4",
+            "passed": false,
+            "detail": "Q4 feedback/suggestions 有空（feedback=0, suggestions=0）"
+          },
+          {
+            "case_id": "rev_real_04",
+            "check": "feedback_nonempty_q5",
+            "passed": false,
+            "detail": "Q5 feedback/suggestions 有空（feedback=0, suggestions=0）"
+          },
+          {
+            "case_id": "rev_real_04",
+            "check": "feedback_nonempty_q6",
+            "passed": false,
+            "detail": "Q6 feedback/suggestions 有空（feedback=0, suggestions=0）"
+          },
+          {
+            "case_id": "rev_real_04",
+            "check": "feedback_nonempty_q8",
+            "passed": false,
+            "detail": "Q8 feedback/suggestions 有空（feedback=0, suggestions=0）"
+          },
+          {
+            "case_id": "rev_real_04",
+            "check": "feedback_nonempty_q10",
+            "passed": false,
+            "detail": "Q10 feedback/suggestions 有空（feedback=0, suggestions=0）"
+          },
+          {
+            "case_id": "rev_real_04",
+            "check": "feedback_nonempty_q11",
+            "passed": false,
+            "detail": "Q11 feedback/suggestions 有空（feedback=0, suggestions=0）"
+          },
+          {
+            "case_id": "rev_real_04",
+            "check": "feedback_nonempty_q12",
+            "passed": false,
+            "detail": "Q12 feedback/suggestions 有空（feedback=0, suggestions=0）"
+          },
+          {
+            "case_id": "rev_real_04",
+            "check": "feedback_nonempty_q15",
+            "passed": false,
+            "detail": "Q15 feedback/suggestions 有空（feedback=0, suggestions=0）"
+          },
+          {
+            "case_id": "rev_real_04",
+            "check": "feedback_nonempty_q17",
+            "passed": false,
+            "detail": "Q17 feedback/suggestions 有空（feedback=0, suggestions=0）"
+          },
+          {
+            "case_id": "rev_real_04",
+            "check": "feedback_nonempty_q20",
+            "passed": false,
+            "detail": "Q20 feedback/suggestions 有空（feedback=0, suggestions=0）"
+          },
+          {
+            "case_id": "rev_real_04",
+            "check": "feedback_nonempty_q21",
+            "passed": false,
+            "detail": "Q21 feedback/suggestions 有空（feedback=0, suggestions=0）"
+          },
+          {
+            "case_id": "rev_real_04",
+            "check": "feedback_nonempty_q23",
+            "passed": false,
+            "detail": "Q23 feedback/suggestions 有空（feedback=0, suggestions=0）"
+          },
+          {
+            "case_id": "rev_real_04",
+            "check": "feedback_nonempty_q25",
+            "passed": false,
+            "detail": "Q25 feedback/suggestions 有空（feedback=0, suggestions=0）"
+          },
+          {
+            "case_id": "rev_real_04",
+            "check": "feedback_nonempty_q26",
+            "passed": false,
+            "detail": "Q26 feedback/suggestions 有空（feedback=0, suggestions=0）"
+          }
+        ]
+      },
+      "overall_score": 62,
+      "n_questions": 26,
+      "elapsed_s": 0.07,
+      "judge_error": "[judge_review] 结构化调用失败（限流退避已耗尽，跳过兜底请求）: Error code: 429 - {'error': {'code': '1305', 'message': '该模型当前访问量过大，请您稍后再试'}}"
+    }
+  ]
+}

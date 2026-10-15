@@ -1,0 +1,62 @@
+{
+  "chain": "review",
+  "dataset": "D:\\A-pythonProject\\AI-learning\\multi-agent\\jobcraft\\evaluation\\datasets\\review_cases.jsonl",
+  "n_cases": 1,
+  "l1_only": false,
+  "chain_model": "glm-4.7-flash",
+  "judge_model": "glm-4.7-flash",
+  "l1_summary": {
+    "total": 22,
+    "passed": 22,
+    "failed": 0,
+    "pass_rate": 1.0,
+    "failures": []
+  },
+  "judge_summary": {
+    "accuracy_mean": 7.0,
+    "completeness_mean": 8.0,
+    "actionability_mean": 7.0,
+    "safety_mean": 10.0,
+    "overall_mean": 8.0
+  },
+  "usage": {
+    "llm_calls": 1,
+    "llm_calls_cached": 3,
+    "duration_s": 86.91,
+    "prompt_tokens": 3125,
+    "completion_tokens": 1632,
+    "total_tokens": 4757
+  },
+  "per_case": [
+    {
+      "case_id": "rev_real_05",
+      "l1": {
+        "total": 22,
+        "passed": 22,
+        "failed": 0,
+        "pass_rate": 1.0,
+        "failures": []
+      },
+      "overall_score": 79,
+      "n_questions": 6,
+      "elapsed_s": 1.19,
+      "judge": {
+        "accuracy": 7,
+        "completeness": 8,
+        "actionability": 7,
+        "safety": 10,
+        "strengths": [
+          "逐题分析框架完整，intent与expected_answer判断准确",
+          "feedback与suggestions具体可执行，action_items具有指导意义"
+        ],
+        "weaknesses": [
+          "Q1 feedback称候选人'对岗位差异的理解较为表面，停留在流程vs研发的简单对比'，但逐字稿中A1已提到实习中的需求分析、方案梳理等可迁移能力，该判断不准确",
+          "strengths重复出现3次相同条目，未提炼核心亮点",
+          "Q2 feedback表述不够精准，'缺少对聚智科技业务特点的回应'应为'缺少回应'而非'缺少理解'"
+        ],
+        "overall": 8,
+        "rationale": "整体分析框架完整，但部分feedback存在事实性错误，strengths重复且不够精准，导致评分偏高。"
+      }
+    }
+  ]
+}
