@@ -4,6 +4,7 @@
 专注分析技术/项目类面试问题，输出结构化标准答案、评分、反馈和建议。
 """
 
+import logging
 from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, Field
@@ -12,6 +13,8 @@ from app.agents.base_agent import BaseAgent
 from app.core.llm import model
 from app.core.prompts import load_prompt
 from app.tools.llm_json import invoke_structured as llm_call
+
+logger = logging.getLogger(__name__)
 
 #: prompt 模板版本（与 load_prompt version 同步演进；审计 prompt_version 透传用，T-P7-4）
 _PROMPT_TEMPLATE_VERSION = 3
@@ -43,6 +46,9 @@ RUBRIC_TEXT = (
 
 class TechAnalyzer(BaseAgent):
     """专注分析技术/项目类问题"""
+
+    #: 评分/反馈必须可复现（T-EVAL-3：同输入 L1 漂移 0.77~1.00 的主因之一）
+    DEFAULT_TEMPERATURE = 0.0
 
     def _get_output_schema(self):
         return _TechAnalyzeOut
@@ -86,8 +92,17 @@ class TechAnalyzer(BaseAgent):
             model,
             schema,
             prompt,
+            temperature=self.config.get("temperature", self.DEFAULT_TEMPERATURE),
             debug_label="tech_analyzer",
             max_tokens=4096,
             prompt_version=str(_PROMPT_TEMPLATE_VERSION),
         )
+        # 覆盖缺口告警（T-EVAL-3）：漏产的题不伪造 feedback（交由 L1 如实暴露）
+        missing = sorted(tech_seqs - {a.sequence for a in raw.analyses})
+        if missing:
+            logger.warning(
+                "tech_analyzer 未产出 %d 题分析（不填充，L1 如实暴露）: %s",
+                len(missing),
+                missing,
+            )
         return {"tech_results": [a.model_dump() for a in raw.analyses]}

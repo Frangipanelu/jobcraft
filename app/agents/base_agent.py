@@ -22,6 +22,10 @@ class BaseAgent:
     #: prompt 模板版本（审计 ai_tasks.prompt_version），子类按 load_prompt 的 version 覆写
     _PROMPT_VERSION: str = "1"
 
+    #: 默认采样温度；None = 沿用模型服务默认。确定性敏感的子类（复盘链四
+    #: agent，T-EVAL-3）覆写为 0.0，使评测与生产同参、同输入可复现
+    DEFAULT_TEMPERATURE: Optional[float] = None
+
     def __init__(self, config: Optional[Dict[str, Any]] = None):
         self.config = config or {}
 
@@ -41,7 +45,7 @@ class BaseAgent:
             model,
             schema,
             prompt,
-            temperature=self.config.get("temperature"),
+            temperature=self.config.get("temperature", self.DEFAULT_TEMPERATURE),
             max_tokens=self.config.get("max_tokens"),
             debug_label=self.__class__.__name__,
             prompt_version=self._PROMPT_VERSION,

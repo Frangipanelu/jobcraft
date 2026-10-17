@@ -30,6 +30,9 @@ class _GateOut(BaseModel):
 class GateAgent(BaseAgent):
     """检查分析结果质量"""
 
+    #: 质检结论必须可复现（T-EVAL-3）
+    DEFAULT_TEMPERATURE = 0.0
+
     def _get_output_schema(self):
         return _GateOut
 
@@ -64,6 +67,7 @@ class GateAgent(BaseAgent):
             model,
             schema,
             prompt,
+            temperature=self.config.get("temperature", self.DEFAULT_TEMPERATURE),
             debug_label="gate_agent",
             prompt_version="1",
         )

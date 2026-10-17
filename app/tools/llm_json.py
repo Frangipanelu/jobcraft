@@ -294,7 +294,10 @@ def invoke_structured(
             logger.exception("AI 审计收尾写入失败，忽略")
 
     # AI 缓存：先查热缓存（尽力而为，未命中/不可用则走 LLM）
-    _cache_key = ai_cache.build_cache_key(feature, str(sm_name), input_hash)
+    # key 纳入 temperature（T-EVAL-3）：不同温度不串缓存，防确定性对照假阳性
+    _cache_key = ai_cache.build_cache_key(
+        feature, str(sm_name), input_hash, temperature=temperature
+    )
     _cached = ai_cache.cache_get(_cache_key)
     if _cached is not None:
         _result = schema.model_validate(_cached)

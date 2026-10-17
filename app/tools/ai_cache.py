@@ -51,9 +51,18 @@ def _get_redis() -> Optional[Any]:
         return None
 
 
-def build_cache_key(feature: str, model: str, input_hash: str) -> str:
-    """构造缓存 key：ai:{feature}:{model}:{input_hash}。"""
-    return f"ai:{feature}:{model}:{input_hash}"
+def build_cache_key(
+    feature: str, model: str, input_hash: str, temperature: Any = None
+) -> str:
+    """构造缓存 key：ai:{feature}:{model}[:t{temperature}]:{input_hash}。
+
+    temperature 非 None 时纳入 key：同一 prompt 在不同温度下的输出不互相
+    串缓存（T-EVAL-3 守卫——否则改温度后仍命中旧温度的热缓存，确定性对照
+    变假阳性）。None 保持旧格式，既有缓存条目不受影响。
+    """
+    if temperature is None:
+        return f"ai:{feature}:{model}:{input_hash}"
+    return f"ai:{feature}:{model}:t{temperature}:{input_hash}"
 
 
 def cache_get(key: str) -> Optional[Dict[str, Any]]:
