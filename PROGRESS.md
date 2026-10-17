@@ -8,10 +8,12 @@
 
 - [x] **素材处理入库 `93b9d35`**：`anonymize` + docx/md 读取（前批 `0997273`）+ 转录归一化 `normalize_transcript` + `parse_speaker_map` + CLI `--speaker-map`（"讲话人N - 时刻"→显式角色标签，修聚智案例角色推断反例 1→6 题）；5 份逐字稿脱敏后入 `review_cases.jsonl`（rev_real_01..05，+姓名/学校参数化替换，PII 零残留，QA 对 14/37/26/26/6）；test_anonymize 23 例全绿。门禁 encoding 452/0、pytest **1444/7**。
 - [x] **runner 抗限流加固（`4d8fa10` + `4a5e38d`）**：`--case-id` 多值、链成功即渐进落盘（judge 限流丢失不拖累链结果）、`--case-retries/--judge-retries` 指数退避、报告记 `chain_model`/`judge_model`；**`4a5e38d` 修 Critical 挂死**——judge 的 `init_chat_model` 未传 `timeout`（langchain 传 None 会禁用 openai SDK 默认超时），上游 accept 后不回包的挂起连接曾无限阻塞评测进程（faulthandler 栈定位 ssl read 卡死），review/prep 两 runner 均已修 + 显式 `LLM_REQUEST_TIMEOUT`。
-- [x] **S4 部分结果（限流窗口内取得）**：rev_real_01 链✓ L1 **0.9565** + 裁判✓ overall 4.0（真实缺陷：Q13/Q14 feedback/suggestions 为空 → tech/soft 分析未覆盖全部 14 题）；rev_real_02 链✓ L1 **1.0**（37 题）judge 待补；03/04/05 链+全部 judge 因 1302/1305 账号级限流窗口横跳未完成。
-- **后台守护**：`run_s4_daemon.py`（TEMP 本地脚本）循环补齐 5 case（链有缓存，重跑代价低），case 间 120s/轮间 300s 冷却，全齐后合并 `evaluation/results/surface_review_report.json`；已修复子进程 env 继承 bug（`env={**ENV}` 剥光环境变量 → WinError 10106 Winsock 失败）。
-- **⚠️ 共享工作区**：pathspec 提交（run_review_eval/run_prep_eval + datasets + anonymize 系）；真实素材与 daemon 脚本不入库；`.env` 裁判模型=glm-4.7-flash（充值后可回 glm-4.7）。
-- **下一步**：守护进程跑齐 5 case → 合并报告提交 → S4 基线冻结；链②表达建议 + 链④公司调研评测按优先级决策后置。
+- [x] **S4 基线冻结（`5dc861e`，5/5 case L1+judge 全过）**：`evaluation/results/surface_review_report.json` —— **L1 pass_rate=0.9523**、judge **overall_mean=6.2**（safety 10.0 / actionability 6.0 / accuracy 4.6 / completeness 4.4）。逐 case：01 软通 L1 0.9565·judge 4（Q13/Q14 feedback 空=tech/soft 分析漏题，真实缺陷保留）；02 光环 1.0·6；03 华翊 1.0·8；04 跨境 0.8049·5；05 聚智 1.0·8。
+- [x] **链非确定性发现（T-EVAL-3 立项依据）**：链 agent 未设 temperature（默认 ~0.7），同输入 L1 漂移——04 四采样 0.8293/1.0/0.7683/0.8049，feedback 覆盖题数随机（14/0/19 题空）；judge 方差 4/5/6/8。
+- [x] **sidecar + `--reuse-chain`（`687f964`）**：链成功即落盘 `chain_result_<cid>.json`，补裁判不重跑链——L1 与 judge 永远评同一份输出，限流下不浪费配额；+4 单测（1447 passed 全绿）。链失败保留旧 l1/judge 的修复（`014d00b`）实战生效。
+- [x] **收尾守护跑完**：`finish_s4.py`（TEMP 本地，探测式 300s × 40 次 + judge-retries 3）末次开窗补上 run04 judge=5；1305 容量期"小探测能过、6k judge 被拒"是主要形态。
+- **⚠️ 共享工作区**：pathspec 提交；真实素材与 daemon 脚本不入库；`.env` 裁判模型=glm-4.7-flash（充值后可回 glm-4.7）；MySQL 3308 宕机全程为环境性噪音（pytest 13 skip）。
+- **下一步**：T-EVAL-3 feedback 确定性治理（链 agent temperature=0 + assemble 覆盖保证 + runtime 守卫）→ prep 真实素材基线（3 case）→ 链②④暂缓。
 
 ## T-EVAL-2 四链评测基础设施落地 S1-S3（2026-10-11）
 
