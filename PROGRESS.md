@@ -2,6 +2,28 @@
 
 > 本文件用于追踪项目整体进度。AI 在每次会话结束或完成子任务时，必须更新本文件的对应板块。
 
+## T-EVAL-3 feedback 确定性治理：复盘链 temperature=0 + 覆盖保证（2026-10-17）
+
+> S4 冻结时发现链非确定性（04 同输入 L1 漂移 0.77~1.00、feedback 漏题 14/0/19 题随机）→ 立项治理。TDD：先写 13 个单测（10 红 3 绿）再实现。
+
+- [x] **实现完成（`20462b3`，8 文件 +399/-5）**：
+  - ① 四 agent `temperature=0`：`BaseAgent` 新增 `DEFAULT_TEMPERATURE=None` 通道（修 `run()` 只读 `config.get("temperature")` 而 None 落到服务默认的缺陷）；Router/Tech/Soft/Gate 覆写 `0.0`，**Tech/Soft/Gate 的 `run()` 覆写一并补 temperature**（此前连 config 通道都没接）。
+  - ② 分类/分析覆盖保证：Router `_transform_result` 把 selected 未分类题补入 soft 桶 + `logger.warning`（消灭静默空 feedback 的根因）；Tech/Soft analyzer 缺项 seq 告警但**不伪造** feedback（交由 L1 如实暴露，符合"暴露问题而非隐藏"）。
+  - ③ 缓存守卫：`build_cache_key` 加可选 `temperature` 参数（None 保持旧格式），`invoke_structured` 传入——防改温度后命中旧温度热缓存造成对照假阳性。
+  - 评测与生产同参天然成立：`_run_review_chain` 驱动同一 `InterviewReviewWorkflow`，改 app 层即评测同参。
+- [x] **门禁全绿**：encoding 459/0、ruff check/format、pytest **1460 passed** / 13 skipped（+13 新单测）。
+- [x] **2×同输入一致性对照（case05，缓存旁路 REDIS_URL 指不可达端口，双独立 out-dir）**：**IDENTICAL=False**——overall 77 vs 57，逐题 diff dimension 4/6、score 5/6、feedback/suggestions/intent/expected_answer 6/6，L1 1.0 vs 0.9545（run2 Q6 空 feedback 被新告警+l1 如实暴露）。
+- [x] **归因追踪（trace_chain2x，同进程双跑+逐调用落盘 prompt/resp/路径）→ 根因 = glm-4.7-flash 免费端点 temp=0 残余非确定**：
+  - 输入侧全部排除：state + 三节点 prompt 跨进程哈希一致（`7a7cb2e5`/`da66b945`/`37acb7ea`/`93b26ef5`）；
+  - 温度确实进请求：`bind_tools(...).bind(temperature=0.0)` 的 kwargs 含 `temperature: 0.0`，单测捕获 agent→invoke_structured 全程 `0.0`；
+  - 同 prompt 同路径同温度 → **router 输出不同**（r1 把 Q2/Q6 分 tech、r2 全 soft），tech/soft prompt sha 的差异全是分类级联；router 同 prompt 双调探针 2/2 一致但真跑多采样间仍有漂移（探针 all-soft / 混分并存）；
+  - 次要方差通道：gate 主路径超时 → 静默 plain_json 兜底（换 prompt），在成功跑中未见（已落盘调用全走 bind_tools），失败跑中兜底也撞429。
+  - **结论**：app 侧确定性治理完成且被证据链支撑；残余为 provider 属性，运行面护栏维持 `--case-retries` + L1 + sidecar 复用。
+- [ ] **S4 L1 回归**：case05 复跑 1.0 / 0.9545（S4 冻结 1.0，1 处 findings 级差异，noise 带内）；5 case 全量回归视 1305/1302 容量与上述结论再定（provider 残余在，重跑对照统计意义有限）。
+- **⚠️ 推送受阻**：代理 `127.0.0.1:2105` 断连，`5dc861e`/`ebda0dc`/`20462b3` 三 commit 待推（ahead 3），恢复后 `git push origin main`。
+- **现场证据（TEMP 本地不入库）**：`t0_control05.log` + `T0_CONTROL_RESULT.txt`（对照 diff）+ `trace_2x/`（prompt/resp 对）+ `probe_t0_determinism.py`。
+- **下一步**：T-EVAL-3 收口 → prep 真实素材基线（3 case）→ 链②④暂缓。
+
 ## T-EVAL-2 S4 正式基线：5 份真实逐字稿入库 + 评测长跑抗限流加固（2026-10-12/13）
 
 > 用户上传 6 份真实素材（`evaluation/datasets/real/`，gitignore 本地私有）：5 份面试逐字稿 docx（软通/光环有云/华翊博奥/跨境电商/聚智）+ 1 份多 JD 合集 md。目标 = 复盘链 ① L1+L2 正式基线冻结。全程免费模型（链与裁判均 glm-4.7-flash；付费 glm-4.7 两次尝试均被 1113 余额拒绝、扣费 0，按用户指示切免费）。
