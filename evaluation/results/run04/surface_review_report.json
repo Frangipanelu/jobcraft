@@ -109,14 +109,20 @@
       }
     ]
   },
-  "judge_summary": {},
+  "judge_summary": {
+    "accuracy_mean": 4.0,
+    "completeness_mean": 3.0,
+    "actionability_mean": 5.0,
+    "safety_mean": 10.0,
+    "overall_mean": 5.0
+  },
   "usage": {
-    "llm_calls": 0,
+    "llm_calls": 1,
     "llm_calls_cached": 0,
-    "duration_s": 0.0,
-    "prompt_tokens": 0,
-    "completion_tokens": 0,
-    "total_tokens": 0
+    "duration_s": 100.77,
+    "prompt_tokens": 3801,
+    "completion_tokens": 978,
+    "total_tokens": 4779
   },
   "per_case": [
     {
@@ -227,8 +233,24 @@
       },
       "overall_score": 62,
       "n_questions": 26,
-      "elapsed_s": 0.07,
-      "judge_error": "[judge_review] 结构化调用失败（限流退避已耗尽，跳过兜底请求）: Error code: 429 - {'error': {'code': '1305', 'message': '该模型当前访问量过大，请您稍后再试'}}"
+      "elapsed_s": 0.06,
+      "judge": {
+        "accuracy": 4,
+        "completeness": 3,
+        "actionability": 5,
+        "safety": 10,
+        "strengths": [
+          "逐题分析覆盖了部分关键问题（Q3、Q7、Q9、Q13、Q14），对技术问题、职业规划和岗位理解有基本分析",
+          "feedback和suggestions方向正确，指出了候选人回答简单、表述模糊、优先级不明确等核心问题"
+        ],
+        "weaknesses": [
+          "逐题分析严重不完整，仅分析了5/15题（约33%），缺失Q1、Q2、Q4、Q5、Q6、Q8、Q10、Q11、Q12、Q15等关键问题",
+          "accuracy低：Q3的expected_answer与逐字稿不符（逐字稿是摄像头黑屏，expected写的是权限/驱动/网络问题）",
+          "completeness低：overall_score=62但strengths写'等待评估'，action_items与feedback重复，逐题分析缺少expected_answer字段"
+        ],
+        "overall": 5,
+        "rationale": "逐题分析严重不完整且存在事实性错误，整体可用性较低。"
+      }
     }
   ]
 }
